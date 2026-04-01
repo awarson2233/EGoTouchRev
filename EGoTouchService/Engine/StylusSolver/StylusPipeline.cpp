@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
-#include <limits>
 #include <ostream>
 #include "imgui.h"
 
@@ -28,24 +27,23 @@ inline void WriteU16Le(std::array<uint8_t, 13>& b,
 bool StylusPipeline::ParseSlaveWords(
         std::span<const uint8_t> rawData,
         std::array<uint16_t, kSlaveWordCount>& out) const {
-    const size_t required = kSlaveWordOffset + kSlaveWordCount * 2;
+    const size_t required = kSlaveHeaderBytes + kSlaveWordCount * 2;
     if (rawData.size() < required) {
         LOG_DEBUG("StylusPipeline", "ParseSlaveWords", "SlaveFrame",
                   "rawData too small: {} < {}",
                   rawData.size(), required);
         return false;
     }
-    const uint8_t* slave = rawData.data() + kMasterFrameBytes;
-
     if (m_enableSlaveChecksum) {
         uint16_t cs = 0;
-        if (!ValidateChecksum16(slave + 7, kSlaveWordCount, cs)) {
+        if (!ValidateChecksum16(rawData.data() + kSlaveHeaderBytes,
+                                kSlaveWordCount, cs)) {
             LOG_DEBUG("StylusPipeline", "ParseSlaveWords", "SlaveFrame",
                       "Checksum failed: cs=0x{:04X}", cs);
             return false;
         }
     }
-    const uint8_t* payload = slave + 7;
+    const uint8_t* payload = rawData.data() + kSlaveHeaderBytes;
     for (size_t i = 0; i < kSlaveWordCount; ++i)
         out[i] = ReadU16Le(payload + i * 2);
     return true;
@@ -61,77 +59,7 @@ bool StylusPipeline::ValidateChecksum16(
     return (outChecksum == 0) && (sum != 0);
 }
 
-// ══════════════════════════════════════════════
-// ExtractMasterMeta (auto-detect, from StylusProcessor)
-// ══════════════════════════════════════════════
-StylusPipeline::MasterMeta StylusPipeline::ExtractMasterMeta(
-        std::span<const uint8_t> rawData) {
-    MasterMeta mm{};
-    m_masterMetaDetectedBaseWord = 0xFF;
-    if (!m_masterMetaEnabled) return mm;
-    if (rawData.size() < kMasterFrameBytes) return mm;
-    if ((kMasterSuffixOffset + kMasterSuffixWords * 2) >
-         rawData.size()) return mm;
 
-    std::array<uint16_t, 128> words{};
-    const uint8_t* suffix = rawData.data() + kMasterSuffixOffset;
-    for (int i = 0; i < kMasterSuffixWords; ++i)
-        words[static_cast<size_t>(i)] = ReadU16Le(
-            suffix + static_cast<size_t>(i) * 2);
-
-    const auto read32 = [&](int idx) -> uint32_t {
-        return static_cast<uint32_t>(words[static_cast<size_t>(idx)]) |
-               (static_cast<uint32_t>(
-                    words[static_cast<size_t>(idx+1)]) << 16);
-    };
-    const auto score = [&](int base) -> int {
-        uint16_t p = words[static_cast<size_t>(base+10)];
-        uint32_t st = read32(base+14);
-        uint32_t bt = read32(base+12);
-        int s = 0;
-        if (p <= 0x0FFF) s += 1;
-        if ((st & 0x3u) != 0) s += 2;
-        if ((st & 0x10u) != 0) s += 1;
-        if ((st & ~0x7Fu) == 0) s += 1;
-        if (words[static_cast<size_t>(base+8)] == m_freqA ||
-            words[static_cast<size_t>(base+8)] == m_freqB) s += 1;
-        if (words[static_cast<size_t>(base+9)] == m_freqA ||
-            words[static_cast<size_t>(base+9)] == m_freqB) s += 1;
-        if ((bt & ~0xFFu) == 0) s += 1;
-        return s;
-    };
-
-    int baseWord = -1;
-    if (m_masterMetaBaseWord >= 0 &&
-        m_masterMetaBaseWord <= (kMasterSuffixWords - kStructWords)) {
-        baseWord = m_masterMetaBaseWord;
-    } else if (m_masterMetaAutoDetect) {
-        int best = std::numeric_limits<int>::min(), bestBase = -1;
-        for (int i = 0; i <= (kMasterSuffixWords - kStructWords); ++i) {
-            int s = score(i);
-            if (s > best) { best = s; bestBase = i; }
-        }
-        if (bestBase >= 0 && best >= 4) baseWord = bestBase;
-    }
-    if (baseWord < 0) return mm;
-
-    mm.valid = true;
-    mm.baseWord = static_cast<uint8_t>(baseWord);
-    mm.tx1Freq = words[static_cast<size_t>(baseWord+8)];
-    mm.tx2Freq = words[static_cast<size_t>(baseWord+9)];
-    mm.pressure = words[static_cast<size_t>(baseWord+10)];
-    mm.button = read32(baseWord+12);
-    mm.status = read32(baseWord+14);
-    m_masterMetaDetectedBaseWord = mm.baseWord;
-
-    // Fixed-offset signal fields (independent of auto-detect)
-    if (kSuffixPressureWord < kMasterSuffixWords)
-        mm.penSignalPressure = words[kSuffixPressureWord];
-    if (kSuffixTiltWord < kMasterSuffixWords)
-        mm.penSignalTilt = words[kSuffixTiltWord];
-
-    return mm;
-}
 
 // ══════════════════════════════════════════════
 // Process — main pipeline
@@ -164,44 +92,28 @@ bool StylusPipeline::Process(
     m_gridData = Asa::ExtractGridFromSlaveWords(
         sw.data(), static_cast<int>(sw.size()));
 
-    // 3. Metadata extraction: slave header + master suffix fallback
-    auto meta = ExtractMasterMeta(rawData);
-    if (meta.valid) m_lastResult.status = meta.status;
-
-    // Cache slave header bytes and extract pressure/button
-    if (rawData.size() >= kMasterFrameBytes + 7) {
-        const uint8_t* sHdr = rawData.data() + kMasterFrameBytes;
-        std::memcpy(m_rawSlaveHdr, sHdr, 7);
-
-        if (m_useSlaveHdrForMeta) {
-            // Pressure: uint16 LE at configurable offset
-            if (m_slaveHdrPressOffset >= 0 && m_slaveHdrPressOffset <= 5) {
-                uint16_t sp = ReadU16Le(sHdr + m_slaveHdrPressOffset);
-                meta.pressure = sp;
-                meta.valid = true;
-            }
-            // Button: uint8 at configurable offset
-            if (m_slaveHdrBtnOffset >= 0 && m_slaveHdrBtnOffset <= 6) {
-                meta.button = sHdr[m_slaveHdrBtnOffset];
-                meta.valid = true;
-            }
-            // Status from slave header if not found
-            if (meta.status == 0) {
-                meta.status = ReadU16Le(sHdr);
-                meta.valid = true;
-            }
-        }
-
-        // Throttled log
+    // 3. Slave header (7 bytes at frame start): status / button
+    struct SlaveHdr {
+        bool valid = false;
+        uint16_t status = 0;
+        uint32_t button = 0;
+    } hdr;
+    if (rawData.size() >= kSlaveHeaderBytes) {
+        const uint8_t* p = rawData.data();
+        std::memcpy(m_rawSlaveHdr, p, kSlaveHeaderBytes);
+        hdr.valid  = true;
+        hdr.status = ReadU16Le(p);
+        hdr.button = (m_slaveHdrBtnOffset >= 0 &&
+                      m_slaveHdrBtnOffset <= 6)
+                     ? static_cast<uint32_t>(p[m_slaveHdrBtnOffset]) : 0u;
+        m_lastResult.status = hdr.status;
         static int sSlvHdrLog = 0;
         if ((sSlvHdrLog++ % 120) == 0) {
             LOG_TRACE("StylusPipeline", "Process", "SlaveHdr",
                      "hdr=[{:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X}] "
-                     "press(off{})={} btn(off{})={}",
-                     sHdr[0], sHdr[1], sHdr[2], sHdr[3],
-                     sHdr[4], sHdr[5], sHdr[6],
-                     m_slaveHdrPressOffset, meta.pressure,
-                     m_slaveHdrBtnOffset, meta.button);
+                     "btn(off{})={}",
+                     p[0], p[1], p[2], p[3], p[4], p[5], p[6],
+                     m_slaveHdrBtnOffset, hdr.button);
         }
     }
 
@@ -211,7 +123,7 @@ bool StylusPipeline::Process(
         m_lastResult.pipelineStage = 2; // TX1 invalid (no pen)
         if (!m_prevValid) { m_postProcessor.Reset(); ResetTilt(); ResetCalibration(); }
         m_prevValid = false;
-        RunAnimationProcess(false, false);
+        UpdatePenLifecycle(false, false);
         if (m_emitPacketWhenInvalid) BuildStylusPacket(outPacket);
         m_prevStatus = m_lastResult.status;
         return false;
@@ -235,7 +147,7 @@ bool StylusPipeline::Process(
         m_lastResult.point.valid = false;
         m_lastResult.pipelineStage = 3; // No peak found
         m_prevValid = false;
-        RunAnimationProcess(false, false);
+        UpdatePenLifecycle(false, false);
         if (m_emitPacketWhenInvalid) BuildStylusPacket(outPacket);
         m_prevStatus = m_lastResult.status;
         return false;
@@ -252,7 +164,7 @@ bool StylusPipeline::Process(
         m_lastResult.point.valid = false;
         m_lastResult.pipelineStage = 4; // Coord solve failed
         m_prevValid = false;
-        RunAnimationProcess(false, false);
+        UpdatePenLifecycle(false, false);
         if (m_emitPacketWhenInvalid) BuildStylusPacket(outPacket);
         m_prevStatus = m_lastResult.status;
         return false;
@@ -263,7 +175,7 @@ bool StylusPipeline::Process(
         m_lastResult.point.valid = false;
         m_lastResult.pipelineStage = 5; // Noise rejected
         m_prevValid = false;
-        RunAnimationProcess(false, false);
+        UpdatePenLifecycle(false, false);
         if (m_emitPacketWhenInvalid) BuildStylusPacket(outPacket);
         m_prevStatus = m_lastResult.status;
         return false;
@@ -307,53 +219,40 @@ bool StylusPipeline::Process(
         }
     }
 
-    // 12. Pressure — use configurable source
-    if (meta.valid) {
-        // Cache signal values for diagnostics
-        m_lastSuffixPressure = meta.penSignalPressure;
-        m_lastSuffixTilt     = meta.penSignalTilt;
-
-        // Select pressure input based on configured source
-        uint16_t pressureInput = 0;
-        switch (m_pressureSource) {
-        case PressureSource::MasterSuffix102:
-            pressureInput = meta.penSignalPressure;
-            break;
-        case PressureSource::SlaveHeader:
-            pressureInput = meta.pressure; // from slave hdr or auto-detect
-            break;
-        case PressureSource::AutoDetectStruct:
-            pressureInput = meta.pressure; // from words[base+10]
-            break;
+    // 12. Pressure — BT MCU injection only (Task 1)
+    {
+        uint16_t btPress = 0;
+        {
+            auto nowObj = std::chrono::steady_clock::now();
+            uint64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                  nowObj.time_since_epoch()).count();
+            std::lock_guard<std::mutex> lock(m_btPressureMutex);
+            while (!m_btPressureHistory.empty() &&
+                   now_ms > m_btPressureHistory.front().timestamp_ms + 100) {
+                m_btPressureHistory.pop_front();
+            }
+            for (auto it = m_btPressureHistory.rbegin();
+                 it != m_btPressureHistory.rend(); ++it) {
+                if (now_ms <= it->timestamp_ms + 50) {
+                    if (it->pressure > btPress) btPress = it->pressure;
+                }
+            }
         }
-
-        // Merge with BT MCU pressure (PenBridge)
-        uint16_t btPress = m_btMcuPressure.load(std::memory_order_relaxed);
-        if (btPress > pressureInput)
-            pressureInput = btPress;
-
-        // Throttled diagnostic
         static int sPressLogCount = 0;
         if ((sPressLogCount++ % 120) == 0) {
-            LOG_DEBUG("StylusPipeline", "Process", "Meta",
-                     "base={} pressIn={} suffix102={} suffix103={} "
-                     "btMcu={} btn={} status=0x{:X} freq=({},{})",
-                     meta.baseWord, pressureInput,
-                     meta.penSignalPressure, meta.penSignalTilt,
-                     btPress,
-                     meta.button, meta.status,
-                     meta.tx1Freq, meta.tx2Freq);
+            LOG_DEBUG("StylusPipeline", "Process", "Pressure",
+                     "btMcu={} active={}", btPress, finalCoor.valid);
         }
-        SolvePressure(pressureInput, finalCoor.valid);
+        SolvePressure(btPress, finalCoor.valid);
     }
 
-    // 13. Button
-    if (meta.valid)
+    // 13. Button (from slave header)
+    if (hdr.valid)
         m_lastResult.status = UpdateButtonState(
-            meta.button, finalCoor.valid);
+            hdr.button, finalCoor.valid);
 
-    // 14. Animation (Phase 6)
-    RunAnimationProcess(finalCoor.valid, m_lastResult.pressure > 0);
+    // 14. Pen lifecycle
+    UpdatePenLifecycle(finalCoor.valid, m_lastResult.pressure > 0);
 
     // 15. Build packet
     m_prevValid = finalCoor.valid;
@@ -601,45 +500,42 @@ bool StylusPipeline::ApplyHpp3NoisePost(
 }
 
 // ══════════════════════════════════════════════
-// AnimationProcess (Phase 6)
-// FSM: Idle→PenDown→Writing→Lifting→Idle
+// UpdatePenLifecycle — Pen Lifecycle Tracker
+// Leave → Hover → Contact → Lifting → Leave
 // ══════════════════════════════════════════════
-void StylusPipeline::RunAnimationProcess(
+void StylusPipeline::UpdatePenLifecycle(
         bool penValid, bool penDown) {
-    switch (m_animState) {
-    case AnimState::Idle:
-        if (penValid) {
-            m_animState = AnimState::PenDown;
-            m_animFrameCount = 0;
+    switch (m_penLifecycle) {
+    case PenLifecycle::Leave:
+        if (penValid)
+            m_penLifecycle = PenLifecycle::Hover;
+        break;
+    case PenLifecycle::Hover:
+        if (!penValid) {
+            m_penLifecycle = PenLifecycle::Leave;
+        } else if (penDown) {
+            m_penLifecycle = PenLifecycle::Contact;
+            m_liftingFrameCount = 0;
         }
         break;
-    case AnimState::PenDown:
-        m_animFrameCount++;
-        if (penDown) {
-            m_animState = AnimState::Writing;
-            m_animFrameCount = 0;
-        } else if (m_animFrameCount > m_animLiftTimeout) {
-            m_animState = AnimState::Idle;
-        }
-        break;
-    case AnimState::Writing:
+    case PenLifecycle::Contact:
         if (!penDown) {
-            m_animState = AnimState::Lifting;
-            m_animFrameCount = 0;
+            m_penLifecycle = PenLifecycle::Lifting;
+            m_liftingFrameCount = 0;
         }
         break;
-    case AnimState::Lifting:
-        m_animFrameCount++;
+    case PenLifecycle::Lifting:
+        m_liftingFrameCount++;
         if (penDown) {
-            m_animState = AnimState::Writing;
-            m_animFrameCount = 0;
+            m_penLifecycle = PenLifecycle::Contact;
+            m_liftingFrameCount = 0;
         } else if (!penValid ||
-                   m_animFrameCount > m_animLiftTimeout) {
-            m_animState = AnimState::Idle;
+                   m_liftingFrameCount > m_liftingTimeout) {
+            m_penLifecycle = PenLifecycle::Leave;
         }
         break;
     }
-    m_lastResult.animState = static_cast<uint8_t>(m_animState);
+    m_lastResult.animState = static_cast<uint8_t>(m_penLifecycle);
 }
 
 // ══════════════════════════════════════════════
@@ -786,50 +682,8 @@ void StylusPipeline::DrawConfigUI() {
         ImGui::Text("  off[6] u8=%3d (0x%02X)",
             m_rawSlaveHdr[6], m_rawSlaveHdr[6]);
         ImGui::Separator();
-        ImGui::Checkbox("Use Slave Header for Meta",
-            &m_useSlaveHdrForMeta);
-        ImGui::SliderInt("Press Byte Offset",
-            &m_slaveHdrPressOffset, 0, 5);
         ImGui::SliderInt("Button Byte Offset",
             &m_slaveHdrBtnOffset, 0, 6);
-    }
-
-    // ── Master Meta ──
-    if (ImGui::CollapsingHeader("Master Meta Extraction")) {
-        ImGui::Checkbox("Enable Master Meta",
-            &m_masterMetaEnabled);
-        ImGui::Checkbox("Auto-Detect Base Word",
-            &m_masterMetaAutoDetect);
-        if (!m_masterMetaAutoDetect) {
-            ImGui::SliderInt("Manual Base Word",
-                &m_masterMetaBaseWord, 0, 112);
-        }
-        ImGui::Text("Detected Base: %d",
-            static_cast<int>(m_masterMetaDetectedBaseWord));
-        int fA = static_cast<int>(m_freqA);
-        int fB = static_cast<int>(m_freqB);
-        if (ImGui::InputInt("Freq A (hex)", &fA))
-            m_freqA = static_cast<uint16_t>(std::clamp(fA, 0, 0xFFFF));
-        if (ImGui::InputInt("Freq B (hex)", &fB))
-            m_freqB = static_cast<uint16_t>(std::clamp(fB, 0, 0xFFFF));
-        ImGui::Separator();
-        // Signal fields from fixed suffix offsets
-        ImGui::TextColored(ImVec4(0.2f,0.9f,0.4f,1),
-            "Suffix[102] Pressure Signal: %d (0x%04X)",
-            m_lastSuffixPressure, m_lastSuffixPressure);
-        ImGui::TextColored(ImVec4(0.4f,0.7f,1.0f,1),
-            "Suffix[103] Tilt Signal:     %d (0x%04X)",
-            m_lastSuffixTilt, m_lastSuffixTilt);
-        ImGui::Separator();
-        // Pressure source selector
-        const char* srcNames[] = {
-            "Master Suffix [102]", "Slave Header", "Auto-Detect Struct" };
-        int srcIdx = static_cast<int>(m_pressureSource);
-        if (ImGui::Combo("Pressure Source", &srcIdx,
-                srcNames, IM_ARRAYSIZE(srcNames)))
-            m_pressureSource = static_cast<PressureSource>(srcIdx);
-        ImGui::Checkbox("Use Suffix[103] for Tilt",
-            &m_useSuffixTilt);
     }
 
     // ── Edge Coordinate ──
@@ -928,13 +782,13 @@ void StylusPipeline::DrawConfigUI() {
             &m_recheckSignalThreshBase, 10, 500);
     }
 
-    // ── Animation (Phase 6) ──
-    if (ImGui::CollapsingHeader("Animation Process")) {
-        ImGui::SliderInt("Lift Timeout (frames)",
-            &m_animLiftTimeout, 1, 30);
+    // ── Pen Lifecycle ──
+    if (ImGui::CollapsingHeader("Pen Lifecycle")) {
+        ImGui::SliderInt("Lifting Timeout (frames)",
+            &m_liftingTimeout, 1, 30);
         const char* stateNames[] = {
-            "Idle", "PenDown", "Writing", "Lifting"};
-        int si = static_cast<int>(m_animState);
+            "Leave", "Hover", "Contact", "Lifting"};
+        int si = static_cast<int>(m_penLifecycle);
         ImGui::Text("Current State: %s",
             stateNames[std::clamp(si, 0, 3)]);
     }
@@ -960,16 +814,6 @@ void StylusPipeline::SaveConfig(std::ostream& out) const {
         << m_emitPacketWhenInvalid << "\n";
     out << "sp.buttonReleaseHold="
         << m_buttonReleaseHoldFrames << "\n";
-    out << "sp.masterMetaEnabled="
-        << m_masterMetaEnabled << "\n";
-    out << "sp.masterMetaAutoDetect="
-        << m_masterMetaAutoDetect << "\n";
-    out << "sp.masterMetaBaseWord="
-        << m_masterMetaBaseWord << "\n";
-    out << "sp.freqA="
-        << m_freqA << "\n";
-    out << "sp.freqB="
-        << m_freqB << "\n";
     // Tilt
     out << "sp.tiltEnabled=" << m_tiltEnabled << "\n";
     out << "sp.tiltKeepLast="
@@ -1017,9 +861,9 @@ void StylusPipeline::SaveConfig(std::ostream& out) const {
         << m_recheckEnabled << "\n";
     out << "sp.recheckThBase="
         << m_recheckSignalThreshBase << "\n";
-    // Animation
-    out << "sp.animLiftTimeout="
-        << m_animLiftTimeout << "\n";
+    // Pen Lifecycle
+    out << "sp.liftingTimeout="
+        << m_liftingTimeout << "\n";
     // Calibration
     out << "sp.calibEnabled="
         << m_calibEnabled << "\n";
@@ -1047,16 +891,6 @@ void StylusPipeline::LoadConfig(
         m_emitPacketWhenInvalid = toBool(value);
     else if (key == "sp.buttonReleaseHold")
         m_buttonReleaseHoldFrames = toInt(value);
-    else if (key == "sp.masterMetaEnabled")
-        m_masterMetaEnabled = toBool(value);
-    else if (key == "sp.masterMetaAutoDetect")
-        m_masterMetaAutoDetect = toBool(value);
-    else if (key == "sp.masterMetaBaseWord")
-        m_masterMetaBaseWord = toInt(value);
-    else if (key == "sp.freqA")
-        m_freqA = static_cast<uint16_t>(toInt(value));
-    else if (key == "sp.freqB")
-        m_freqB = static_cast<uint16_t>(toInt(value));
     // Tilt
     else if (key == "sp.tiltEnabled")
         m_tiltEnabled = toBool(value);
@@ -1105,12 +939,24 @@ void StylusPipeline::LoadConfig(
         m_recheckEnabled = toBool(value);
     else if (key == "sp.recheckThBase")
         m_recheckSignalThreshBase = toInt(value);
-    // Animation
-    else if (key == "sp.animLiftTimeout")
-        m_animLiftTimeout = toInt(value);
+    // Pen Lifecycle
+    else if (key == "sp.liftingTimeout")
+        m_liftingTimeout = toInt(value);
     // Calibration
     else if (key == "sp.calibEnabled")
         m_calibEnabled = toBool(value);
+}
+
+void StylusPipeline::SetBtMcuPressure(uint16_t p) {
+    auto nowObj = std::chrono::steady_clock::now();
+    uint64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                          nowObj.time_since_epoch()).count();
+
+    std::lock_guard<std::mutex> lock(m_btPressureMutex);
+    m_btPressureHistory.push_back({now_ms, p});
+    if (m_btPressureHistory.size() > 20) {
+        m_btPressureHistory.pop_front();
+    }
 }
 
 } // namespace Engine

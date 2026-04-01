@@ -7,9 +7,10 @@
 #include "EngineTypes.h"
 
 #include <array>
-#include <atomic>
 #include <cstdint>
 #include <span>
+#include <deque>
+#include <mutex>
 #include <string>
 #include <iosfwd>
 
@@ -25,8 +26,8 @@ public:
     bool Process(std::span<const uint8_t> rawData,
                  StylusPacket& outPacket);
 
-    /// 注入 BT MCU 压感值（由 PenBridge 线程实时更新，下一帧生效）
-    void SetBtMcuPressure(uint16_t p) { m_btMcuPressure.store(p, std::memory_order_relaxed); }
+    /// 注入 BT MCU 压感值（由 PenBridge 线程实时更新，加入时间戳队列供 Process() 取用）
+    void SetBtMcuPressure(uint16_t p);
 
     const StylusFrameData& GetLastResult() const {
         return m_lastResult;
@@ -39,14 +40,11 @@ public:
 
 private:
     // ── Frame Constants ──
-    static constexpr size_t kMasterFrameBytes = 5063;
     static constexpr size_t kSlaveFrameBytes  = 339;
+    static constexpr size_t kSlaveHeaderBytes = 7;
     static constexpr size_t kSlaveWordCount   = 166;
-    static constexpr size_t kSlaveWordOffset  = kMasterFrameBytes + 7;
+    static constexpr size_t kSlaveWordOffset  = kSlaveHeaderBytes;
     static constexpr size_t kStylusBlockWords = 83;
-    static constexpr size_t kMasterSuffixOffset = 4807;
-    static constexpr int kMasterSuffixWords = 128;
-    static constexpr int kStructWords = 16;
 
     // ── Slave frame parsing ──
     bool ParseSlaveWords(
@@ -56,21 +54,7 @@ private:
         const uint8_t* bytes, size_t wordCount,
         uint16_t& outChecksum) const;
 
-    // ── Master meta extraction (auto-detect from StylusProcessor) ──
-    struct MasterMeta {
-        bool valid = false;
-        uint8_t baseWord = 0xFF;
-        uint16_t tx1Freq = 0;
-        uint16_t tx2Freq = 0;
-        uint16_t pressure = 0;
-        uint32_t button   = 0;
-        uint32_t status   = 0;
-        // Fixed-offset signal fields from master suffix
-        uint16_t penSignalPressure = 0;  // word[102]
-        uint16_t penSignalTilt     = 0;  // word[103]
-    };
-    MasterMeta ExtractMasterMeta(
-        std::span<const uint8_t> rawData);
+
 
     // ── VHF packet builder ──
     void BuildStylusPacket(StylusPacket& pkt) const;
@@ -143,9 +127,7 @@ private:
     void EdgeCoorPostProcess(float& dim1, float& dim2) const;
 
     // ── Slave header byte layout ──
-    int m_slaveHdrPressOffset = 4;  // byte offset for pressure (uint16 LE)
-    int m_slaveHdrBtnOffset   = 6;  // byte offset for button (uint8)
-    bool m_useSlaveHdrForMeta = true; // use slave header instead of master suffix
+    int m_slaveHdrBtnOffset = 6;    // byte offset for button (uint8)
     uint8_t m_rawSlaveHdr[7]{};     // cached for GUI display
 
     // ── Button state ──
@@ -169,14 +151,17 @@ private:
     bool  m_prevValidPoint = false;
     bool ApplyHpp3NoisePost(const Asa::AsaCoorResult& coor);
 
-    // ── AnimationProcess (Phase 6 — hot-zone state machine) ──
-    enum class AnimState : uint8_t {
-        Idle = 0, PenDown, Writing, Lifting
+    // ── Pen Lifecycle Tracker ──
+    enum class PenLifecycle : uint8_t {
+        Leave = 0,   // 笔不在感应范围内
+        Hover,       // 悬浮：有位置信号，无压力
+        Contact,     // 接触：有位置信号 + 压力
+        Lifting,     // 抬笔过渡：防抖保留
     };
-    AnimState m_animState = AnimState::Idle;
-    int  m_animFrameCount = 0;
-    int  m_animLiftTimeout = 10;
-    void RunAnimationProcess(bool penValid, bool penDown);
+    PenLifecycle m_penLifecycle = PenLifecycle::Leave;
+    int  m_liftingFrameCount = 0;
+    int  m_liftingTimeout = 10;
+    void UpdatePenLifecycle(bool penValid, bool penDown);
 
     // ── ASACalibration_Process (Phase 6 — rolling average) ──
     static constexpr int kCalibWindow = 5;
@@ -187,29 +172,19 @@ private:
     Asa::AsaCoorResult ApplyCalibration(const Asa::AsaCoorResult& c);
     void ResetCalibration();
 
-    // ── Master meta config ──
-    bool m_masterMetaEnabled = true;
-    bool m_masterMetaAutoDetect = true;
-    int  m_masterMetaBaseWord = -1;
-    uint8_t m_masterMetaDetectedBaseWord = 0xFF;
-    uint16_t m_freqA = 0x0018;
-    uint16_t m_freqB = 0x00A1;
 
-    // ── Master suffix signal source (pressure/tilt from fixed word offsets) ──
-    static constexpr int kSuffixPressureWord = 102; // master suffix word index for pressure
-    static constexpr int kSuffixTiltWord     = 103; // master suffix word index for tilt
-    enum class PressureSource : int { MasterSuffix102 = 0, SlaveHeader, AutoDetectStruct };
-    PressureSource m_pressureSource = PressureSource::MasterSuffix102;
-    bool m_useSuffixTilt = false;  // use word[103] signal for tilt augmentation
-    uint16_t m_lastSuffixPressure = 0;  // cached for display
-    uint16_t m_lastSuffixTilt     = 0;  // cached for display
 
     // ── Config ──
     bool m_enableSlaveChecksum = false;  // unverified; disable until checksum format is confirmed
     bool m_emitPacketWhenInvalid = true;
 
-    // ── BT MCU 外部压感注入 ──────────────────────────────────────────────────────
-    std::atomic<uint16_t> m_btMcuPressure{0};  // 由 PenBridge 线程写入，Process 帧内读取
+    // ── BT MCU 外部压感注入与防抖 ────────────────────────────────────────────────
+    struct BtPressureSample {
+        uint64_t timestamp_ms;
+        uint16_t pressure;
+    };
+    mutable std::mutex m_btPressureMutex;
+    std::deque<BtPressureSample> m_btPressureHistory;
 };
 
 } // namespace Engine
