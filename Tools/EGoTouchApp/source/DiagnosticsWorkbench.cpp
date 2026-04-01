@@ -436,6 +436,22 @@ void DiagnosticsWorkbench::DrawControlPanel() {
     }
     if (!m_proxy) ImGui::EndDisabled();
 
+    // Global Service Options
+    ImGui::Separator();
+    ImGui::TextUnformatted("Global Config");
+    if (m_proxy) {
+        bool isFull = m_proxy->IsSrvModeFull();
+        bool isTouchOnly = !isFull;
+        if (ImGui::Checkbox("Touch-Only Mode (Pure Finger, Disable Pen)", &isTouchOnly)) {
+            m_proxy->SetSrvModeFull(!isTouchOnly);
+        }
+        
+        bool autoMode = m_proxy->IsSrvAutoMode();
+        if (ImGui::Checkbox("Auto-Mode (Hardware handshake)", &autoMode)) {
+            m_proxy->SetSrvAutoMode(autoMode);
+        }
+    }
+
 
     ImGui::Separator();
     
@@ -561,6 +577,14 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
         ImGui::TextUnformatted("Master Parser Only is enabled.");
         ImGui::BeginDisabled();
     }
+    
+    // Global VHF Output Switch
+    ImGui::TextUnformatted("Windows INK Output (VHF)");
+    bool vhfStylus = m_proxy->IsSrvStylusVhfEnabled();
+    if (ImGui::Checkbox("Enable Stylus Native Output", &vhfStylus)) {
+        m_proxy->SetSrvStylusVhfEnabled(vhfStylus);
+    }
+    ImGui::Separator();
 
     // -- Stylus Pipeline Config (official ASA pipeline) --
     if (ImGui::BeginTabBar("StylusSubTabs")) {
@@ -1094,11 +1118,14 @@ void DiagnosticsWorkbench::DrawStylusPanel() {
 
 void DiagnosticsWorkbench::DrawMasterSuffixTable() {
     if (m_currentFrame.rawData.size() >= 5063) {
-        if (ImGui::BeginTable("MasterSuffixTable", 8, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
+        float itemWidth = ImGui::CalcTextSize("[000]: 0000 (00000)").x + ImGui::GetStyle().CellPadding.x * 2.0f + 10.0f;
+        int columns = std::max(1, std::min(64, static_cast<int>(ImGui::GetContentRegionAvail().x / itemWidth)));
+
+        if (ImGui::BeginTable("MasterSuffixTable", columns, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
             const uint8_t* ptr = m_currentFrame.rawData.data() + 4807;
             for (int i = 0; i < 128; ++i) {
-                if (i % 8 == 0) ImGui::TableNextRow();
-                ImGui::TableSetColumnIndex(i % 8);
+                if (i % columns == 0) ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(i % columns);
                 uint16_t val = static_cast<uint16_t>(ptr[i * 2] | (ptr[i * 2 + 1] << 8));
                 ImGui::Text("[%03d]: %04X (%5d)", i, val, val);
             }
@@ -1112,11 +1139,14 @@ void DiagnosticsWorkbench::DrawMasterSuffixTable() {
 
 void DiagnosticsWorkbench::DrawSlaveSuffixTable() {
     if (m_currentFrame.rawData.size() >= 5402) { // 5063 + 339 = 5402
-        if (ImGui::BeginTable("SlaveSuffixTable", 8, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
+        float itemWidth = ImGui::CalcTextSize("[000]: 0000 (00000)").x + ImGui::GetStyle().CellPadding.x * 2.0f + 10.0f;
+        int columns = std::max(1, std::min(64, static_cast<int>(ImGui::GetContentRegionAvail().x / itemWidth)));
+
+        if (ImGui::BeginTable("SlaveSuffixTable", columns, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
             const uint8_t* ptr = m_currentFrame.rawData.data() + 5070; // 5063 + 7
             for (int i = 0; i < 166; ++i) {
-                if (i % 8 == 0) ImGui::TableNextRow();
-                ImGui::TableSetColumnIndex(i % 8);
+                if (i % columns == 0) ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(i % columns);
                 uint16_t val = static_cast<uint16_t>(ptr[i * 2] | (ptr[i * 2 + 1] << 8));
                 ImGui::Text("[%03d]: %04X (%5d)", i, val, val);
             }
@@ -1338,17 +1368,24 @@ void DiagnosticsWorkbench::ExportCurrentFrameToCSV(bool isAutoCapture) {
 
 void DiagnosticsWorkbench::DrawBtMcuPanel() {
     ImGui::TextWrapped(
-        "BT MCU dual-channel bridge (PenBridge) runs inside EGoTouchService. "
-        "Event channel: auto-ACK + 0x7D01 echo. "
-        "Pressure channel: continuous 'U' report decode.");
+        "BT MCU dual-channel architecture: "
+        "PenEventBridge (col00) handles auto-ACK + 0x7D01 echo. "
+        "PenPressureReader (col01) decodes continuous 'U' reports.");
     ImGui::Separator();
 
     // ── Status + Pressure (via IPC GetPenBridgeStatus) ──
     auto ps = m_proxy ? m_proxy->GetPenBridgeStatus() : App::PenBridgeStatus{};
 
-    ImGui::Text("PenBridge:");
+    ImGui::Text("EventBridge (col00):");
     ImGui::SameLine();
-    if (ps.running)
+    if (ps.evtRunning)
+        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "RUNNING");
+    else
+        ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "STOPPED");
+
+    ImGui::Text("PressReader (col01):");
+    ImGui::SameLine();
+    if (ps.pressRunning)
         ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "RUNNING");
     else
         ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "STOPPED");
@@ -1382,7 +1419,9 @@ void DiagnosticsWorkbench::DrawBtMcuPanel() {
     ImGui::BeginChild("McuLogFilter", ImVec2(0, 0), true,
                       ImGuiWindowFlags_HorizontalScrollbar);
     for (const auto& line : allLines) {
-        if (line.find("PenBridge") != std::string::npos ||
+        if (line.find("PenEventBridge") != std::string::npos ||
+            line.find("PenPressureReader") != std::string::npos ||
+            line.find("PenBridge") != std::string::npos ||
             line.find("MCU") != std::string::npos ||
             line.find("PenEventCb") != std::string::npos ||
             line.find("PenConn") != std::string::npos ||

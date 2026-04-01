@@ -72,6 +72,27 @@ bool ServiceProxy::Connect() {
         m_frameReader.Close();
         return false;
     }
+    if (!m_logEvent) {
+        m_logEvent = OpenEventW(SYNCHRONIZE, FALSE, Ipc::kLogReadyEventName);
+        if (!m_logEvent) {
+            LOG_WARN("App", "ServiceProxy::Connect", "IPC",
+                     "OpenEvent failed for LogReadyEvent: {}", GetLastError());
+        }
+    }
+    if (!m_penEvent) {
+        m_penEvent = OpenEventW(SYNCHRONIZE, FALSE, Ipc::kPenReadyEventName);
+        if (!m_penEvent) {
+            LOG_WARN("App", "ServiceProxy::Connect", "IPC",
+                     "OpenEvent failed for PenReadyEvent: {}", GetLastError());
+        }
+    }
+    if (!m_pollStopEvent) {
+        m_pollStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!m_pollStopEvent) {
+            LOG_WARN("App", "ServiceProxy::Connect", "IPC",
+                     "CreateEvent failed for PollStopEvent: {}", GetLastError());
+        }
+    }
     // 5. Start polling thread
     m_polling.store(true);
     m_pollThread = std::thread(&ServiceProxy::PollLoop, this);
@@ -84,7 +105,22 @@ bool ServiceProxy::Connect() {
 void ServiceProxy::Disconnect() {
     // Stop polling
     m_polling.store(false);
+    if (m_pollStopEvent) {
+        SetEvent(m_pollStopEvent);
+    }
     if (m_pollThread.joinable()) m_pollThread.join();
+    if (m_pollStopEvent) {
+        CloseHandle(m_pollStopEvent);
+        m_pollStopEvent = nullptr;
+    }
+    if (m_logEvent) {
+        CloseHandle(m_logEvent);
+        m_logEvent = nullptr;
+    }
+    if (m_penEvent) {
+        CloseHandle(m_penEvent);
+        m_penEvent = nullptr;
+    }
 
     // Tell Service to exit debug mode
     if (m_client.IsConnected()) {
@@ -159,8 +195,17 @@ bool ServiceProxy::StopRemoteRuntime() {
 }
 
 void ServiceProxy::SaveConfig() {
+    // 1. 生成服务层的配置段（[Service]段）
+    std::string serviceBlock = "[Service]\n";
+    serviceBlock += "mode=" + std::string(m_srvModeFull ? "full" : "touch_only") + "\n";
+    serviceBlock += "auto_mode=" + std::string(m_srvAutoMode ? "1" : "0") + "\n";
+    serviceBlock += "stylus_vhf_enabled=" + std::string(m_srvStylusVhfEnabled ? "1" : "0") + "\n";
+
+    // 2. 将全量配置写回
     std::ofstream out(kConfigPath);
     if (!out.is_open()) return;
+
+    out << serviceBlock << "\n";
     for (auto& p : m_pipeline.GetProcessors()) {
         out << "[" << p->GetName() << "]\n";
         p->SaveConfig(out);
@@ -192,6 +237,15 @@ void ServiceProxy::LoadConfig() {
                 if (p->GetName() == section) {
                     cur = p.get(); break;
                 }
+            }
+        } else if (section == "Service") {
+            auto eq = line.find('=');
+            if (eq != std::string::npos) {
+                std::string k = line.substr(0, eq);
+                std::string v = line.substr(eq + 1);
+                if (k == "mode") m_srvModeFull = (v == "full");
+                else if (k == "auto_mode") m_srvAutoMode = (v == "1" || v == "true");
+                else if (k == "stylus_vhf_enabled") m_srvStylusVhfEnabled = (v == "1" || v == "true");
             }
         } else if (section == "StylusPipeline") {
             auto eq = line.find('=');
@@ -295,21 +349,81 @@ void ServiceProxy::PollLoop() {
     uint64_t lastFpsFrameId = m_frameReader.LastFrameId();
     auto lastFpsTick = std::chrono::steady_clock::now();
     auto lastLogPoll = std::chrono::steady_clock::now();
+    auto lastPenPoll = std::chrono::steady_clock::now();
+    HANDLE frameEvent = m_frameReader.FrameReadyEvent();
+    HANDLE stopEvent = m_pollStopEvent;
     while (m_polling.load()) {
-        bool gotFrame = false;
-        {
-            std::lock_guard<std::mutex> lk(m_frameMutex);
-            if (m_frameReader.Read(m_latestFrame)) {
-                m_hasNewFrame.store(true, std::memory_order_release);
-                gotFrame = true;
-            }
-        }
-        if (gotFrame) {
-            if (m_dvrBuffer) {
-                m_dvrBuffer->PushOverwriting(m_latestFrame);
-            }
-        }
         auto now = std::chrono::steady_clock::now();
+        auto nextLogDue = lastLogPoll + std::chrono::milliseconds(1000);
+        auto nextPenDue = lastPenPoll + std::chrono::milliseconds(500);
+        auto nextDue = (nextLogDue < nextPenDue) ? nextLogDue : nextPenDue;
+        DWORD timeoutMs = 1000;
+        if (nextDue <= now) {
+            timeoutMs = 0;
+        } else {
+            timeoutMs = static_cast<DWORD>(
+                std::chrono::duration_cast<std::chrono::milliseconds>(nextDue - now).count());
+        }
+
+        DWORD waitRes = WAIT_TIMEOUT;
+        HANDLE handles[4];
+        enum class WaitType { Stop, Frame, Log, Pen };
+        WaitType types[4];
+        DWORD count = 0;
+        if (stopEvent) {
+            handles[count] = stopEvent;
+            types[count] = WaitType::Stop;
+            ++count;
+        }
+        if (frameEvent) {
+            handles[count] = frameEvent;
+            types[count] = WaitType::Frame;
+            ++count;
+        }
+        if (m_logEvent) {
+            handles[count] = m_logEvent;
+            types[count] = WaitType::Log;
+            ++count;
+        }
+        if (m_penEvent) {
+            handles[count] = m_penEvent;
+            types[count] = WaitType::Pen;
+            ++count;
+        }
+
+        if (count > 0) {
+            waitRes = WaitForMultipleObjects(count, handles, FALSE, timeoutMs);
+        } else {
+            Sleep(std::min<DWORD>(timeoutMs, 50));
+        }
+
+        if (count > 0 && waitRes >= WAIT_OBJECT_0 && waitRes < WAIT_OBJECT_0 + count) {
+            const WaitType wt = types[waitRes - WAIT_OBJECT_0];
+            if (wt == WaitType::Stop) {
+                break;
+            }
+            if (wt == WaitType::Frame) {
+                bool gotFrame = false;
+                {
+                    std::lock_guard<std::mutex> lk(m_frameMutex);
+                    if (m_frameReader.Read(m_latestFrame)) {
+                        m_hasNewFrame.store(true, std::memory_order_release);
+                        gotFrame = true;
+                    }
+                }
+                if (gotFrame && m_dvrBuffer) {
+                    m_dvrBuffer->PushOverwriting(m_latestFrame);
+                }
+            }
+            if (wt == WaitType::Log) {
+                lastLogPoll = std::chrono::steady_clock::now() - std::chrono::milliseconds(1000);
+            }
+            if (wt == WaitType::Pen) {
+                lastPenPoll = std::chrono::steady_clock::now() - std::chrono::milliseconds(500);
+            }
+        }
+
+        now = std::chrono::steady_clock::now();
         // FPS counter
         auto fpsElapsed = std::chrono::duration_cast<
             std::chrono::milliseconds>(now - lastFpsTick);
@@ -345,26 +459,27 @@ void ServiceProxy::PollLoop() {
             lastLogPoll = now;
         }
         // PenBridge status polling (~every 500ms for responsive pressure bars)
-        if (logElapsed.count() >= 500 && m_client.IsConnected()) {
+        auto penElapsed = std::chrono::duration_cast<
+            std::chrono::milliseconds>(now - lastPenPoll);
+        if (penElapsed.count() >= 500 && m_client.IsConnected()) {
             Ipc::IpcRequest penReq{};
             penReq.command = Ipc::IpcCommand::GetPenBridgeStatus;
             auto penResp = m_client.Send(penReq);
-            if (penResp.success && penResp.dataLen >= 12) {
+            if (penResp.success && penResp.dataLen >= 13) {
                 const uint8_t* d = penResp.data;
                 PenBridgeStatus s;
-                s.running    = d[0] != 0;
-                s.reportType = d[1];
-                s.freq1      = d[2];
-                s.freq2      = d[3];
+                s.evtRunning   = d[0] != 0;
+                s.pressRunning = d[1] != 0;
+                s.reportType   = d[2];
+                s.freq1        = d[3];
+                s.freq2        = d[4];
                 for (int k = 0; k < 4; ++k)
-                    s.press[k] = static_cast<uint16_t>(d[4 + k * 2]) |
-                                 (static_cast<uint16_t>(d[5 + k * 2]) << 8);
+                    s.press[k] = static_cast<uint16_t>(d[5 + k * 2]) |
+                                 (static_cast<uint16_t>(d[6 + k * 2]) << 8);
                 std::lock_guard<std::mutex> lk(m_penMutex);
                 m_penStatus = s;
             }
-        }
-        if (!gotFrame) {
-            std::this_thread::sleep_for(std::chrono::microseconds(100));
+            lastPenPoll = now;
         }
     }
 }

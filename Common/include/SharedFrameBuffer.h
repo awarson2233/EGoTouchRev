@@ -16,6 +16,8 @@ namespace Ipc {
 
 // Fixed shared memory name
 constexpr const wchar_t* kSharedFrameName = L"Global\\EGoTouchSharedFrame";
+// Frame-ready event name (Service signals after Write)
+constexpr const wchar_t* kFrameReadyEventName = L"Global\\EGoTouchFrameReady";
 
 // Maximum contacts in shared memory
 constexpr int kMaxSharedContacts = 10;
@@ -174,6 +176,7 @@ public:
 private:
     HANDLE          m_mapHandle = nullptr;
     SharedFrameData* m_data     = nullptr;
+    HANDLE          m_frameEvent = nullptr;
 };
 
 // Reader: used by EGoTouchApp to read frame data
@@ -189,6 +192,7 @@ public:
     bool Read(Engine::HeatmapFrame& out);
     uint64_t LastFrameId() const;
     const SharedFrameData* Raw() const { return m_data; }
+    HANDLE FrameReadyEvent() const { return m_frameEvent; }
     void Close();
     bool IsOpen() const { return m_data != nullptr; }
 
@@ -196,6 +200,7 @@ private:
     HANDLE          m_mapHandle = nullptr;
     SharedFrameData* m_data     = nullptr;
     uint64_t        m_lastReadId = 0;
+    HANDLE          m_frameEvent = nullptr;
 };
 
 } // namespace Ipc

@@ -39,6 +39,14 @@ bool SharedFrameWriter::Open(const wchar_t* name) {
     }
     LOG_INFO("Ipc", "SharedFrameWriter::Open", "IPC",
              "Shared memory opened for writing.");
+
+    // Open frame-ready event (optional)
+    m_frameEvent = OpenEventW(EVENT_MODIFY_STATE | SYNCHRONIZE, FALSE,
+                              kFrameReadyEventName);
+    if (!m_frameEvent) {
+        LOG_WARN("Ipc", "SharedFrameWriter::Open", "IPC",
+                 "OpenEvent failed for FrameReadyEvent: {}", GetLastError());
+    }
     return true;
 }
 
@@ -73,6 +81,13 @@ bool SharedFrameWriter::Create(const wchar_t* name) {
     LOG_INFO("Ipc", "SharedFrameWriter::Create", "IPC",
              "Shared memory created for writing ({} bytes).",
              sizeof(SharedFrameData));
+
+    // Create frame-ready event (auto-reset)
+    m_frameEvent = CreateEventW(&sa, FALSE, FALSE, kFrameReadyEventName);
+    if (!m_frameEvent) {
+        LOG_WARN("Ipc", "SharedFrameWriter::Create", "IPC",
+                 "CreateEvent failed for FrameReadyEvent: {}", GetLastError());
+    }
     return true;
 }
 
@@ -204,6 +219,10 @@ void SharedFrameWriter::Write(const Engine::HeatmapFrame& frame) {
     // Increment frame ID and signal write complete
     m_data->frameId.fetch_add(1, std::memory_order_relaxed);
     m_data->lockFlag.store(0, std::memory_order_release);
+
+    if (m_frameEvent) {
+        SetEvent(m_frameEvent);
+    }
 }
 
 void SharedFrameWriter::Close() {
@@ -214,6 +233,10 @@ void SharedFrameWriter::Close() {
     if (m_mapHandle) {
         CloseHandle(m_mapHandle);
         m_mapHandle = nullptr;
+    }
+    if (m_frameEvent) {
+        CloseHandle(m_frameEvent);
+        m_frameEvent = nullptr;
     }
 }
 
@@ -251,6 +274,13 @@ bool SharedFrameReader::Create(const wchar_t* name) {
     std::memset(m_data, 0, sizeof(SharedFrameData));
     LOG_INFO("Ipc", "SharedFrameReader::Create", "IPC",
              "Shared memory created ({} bytes).", sizeof(SharedFrameData));
+
+    // Create frame-ready event (auto-reset)
+    m_frameEvent = CreateEventW(&sa, FALSE, FALSE, kFrameReadyEventName);
+    if (!m_frameEvent) {
+        LOG_WARN("Ipc", "SharedFrameReader::Create", "IPC",
+                 "CreateEvent failed for FrameReadyEvent: {}", GetLastError());
+    }
     return true;
 }
 
@@ -274,6 +304,13 @@ bool SharedFrameReader::Open(const wchar_t* name) {
     m_lastReadId = 0;
     LOG_INFO("Ipc", "SharedFrameReader::Open", "IPC",
              "Shared memory opened for reading.");
+
+    // Open frame-ready event
+    m_frameEvent = OpenEventW(SYNCHRONIZE, FALSE, kFrameReadyEventName);
+    if (!m_frameEvent) {
+        LOG_WARN("Ipc", "SharedFrameReader::Open", "IPC",
+                 "OpenEvent failed for FrameReadyEvent: {}", GetLastError());
+    }
     return true;
 }
 
@@ -425,6 +462,10 @@ void SharedFrameReader::Close() {
     if (m_mapHandle) {
         CloseHandle(m_mapHandle);
         m_mapHandle = nullptr;
+    }
+    if (m_frameEvent) {
+        CloseHandle(m_frameEvent);
+        m_frameEvent = nullptr;
     }
 }
 

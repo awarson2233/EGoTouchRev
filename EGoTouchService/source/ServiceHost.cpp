@@ -32,9 +32,15 @@ ServiceHost::~ServiceHost() {
 }
 
 // ── 模式解析 ──────────────────────────────────────────
-ServiceMode ServiceHost::ParseServiceMode(const std::string& configPath) const {
+void ServiceHost::ParseServiceConfig(const std::string& configPath) {
     std::ifstream cfg(configPath);
-    if (!cfg.is_open()) return ServiceMode::TouchOnly;
+    if (!cfg.is_open()) {
+        m_mode = ServiceMode::Full;
+        m_autoMode = true;
+        m_stylusVhfEnabled = true;
+        return;
+    }
+
     std::string line;
     bool inServiceSection = false;
     while (std::getline(cfg, line)) {
@@ -51,27 +57,33 @@ ServiceMode ServiceHost::ParseServiceMode(const std::string& configPath) const {
                 // trim whitespace
                 val.erase(0, val.find_first_not_of(" \t\r\n"));
                 val.erase(val.find_last_not_of(" \t\r\n") + 1);
+
                 if (key == "mode") {
-                    if (val == "full") return ServiceMode::Full;
-                    return ServiceMode::TouchOnly;
+                    if (val == "touch_only") m_mode = ServiceMode::TouchOnly;
+                    else m_mode = ServiceMode::Full;
+                } else if (key == "auto_mode") {
+                    m_autoMode = (val != "0" && val != "false");
+                } else if (key == "stylus_vhf_enabled") {
+                    m_stylusVhfEnabled = (val != "0" && val != "false");
                 }
             }
         }
     }
-    return ServiceMode::TouchOnly;
 }
 
 bool ServiceHost::Start() {
     // ── 0. 解析运行模式 ──────────────────────────────────
-    m_mode = ParseServiceMode(kConfigPath);
+    ParseServiceConfig(kConfigPath);
     LOG_INFO("ServiceHost", "Start", "Boot",
-             "Service mode: {}.",
-             m_mode == ServiceMode::Full ? "full" : "touch_only");
+             "Service mode: {}, AutoMode: {}",
+             m_mode == ServiceMode::Full ? "full" : "touch_only",
+             m_autoMode);
 
     // ── 1. DeviceRuntime（先创建，后续模块依赖它） ─────────
     m_deviceRuntime = std::make_unique<DeviceRuntime>(
         kDevicePathMaster, kDevicePathSlave, kDevicePathInterrupt);
-    m_deviceRuntime->SetAutoMode(true);
+    m_deviceRuntime->SetAutoMode(m_autoMode);
+    m_deviceRuntime->SetStylusVhfEnabled(m_stylusVhfEnabled);
     m_deviceRuntime->SetTouchOnlyMode(m_mode == ServiceMode::TouchOnly);
     BuildDefaultPipeline(kConfigPath);
 
@@ -115,6 +127,28 @@ bool ServiceHost::Start() {
 #endif
 
     // ── 4. IPC Pipe Server ──────────────────────────────────
+    // Create log/pen status events for App (cross-session)
+    {
+        SECURITY_DESCRIPTOR sd{};
+        InitializeSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION);
+        SetSecurityDescriptorDacl(&sd, TRUE, nullptr, FALSE);
+        SECURITY_ATTRIBUTES sa{};
+        sa.nLength = sizeof(sa);
+        sa.lpSecurityDescriptor = &sd;
+        sa.bInheritHandle = FALSE;
+        m_logEvent = CreateEventW(&sa, FALSE, FALSE, Ipc::kLogReadyEventName);
+        if (!m_logEvent) {
+            LOG_WARN("ServiceHost", "Start", "IPC",
+                     "CreateEvent failed for LogReadyEvent: {}", GetLastError());
+        } else {
+            Common::GuiLogSink::Instance()->SetNotifyEvent(m_logEvent);
+        }
+        m_penEvent = CreateEventW(&sa, FALSE, FALSE, Ipc::kPenReadyEventName);
+        if (!m_penEvent) {
+            LOG_WARN("ServiceHost", "Start", "IPC",
+                     "CreateEvent failed for PenReadyEvent: {}", GetLastError());
+        }
+    }
     m_configDirty.Open();
     m_ipcServer.SetCommandHandler(
         [this](const Ipc::IpcRequest& req) {
@@ -127,12 +161,12 @@ bool ServiceHost::Start() {
     LOG_INFO("ServiceHost", "Start", "Boot",
              "All modules started.");
 
-    // ── 4. BT MCU PenBridge（仅 Full 模式启用） ────────
+    // ── 4. BT MCU（仅 Full 模式启用） ─────────────────────
     if (m_mode == ServiceMode::Full) {
-        m_penBridge = std::make_unique<Himax::Pen::PenBridge>();
-
-        // 事件回调：响应关键 MCU 事件
-        m_penBridge->SetEventCallback(
+        // ── 4a. 事件通道 (col00): 握手 + ACK + 0x7D01 回显 ──
+        m_penEventBridge = std::make_unique<Himax::Pen::PenEventBridge>();
+        if (m_penEvent) m_penEventBridge->SetNotifyEvent(m_penEvent);
+        m_penEventBridge->SetEventCallback(
             [this](const Himax::Pen::PenEvent& ev) {
                 using EC = Himax::Pen::PenUsbEventCode;
                 switch (ev.code) {
@@ -146,7 +180,7 @@ bool ServiceHost::Start() {
                         command cmd{};
                         if (connected) {
                             cmd.type  = AFE_Command::InitStylus;
-                            cmd.param = 5;
+                            cmd.param = 0;  // freq pair由0x73 SetStylusId绑定
                             m_deviceRuntime->SubmitCommand(
                                 cmd, CommandSource::SystemPolicy, "PenConnStatus→Init");
                         } else {
@@ -180,6 +214,33 @@ bool ServiceHost::Start() {
                     break;
                 }
 
+                case EC::PenTypeInfo: {
+                    // 0x73: 笔类型 → set_stylus_id(pen_type) 频率表绑定
+                    uint8_t penType = ev.payload.empty() ? 0 : ev.payload[0];
+                    LOG_INFO("ServiceHost", "PenEventCb", "MCU",
+                             "PenTypeInfo: pen_type={}.", penType);
+                    if (m_deviceRuntime) {
+                        command cmd{};
+                        cmd.type  = AFE_Command::SetStylusId;
+                        cmd.param = penType;
+                        m_deviceRuntime->SubmitCommand(
+                            cmd, CommandSource::SystemPolicy, "PenTypeInfo→SetStylusId");
+                    }
+                    break;
+                }
+
+                case EC::PenCurStatus: {
+                    // 0x72: 笔工作模式 (1=书写, 2=悬停, 3=橡皮擦)
+                    uint8_t mode = ev.payload.empty() ? 0 : ev.payload[0];
+                    const char* modeStr = "unknown";
+                    if (mode == 1) modeStr = "writing";
+                    else if (mode == 2) modeStr = "hovering";
+                    else if (mode == 3) modeStr = "eraser";
+                    LOG_INFO("ServiceHost", "PenEventCb", "MCU",
+                             "PenCurStatus: mode={} ({}).", mode, modeStr);
+                    break;
+                }
+
                 default:
                     LOG_INFO("ServiceHost", "PenEventCb", "MCU",
                              "MCU event 0x{:02X} received.",
@@ -187,19 +248,34 @@ bool ServiceHost::Start() {
                     break;
                 }
             });
+        m_penEventBridge->Start();
+        LOG_INFO("ServiceHost", "Start", "MCU",
+                 "PenEventBridge started (col00 event channel).");
 
-        // 压感回调：BT MCU 压力 → DeviceRuntime → StylusPipeline
-        m_penBridge->SetPressureCallback(
+        // ── 4b. 压力通道 (col01): 'U' 报文频率 + 压感 ──────
+        m_penPressureReader = std::make_unique<Himax::Pen::PenPressureReader>();
+        if (m_penEvent) m_penPressureReader->SetNotifyEvent(m_penEvent);
+        m_penPressureReader->SetPressureCallback(
             [this](uint16_t press) {
                 if (m_deviceRuntime) m_deviceRuntime->SetBtMcuPressure(press);
             });
 
-        m_penBridge->Start();
+        // BT 频率提供者：DeviceRuntime 每帧 poll 获取最新 BT MCU 频率
+        if (m_deviceRuntime) {
+            m_deviceRuntime->SetBtFreqProvider(
+                [this]() -> std::pair<uint8_t, uint8_t> {
+                    if (!m_penPressureReader) return {0, 0};
+                    auto s = m_penPressureReader->GetPressureStats();
+                    return {s.freq1, s.freq2};
+                });
+        }
+
+        m_penPressureReader->Start();
         LOG_INFO("ServiceHost", "Start", "MCU",
-                 "PenBridge started (event + pressure threads).");
+                 "PenPressureReader started (col01 pressure channel).");
     } else {
         LOG_INFO("ServiceHost", "Start", "MCU",
-                 "PenBridge skipped (touch_only mode).");
+                 "Pen modules skipped (touch_only mode).");
     }
 
     return true;
@@ -212,13 +288,28 @@ void ServiceHost::Stop() {
     m_frameWriter.Close();
     m_configDirty.Close();
     m_debugMode = false;
+    if (m_logEvent) {
+        Common::GuiLogSink::Instance()->SetNotifyEvent(nullptr);
+        CloseHandle(m_logEvent);
+        m_logEvent = nullptr;
+    }
+    if (m_penEvent) {
+        CloseHandle(m_penEvent);
+        m_penEvent = nullptr;
+    }
 
-    // PenBridge（先停，避免回调中仍访问 DeviceRuntime）
-    if (m_penBridge) {
-        m_penBridge->Stop();
-        m_penBridge.reset();
+    // Pen 通道（先停，避免回调中仍访问 DeviceRuntime）
+    if (m_penPressureReader) {
+        m_penPressureReader->Stop();
+        m_penPressureReader.reset();
         LOG_INFO("ServiceHost", "Stop", "MCU",
-                 "PenBridge stopped.");
+                 "PenPressureReader stopped.");
+    }
+    if (m_penEventBridge) {
+        m_penEventBridge->Stop();
+        m_penEventBridge.reset();
+        LOG_INFO("ServiceHost", "Stop", "MCU",
+                 "PenEventBridge stopped.");
     }
 
     if (m_sysMonitor) {
@@ -355,6 +446,12 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(
 
     case Ipc::IpcCommand::ReloadConfig:
         if (m_deviceRuntime) {
+            // First, re-read [Service] global configs
+            ParseServiceConfig(kConfigPath);
+            // Apply touchonly mode and VHF stylus config dynamically to the runtime
+            m_deviceRuntime->SetTouchOnlyMode(m_mode == ServiceMode::TouchOnly);
+            m_deviceRuntime->SetStylusVhfEnabled(m_stylusVhfEnabled);
+
             auto& pl = m_deviceRuntime->GetPipeline();
             std::ifstream in(kConfigPath);
             if (in.is_open()) {
@@ -392,7 +489,9 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(
             if (out.is_open()) {
                 // Preserve [Service] section
                 out << "[Service]\n";
-                out << "mode=" << (m_mode == ServiceMode::Full ? "full" : "touch_only") << "\n\n";
+                out << "mode=" << (m_mode == ServiceMode::Full ? "full" : "touch_only") << "\n";
+                out << "auto_mode=" << (m_autoMode ? "1" : "0") << "\n";
+                out << "stylus_vhf_enabled=" << (m_stylusVhfEnabled ? "1" : "0") << "\n\n";
                 for (auto& p : pl.GetProcessors()) {
                     out << "[" << p->GetName() << "]\n";
                     p->SaveConfig(out);
@@ -439,18 +538,20 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(
     }
 
     case Ipc::IpcCommand::GetPenBridgeStatus: {
-        // Pack: [running:1][reportType:1][freq1:1][freq2:1][p0L:1][p0H:1][p1L:1][p1H:1][p2L:1][p2H:1][p3L:1][p3H:1]
-        // Total: 12 bytes
-        uint8_t buf[12] = {};
-        if (m_penBridge) {
-            buf[0] = m_penBridge->IsRunning() ? 1 : 0;
-            auto s = m_penBridge->GetPressureStats();
-            buf[1]  = s.reportType;
-            buf[2]  = s.freq1;
-            buf[3]  = s.freq2;
+        // Pack: [evtRunning:1][pressRunning:1][reportType:1][freq1:1][freq2:1]
+        //       [p0L:1][p0H:1][p1L:1][p1H:1][p2L:1][p2H:1][p3L:1][p3H:1]
+        // Total: 13 bytes
+        uint8_t buf[13] = {};
+        buf[0] = (m_penEventBridge && m_penEventBridge->IsRunning()) ? 1 : 0;
+        buf[1] = (m_penPressureReader && m_penPressureReader->IsRunning()) ? 1 : 0;
+        if (m_penPressureReader) {
+            auto s = m_penPressureReader->GetPressureStats();
+            buf[2]  = s.reportType;
+            buf[3]  = s.freq1;
+            buf[4]  = s.freq2;
             for (int k = 0; k < 4; ++k) {
-                buf[4 + k * 2]     = static_cast<uint8_t>(s.press[k] & 0xFF);
-                buf[4 + k * 2 + 1] = static_cast<uint8_t>(s.press[k] >> 8);
+                buf[5 + k * 2]     = static_cast<uint8_t>(s.press[k] & 0xFF);
+                buf[5 + k * 2 + 1] = static_cast<uint8_t>(s.press[k] >> 8);
             }
         }
         std::memcpy(resp.data, buf, sizeof(buf));

@@ -6,6 +6,9 @@
 namespace Ipc {
 
 constexpr const wchar_t* kPipeName = L"\\\\.\\pipe\\EGoTouchControl";
+// IPC-related global events
+constexpr const wchar_t* kLogReadyEventName = L"Global\\EGoTouchLogReady";
+constexpr const wchar_t* kPenReadyEventName = L"Global\\EGoTouchPenStatusReady";
 
 enum class IpcCommand : uint8_t {
     Ping = 0,

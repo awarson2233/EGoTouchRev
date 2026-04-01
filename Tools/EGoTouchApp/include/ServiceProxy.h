@@ -17,13 +17,14 @@
 
 namespace App {
 
-// Lightweight mirror of Service-side PenBridge pressure stats (no PenBridge.h dependency)
+// Lightweight mirror of Service-side Pen channel status (no PenBridge.h dependency)
 struct PenBridgeStatus {
-    bool     running     = false;
-    uint8_t  reportType  = 0;
-    uint8_t  freq1       = 0;
-    uint8_t  freq2       = 0;
-    uint16_t press[4]    = {0,0,0,0};
+    bool     evtRunning   = false;  // col00 事件通道运行中
+    bool     pressRunning = false;  // col01 压力通道运行中
+    uint8_t  reportType   = 0;
+    uint8_t  freq1        = 0;
+    uint8_t  freq2        = 0;
+    uint16_t press[4]     = {0,0,0,0};
 };
 
 class ServiceProxy {
@@ -79,6 +80,14 @@ public:
     // Local DVR export
     void TriggerDVRExport(bool heatmap, bool master, bool slave);
 
+    // Global Service config (UI mirrors)
+    bool IsSrvModeFull() const { return m_srvModeFull; }
+    void SetSrvModeFull(bool full) { m_srvModeFull = full; }
+    bool IsSrvStylusVhfEnabled() const { return m_srvStylusVhfEnabled; }
+    void SetSrvStylusVhfEnabled(bool enabled) { m_srvStylusVhfEnabled = enabled; }
+    bool IsSrvAutoMode() const { return m_srvAutoMode; }
+    void SetSrvAutoMode(bool enabled) { m_srvAutoMode = enabled; }
+
     // PenBridge status (polled from Service)
     PenBridgeStatus GetPenBridgeStatus() const {
         std::lock_guard<std::mutex> lk(m_penMutex);
@@ -108,6 +117,9 @@ private:
     std::atomic<bool> m_polling{false};
     std::thread m_pollThread;
     void PollLoop();
+    HANDLE m_pollStopEvent = nullptr;
+    HANDLE m_logEvent = nullptr;
+    HANDLE m_penEvent = nullptr;
 
     // Auto-discovery thread
     std::atomic<bool> m_discovering{false};
@@ -133,6 +145,11 @@ private:
 
     // FPS measurement
     std::atomic<int> m_fps{0};
+
+    // Global Service config mirrors
+    bool m_srvModeFull = true;
+    bool m_srvAutoMode = true;
+    bool m_srvStylusVhfEnabled = true;
 };
 
 } // namespace App
