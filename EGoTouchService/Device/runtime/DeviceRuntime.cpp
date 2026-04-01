@@ -135,7 +135,7 @@ RuntimeSnapshot DeviceRuntime::GetSnapshot() const {
     std::lock_guard<std::mutex> lk(m_mu);
     RuntimeSnapshot s;
     s.state = m_state.load();
-    s.stylus_connected = m_chip.m_stylus.connected;
+    s.stylus_connected = m_chip.m_afe.GetStylusState().connected;
     s.recover_count = m_recoverCount;
     s.queue_depth = m_cmdQueue.size();
     s.last_command_id = m_lastCmdId;
@@ -186,7 +186,7 @@ bool DeviceRuntime::DrainCommands() {
         auto qc = m_cmdQueue.front();
         m_cmdQueue.pop_front();
         m_lastCmdId = qc.id;
-        if (auto r = m_chip.afe_sendCommand(qc.cmd); !r) {
+        if (auto r = m_chip.m_afe.SendCommand(qc.cmd); !r) {
             RecordHistory(qc, false, "afe_sendCommand failed");
             LOG_WARN("Device", "DrainCommands", "CmdExec",
                      "Command '{}' (type={}) failed — skipping (non-fatal).",
@@ -280,29 +280,46 @@ void DeviceRuntime::OnStreaming() {
 
     const bool touchOnly = m_touchOnly.load(std::memory_order_relaxed);
 
-    // 0. 手写笔频率跟踪（仅 Full 模式）
+    // 0. BT MCU 心跳注入（每帧，原厂 ASA_SetBluetoothFreq 等价）
+    if (!touchOnly && m_btFreqProvider) {
+        auto [f1, f2] = m_btFreqProvider();
+        m_chip.m_afe.UpdateBtHeartbeat(f1, f2);
+    }
+
+    // 1. 手写笔频率跟踪（仅 Full 模式）
     if (!touchOnly) {
-        m_chip.ProcessStylusStatus();
+        if (m_chip.m_afe.ProcessStylusStatus()) {
+            SubmitCommand({AFE_Command::ForceToFreqPoint, m_chip.m_afe.GetStylusState().switchTargetIdx},
+                          CommandSource::SystemPolicy, "Stylus Freq Sync Requested");
+        }
     }
 
     const auto& rawData = m_chip.back_data;
 
-    // 1. Stylus pipeline（仅 Full 模式）
+    // 2. Stylus pipeline（仅 Full 模式）
+    // rawData 为 master+slave 复合帧；pipeline 只需 slave frame（339字节，偏移 5063）
     Engine::StylusPacket stylusPacket{};
     if (!touchOnly) {
-        m_stylusPipeline.Process(
-            std::span<const uint8_t>(rawData.data(), rawData.size()),
-            stylusPacket);
-        // m_vhfReporter.DispatchStylus(stylusPacket);  // disabled for debugging
+        static constexpr size_t kMasterBytes = 5063;
+        static constexpr size_t kSlaveBytes  = 339;
+        if (rawData.size() >= kMasterBytes + kSlaveBytes) {
+            m_stylusPipeline.Process(
+                std::span<const uint8_t>(
+                    rawData.data() + kMasterBytes, kSlaveBytes),
+                stylusPacket);
+        }
+        if (m_stylusVhfEnabled.load(std::memory_order_relaxed)) {
+            m_vhfReporter.DispatchStylus(stylusPacket);
+        }
     }
 
-    // 2. Touch pipeline (always active)
+    // 3. Touch pipeline (always active)
     Engine::HeatmapFrame touchFrame;
     touchFrame.rawData.assign(rawData.begin(), rawData.end());
     m_touchPipeline.Execute(touchFrame);
     m_vhfReporter.DispatchTouch(touchFrame);
 
-    // 3. Merge results for UI push
+    // 4. Merge results for UI push
     if (m_framePushCb) {
         if (!touchOnly) {
             touchFrame.stylus = m_stylusPipeline.GetLastResult();

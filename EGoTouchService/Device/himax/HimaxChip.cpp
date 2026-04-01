@@ -47,33 +47,6 @@ void himax_parse_assign_cmd(uint32_t addr, uint8_t *cmd, int len) {
     }
 }
 
-const char* AfeCommandToString(AFE_Command cmd) {
-    switch (cmd) {
-    case AFE_Command::ClearStatus:
-        return "ClearStatus";
-    case AFE_Command::EnableFreqShift:
-        return "EnableFreqShift";
-    case AFE_Command::DisableFreqShift:
-        return "DisableFreqShift";
-    case AFE_Command::StartCalibration:
-        return "StartCalibration";
-    case AFE_Command::EnterIdle:
-        return "EnterIdle";
-    case AFE_Command::ForceExitIdle:
-        return "ForceExitIdle";
-    case AFE_Command::ForceToFreqPoint:
-        return "ForceToFreqPoint";
-    case AFE_Command::ForceToScanRate:
-        return "ForceToScanRate";
-    case AFE_Command::InitStylus:
-        return "InitStylus";
-    case AFE_Command::DisconnectStylus:
-        return "DisconnectStylus";
-    default:
-        return "Unknown";
-    }
-}
-
 } // end anonymous namespace
 
 namespace Himax {
@@ -84,7 +57,8 @@ Chip::Chip(const std::wstring& master_path, const std::wstring& slave_path, cons
       pflash_op(InitFlashOperation()),
       psram_op(InitSramOperation()),
       pdriver_op(InitDriverOperation()),
-      pzf_op(InitZfOperation())
+      pzf_op(InitZfOperation()),
+      m_afe(*this)
 {
     m_master = std::make_unique<HalDevice>(master_path.c_str(), DeviceType::Master);
     m_slave = std::make_unique<HalDevice>(slave_path.c_str(), DeviceType::Slave);
@@ -689,128 +663,7 @@ ChipResult<> Chip::himax_mcu_power_on_init(void) {
  * @param param 参数
  * @return bool 是否成功
  */
-ChipResult<> Chip::thp_afe_enter_idle(uint8_t param) {
-    if (m_connState.load() != ConnectionState::Connected) return std::unexpected(ChipError::InvalidOperation);
-    LOG_INFO("Device", "Chip::thp_afe_enter_idle", GetStateStr(), "Entering with param={}",
-             static_cast<unsigned int>(param));
 
-    // 2. 发送 EnterIdle 命令 (ID=0x0A, 使用传入的 param)
-    if (auto res = HimaxProtocol::send_command(m_master.get(), 0x0a, param, current_slot); !res) {
-        LOG_ERROR("Device", "Chip::thp_afe_enter_idle", GetStateStr(), "Send ENTER_IDLE command failed!");
-        return res;
-    }
-
-    // 3. Idle read policy: block=1, timeout=200ms
-    if (auto res = SetFrameReadIdlePolicy(); !res) return res;
-
-    // 4. 更新状态标志位
-    afe_mode.store(THP_AFE_MODE::Idle);
-    
-    LOG_INFO("Device", "Chip::thp_afe_enter_idle", GetStateStr(),
-             "===== IDLE ENTER ===== No input detected, entering low-power idle.");
-    return {};
-}
-
-/**
- * @brief 开始硬件校准
- * @param param 参数
- * @return bool 是否成功
- */
-ChipResult<> Chip::thp_afe_start_calibration(uint8_t param) {
-    if (m_connState.load() != ConnectionState::Connected) return std::unexpected(ChipError::InvalidOperation);
-    LOG_INFO("Device", "Chip::thp_afe_start_calibration", GetStateStr(), "Entering with param={}",
-             static_cast<unsigned int>(param));
-
-    // 发送 StartCalibration 命令 (ID=0x01, 使用传入的 param)
-    if (auto res = HimaxProtocol::send_command(m_master.get(), 0x01, param, current_slot); !res) {
-        LOG_ERROR("Device", "Chip::thp_afe_start_calibration", GetStateStr(), "Send AFE_START_CALBRATION command failed!");
-        return res;
-    }
-
-    LOG_INFO("Device", "Chip::thp_afe_start_calibration", GetStateStr(), "Out!");
-    return {};
-}
-
-/**
- * @brief 强制退出低功耗模式
- */
-ChipResult<> Chip::thp_afe_force_exit_idle(void) {
-    if (m_connState.load() != ConnectionState::Connected) return std::unexpected(ChipError::InvalidOperation);
-    LOG_INFO("Device", "Chip::thp_afe_force_exit_idle", GetStateStr(), "Entering!");
-
-    // Firmware-side force-exit command is unstable; keep this as software state sync.
-    auto res = NotifyTouchWakeup();
-    LOG_INFO("Device", "Chip::thp_afe_force_exit_idle", GetStateStr(), "Out!");
-    return res;
-}
-
-ChipResult<> Chip::thp_afe_enable_freq_shift(void) {
-    if (m_connState.load() != ConnectionState::Connected) return std::unexpected(ChipError::InvalidOperation);
-    LOG_INFO("Device", "Chip::thp_afe_enable_freq_shift", GetStateStr(), "Entering!");
-    return HimaxProtocol::send_command(m_master.get(), 0x0d, 0x00, current_slot);
-}
-
-ChipResult<> Chip::thp_afe_disable_freq_shift(void) {
-    if (m_connState.load() != ConnectionState::Connected) return std::unexpected(ChipError::InvalidOperation);
-    LOG_INFO("Device", "Chip::thp_afe_disable_freq_shift", GetStateStr(), "Entering!");
-    return HimaxProtocol::send_command(m_master.get(), 0x02, 0x00, current_slot);
-}
-
-ChipResult<> Chip::thp_afe_clear_status(uint8_t cmd_val) {
-    if (m_connState.load() != ConnectionState::Connected) return std::unexpected(ChipError::InvalidOperation);
-    LOG_INFO("Device", "Chip::thp_afe_clear_status", GetStateStr(), "Entering with cmd_val={}",
-             static_cast<unsigned int>(cmd_val));
-    return HimaxProtocol::send_command(m_master.get(), 0x06, cmd_val, current_slot);
-}
-
-ChipResult<> Chip::thp_afe_force_to_freq_point(uint8_t freq_idx) {
-    if (m_connState.load() != ConnectionState::Connected) return std::unexpected(ChipError::InvalidOperation);
-    LOG_INFO("Device", "Chip::thp_afe_force_to_freq_point", GetStateStr(), "Entering with freq_idx={}",
-             static_cast<unsigned int>(freq_idx));
-    return HimaxProtocol::send_command(m_master.get(), 0x0c, freq_idx, current_slot);
-}
-
-ChipResult<> Chip::thp_afe_force_to_scan_rate(uint8_t rate_idx) {
-    if (m_connState.load() != ConnectionState::Connected) return std::unexpected(ChipError::InvalidOperation);
-    LOG_INFO("Device", "Chip::thp_afe_force_to_scan_rate", GetStateStr(), "Entering with rate_idx={}",
-             static_cast<unsigned int>(rate_idx));
-    return HimaxProtocol::send_command(m_master.get(), 0x0e, rate_idx, current_slot);
-}
-
-/**
- * @brief 统一的 AFE 模式切换接口
- * @param cmd AFE 命令类型
- * @param param 可选参数 (用于 ClearStatus 等需要参数的命令)
- * @return bool 是否成功
- */
-ChipResult<> Chip::afe_sendCommand(command cmd) {
-    LOG_INFO("Device", "Chip::afe_sendCommand", GetStateStr(), "Dispatch cmd={}({}), param={}",
-             AfeCommandToString(cmd.type), static_cast<int>(cmd.type), static_cast<unsigned int>(cmd.param));
-    switch (cmd.type) {
-    case AFE_Command::ClearStatus:
-        return thp_afe_clear_status(cmd.param);
-    case AFE_Command::EnableFreqShift:
-        return thp_afe_enable_freq_shift();
-    case AFE_Command::DisableFreqShift:
-        return thp_afe_disable_freq_shift();
-    case AFE_Command::StartCalibration:
-        return thp_afe_start_calibration(cmd.param);
-    case AFE_Command::EnterIdle:
-        return thp_afe_enter_idle(cmd.param);
-    case AFE_Command::ForceExitIdle:
-        return thp_afe_force_exit_idle();
-    case AFE_Command::ForceToFreqPoint:
-        return thp_afe_force_to_freq_point(cmd.param);
-    case AFE_Command::ForceToScanRate:
-        return thp_afe_force_to_scan_rate(cmd.param);
-    case AFE_Command::InitStylus:
-        return InitStylus(cmd.param);
-    case AFE_Command::DisconnectStylus:
-        return DisconnectStylus();
-    default:
-        return std::unexpected(ChipError::InvalidOperation);
-    }
-}
 
 ChipResult<> Chip::Init(void) {
     if (auto res = hx_hw_reset_ahb_intf(DeviceType::Master); !res) return res;
@@ -849,14 +702,10 @@ ChipResult<> Chip::Init(void) {
     // 标记连接就绪（后续 AFE 命令检查此状态）
     m_connState.store(ConnectionState::Connected);
 
-    if (auto res = thp_afe_clear_status(0x00); !res) {
-        LOG_WARN("Device", "Chip::Init", GetStateStr(),
-                 "clear_status failed (non-fatal), chip may use default rate");
-    } else {
-        LOG_INFO("Device", "Chip::Init", GetStateStr(), "clear_status success.");
-    }
+    // 重置手写笔软件状态（确保无残留 pending）
+    m_afe.ResetStylusState();
 
-    if (auto res = thp_afe_start_calibration(); !res) {
+    if (auto res = m_afe.StartCalibration(); !res) {
         LOG_WARN("Device", "Chip::Init", GetStateStr(),
                  "start_calibration failed (non-fatal), chip may use default rate");
     } else {
@@ -865,7 +714,7 @@ ChipResult<> Chip::Init(void) {
     
     // 强制芯片切换到 120Hz 扫描率（cmd=0x0E, val=0x00）
     // 确保上电后不处于芯片默认的低帧率或未知模式
-    if (auto res = thp_afe_force_to_scan_rate(0x00); !res) {
+    if (auto res = m_afe.ForceToScanRate(0x00); !res) {
         LOG_WARN("Device", "Chip::Init", GetStateStr(),
                  "force_to_scan_rate(120Hz) failed (non-fatal), chip may use default rate");
     } else {
@@ -960,141 +809,16 @@ bool Chip::isFingerDetected() const {
 bool Chip::isStylusDetected() const {
     constexpr size_t kSlaveOffset = 5063;
     constexpr size_t kHeaderSize  = 7;    // 与 master 一致的校验头
-    const uint8_t b1 = back_data[kSlaveOffset + kHeaderSize];      // 字段 1
-    const uint8_t b2 = back_data[kSlaveOffset + kHeaderSize + 1];  // 字段 2
-    return !(b1 == 0xFF && b2 == 0xFF);
-}
 
-// ── 手写笔生命周期 ──────────────────────────────────────────────────────────
+    const uint8_t* st = back_data.data() + kSlaveOffset + kHeaderSize;
 
-/// 默认频率命令表（4 条目 + 1 默认笔 ID=5）
-/// 来源：Ghidra 逆向 himax_thp_drv.dll DAT_18016dc80
-/// 每条目：[pen_id, freq0_cmd(u16), freq1_cmd(u16)]
-static constexpr struct { uint8_t id; uint16_t f0; uint16_t f1; } kFreqTable[] = {
-    {0, 0x00A1, 0x0018},   // 笔 0
-    {1, 0x00A2, 0x0019},   // 笔 1
-    {2, 0x00A3, 0x001A},   // 笔 2
-    {3, 0x00A4, 0x001B},   // 笔 3
-    {5, 0x00A1, 0x0018},   // 默认笔 "CD54" (ID=5)
-};
-
-ChipResult<> Chip::InitStylus(uint8_t pen_id) {
-    if (m_connState.load() != ConnectionState::Connected)
-        return std::unexpected(ChipError::InvalidOperation);
-
-    LOG_INFO("Device", "Chip::InitStylus", GetStateStr(),
-             "pen_id={} → EnableFreqShift + bind FreqPair",
-             static_cast<unsigned>(pen_id));
-
-    // 1. 启用芯片频率偏移模式
-    if (auto r = thp_afe_enable_freq_shift(); !r) return r;
-
-    // 2. 按 pen_id 查频率表，绑定 FreqPair
-    StylusFreqPair pair{0x00A1, 0x0018};  // 默认值（ID=5）
-    for (auto& e : kFreqTable) {
-        if (e.id == pen_id) {
-            pair.freq0_cmd = e.f0;
-            pair.freq1_cmd = e.f1;
-            break;
-        }
-    }
-
-    // 3. 更新运行时状态
-    m_stylus.connected       = true;
-    m_stylus.pen_id          = pen_id;
-    m_stylus.freqPair        = pair;
-    m_stylus.freqIdx         = 0;       // 初始频点 0
-    m_stylus.switchPolicy    = 2;       // 启用噪声触发切换
-    m_stylus.switchTargetIdx = 0;
-    m_stylus.switchReqPending = false;
-
-    LOG_INFO("Device", "Chip::InitStylus", GetStateStr(),
-             "Stylus ready: freq0=0x{:04X}, freq1=0x{:04X}, policy=2",
-             pair.freq0_cmd, pair.freq1_cmd);
-
-    return {};
-}
-
-ChipResult<> Chip::DisconnectStylus() {
-    if (m_connState.load() != ConnectionState::Connected)
-        return std::unexpected(ChipError::InvalidOperation);
-
-    LOG_INFO("Device", "Chip::DisconnectStylus", GetStateStr(),
-             "DisableFreqShift + reset StylusState");
-
-    // 禁用频率偏移
-    (void)thp_afe_disable_freq_shift();
-
-    // 重置手写笔状态
-    m_stylus = StylusState{};
-
-    return {};
-}
-
-/// 每帧调用：从 master 状态表读取 F0/F1 噪声计数，
-/// 噪声差 > 5000 时发 ForceToFreqPoint 切换扫描频率。
-/// 与原厂 thp_afe_process_stylus_status() 等价。
-void Chip::ProcessStylusStatus() {
-    if (!m_stylus.connected || m_stylus.switchPolicy < 2) return;
-
-    // ── 定位 master 帧内的状态表 ────────────────────────────────
-    // Master 帧布局: [7 协议头][4800 电容数据][256 状态表]
-    // 状态表起始偏移 = 7 + 4800 = 4807
-    constexpr size_t kMasterStatusOffset = 4807;
-    // F0 噪声计数位于状态表 +0x1C（u16）
-    constexpr size_t kF0NoiseOffset = kMasterStatusOffset + 0x1C;
-    // F1 噪声计数位于状态表 +0x20（u16）
-    constexpr size_t kF1NoiseOffset = kMasterStatusOffset + 0x20;
-    // 频率切换完成标志位于状态表 +0x04（u16）
-    constexpr size_t kFreqShiftDoneOffset = kMasterStatusOffset + 0x04;
-
-    // 安全检查
-    if (kF1NoiseOffset + 2 > back_data.size()) return;
-
-    // 读取噪声值（小端 u16）
-    auto readU16 = [this](size_t off) -> uint16_t {
-        return static_cast<uint16_t>(back_data[off]) |
-               (static_cast<uint16_t>(back_data[off + 1]) << 8);
+    auto readU16 = [&](size_t wordIdx) -> uint16_t {
+        size_t byteIdx = wordIdx * 2;
+        return static_cast<uint16_t>(st[byteIdx] | (st[byteIdx + 1] << 8));
     };
-
-    uint16_t f0_noise = readU16(kF0NoiseOffset);
-    uint16_t f1_noise = readU16(kF1NoiseOffset);
-    uint16_t freqDone = readU16(kFreqShiftDoneOffset);
-
-    // ── 频率切换完成确认 ────────────────────────────────────────
-    if (freqDone != 0 && m_stylus.switchReqPending) {
-        m_stylus.freqIdx = m_stylus.switchTargetIdx;
-        m_stylus.switchReqPending = false;
-        LOG_INFO("Device", "Chip::ProcessStylusStatus", GetStateStr(),
-                 "FreqShift done → now at freqIdx={}", m_stylus.freqIdx);
-    }
-
-    // ── 噪声差判断 → 频率切换请求 ───────────────────────────────
-    // 阈值 5000，与原厂固件一致
-    constexpr int kNoiseThreshold = 5000;
-
-    if (!m_stylus.switchReqPending) {
-        int diff_01 = static_cast<int>(f0_noise) - static_cast<int>(f1_noise);
-        int diff_10 = static_cast<int>(f1_noise) - static_cast<int>(f0_noise);
-
-        if (diff_01 >= kNoiseThreshold && m_stylus.freqIdx != 1) {
-            // F0 太吵 → 切到频点1
-            m_stylus.switchTargetIdx = 1;
-            m_stylus.switchReqPending = true;
-            LOG_INFO("Device", "Chip::ProcessStylusStatus", GetStateStr(),
-                     "F0_noise({})−F1_noise({})={} ≥{} → ForceToFreqPoint(1)",
-                     f0_noise, f1_noise, diff_01, kNoiseThreshold);
-            (void)thp_afe_force_to_freq_point(1);
-        } else if (diff_10 > kNoiseThreshold && m_stylus.freqIdx != 0) {
-            // F1 太吵 → 切回频点0
-            m_stylus.switchTargetIdx = 0;
-            m_stylus.switchReqPending = true;
-            LOG_INFO("Device", "Chip::ProcessStylusStatus", GetStateStr(),
-                     "F1_noise({})−F0_noise({})={} >{} → ForceToFreqPoint(0)",
-                     f1_noise, f0_noise, diff_10, kNoiseThreshold);
-            (void)thp_afe_force_to_freq_point(0);
-        }
-    }
+    const uint16_t field1 = readU16(0);  // 字段 1（word index 0）
+    const uint16_t field2 = readU16(1);  // 字段 2（word index 1）
+    return !((field1 & 0xFF) == 0xFF && (field2 & 0xFF) == 0xFF);
 }
 
 ChipResult<> Chip::GetFrame(void) {
@@ -1108,7 +832,7 @@ ChipResult<> Chip::GetFrame(void) {
         auto s_res = m_slave->GetFrame(back_data.data() + 5063, 339, nullptr);
 
         if (m_res && s_res) {
-            if (isFingerDetected()) {
+            if (isFingerDetected() || isStylusDetected()) {
                 (void)NotifyTouchWakeup();
                 LOG_INFO("Device", "Chip::GetFrame", GetStateStr(),
                          "Input detected in idle → wakeup to Normal");
@@ -1121,18 +845,11 @@ ChipResult<> Chip::GetFrame(void) {
     }
 
     // ── Normal 模式：2:1 交错帧获取 ──────────────────────────
+    // 原厂顺序: Master → Slave（确保 master scan cycle 完成后再读 slave 数据）
 
-    // 1. 总是读 Slave (stylus, 有效 240Hz)
-    if (auto res = m_slave->GetFrame(back_data.data() + 5063, 339, nullptr); !res) {
-        if (m_slave->IsTimeoutError())
-            return std::unexpected(ChipError::Timeout);
-        LOG_ERROR("Device", "Chip::GetFrame", GetStateStr(), "Slave GetFrame failed!");
-        return res;
-    }
-
-    // 2. 条件读 Master (touch, 有效 120Hz)
+    // 1. 条件读 Master (touch, 有效 120Hz)
     //    奇数帧 且 手写笔已连接 → 跳过 Master，复用上一帧数据
-    bool skipMaster = (m_frameCount & 1) != 0 && m_stylus.connected;
+    bool skipMaster = (m_frameCount & 1) != 0 && m_afe.GetStylusState().connected;
     if (!skipMaster) {
         if (auto res = m_master->GetFrame(back_data.data(), 5063, nullptr); !res) {
             if (m_master->IsTimeoutError())
@@ -1141,12 +858,20 @@ ChipResult<> Chip::GetFrame(void) {
             return res;
         }
     }
+
+    // 2. 总是读 Slave (stylus, 有效 240Hz)
+    if (auto res = m_slave->GetFrame(back_data.data() + 5063, 339, nullptr); !res) {
+        if (m_slave->IsTimeoutError())
+            return std::unexpected(ChipError::Timeout);
+        LOG_ERROR("Device", "Chip::GetFrame", GetStateStr(), "Slave GetFrame failed!");
+        return res;
+    }
     m_frameCount++;
 
-    // ── 零帧计数 & idle 自动进入(暂时清除手写笔校验)) ──────────────────────────────
+    // ── 零帧计数 & idle 自动进入 ─────────────────────────────
     constexpr uint32_t kIdleEntryThreshold = 600;  // ~5 秒 @120Hz
 
-    if (isFingerDetected()) {
+    if (isFingerDetected() || isStylusDetected()) {
         m_zeroFrameCount = 0;
     } else {
         m_zeroFrameCount++;
@@ -1154,7 +879,7 @@ ChipResult<> Chip::GetFrame(void) {
             LOG_INFO("Device", "Chip::GetFrame", GetStateStr(),
                      "No input for {} frames → EnterIdle",
                      m_zeroFrameCount);
-            (void)thp_afe_enter_idle();
+            (void)m_afe.EnterIdle();
             m_zeroFrameCount = 0;
         }
     }

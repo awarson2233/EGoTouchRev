@@ -1,15 +1,8 @@
-/*
- * @Author: Detach0-0 detach0-0@outlook.com
- * @Date: 2026-01-03 01:19:27
- * @LastEditors: Detach0-0 detach0-0@outlook.com
- * @LastEditTime: 2026-01-07 13:30:34
- * @FilePath: \EGoTouchRev-vsc\HimaxChipCore\header\HimaxChip.h
- * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
- */
 #pragma once
 #include "Device.h"
 #include "HimaxProtocol.h"
 #include "HimaxRegisters.h"
+#include "himax/HimaxAfe.h"
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -17,8 +10,6 @@
 #include <string>
 #include <thread>
 #include <winnt.h>
-
-// Note: The legacy HIMAX_LOG is removed. We use LOG_INFO, LOG_ERROR, etc. from Logger.h
 
 namespace Himax {
 
@@ -73,26 +64,13 @@ namespace Himax {
             ChipResult<> himax_mcu_interface_on(void);
             ChipResult<> hx_set_N_frame(uint8_t nFrame);
 
-            ChipResult<> thp_afe_enter_idle(uint8_t param = 0);
-            ChipResult<> thp_afe_force_exit_idle(void);
-            ChipResult<> thp_afe_start_calibration(uint8_t param = 0);
-            ChipResult<> thp_afe_enable_freq_shift(void);
-            ChipResult<> thp_afe_disable_freq_shift(void);
-            ChipResult<> thp_afe_clear_status(uint8_t cmd_val);
-            ChipResult<> thp_afe_force_to_freq_point(uint8_t freq_idx);
-            ChipResult<> thp_afe_force_to_scan_rate(uint8_t rate_idx);
         public:
-            // ── 手写笔生命周期管理 ────────────────────────────────
-            /// 手写笔连接初始化：EnableFreqShift + 绑定 FreqPair + 设置 connected
-            ChipResult<> InitStylus(uint8_t pen_id = 5);
-            /// 手写笔断连清理：DisableFreqShift + 重置 StylusState
-            ChipResult<> DisconnectStylus();
-            /// 每帧调用：从 master 状态表读取噪声计数，超阈值时切换频点
-            void ProcessStylusStatus();
             alignas(64) std::array<uint8_t, 6000> back_data{};
             THP_INSPECTION_ENUM m_inspection_mode;
             std::atomic<THP_AFE_MODE> afe_mode{THP_AFE_MODE::Normal};
-            StylusState m_stylus;    // 手写笔运行时状态（连接/频点/切换策略）
+
+            // ── AfeController (owns stylus state and AFE command dispatch) ──
+            AfeController m_afe;
 
             // 触点/手写笔检测：从帧数据判断是否有输入
             bool isFingerDetected() const;
@@ -112,20 +90,26 @@ namespace Himax {
                 }
             }
 
+            // ── AfeController 访问接口 ──────────────────────────────────
+            // 这些方法供 AfeController 使用，避免将 Chip 内部全部暴露
+            HalDevice* GetMasterDevice() { return m_master.get(); }
+            uint8_t& GetCurrentSlot() { return current_slot; }
+            ConnectionState GetConnectionState() const { return m_connState.load(); }
+            const std::array<uint8_t, 6000>& GetFrameBuffer() const { return back_data; }
+            void SetAfeMode(THP_AFE_MODE mode) { afe_mode.store(mode); }
+
             ChipResult<> SetFrameReadPolicy(bool block, uint8_t timeoutMs);
             ChipResult<> SetFrameReadNormalPolicy();
             ChipResult<> SetFrameReadIdlePolicy();
-            ChipResult<> afe_sendCommand(command cmd);
             ChipResult<> NotifyTouchWakeup();
 
             Chip(const std::wstring& master_path, const std::wstring& slave_path, const std::wstring& interrupt_path);
             ~Chip(); // Add destructor for explicit cleanup
             
             bool IsReady(DeviceType type) const;
-            ConnectionState GetConnectionState() const { return m_connState.load(); }
             
             ChipResult<> Init(void);
-            ChipResult<> Deinit(bool check_en = true); // Replaces Stop
+            ChipResult<> Deinit(bool check_en = true);
             void HoldReset();   // Suspend: pull reset low + IntClose, no bus traffic
             ChipResult<> check_bus(void);
             ChipResult<> GetFrame(void);

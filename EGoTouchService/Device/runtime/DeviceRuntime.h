@@ -94,6 +94,10 @@ public:
     void SetTouchOnlyMode(bool v) { m_touchOnly.store(v); }
     bool IsTouchOnlyMode() const { return m_touchOnly.load(); }
 
+    // 单独的 Stylus VHF 输出开关
+    void SetStylusVhfEnabled(bool v) { m_stylusVhfEnabled.store(v); }
+    bool IsStylusVhfEnabled() const { return m_stylusVhfEnabled.load(); }
+
     // Pipeline / VHF 配置 — 仅在 Start() 前调用
     Engine::FramePipeline& GetTouchPipeline() { return m_touchPipeline; }
     // Legacy alias
@@ -103,6 +107,10 @@ public:
 
     /// 注入 BT MCU 压感值（由 PenBridge 线程写入，StylusPipeline 帧内读取）
     void SetBtMcuPressure(uint16_t p) { m_stylusPipeline.SetBtMcuPressure(p); }
+
+    /// BT 频率提供者：每帧调用获取最新 BT MCU 频率 (freq1, freq2)
+    using BtFreqProvider = std::function<std::pair<uint8_t, uint8_t>()>;
+    void SetBtFreqProvider(BtFreqProvider fn) { m_btFreqProvider = std::move(fn); }
 
     // Frame push callback for IPC (called after pipeline+VHF in worker loop)
     using FramePushCallback = std::function<void(const Engine::HeatmapFrame&)>;
@@ -142,6 +150,7 @@ private:
     std::atomic<StopReason> m_stopReason{StopReason::None};
     std::atomic<bool> m_autoMode{false};
     std::atomic<bool> m_touchOnly{false};
+    std::atomic<bool> m_stylusVhfEnabled{true};
     Himax::Chip m_chip;
     Engine::FramePipeline m_touchPipeline;
     Engine::StylusPipeline m_stylusPipeline;
@@ -163,6 +172,7 @@ private:
     std::string m_lastNote;
     std::atomic<uint64_t> m_nextCmdId{1};
     FramePushCallback m_framePushCb;
+    BtFreqProvider m_btFreqProvider;
 
     std::atomic<bool> m_running{false};
     std::thread m_thread;
