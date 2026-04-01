@@ -1,87 +1,67 @@
 ---
-name: agent-memory-mcp
-description: "A hybrid memory system that provides persistent, searchable knowledge management for AI agents (Architecture, Patterns, Decisions)."
-risk: unknown
-source: community
-date_added: "2026-02-27"
+name: agentMemory
+description: A hybrid memory system that provides persistent, searchable knowledge management for AI agents.
 ---
 
-# Agent Memory Skill
+# agentMemory Skill
 
-This skill provides a persistent, searchable memory bank that automatically syncs with project documentation. It runs as an MCP server to allow reading/writing/searching of long-term memories.
+This skill extends your capabilities by providing a persistent, searchable memory bank that automatically syncs with project documentation.
 
 ## Prerequisites
 
-- Node.js (v18+)
+- Node.js installed
+- Check if `agentMemory` is already installed in the project:
+  ```bash
+  ls -la .agentMemory
+  ```
 
 ## Setup
 
-1. **Clone the Repository**:
-   Clone the `agentMemory` project into your agent's workspace or a parallel directory:
-
+1. **Install Dependencies**:
    ```bash
-   git clone https://github.com/webzler/agentMemory.git .agent/skills/agent-memory
+   npm install
    ```
 
-2. **Install Dependencies**:
-
+2. **Build the Project**:
    ```bash
-   cd .agent/skills/agent-memory
-   npm install
    npm run compile
    ```
 
-3. **Start the MCP Server**:
-   Use the helper script to activate the memory bank for your current project:
-
+3. **Start the Memory Server**:
+   You need to run the MCP server to interact with the memory bank.
    ```bash
-   npm run start-server <project_id> <absolute_path_to_target_workspace>
+   npm run start-server <project_id> <absolute_path_to_workspace>
    ```
-
-   _Example for current directory:_
-
-   ```bash
-   npm run start-server my-project $(pwd)
-   ```
+   *Note: This skill typically runs as a background process or via an mcp-server configuration. ensuring it is running is key.*
 
 ## Capabilities (MCP Tools)
 
+Once the server is running, you can use these tools:
+
 ### `memory_search`
-
 Search for memories by query, type, or tags.
-
 - **Args**: `query` (string), `type?` (string), `tags?` (string[])
 - **Usage**: "Find all authentication patterns" -> `memory_search({ query: "authentication", type: "pattern" })`
 
 ### `memory_write`
-
 Record new knowledge or decisions.
-
 - **Args**: `key` (string), `type` (string), `content` (string), `tags?` (string[])
 - **Usage**: "Save this architecture decision" -> `memory_write({ key: "auth-v1", type: "decision", content: "..." })`
 
 ### `memory_read`
-
 Retrieve specific memory content by key.
-
 - **Args**: `key` (string)
 - **Usage**: "Get the auth design" -> `memory_read({ key: "auth-v1" })`
 
 ### `memory_stats`
-
 View analytics on memory usage.
-
 - **Usage**: "Show memory statistics" -> `memory_stats({})`
 
-## Dashboard
+## Workflow
 
-This skill includes a standalone dashboard to visualize memory usage.
-
-```bash
-npm run start-dashboard <absolute_path_to_target_workspace>
-```
-
-Access at: `http://localhost:3333`
-
-## When to Use
-This skill is applicable to execute the workflow or actions described in the overview.
+1. **Initialization**: The first time you run this in a project, it may attempt to import existing markdown memory banks from `.kilocode/`, `.clinerules/`, or `.roo/`.
+2. **Development Loop**:
+   - **Before Task**: Search memory for relevant context.
+   - **During Task**: Use read/search to answer questions.
+   - **After Task**: Write new findings to memory.
+3. **Sync**: Your writes are automatically synced to standard markdown files in the project.

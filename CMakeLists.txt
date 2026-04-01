@@ -118,14 +118,14 @@ target_include_directories(Common PUBLIC "${ENGINE_ROOT}")
 
 # --- Host Module (System Integration) ---
 set(HOST_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/EGoTouchService/Host")
-file(GLOB HOST_SOURCES "${HOST_ROOT}/source/*.cpp")
-file(GLOB HOST_HEADERS "${HOST_ROOT}/include/*.h")
+file(GLOB HOST_SOURCES "${HOST_ROOT}/*.cpp")
+file(GLOB HOST_HEADERS "${HOST_ROOT}/*.h")
 
 add_library(Host STATIC
     ${HOST_SOURCES}
     ${HOST_HEADERS}
 )
-target_include_directories(Host PUBLIC "${HOST_ROOT}/include")
+target_include_directories(Host PUBLIC "${HOST_ROOT}")
 target_link_libraries(Host PUBLIC Common)
 if (WIN32)
     target_link_libraries(Host PUBLIC advapi32)
@@ -169,6 +169,11 @@ target_include_directories(EGoTouchService PRIVATE
     "${SERVICE_ROOT}/include"
 )
 target_link_libraries(EGoTouchService PRIVATE Device Host Common advapi32 setupapi hid)
+
+# EGoTouchService uses wmain (console subsystem) for service/console dual mode
+if(MSVC)
+    set_target_properties(EGoTouchService PROPERTIES LINK_FLAGS "/SUBSYSTEM:CONSOLE")
+endif()
 
 # --- BtMcuTestTool (ImGui BT Protocol Validator) ---
 add_executable(BtMcuTestTool

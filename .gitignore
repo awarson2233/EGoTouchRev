@@ -4,3 +4,8 @@ build/
 .vs/
 exports/
 release/
+.agents/
+SKILL.md
+.agentMemory/.claude/
+.brain/
+temp/
