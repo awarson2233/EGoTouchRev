@@ -1,5 +1,4 @@
 #include "TouchTracker.h"
-#include "imgui.h"
 
 #include <algorithm>
 #include <cmath>
@@ -415,68 +414,46 @@ bool TouchTracker::Process(HeatmapFrame& frame) {
 }
 
 // =============================================================================
-// DrawConfigUI — IDT core params only, no TS/TE
+// GetConfigSchema — IDT core params
 // =============================================================================
-void TouchTracker::DrawConfigUI() {
-    ImGui::TextWrapped("IDT touch tracking (pure matcher). Reporting is handled by TouchGestureStateMachine.");
-    ImGui::Checkbox("Use Hungarian Assignment", &m_useHungarian);
-    ImGui::SliderFloat("Max Track Distance", &m_maxTrackDistance, 1.0f, 20.0f, "%.1f");
-    ImGui::SliderFloat("Always Match Distance", &m_alwaysMatchDistance, 0.5f, 6.0f, "%.2f");
-    ImGui::SliderFloat("Edge Track Boost", &m_edgeTrackBoost, 1.0f, 3.0f, "%.2f");
-    ImGui::SliderFloat("Acc Threshold Boost", &m_accThresholdBoost, 1.0f, 6.0f, "%.2f");
-    ImGui::SliderFloat("Acc Boost Size(mm)", &m_accBoostSizeMm, 0.5f, 4.0f, "%.2f");
-    ImGui::SliderFloat("Prediction Scale", &m_predictionScale, 0.0f, 2.0f, "%.2f");
-    ImGui::SliderInt("LiftOff Hold Frames", &m_liftOffHoldFrames, 0, 4);
-    ImGui::SliderInt("TouchDown Debounce Frames", &m_touchDownDebounceFrames, 0, 3);
-    ImGui::Checkbox("Dynamic Debounce", &m_dynamicDebounceEnabled);
-    if (m_dynamicDebounceEnabled) {
-        ImGui::SliderInt("  TouchDown Max Extra", &m_touchDownDebounceMaxExtra, 0, 4);
-        ImGui::SliderInt("  TouchDown Weak Sig", &m_touchDownWeakSignalThreshold, 20, 800);
-        ImGui::SliderFloat("  TouchDown Small Size", &m_touchDownSmallSizeThresholdMm, 0.5f, 4.0f, "%.2f");
-        ImGui::Checkbox("  TouchDown Reject Weak", &m_touchDownRejectEnabled);
-        if (m_touchDownRejectEnabled) {
-            ImGui::SliderInt("    Reject Min Signal", &m_touchDownRejectMinSignal, 1, 400);
-            ImGui::SliderFloat("    Reject Min Size", &m_touchDownRejectMinSizeMm, 0.3f, 3.0f, "%.2f");
-            ImGui::SliderInt("    Edge Reject Min Sig", &m_touchDownEdgeRejectMinSignal, 1, 600);
-        }
-    }
-    ImGui::SliderFloat("Fallback Size(mm)", &m_fallbackSizeMm, 0.1f, 4.0f, "%.2f");
-    ImGui::SliderFloat("Size Area Scale", &m_sizeAreaScale, 0.05f, 1.00f, "%.2f");
-    ImGui::SliderFloat("Size Signal Scale", &m_sizeSignalScale, 0.05f, 1.20f, "%.2f");
-    ImGui::Checkbox("Rx Ghost Filter", &m_rxGhostFilterEnabled);
-    if (m_rxGhostFilterEnabled) {
-        ImGui::SliderInt("  Rx Ghost Line Delta", &m_rxGhostLineDelta, 0, 3);
-        ImGui::SliderFloat("  Rx Ghost Weak Ratio", &m_rxGhostWeakRatio, 0.10f, 0.95f, "%.2f");
-        ImGui::Checkbox("  Rx Ghost Only New", &m_rxGhostOnlyNew);
-    }
-    ImGui::Separator();
-    ImGui::TextWrapped("Stylus interop params are in Stylus Pipeline Panel.");
-}
+std::vector<ConfigParam> TouchTracker::GetConfigSchema() const {
+    std::vector<ConfigParam> schema = IFrameProcessor::GetConfigSchema();
+    
+    // --- Core Tracking ---
+    schema.push_back(ConfigParam("UseHungarian", "Use Hungarian", 
+        ConfigParam::Bool, const_cast<bool*>(&m_useHungarian)));
+    schema.push_back(ConfigParam("MaxTrackDistance", "Max Track Dist", 
+        ConfigParam::Float, const_cast<float*>(&m_maxTrackDistance), 1.0f, 20.0f));
+    schema.push_back(ConfigParam("AlwaysMatchDistance", "Always Match Dist", 
+        ConfigParam::Float, const_cast<float*>(&m_alwaysMatchDistance), 0.5f, 6.0f));
+    schema.push_back(ConfigParam("PredictionScale", "Prediction Scale", 
+        ConfigParam::Float, const_cast<float*>(&m_predictionScale), 0.0f, 2.0f));
+    schema.push_back(ConfigParam("LiftOffHoldFrames", "LiftOff Hold", 
+        ConfigParam::Int, const_cast<int*>(&m_liftOffHoldFrames), 0, 10));
 
-void TouchTracker::DrawStylusInteropConfigUI() {
-    ImGui::TextWrapped("Touch-side stylus suppression and StylusAFT gating.");
-    ImGui::Separator();
-    ImGui::Checkbox("Stylus Global Suppress", &m_stylusSuppressGlobalEnabled);
-    ImGui::Checkbox("Stylus Local Suppress", &m_stylusSuppressLocalEnabled);
-    if (m_stylusSuppressLocalEnabled) {
-        ImGui::SliderFloat("  Stylus Local Dist", &m_stylusSuppressLocalDistance, 0.5f, 10.0f, "%.2f");
-        ImGui::SliderInt("  Stylus Pen Peak Th", &m_stylusSuppressPenPeakThreshold, 100, 4000);
-        ImGui::SliderInt("  Stylus Keep Touch Sig", &m_stylusSuppressTouchSignalKeep, 100, 12000);
-        ImGui::SliderInt("  Stylus Keep Touch Area", &m_stylusSuppressTouchAreaKeep, 1, 80);
-    }
-    ImGui::Separator();
-    ImGui::Checkbox("StylusAFT Enabled", &m_stylusAftEnabled);
-    if (m_stylusAftEnabled) {
-        ImGui::SliderInt("  StylusAFT Recent Frames", &m_stylusAftRecentFrames, 1, 80);
-        ImGui::SliderFloat("  StylusAFT Radius", &m_stylusAftRadius, 0.5f, 12.0f, "%.2f");
-        ImGui::SliderInt("  StylusAFT Debounce Frames", &m_stylusAftDebounceFrames, 1, 8);
-        ImGui::SliderInt("  StylusAFT Weak Signal", &m_stylusAftWeakSignalThreshold, 1, 1200);
-        ImGui::SliderFloat("  StylusAFT Weak Size", &m_stylusAftWeakSizeThresholdMm, 0.2f, 4.0f, "%.2f");
-        ImGui::SliderInt("  StylusAFT Suppress Frames", &m_stylusAftSuppressFrames, 1, 120);
-        ImGui::SliderInt("  StylusAFT Palm Suppress", &m_stylusAftPalmSuppressFrames, 1, 180);
-        ImGui::SliderInt("  StylusAFT Palm Area", &m_stylusAftPalmAreaThreshold, 1, 120);
-        ImGui::SliderFloat("  StylusAFT Palm Size", &m_stylusAftPalmSizeThresholdMm, 0.5f, 8.0f, "%.2f");
-    }
+    // --- Debounce & Rejection ---
+    schema.push_back(ConfigParam("TouchDownDebounceFrames", "Down Debounce", 
+        ConfigParam::Int, const_cast<int*>(&m_touchDownDebounceFrames), 0, 10));
+    schema.push_back(ConfigParam("TouchDownRejectEnabled", "Enable Reject", 
+        ConfigParam::Bool, const_cast<bool*>(&m_touchDownRejectEnabled)));
+    schema.push_back(ConfigParam("TouchDownRejectMinSignal", "Reject Signal Th", 
+        ConfigParam::Int, const_cast<int*>(&m_touchDownRejectMinSignal), 0, 500));
+
+    // --- Stylus Interop ---
+    schema.push_back(ConfigParam("StylusSuppressGlobalEnabled", "Pen Global Suppress", 
+        ConfigParam::Bool, const_cast<bool*>(&m_stylusSuppressGlobalEnabled)));
+    schema.push_back(ConfigParam("StylusSuppressLocalEnabled", "Pen Local Suppress", 
+        ConfigParam::Bool, const_cast<bool*>(&m_stylusSuppressLocalEnabled)));
+    schema.push_back(ConfigParam("StylusSuppressLocalDistance", "Suppress radius", 
+        ConfigParam::Float, const_cast<float*>(&m_stylusSuppressLocalDistance), 0.5f, 10.0f));
+    schema.push_back(ConfigParam("StylusAftEnabled", "Enable AFT (Anti-Falsing)", 
+        ConfigParam::Bool, const_cast<bool*>(&m_stylusAftEnabled)));
+    schema.push_back(ConfigParam("StylusAftRadius", "AFT Radius", 
+        ConfigParam::Float, const_cast<float*>(&m_stylusAftRadius), 0.5f, 10.0f));
+    schema.push_back(ConfigParam("StylusAftSuppressFrames", "AFT Suppress Frames", 
+        ConfigParam::Int, const_cast<int*>(&m_stylusAftSuppressFrames), 0, 200));
+
+    return schema;
 }
 
 // =============================================================================

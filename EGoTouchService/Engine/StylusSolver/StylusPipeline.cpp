@@ -4,7 +4,6 @@
 #include <cmath>
 #include <cstring>
 #include <ostream>
-#include "imgui.h"
 
 namespace Engine {
 
@@ -14,10 +13,17 @@ inline uint16_t ReadU16Le(const uint8_t* p) {
     return static_cast<uint16_t>(p[0]) |
            (static_cast<uint16_t>(p[1]) << 8);
 }
-inline void WriteU16Le(std::array<uint8_t, 13>& b,
+inline void WriteU16Le(std::array<uint8_t, 17>& b,
                        size_t off, uint16_t v) {
     b[off]     = static_cast<uint8_t>(v & 0xFF);
     b[off + 1] = static_cast<uint8_t>((v >> 8) & 0xFF);
+}
+inline void WriteU32Le(std::array<uint8_t, 17>& b,
+                       size_t off, uint32_t v) {
+    b[off]     = static_cast<uint8_t>(v & 0xFF);
+    b[off + 1] = static_cast<uint8_t>((v >> 8) & 0xFF);
+    b[off + 2] = static_cast<uint8_t>((v >> 16) & 0xFF);
+    b[off + 3] = static_cast<uint8_t>((v >> 24) & 0xFF);
 }
 } // namespace
 
@@ -79,7 +85,7 @@ bool StylusPipeline::Process(
         m_lastResult.pipelineStage = 1; // SlaveParseFailure
         if (m_emitPacketWhenInvalid) {
             outPacket.valid = true; outPacket.reportId = 0x08;
-            outPacket.length = 13; outPacket.bytes.fill(0);
+            outPacket.length = 17; outPacket.bytes.fill(0);
             outPacket.bytes[0] = 0x08;
         }
         m_prevValid = false;
@@ -107,14 +113,6 @@ bool StylusPipeline::Process(
                       m_slaveHdrBtnOffset <= 6)
                      ? static_cast<uint32_t>(p[m_slaveHdrBtnOffset]) : 0u;
         m_lastResult.status = hdr.status;
-        static int sSlvHdrLog = 0;
-        if ((sSlvHdrLog++ % 120) == 0) {
-            LOG_TRACE("StylusPipeline", "Process", "SlaveHdr",
-                     "hdr=[{:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X}] "
-                     "btn(off{})={}",
-                     p[0], p[1], p[2], p[3], p[4], p[5], p[6],
-                     m_slaveHdrBtnOffset, hdr.button);
-        }
     }
 
     // 4. TX1 validity: anchor words must not both be 0x00FF
@@ -134,10 +132,10 @@ bool StylusPipeline::Process(
         static int sAnchorLogCount = 0;
         if ((sAnchorLogCount++ % 60) == 0) {
             LOG_TRACE("StylusPipeline", "Process", "Anchor",
-                     "anchor=({},{}) grid_center={} sensorDim=({},{})",
+                     "anchor=({},{}) grid_center={} sensor=({} rows, {} cols)",
                      m_gridData.tx1.anchorRow, m_gridData.tx1.anchorCol,
                      m_gridData.tx1.grid[4][4],
-                     m_sensorDimX, m_sensorDimY);
+                     m_sensorRows, m_sensorCols);
         }
     }
 
@@ -190,19 +188,31 @@ bool StylusPipeline::Process(
 
     m_lastResult.point.valid = finalCoor.valid;
     // Grid coordinate is local to the 9×9 window (0 ~ 9*1024).
-    // m_anchorCenterOffset controls grid center interpretation:
-    //   0 = anchor is top-left of grid (no subtraction)
-    //   4 = anchor is center of grid (subtract 4*1024)
-    const float anchorX = static_cast<float>(
-        m_gridData.tx1.anchorRow) * Asa::kCoorUnit;
-    const float anchorY = static_cast<float>(
-        m_gridData.tx1.anchorCol) * Asa::kCoorUnit;
+    // Sensor layout: Row direction = vertical = Y axis on screen
+    //                Col direction = horizontal = X axis on screen
+    // m_anchorCenterOffset: 0=anchor is top-left, 4=anchor is center of window
+    const float anchorRow = static_cast<float>(
+        m_gridData.tx1.anchorRow) * Asa::kCoorUnit;  // vertical (Y)
+    const float anchorCol = static_cast<float>(
+        m_gridData.tx1.anchorCol) * Asa::kCoorUnit;  // horizontal (X)
     const float centerOff =
         static_cast<float>(m_anchorCenterOffset) * Asa::kCoorUnit;
-    m_lastResult.point.x = anchorX +
-        static_cast<float>(finalCoor.dim1) - centerOff;
-    m_lastResult.point.y = anchorY +
-        static_cast<float>(finalCoor.dim2) - centerOff;
+    m_lastResult.point.x = anchorCol +
+        static_cast<float>(finalCoor.dim2) - centerOff;  // col + dim2
+    m_lastResult.point.y = anchorRow +
+        static_cast<float>(finalCoor.dim1) - centerOff;  // row + dim1
+
+    // 诊断：写入实时分解量（供 DrawConfigUI 展示）
+    m_dbg.anchorRow = m_gridData.tx1.anchorRow;
+    m_dbg.anchorCol = m_gridData.tx1.anchorCol;
+    m_dbg.rawDim1   = rawCoor.dim1;
+    m_dbg.rawDim2   = rawCoor.dim2;
+    m_dbg.finalDim1 = finalCoor.dim1;
+    m_dbg.finalDim2 = finalCoor.dim2;
+    m_dbg.centerOff = centerOff;
+    m_dbg.pointX    = m_lastResult.point.x;
+    m_dbg.pointY    = m_lastResult.point.y;
+    m_dbg.valid     = finalCoor.valid;
 
     // 10b. Edge coordinate compensation
     if (m_edgeCoorPostEnabled)
@@ -461,8 +471,8 @@ void StylusPipeline::EdgeCoorPostProcess(
         return coord;  // interior cells: no change
     };
 
-    dim1 = edgeClamp(dim1, m_sensorDimX);
-    dim2 = edgeClamp(dim2, m_sensorDimY);
+    dim1 = edgeClamp(dim1, m_sensorCols);  // point.x → 水平/Col 方向 → 用列数
+    dim2 = edgeClamp(dim2, m_sensorRows);  // point.y → 垂直/Row 方向 → 用行数
 }
 
 // ══════════════════════════════════════════════
@@ -573,7 +583,7 @@ void StylusPipeline::ResetCalibration() {
 void StylusPipeline::BuildStylusPacket(StylusPacket& pkt) const {
     pkt = StylusPacket{};
     pkt.reportId = 0x08;
-    pkt.length = 13;
+    pkt.length = 17;
     if (!m_lastResult.point.valid && !m_emitPacketWhenInvalid) {
         pkt.valid = false; return;
     }
@@ -584,224 +594,125 @@ void StylusPipeline::BuildStylusPacket(StylusPacket& pkt) const {
     b[1] = static_cast<uint8_t>(m_lastResult.status & 0x7F);
     b[2] = 0x80;
     if (m_lastResult.point.valid) {
-        // Full sensor coordinate range: [0, sensorDim * kCoorUnit)
-        // HID report range: [0, 16000]
+        // Full sensor coordinate range
+        // X(Col): [0, sensorCols * kCoorUnit)  Y(Row): [0, sensorRows * kCoorUnit)
         const float kSensorRangeX =
-            static_cast<float>(m_sensorDimX * Asa::kCoorUnit);
+            static_cast<float>(m_sensorCols * Asa::kCoorUnit);
         const float kSensorRangeY =
-            static_cast<float>(m_sensorDimY * Asa::kCoorUnit);
-        constexpr float kReportMax = 16000.0f;
+            static_cast<float>(m_sensorRows * Asa::kCoorUnit);
 
         const float gx = m_lastResult.point.x;
         const float gy = m_lastResult.point.y;
 
-        // Map sensor coords to report coords
+        // Map sensor coords to HID report coords (4-byte fields)
         // X is inverted (landscape orientation convention)
-        uint16_t vx = static_cast<uint16_t>(std::clamp(
-            static_cast<int>(std::lround(
-                (1.0f - gx / kSensorRangeX) * kReportMax)),
-            0, 16000));
-        uint16_t vy = static_cast<uint16_t>(std::clamp(
-            static_cast<int>(std::lround(
-                gy / kSensorRangeY * kReportMax)),
-            0, 16000));
-        WriteU16Le(b, 3, vx);
-        WriteU16Le(b, 5, vy);
+        uint32_t vx = static_cast<uint32_t>(std::clamp(
+            static_cast<int32_t>(std::lround(
+                (1.0f - gx / kSensorRangeX) * kHidMaxX)),
+            static_cast<int32_t>(0), static_cast<int32_t>(kHidMaxX)));
+        uint32_t vy = static_cast<uint32_t>(std::clamp(
+            static_cast<int32_t>(std::lround(
+                gy / kSensorRangeY * kHidMaxY)),
+            static_cast<int32_t>(0), static_cast<int32_t>(kHidMaxY)));
+        WriteU32Le(b, 3, vx);
+        WriteU32Le(b, 7, vy);
     }
-    WriteU16Le(b, 7, m_lastResult.pressure);
-    WriteU16Le(b, 9,
+    WriteU16Le(b, 11, m_lastResult.pressure);
+    WriteU16Le(b, 13,
         static_cast<uint16_t>(m_lastResult.point.tiltX));
-    WriteU16Le(b, 11,
+    WriteU16Le(b, 15,
         static_cast<uint16_t>(m_lastResult.point.tiltY));
 }
 
 // ══════════════════════════════════════════════
-// DrawConfigUI — Full ImGui parameter panel
+// GetConfigSchema — Configuration metadata
 // ══════════════════════════════════════════════
-void StylusPipeline::DrawConfigUI() {
-    // ── General ──
-    if (ImGui::CollapsingHeader("General",
-            ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::Checkbox("Enable Slave Checksum",
-            &m_enableSlaveChecksum);
-        ImGui::Checkbox("Emit Packet When Invalid",
-            &m_emitPacketWhenInvalid);
-        ImGui::SliderInt("Button Release Hold",
-            &m_buttonReleaseHoldFrames, 0, 10);
-    }
+std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
+    return {
+        // General
+        ConfigParam("sp.enableSlaveChecksum", "Enable Slave Checksum",
+            ConfigParam::Bool, const_cast<bool*>(&m_enableSlaveChecksum)),
+        ConfigParam("sp.emitPacketWhenInvalid", "Emit Packet When Invalid",
+            ConfigParam::Bool, const_cast<bool*>(&m_emitPacketWhenInvalid)),
+        ConfigParam("sp.buttonReleaseHold", "Button Release Hold",
+            ConfigParam::Int, const_cast<int*>(&m_buttonReleaseHoldFrames), 0, 10),
 
-    // ── Coordinate Mapping ──
-    if (ImGui::CollapsingHeader("Coordinate Mapping",
-            ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::SliderInt("Sensor Dim X (rows)",
-            &m_sensorDimX, 9, 80);
-        ImGui::SliderInt("Sensor Dim Y (cols)",
-            &m_sensorDimY, 9, 80);
-        ImGui::SliderInt("Anchor Center Offset",
-            &m_anchorCenterOffset, 0, 8);
-        ImGui::SameLine();
-        ImGui::TextDisabled("(0=start, 4=center)");
-        ImGui::Separator();
-        ImGui::Text("Anchor: (%d, %d)",
-            m_gridData.tx1.anchorRow, m_gridData.tx1.anchorCol);
-        ImGui::Text("Full coord: (%.1f, %.1f)",
-            m_lastResult.point.x, m_lastResult.point.y);
-        const float rx = static_cast<float>(m_sensorDimX) *
-            Asa::kCoorUnit;
-        const float ry = static_cast<float>(m_sensorDimY) *
-            Asa::kCoorUnit;
-        if (rx > 0 && ry > 0) {
-            ImGui::Text("Report: (%.0f, %.0f) / 16000",
-                std::clamp((1.f - m_lastResult.point.x / rx) *
-                    16000.f, 0.f, 16000.f),
-                std::clamp(m_lastResult.point.y / ry *
-                    16000.f, 0.f, 16000.f));
-        }
-        ImGui::Text("Pressure: %d  Button: %d",
-            m_lastResult.pressure, m_lastResult.button);
-        ImGui::Text("Pipeline Stage: %d",
-            m_lastResult.pipelineStage);
-    }
+        // Coordinate Mapping
+        ConfigParam("sp.sensorRows", "Sensor Rows (Y)",
+            ConfigParam::Int, const_cast<int*>(&m_sensorRows), 9, 80),
+        ConfigParam("sp.sensorCols", "Sensor Cols (X)",
+            ConfigParam::Int, const_cast<int*>(&m_sensorCols), 9, 80),
+        ConfigParam("sp.anchorCenterOffset", "Anchor Center Offset",
+            ConfigParam::Int, const_cast<int*>(&m_anchorCenterOffset), 0, 8),
 
-    // ── Slave Header ──
-    if (ImGui::CollapsingHeader("Slave Header",
-            ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::Text("Raw: %02X %02X %02X %02X %02X %02X %02X",
-            m_rawSlaveHdr[0], m_rawSlaveHdr[1],
-            m_rawSlaveHdr[2], m_rawSlaveHdr[3],
-            m_rawSlaveHdr[4], m_rawSlaveHdr[5],
-            m_rawSlaveHdr[6]);
-        // Show interpretation of each byte pair
-        for (int i = 0; i < 6; ++i) {
-            uint16_t val = static_cast<uint16_t>(
-                m_rawSlaveHdr[i]) |
-                (static_cast<uint16_t>(m_rawSlaveHdr[i+1]) << 8);
-            ImGui::Text("  off[%d..%d] u16LE=%5d (0x%04X) u8=%3d",
-                i, i+1, val, val, m_rawSlaveHdr[i]);
-        }
-        ImGui::Text("  off[6] u8=%3d (0x%02X)",
-            m_rawSlaveHdr[6], m_rawSlaveHdr[6]);
-        ImGui::Separator();
-        ImGui::SliderInt("Button Byte Offset",
-            &m_slaveHdrBtnOffset, 0, 6);
-    }
+        // Edge Coordinate
+        ConfigParam("sp.edgeCoorPostEnabled", "Enable Edge Compensation",
+            ConfigParam::Bool, const_cast<bool*>(&m_edgeCoorPostEnabled)),
 
-    // ── Edge Coordinate ──
-    if (ImGui::CollapsingHeader("Edge Coordinate Post")) {
-        ImGui::Checkbox("Enable Edge Compensation",
-            &m_edgeCoorPostEnabled);
-        ImGui::Text("Dead Zone: %d/%d of first/last cell (%.1f%%)",
-            kEdgeDeadZone, kCellUnit,
-            100.0f * kEdgeDeadZone / kCellUnit);
-    }
+        // Tilt
+        ConfigParam("sp.tiltEnabled", "Enable Tilt",
+            ConfigParam::Bool, const_cast<bool*>(&m_tiltEnabled)),
+        ConfigParam("sp.tiltKeepLast", "Keep Last On Invalid",
+            ConfigParam::Bool, const_cast<bool*>(&m_tiltKeepLastOnInvalid)),
+        ConfigParam("sp.tiltDiffAvgWin", "Diff Average Window",
+            ConfigParam::Int, const_cast<int*>(&m_tiltDiffAverageWindow), 1, 10),
+        ConfigParam("sp.tiltDegCellX", "Degree/Cell X",
+            ConfigParam::Float, const_cast<float*>(&m_tiltDegreePerCellX), 1.0f, 30.0f),
+        ConfigParam("sp.tiltDegCellY", "Degree/Cell Y",
+            ConfigParam::Float, const_cast<float*>(&m_tiltDegreePerCellY), 1.0f, 30.0f),
+        ConfigParam("sp.tiltNormLenX", "Norm Len X",
+            ConfigParam::Float, const_cast<float*>(&m_tiltNormLenX), 0.5f, 20.0f),
+        ConfigParam("sp.tiltNormLenY", "Norm Len Y",
+            ConfigParam::Float, const_cast<float*>(&m_tiltNormLenY), 0.5f, 20.0f),
+        ConfigParam("sp.tiltMaxDeg", "Max Degree",
+            ConfigParam::Int, const_cast<int*>(&m_tiltMaxDegree), 10, 89),
+        ConfigParam("sp.tiltJitterDeg", "Jitter Threshold",
+            ConfigParam::Int, const_cast<int*>(&m_tiltJitterThresholdDeg), 0, 10),
+        ConfigParam("sp.tiltIirOldW", "IIR Old Weight",
+            ConfigParam::Float, const_cast<float*>(&m_tiltCoordIirOldWeight), 0.0f, 0.99f),
 
-    // ── Tilt ──
-    if (ImGui::CollapsingHeader("Tilt")) {
-        ImGui::Checkbox("Enable Tilt", &m_tiltEnabled);
-        if (m_tiltEnabled) {
-            ImGui::Checkbox("Keep Last On Invalid",
-                &m_tiltKeepLastOnInvalid);
-            ImGui::SliderInt("Diff Average Window",
-                &m_tiltDiffAverageWindow, 1, 10);
-            ImGui::SliderFloat("Degree/Cell X",
-                &m_tiltDegreePerCellX, 1.0f, 30.0f);
-            ImGui::SliderFloat("Degree/Cell Y",
-                &m_tiltDegreePerCellY, 1.0f, 30.0f);
-            ImGui::SliderFloat("Norm Len X",
-                &m_tiltNormLenX, 0.5f, 20.0f);
-            ImGui::SliderFloat("Norm Len Y",
-                &m_tiltNormLenY, 0.5f, 20.0f);
-            ImGui::SliderInt("Max Degree",
-                &m_tiltMaxDegree, 10, 89);
-            ImGui::SliderInt("Jitter Threshold (deg)",
-                &m_tiltJitterThresholdDeg, 0, 10);
-            ImGui::SliderFloat("IIR Old Weight",
-                &m_tiltCoordIirOldWeight, 0.0f, 0.99f, "%.3f");
-        }
-    }
+        // Pressure
+        ConfigParam("sp.pressPolyEnabled", "Polynomial Mapping",
+            ConfigParam::Bool, const_cast<bool*>(&m_pressurePolyEnabled)),
+        ConfigParam("sp.pressIirQ7", "IIR Weight (Q7)",
+            ConfigParam::Int, const_cast<int*>(&m_pressureIirWeightQ7), 1, 127),
+        ConfigParam("sp.pressSeg1Th", "Seg1 Threshold",
+            ConfigParam::Int, const_cast<int*>(&m_pressureMapSeg1Threshold), 0, 50),
+        ConfigParam("sp.pressSeg2Th", "Seg2 Threshold",
+            ConfigParam::Int, const_cast<int*>(&m_pressureMapSeg2Threshold), 50, 500),
+        ConfigParam("sp.pressGain", "Gain %",
+            ConfigParam::Int, const_cast<int*>(&m_pressureMapGainPercent), 10, 500),
+        ConfigParam("sp.pressTailFrames", "Tail Frames",
+            ConfigParam::Int, const_cast<int*>(&m_pressureTailFrames), 0, 20),
+        ConfigParam("sp.pressTailMin", "Tail Min",
+            ConfigParam::Int, const_cast<int*>(&m_pressureTailMin), 0, 100),
+        ConfigParam("sp.pressTailDecay", "Tail Decay Rate",
+            ConfigParam::Int, const_cast<int*>(&m_pressureTailDecay), 1, 200),
 
-    // ── Pressure ──
-    if (ImGui::CollapsingHeader("Pressure")) {
-        ImGui::Checkbox("Polynomial Mapping",
-            &m_pressurePolyEnabled);
-        ImGui::SliderInt("IIR Weight (Q7)",
-            &m_pressureIirWeightQ7, 1, 127);
-        ImGui::SliderInt("Seg1 Threshold",
-            &m_pressureMapSeg1Threshold, 0, 50);
-        ImGui::SliderInt("Seg2 Threshold",
-            &m_pressureMapSeg2Threshold, 50, 500);
-        ImGui::SliderInt("Gain %%",
-            &m_pressureMapGainPercent, 10, 500);
-        ImGui::Separator();
-        ImGui::Text("Tail Decay");
-        ImGui::SliderInt("Tail Frames",
-            &m_pressureTailFrames, 0, 20);
-        ImGui::SliderInt("Tail Min",
-            &m_pressureTailMin, 0, 100);
-        ImGui::SliderInt("Tail Decay Rate",
-            &m_pressureTailDecay, 1, 200);
-        ImGui::Separator();
-        ImGui::Text("Poly Seg1 Coefficients:");
-        for (int i = 0; i < 5; ++i) {
-            char label[32];
-            snprintf(label, sizeof(label), "S1[%d]", i);
-            double v = m_pressurePolySeg1[static_cast<size_t>(i)];
-            float fv = static_cast<float>(v);
-            if (ImGui::InputFloat(label, &fv, 0, 0, "%.10f"))
-                m_pressurePolySeg1[static_cast<size_t>(i)] =
-                    static_cast<double>(fv);
-        }
-        ImGui::Text("Poly Seg2 Coefficients:");
-        for (int i = 0; i < 5; ++i) {
-            char label[32];
-            snprintf(label, sizeof(label), "S2[%d]", i);
-            double v = m_pressurePolySeg2[static_cast<size_t>(i)];
-            float fv = static_cast<float>(v);
-            if (ImGui::InputFloat(label, &fv, 0, 0, "%.10f"))
-                m_pressurePolySeg2[static_cast<size_t>(i)] =
-                    static_cast<double>(fv);
-        }
-    }
+        // HPP3 Noise
+        ConfigParam("sp.hpp3NoiseEnabled", "Enable HPP3 Noise",
+            ConfigParam::Bool, const_cast<bool*>(&m_hpp3NoisePostEnabled)),
+        ConfigParam("sp.hpp3JumpTh", "Jump Threshold",
+            ConfigParam::Float, const_cast<float*>(&m_hpp3CoorJumpThreshold), 1.0f, 100.0f),
 
-    // ── HPP3 Noise Post ──
-    if (ImGui::CollapsingHeader("HPP3 Noise Post")) {
-        ImGui::Checkbox("Enable", &m_hpp3NoisePostEnabled);
-        ImGui::SliderFloat("Jump Threshold",
-            &m_hpp3CoorJumpThreshold, 1.0f, 100.0f);
-        ImGui::SliderInt("Signal Ratio Factor",
-            &m_hpp3SignalRatioFactor, 1, 20);
-        ImGui::SliderInt("Signal Drop Factor",
-            &m_hpp3SignalDropFactor, 1, 20);
-    }
+        // Recheck
+        ConfigParam("sp.recheckEnabled", "Enable Recheck",
+            ConfigParam::Bool, const_cast<bool*>(&m_recheckEnabled)),
+        ConfigParam("sp.recheckThBase", "Signal Thresh Base",
+            ConfigParam::Int, const_cast<int*>(&m_recheckSignalThreshBase), 10, 500),
 
-    // ── Recheck ──
-    if (ImGui::CollapsingHeader("Recheck")) {
-        ImGui::Checkbox("Enable Recheck",
-            &m_recheckEnabled);
-        ImGui::SliderInt("Signal Thresh Base",
-            &m_recheckSignalThreshBase, 10, 500);
-    }
+        // Pen Lifecycle
+        ConfigParam("sp.liftingTimeout", "Lifting Timeout",
+            ConfigParam::Int, const_cast<int*>(&m_liftingTimeout), 1, 30),
 
-    // ── Pen Lifecycle ──
-    if (ImGui::CollapsingHeader("Pen Lifecycle")) {
-        ImGui::SliderInt("Lifting Timeout (frames)",
-            &m_liftingTimeout, 1, 30);
-        const char* stateNames[] = {
-            "Leave", "Hover", "Contact", "Lifting"};
-        int si = static_cast<int>(m_penLifecycle);
-        ImGui::Text("Current State: %s",
-            stateNames[std::clamp(si, 0, 3)]);
-    }
+        // Calibration
+        ConfigParam("sp.calibEnabled", "Enable Calibration",
+            ConfigParam::Bool, const_cast<bool*>(&m_calibEnabled)),
 
-    // ── Calibration (Phase 6) ──
-    if (ImGui::CollapsingHeader("Calibration")) {
-        ImGui::Checkbox("Enable Rolling Avg Calibration",
-            &m_calibEnabled);
-        ImGui::Text("Window Size: %d", kCalibWindow);
-        ImGui::Text("Current Samples: %d", m_calibCount);
-        if (ImGui::Button("Reset Calibration"))
-            ResetCalibration();
-    }
+        // Slave Header
+        ConfigParam("sp.slaveHdrBtnOffset", "Button Byte Offset",
+            ConfigParam::Int, const_cast<int*>(&m_slaveHdrBtnOffset), 0, 6),
+    };
 }
 
 // ══════════════════════════════════════════════

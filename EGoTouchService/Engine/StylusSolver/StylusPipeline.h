@@ -5,6 +5,7 @@
 #include "CoordinateSolver.h"
 #include "CoorPostProcessor.h"
 #include "EngineTypes.h"
+#include "ConfigSchema.h"
 
 #include <array>
 #include <cstdint>
@@ -13,6 +14,7 @@
 #include <mutex>
 #include <string>
 #include <iosfwd>
+#include <vector>
 
 namespace Engine {
 
@@ -33,10 +35,26 @@ public:
         return m_lastResult;
     }
 
-    void DrawConfigUI();
+    std::vector<ConfigParam> GetConfigSchema() const;
     void SaveConfig(std::ostream& out) const;
     void LoadConfig(const std::string& key,
                     const std::string& value);
+
+    /// 实时坐标分解诊断（每帧 Process() 后更新）
+    struct DbgCoordBreakdown {
+        uint16_t anchorRow = 0;    // 粗定位：行（垂直/Y）
+        uint16_t anchorCol = 0;    // 粗定位：列（水平/X）
+        int32_t  rawDim1   = 0;    // 亚像素偏移：行方向（Y）
+        int32_t  rawDim2   = 0;    // 亚像素偏移：列方向（X）
+        int32_t  finalDim1 = 0;    // 后处理+标定后 dim1
+        int32_t  finalDim2 = 0;    // 后处理+标定后 dim2
+        float    centerOff = 0.f;  // anchorCenterOffset * kCoorUnit
+        float    pointX    = 0.f;  // = anchorCol*kUnit + finalDim2 - centerOff
+        float    pointY    = 0.f;  // = anchorRow*kUnit + finalDim1 - centerOff
+        bool     valid     = false;
+    };
+    const DbgCoordBreakdown& GetDebugCoord() const { return m_dbg; }
+
 
 private:
     // ── Frame Constants ──
@@ -115,9 +133,14 @@ private:
     void SolvePressure(uint16_t rawPressure, bool active);
 
     // ── Sensor dimensions (full sensor array, not just 9x9 grid) ──
-    int m_sensorDimX = 37;  // rows (dim1) — adjust per device
-    int m_sensorDimY = 23;  // cols (dim2) — adjust per device
+    // 屏幕方向: 右下角(0,0), 左上角(39,59)
+    int m_sensorRows = 40;  // 行数 (Row/垂直/Y方向): anchor 范围 [0, 39]
+    int m_sensorCols = 60;  // 列数 (Col/水平/X方向): anchor 范围 [0, 59]
     int m_anchorCenterOffset = 4; // grid center index to subtract (0=anchor is start, 4=anchor is center)
+
+    // ── HID report logical maximum ──
+    static constexpr float kHidMaxX = 25600.0f;
+    static constexpr float kHidMaxY = 16000.0f;
 
     // ── Edge coordinate post-process (from TSACore EdgeCoorPostProcess) ──
     bool m_edgeCoorPostEnabled = true;
@@ -172,6 +195,9 @@ private:
     Asa::AsaCoorResult ApplyCalibration(const Asa::AsaCoorResult& c);
     void ResetCalibration();
 
+
+    // ── 实时坐标分解诊断（内部存储）──
+    DbgCoordBreakdown m_dbg{};
 
 
     // ── Config ──

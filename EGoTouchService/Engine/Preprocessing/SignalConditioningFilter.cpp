@@ -1,5 +1,4 @@
 #include "SignalConditioningFilter.h"
-#include "imgui.h"
 #include <algorithm>
 #include <cstring>
 
@@ -83,10 +82,13 @@ bool SignalConditioningFilter::Process(HeatmapFrame& frame) {
     return true;
 }
 
-void SignalConditioningFilter::DrawConfigUI() {
-    ImGui::TextWrapped("IIR Smooths temporal noise. Cut-off Floor prevents blocky tearing by slicing the baseline continuously.");
-    ImGui::SliderInt("IIR Alpha", &m_alpha, 100, 1000, "%d (1000 = Direct No History)");
-    ImGui::SliderInt("Noise Cut-off Floor", &m_noiseFloor, 0, 500);
+std::vector<ConfigParam> SignalConditioningFilter::GetConfigSchema() const {
+    std::vector<ConfigParam> schema = IFrameProcessor::GetConfigSchema();
+    schema.push_back(ConfigParam("IIRAlpha", "IIR Alpha",
+        ConfigParam::Int, const_cast<int*>(&m_alpha), 100, 1000));
+    schema.push_back(ConfigParam("NoiseFloor", "Noise Cut-off Floor",
+        ConfigParam::Int, const_cast<int*>(&m_noiseFloor), 0, 500));
+    return schema;
 }
 
 } // namespace Engine

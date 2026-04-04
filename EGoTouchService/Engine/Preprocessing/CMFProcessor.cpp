@@ -1,5 +1,4 @@
 #include "CMFProcessor.h"
-#include "imgui.h"
 #include <algorithm>
 
 namespace Engine {
@@ -76,20 +75,13 @@ void CMFProcessor::ProcessColumnWise(HeatmapFrame& frame) {
     }
 }
 
-void CMFProcessor::DrawConfigUI() {
-    ImGui::TextWrapped("Restores original TSACore Common Mode Filter (CMF)");
-    ImGui::TextWrapped("Reduces row/col drift induced by charger or LCD noise, mimicking CMF_ProcessDimUnit.");
-    
-    int modeInt = static_cast<int>(m_mode);
-    const char* modes[] = { "Disabled", "Row-Wise (Dim1)", "Column-Wise (Dim2)", "Dual-Dim (1 & 2)" };
-    if (ImGui::Combo("CMF Mode", &modeInt, modes, IM_ARRAYSIZE(modes))) {
-        m_mode = static_cast<DimensionMode>(modeInt);
-    }
-
-    ImGui::SliderInt("Exclusion Thrsh", &m_exclusionThreshold, 50, 2000, "%d", ImGuiSliderFlags_Logarithmic);
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Above this value, the node is considered a finger and won't affect the noise calculation.");
-
-    ImGui::SliderInt("Max Correction", &m_maxCorrection, 10, 2000, "%d", ImGuiSliderFlags_Logarithmic);
+std::vector<ConfigParam> CMFProcessor::GetConfigSchema() const {
+    std::vector<ConfigParam> schema = IFrameProcessor::GetConfigSchema();
+    schema.push_back(ConfigParam("ExclusionThreshold", "Exclusion Threshold",
+        ConfigParam::Int, const_cast<int*>(&m_exclusionThreshold), 50, 2000));
+    schema.push_back(ConfigParam("MaxCorrection", "Max Correction",
+        ConfigParam::Int, const_cast<int*>(&m_maxCorrection), 10, 2000));
+    return schema;
 }
 
 } // namespace Engine

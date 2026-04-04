@@ -316,6 +316,7 @@ void DeviceRuntime::OnStreaming() {
     // 3. Touch pipeline (always active)
     Engine::HeatmapFrame touchFrame;
     touchFrame.rawData.assign(rawData.begin(), rawData.end());
+    touchFrame.masterWasRead = m_chip.m_lastMasterWasRead;  // 传递 master 读取状态给帧写入器
     m_touchPipeline.Execute(touchFrame);
     m_vhfReporter.DispatchTouch(touchFrame);
 

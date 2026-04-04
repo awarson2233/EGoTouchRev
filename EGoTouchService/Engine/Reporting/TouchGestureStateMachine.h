@@ -85,7 +85,7 @@ public:
 
     bool Process(HeatmapFrame& frame) override;
     std::string GetName() const override { return "TouchGestureStateMachine"; }
-    void DrawConfigUI() override;
+    std::vector<ConfigParam> GetConfigSchema() const override;
     void SaveConfig(std::ostream& out) const override;
     void LoadConfig(const std::string& key, const std::string& value) override;
 

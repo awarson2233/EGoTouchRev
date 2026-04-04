@@ -21,7 +21,7 @@ public:
     std::string GetName() const override {
         return "Feature Extractor (4.1/4.2)";
     }
-    void DrawConfigUI() override;
+    std::vector<ConfigParam> GetConfigSchema() const override;
     void SaveConfig(std::ostream& out) const override;
     void LoadConfig(const std::string& key,
                     const std::string& value) override;

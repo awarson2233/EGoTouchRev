@@ -1,0 +1,66 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <!-- 
+    测试版本安装包声明区：
+    包含完整的诊断上位机与测试工具。
+  -->
+  <Package Name="EGoTouch Controller Software (Test Version)" Manufacturer="EGoTouch Team" Version="1.9.9" 
+           UpgradeCode="434AC770-0762-431A-9ABC-DB2F9DB289AD" 
+           Scope="perMachine">
+
+    <!-- 支持自动覆盖升级 -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." AllowSameVersionUpgrades="yes" />
+
+    <ui:WixUI Id="WixUI_Minimal" />
+    <WixVariable Id="WixUILicenseRtf" Value="scripts\EULA.rtf" />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="INSTALLFOLDER" Name="EGoTouchRev" />
+    </StandardDirectory>
+
+    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+      
+      <!-- 核心服务 -->
+      <Component Id="EGoTouchServiceComp" Guid="FCF77309-64AC-4F98-8424-B1D6144D9757">
+        <File Id="EGoTouchServiceEXE" Source="build\EGoTouchService.exe" KeyPath="yes" />
+        
+        <ServiceInstall 
+            Id="EGoTouchServiceInstaller"
+            Type="ownProcess"
+            Name="EGoTouchService"
+            DisplayName="EGoTouch Capacitive Touch Driver (Test)"
+            Description="EGoTouch Capacitive Touch Driver Service - Test Version."
+            Start="auto"           
+            Account="LocalSystem"
+            ErrorControl="normal" />
+            
+        <ServiceControl Id="StartWixService" Name="EGoTouchService" 
+                        Start="install" 
+                        Stop="both" 
+                        Remove="uninstall" />
+      </Component>
+
+      <!-- 配置文件 -->
+      <Component Id="ConfigFileComp" Guid="F9D704CD-80EE-4AE2-9BE7-1BBDA7AB7421">
+        <File Id="ConfigFile" Source="build\config.ini" KeyPath="yes" />
+      </Component>
+
+      <!-- 测试版本增加内容：上位机 EGoTouchApp 和 测试工具 BtMcuTestTool -->
+      <Component Id="EGoTouchAppComp" Guid="E198F02C-4BA7-4E90-B7FD-A99A0FA5EB21">
+        <File Id="EGoTouchAppEXE" Source="build\EGoTouchApp.exe" KeyPath="yes" />
+      </Component>
+
+      <Component Id="BtMcuTestToolComp" Guid="5247FBFC-E500-47E4-BCE5-23FE9A0C3817">
+        <File Id="BtMcuTestToolEXE" Source="build\BtMcuTestTool.exe" KeyPath="yes" />
+      </Component>
+
+    </ComponentGroup>
+
+    <!-- 功能树 -->
+    <Feature Id="MainFeature" Title="EGoTouch Core &amp; Tools" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+    </Feature>
+  </Package>
+</Wix>

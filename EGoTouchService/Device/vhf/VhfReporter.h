@@ -46,7 +46,7 @@ public:
 
 private:
     void BuildTouchReports(Engine::HeatmapFrame& frame);
-    void ApplyStylusPostTransform(std::array<uint8_t, 13>& bytes);
+    void ApplyStylusPostTransform(std::array<uint8_t, 17>& bytes);
     bool EnsureDeviceOpen();
     void CloseDevice();
     void ReopenDevice();

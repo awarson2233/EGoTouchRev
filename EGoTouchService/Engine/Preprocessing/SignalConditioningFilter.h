@@ -16,7 +16,7 @@ public:
     bool Process(HeatmapFrame& frame) override;
     std::string GetName() const override { return "Signal Conditioning (IIR + Clip)"; }
 
-    void DrawConfigUI() override;
+    std::vector<ConfigParam> GetConfigSchema() const override;
     
     void SaveConfig(std::ostream& out) const override {
         IFrameProcessor::SaveConfig(out);

@@ -1,6 +1,5 @@
 #include "BaselineSubtraction.h"
 #include <cstring>
-#include "imgui.h"
 
 namespace Engine {
 
@@ -19,19 +18,11 @@ bool BaselineSubtraction::Process(HeatmapFrame& frame) {
     return true;
 }
 
-void BaselineSubtraction::DrawConfigUI() {
-    ImGui::TextWrapped("Subtracts a baseline from the raw AD values to center the signal.");
-    
-    // 输入框，方便精确输入
-    ImGui::InputInt("Baseline Value", &m_baseline, 1, 100);
-    
-    // 滑动条，范围设定在 0 到 65535 之间（16位无符号范围），但这里用带符号int存储处理
-    ImGui::SliderInt("Baseline Slider", &m_baseline, 0, 65535, "%d");
-    
-    // 重置按钮
-    if (ImGui::Button("Reset to Default (0x7FFE)")) {
-        m_baseline = 0x7FFE;
-    }
+std::vector<ConfigParam> BaselineSubtraction::GetConfigSchema() const {
+    std::vector<ConfigParam> schema = IFrameProcessor::GetConfigSchema();
+    schema.push_back(ConfigParam("BaselineValue", "Baseline Value",
+        ConfigParam::Int, const_cast<int*>(&m_baseline), 0, 65535));
+    return schema;
 }
 
 void BaselineSubtraction::LoadConfig(const std::string& key, const std::string& value) {

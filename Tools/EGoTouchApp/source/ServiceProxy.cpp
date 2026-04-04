@@ -130,6 +130,7 @@ void ServiceProxy::Disconnect() {
     m_frameReader.Close();
     m_configDirty.Close();
     m_fps.store(0);
+    m_slaveFps.store(0);
     LOG_INFO("App", "ServiceProxy::Disconnect", "IPC",
              "Disconnected.");
 }
@@ -347,6 +348,8 @@ void ServiceProxy::PollLoop() {
     m_latestFrame.rawData.reserve(5402);
 
     uint64_t lastFpsFrameId = m_frameReader.LastFrameId();
+    uint64_t lastSlaveFpsFrameId = m_frameReader.LastSlaveFrameId();
+    uint64_t lastMasterFpsFrameId = m_frameReader.LastMasterFrameId();
     auto lastFpsTick = std::chrono::steady_clock::now();
     auto lastLogPoll = std::chrono::steady_clock::now();
     auto lastPenPoll = std::chrono::steady_clock::now();
@@ -428,9 +431,19 @@ void ServiceProxy::PollLoop() {
         auto fpsElapsed = std::chrono::duration_cast<
             std::chrono::milliseconds>(now - lastFpsTick);
         if (fpsElapsed.count() >= 1000) {
-            uint64_t currentId = m_frameReader.LastFrameId();
-            m_fps.store(static_cast<int>(currentId - lastFpsFrameId));
-            lastFpsFrameId = currentId;
+            // Master FPS: only counts frames where master was actually read
+            uint64_t currentMasterId = m_frameReader.LastMasterFrameId();
+            m_fps.store(static_cast<int>(currentMasterId - lastMasterFpsFrameId));
+            lastMasterFpsFrameId = currentMasterId;
+
+            // Slave FPS: counts every GetFrame() cycle (240Hz when stylus connected)
+            uint64_t currentSlaveId = m_frameReader.LastSlaveFrameId();
+            m_slaveFps.store(static_cast<int>(currentSlaveId - lastSlaveFpsFrameId));
+            lastSlaveFpsFrameId = currentSlaveId;
+
+            // Keep lastFpsFrameId in sync (used for frame-ready detection)
+            lastFpsFrameId = m_frameReader.LastFrameId();
+
             lastFpsTick = now;
         }
         // Service log polling (~every 1s)

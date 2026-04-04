@@ -1,4 +1,5 @@
 #include "DiagnosticsWorkbench.h"
+#include "ConfigUIRenderer.h"
 #include "imgui_internal.h"
 #include "Device.h"
 #include "MasterFrameParser.h"
@@ -35,7 +36,8 @@ void DrawProcessorConfigBlock(Engine::IFrameProcessor* processor, int idBase) {
     }
     if (enabled) {
         ImGui::Indent();
-        processor->DrawConfigUI();
+        auto schema = processor->GetConfigSchema();
+        ConfigUIRenderer::RenderConfigSchema(schema, processor->GetName());
         ImGui::Unindent();
     }
     ImGui::PopID();
@@ -139,7 +141,9 @@ void DiagnosticsWorkbench::DrawStatusBar() {
                                "● Disconnected");
         }
         ImGui::SameLine(0, 20);
-        ImGui::Text("FPS: %d", m_proxy->GetAcquisitionFps());
+        ImGui::Text("Master FPS: %d", m_proxy->GetAcquisitionFps());
+        ImGui::SameLine(0, 20);
+        ImGui::Text("Slave FPS: %d", m_proxy->GetSlaveAcquisitionFps());
         ImGui::SameLine(0, 20);
         ImGui::Text("VHF: %s", m_proxy->IsVhfEnabled() ? "ON" : "OFF");
         ImGui::SameLine(0, 20);
@@ -555,12 +559,14 @@ void DiagnosticsWorkbench::DrawTouchTrackingPanel() {
     ImGui::TextUnformatted("Performance");
     if (m_proxy) {
         const int fps = m_proxy->GetAcquisitionFps();
+        const int slaveFps = m_proxy->GetSlaveAcquisitionFps();
         auto fpsColor = [](int f) -> ImVec4 {
             if (f >= 100) return ImVec4(0.2f, 0.9f, 0.2f, 1.f);
             if (f >=  50) return ImVec4(1.0f, 0.8f, 0.0f, 1.f);
             return            ImVec4(1.0f, 0.3f, 0.3f, 1.f);
         };
-        ImGui::TextColored(fpsColor(fps), "Service Frame Rate: %d Hz", fps);
+        ImGui::TextColored(fpsColor(fps),       "Master Frame Rate: %d Hz", fps);
+        ImGui::TextColored(fpsColor(slaveFps),   "Slave  Frame Rate: %d Hz", slaveFps);
     }
 
 
@@ -589,7 +595,8 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
     // -- Stylus Pipeline Config (official ASA pipeline) --
     if (ImGui::BeginTabBar("StylusSubTabs")) {
         if (ImGui::BeginTabItem("Pipeline Config")) {
-            m_proxy->GetStylusPipeline().DrawConfigUI();
+            auto schema = m_proxy->GetStylusPipeline().GetConfigSchema();
+            ConfigUIRenderer::RenderConfigSchema(schema, "Stylus Pipeline");
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Live Status")) {
@@ -605,9 +612,9 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
             ImGui::Text("Tilt X: %d  Y: %d",
                 static_cast<int>(s.point.tiltX),
                 static_cast<int>(s.point.tiltY));
-            const char* animLabels[] = {"Idle","PenDown","Writing","Lifting"};
+            const char* animLabels[] = {"Leave","Hover","Contact","Lifting"};
             int ai = std::clamp(static_cast<int>(s.animState), 0, 3);
-            ImGui::Text("Anim State: %s", animLabels[ai]);
+            ImGui::Text("Lifecycle: %s", animLabels[ai]);
             ImGui::Separator();
             ImGui::Text("Packet Valid: %s", s.packet.valid ? "YES" : "NO");
             const char* stageNames[] = {
@@ -618,28 +625,49 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
                 ImGui::TextColored(ImVec4(0.2f,0.9f,0.3f,1), "Pipeline: %s", stageNames[si]);
             else
                 ImGui::TextColored(ImVec4(1.0f,0.3f,0.3f,1), "Pipeline: %s (%d)", stageNames[si], si);
+
+            // ── 实时坐标分解 ──────────────────────────────────
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(0.4f,0.85f,1.0f,1.f),
+                "[Coord Breakdown] (Row=Y, Col=X)");
+            const auto& dbg = m_proxy->GetStylusPipeline().GetDebugCoord();
+            ImGui::Text("  anchorRow(Y) = %u   (%u * %.1f = %.1f)",
+                dbg.anchorRow, dbg.anchorRow,
+                static_cast<float>(Asa::kCoorUnit),
+                static_cast<float>(dbg.anchorRow) * Asa::kCoorUnit);
+            ImGui::Text("  anchorCol(X) = %u   (%u * %.1f = %.1f)",
+                dbg.anchorCol, dbg.anchorCol,
+                static_cast<float>(Asa::kCoorUnit),
+                static_cast<float>(dbg.anchorCol) * Asa::kCoorUnit);
+            ImGui::Text("  rawDim1(Y)   = %d", dbg.rawDim1);
+            ImGui::Text("  rawDim2(X)   = %d", dbg.rawDim2);
+            ImGui::Text("  finalDim1(Y) = %d", dbg.finalDim1);
+            ImGui::Text("  finalDim2(X) = %d", dbg.finalDim2);
+            ImGui::Text("  centerOff    = %.1f", dbg.centerOff);
+            ImGui::Separator();
+            if (dbg.valid) {
+                ImGui::TextColored(ImVec4(0.2f,0.9f,0.4f,1),
+                    "  point.X = anchorCol*kU + finalDim2 - cOff");
+                ImGui::TextColored(ImVec4(0.2f,0.9f,0.4f,1),
+                    "         = %.1f + %d - %.1f = %.2f",
+                    static_cast<float>(dbg.anchorCol) * Asa::kCoorUnit,
+                    dbg.finalDim2, dbg.centerOff, dbg.pointX);
+                ImGui::TextColored(ImVec4(0.4f,0.7f,1.0f,1),
+                    "  point.Y = anchorRow*kU + finalDim1 - cOff");
+                ImGui::TextColored(ImVec4(0.4f,0.7f,1.0f,1),
+                    "         = %.1f + %d - %.1f = %.2f",
+                    static_cast<float>(dbg.anchorRow) * Asa::kCoorUnit,
+                    dbg.finalDim1, dbg.centerOff, dbg.pointY);
+            } else {
+                ImGui::TextColored(ImVec4(0.7f,0.7f,0.0f,1),
+                    "  [coord invalid this frame]");
+            }
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();
     }
 
-    // -- Touch<->Stylus Interop --
-    Engine::TouchTracker* touchTracker = nullptr;
-    for (const auto& p : m_proxy->GetPipeline().GetProcessors()) {
-        auto tt = dynamic_cast<Engine::TouchTracker*>(p.get());
-        if (tt) { touchTracker = tt; break; }
-    }
-    if (touchTracker) {
-        ImGui::Separator();
-        ImGui::TextUnformatted("Touch<->Stylus Interop (TouchTracker)");
-        bool te = touchTracker->IsEnabled();
-        if (!te) {
-            ImGui::TextUnformatted("TouchTracker is disabled.");
-            ImGui::BeginDisabled();
-        }
-        touchTracker->DrawStylusInteropConfigUI();
-        if (!te) ImGui::EndDisabled();
-    }
+    // Stylus-Touch Interop settings are now accessible via the Touch Tracking tab's TrackTracker config.
 
     if (masterParserOnly) ImGui::EndDisabled();
 

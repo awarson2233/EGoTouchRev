@@ -1,5 +1,4 @@
 #include "FeatureExtractor.h"
-#include "imgui.h"
 
 namespace Engine {
 
@@ -32,46 +31,8 @@ bool FeatureExtractor::Process(HeatmapFrame& frame) {
     return true;
 }
 
-void FeatureExtractor::DrawConfigUI() {
-    ImGui::TextWrapped("Feature Extractor (TSACore-aligned)");
-
-    ImGui::SeparatorText("Peak Detection");
-    int thresh = m_peakDet.m_threshold;
-    if (ImGui::SliderInt("Peak Threshold", &thresh, 5, 2000))
-        m_peakDet.m_threshold = static_cast<int16_t>(thresh);
-    int sigLimit = m_peakDet.m_sigTholdLimit;
-    if (ImGui::SliderInt("Sig Thold Limit", &sigLimit, 100, 4000))
-        m_peakDet.m_sigTholdLimit = static_cast<int16_t>(sigLimit);
-    ImGui::Checkbox("Z8 Filter", &m_peakDet.m_z8Filter);
-    ImGui::SameLine();
-    ImGui::Checkbox("Z1 Filter", &m_peakDet.m_z1Filter);
-    ImGui::Checkbox("PressureDrift Filter", &m_peakDet.m_pressureDriftFilter);
-    ImGui::SameLine();
-    ImGui::Checkbox("Edge Peak Filter", &m_peakDet.m_edgePeakFilter);
-    ImGui::Checkbox("Edge Threshold##en", &m_peakDet.m_edgeThresholdEnabled);
-    if (m_peakDet.m_edgeThresholdEnabled) {
-        ImGui::SameLine();
-        int et = m_peakDet.m_edgeThreshold;
-        if (ImGui::SliderInt("##EdgeTh", &et, 5, 2000))
-            m_peakDet.m_edgeThreshold = static_cast<int16_t>(et);
-    }
-    ImGui::Text("Peaks: %d / %d", m_cachedPeakCount, PeakDetector::kMaxPeaks);
-
-    ImGui::SeparatorText("Touch Zone (TZ_Process)");
-    int scale = m_zoneExp.m_tholdScaleNumer;
-    if (ImGui::SliderInt("Zone Thold Scale", &scale, 16, 127, "%d/128"))
-        m_zoneExp.m_tholdScaleNumer = scale;
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("zoneThold = min(sigThold,peakSig) * scale/128\nHigher = smaller zones, less merging");
-    ImGui::Checkbox("Dilate & Erode", &m_zoneExp.m_dilateErode);
-    ImGui::Text("Zones: %d  |  Contacts: %d",
-                m_cachedZoneCount, m_cachedContactCount);
-
-    ImGui::SeparatorText("Edge Compensation");
-    ImGui::Checkbox("EC Enabled", &m_edgeComp.m_enabled);
-    ImGui::SliderFloat("EC Blend Range", &m_edgeComp.m_ecBlendRange, 0.25f, 5.0f, "%.2f grids");
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("How far from edge the blend zone extends.\nOriginal firmware: 0.25. Increase to push edge coords further.");
+std::vector<ConfigParam> FeatureExtractor::GetConfigSchema() const {
+    return IFrameProcessor::GetConfigSchema();
 }
 
 void FeatureExtractor::SaveConfig(std::ostream& out) const {

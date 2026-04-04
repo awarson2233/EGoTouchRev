@@ -1,5 +1,4 @@
 #include "CoordinateFilter.h"
-#include "imgui.h"
 #include <cmath>
 #include <vector>
 
@@ -101,50 +100,15 @@ bool CoordinateFilter::Process(HeatmapFrame& frame) {
     return true;
 }
 
-void CoordinateFilter::DrawConfigUI() {
-    ImGui::TextWrapped("1 Euro Filter Parameters");
-    ImGui::Separator();
-
-    // --- Preset Buttons ---
-    ImGui::TextUnformatted("Presets:");
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Strong (1.0/0.007)")) {
-        m_minCutoff = 1.0f; m_beta = 0.007f;
-    }
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Balanced (5.0/0.05)")) {
-        m_minCutoff = 5.0f; m_beta = 0.05f;
-    }
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Light (10.0/0.1)")) {
-        m_minCutoff = 10.0f; m_beta = 0.1f;
-    }
-
-    ImGui::Spacing();
-
-    ImGui::SliderFloat("Min Cutoff (Hz)##1euro", &m_minCutoff, 0.5f, 20.0f, "%.2f");
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("低速截止频率。越大越跟手，越小越平滑。\n推荐: 5.0");
-
-    ImGui::SliderFloat("Beta##1euro", &m_beta, 0.0f, 0.5f, "%.4f");
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("速度自适应斜率。越大高速时滞后越小。\n推荐: 0.05");
-
-    ImGui::SliderFloat("Deriv Cutoff (Hz)##1euro", &m_dCutoff, 0.1f, 10.0f, "%.2f");
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("速度导数截止频率，通常保持 1.0 即可。");
-
-    // --- Live alpha display at 120 Hz ---
-    const float rate120 = 120.0f;
-    const float tau = 1.0f / (2.0f * M_PI_F * m_minCutoff);
-    const float alphaSlowSpeed = 1.0f / (1.0f + tau * rate120);
-    ImGui::Separator();
-    ImGui::TextDisabled("@ 120 Hz slow-speed: alpha = %.3f  (time-const ~ %.1f frames)",
-        alphaSlowSpeed, 1.0f / alphaSlowSpeed);
-    if (alphaSlowSpeed < 0.1f) {
-        ImGui::TextColored(ImVec4(1.f, 0.4f, 0.f, 1.f),
-            "WARNING: alpha < 0.10, lag is very noticeable!");
-    }
+std::vector<ConfigParam> CoordinateFilter::GetConfigSchema() const {
+    std::vector<ConfigParam> schema = IFrameProcessor::GetConfigSchema();
+    schema.push_back(ConfigParam("OneEuroMinCutoff", "1 Euro Min Cutoff",
+        ConfigParam::Float, const_cast<float*>(&m_minCutoff), 0.1f, 20.0f));
+    schema.push_back(ConfigParam("OneEuroBeta", "1 Euro Beta",
+        ConfigParam::Float, const_cast<float*>(&m_beta), 0.0f, 0.5f));
+    schema.push_back(ConfigParam("OneEuroDCutoff", "1 Euro Deriv Cutoff",
+        ConfigParam::Float, const_cast<float*>(&m_dCutoff), 0.1f, 10.0f));
+    return schema;
 }
 
 void CoordinateFilter::SaveConfig(std::ostream& out) const {

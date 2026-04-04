@@ -12,14 +12,18 @@ if %errorlevel% neq 0 (
 echo === EGoTouchService Uninstall ===
 echo.
 
-:: Stop service first
+:: Stop service
+echo [INFO] Stopping service...
 sc stop EGoTouchService >nul 2>&1
 timeout /t 3 /nobreak >nul
+
+:: Kill any lingering process
+taskkill /F /IM EGoTouchService.exe >nul 2>&1
 
 :: Delete service
 sc delete EGoTouchService
 if %errorlevel% equ 0 (
-    echo [OK] Service uninstalled.
+    echo [OK] Service uninstalled successfully.
 ) else (
     echo [WARN] Uninstall may require a reboot to take effect.
 )

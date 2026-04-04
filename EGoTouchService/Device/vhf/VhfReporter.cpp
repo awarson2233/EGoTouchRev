@@ -187,7 +187,7 @@ void VhfReporter::BuildTouchReports(Engine::HeatmapFrame& frame) {
 // ── Stylus 后处理 ──
 
 void VhfReporter::ApplyStylusPostTransform(
-        std::array<uint8_t, 13>& b) {
+        std::array<uint8_t, 17>& b) {
     if (m_eraserState.load() == 1u)
         b[1] = static_cast<uint8_t>((b[1] & 0xFEu) | 0x0Cu);
     else

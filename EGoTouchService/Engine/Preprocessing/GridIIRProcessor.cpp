@@ -1,5 +1,4 @@
 #include "GridIIRProcessor.h"
-#include "imgui.h"
 #include <algorithm>
 #include <cstring>
 #include <cmath>
@@ -76,31 +75,17 @@ int16_t GridIIRProcessor::ApplyIIR(int16_t current, int16_t history,
     return static_cast<int16_t>(val);
 }
 
-void GridIIRProcessor::DrawConfigUI() {
-    ImGui::TextWrapped("Grid IIR v2: Dynamic Gate + Fast Decay");
-
-    ImGui::SeparatorText("Dynamic Touch Gate");
-    ImGui::SliderFloat("Gate Ratio (frameMax *)", &m_gateRatio, 0.02f, 0.30f, "%.2f");
-    ImGui::SliderInt("Gate Static Floor", &m_gateStaticFloor, 50, 500);
-
-    ImGui::SeparatorText("Low-Signal Decay");
-    ImGui::SliderInt("Decay Weight (0-256)", &m_decayWeight, 1, 256);
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Higher = more weight on current frame (less smoothing).");
-    ImGui::SliderInt("Decay Step (per-frame)", &m_decayStep, 0, 200);
-    ImGui::SliderInt("Noise Floor Cutoff", &m_noiseFloorCutoff, 0, 20);
-
-    ImGui::SeparatorText("Residual Correction");
-    ImGui::Checkbox("Enable Residual Correction", &m_residualEnabled);
-    if (m_residualEnabled) {
-        ImGui::SliderFloat("Residual Alpha", &m_residualAlpha, 0.0f, 1.0f, "%.2f");
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("0 = no correction; 1 = fully subtract ghost");
-    }
-
-    if (ImGui::Button("Reset History")) {
-        m_historyInitialized = false;
-    }
+std::vector<ConfigParam> GridIIRProcessor::GetConfigSchema() const {
+    std::vector<ConfigParam> schema = IFrameProcessor::GetConfigSchema();
+    schema.push_back(ConfigParam("GateRatio", "Gate Ratio",
+        ConfigParam::Float, const_cast<float*>(&m_gateRatio), 0.02f, 0.30f));
+    schema.push_back(ConfigParam("GateStaticFloor", "Gate Static Floor",
+        ConfigParam::Int, const_cast<int*>(&m_gateStaticFloor), 50, 500));
+    schema.push_back(ConfigParam("DecayWeight", "Decay Weight",
+        ConfigParam::Int, const_cast<int*>(&m_decayWeight), 1, 256));
+    schema.push_back(ConfigParam("DecayStep", "Decay Step",
+        ConfigParam::Int, const_cast<int*>(&m_decayStep), 0, 200));
+    return schema;
 }
 
 void GridIIRProcessor::SaveConfig(std::ostream& out) const {

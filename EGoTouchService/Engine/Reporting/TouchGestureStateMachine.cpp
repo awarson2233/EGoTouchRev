@@ -1,5 +1,4 @@
 #include "TouchGestureStateMachine.h"
-#include <imgui.h>
 #include <algorithm>
 #include <cmath>
 
@@ -303,34 +302,25 @@ void TouchGestureStateMachine::UpdateSlot(
 }
 
 // =============================================================================
-// DrawConfigUI
+// GetConfigSchema
 // =============================================================================
-void TouchGestureStateMachine::DrawConfigUI() {
-    ImGui::SliderInt("Press Candidate Frames", &m_pressCandidateFrames, 1, 10);
-    ImGui::SliderInt("Press Candidate Min Signal", &m_pressCandidateMinSignal, 0, 500);
-    ImGui::SliderFloat("Press Min Size mm", &m_pressCandidateMinSizeMm, 0.0f, 5.0f, "%.2f");
-    ImGui::SliderFloat("Drag Threshold", &m_dragThreshold, 0.1f, 5.0f, "%.2f");
-    ImGui::SliderInt("LongPress Frames", &m_longPressFrames, 10, 120);
-    ImGui::SliderFloat("LongPress Move Tolerance", &m_longPressMoveTolerance, 0.1f, 3.0f, "%.2f");
-    ImGui::SliderInt("Release Pending Frames", &m_releasePendingFrames, 0, 10);
-
-    ImGui::Separator();
-    ImGui::Text("Slot Status:");
-    for (int i = 0; i < kMaxSlots; ++i) {
-        const auto& s = m_slots[i];
-        if (s.phase == GesturePhase::Idle) continue;
-        const char* ph = "?";
-        switch (s.phase) {
-        case GesturePhase::PressCandidate: ph = "PressCandidate"; break;
-        case GesturePhase::Dragging:       ph = "Dragging"; break;
-        case GesturePhase::LongPressHold:  ph = "LongPressHold"; break;
-        case GesturePhase::ReleasePending: ph = "ReleasePending"; break;
-        default: break;
-        }
-        ImGui::Text("  [%d] %s age=%d miss=%d (%.1f,%.1f)",
-                     i + 1, ph, s.ageFrames, s.missingFrames,
-                     s.lastOutputX, s.lastOutputY);
-    }
+std::vector<ConfigParam> TouchGestureStateMachine::GetConfigSchema() const {
+    std::vector<ConfigParam> schema = IFrameProcessor::GetConfigSchema();
+    schema.push_back(ConfigParam("PressCandidateFrames", "Press Candidate Frames",
+        ConfigParam::Int, const_cast<int*>(&m_pressCandidateFrames), 1, 10));
+    schema.push_back(ConfigParam("PressCandidateMinSignal", "Press Candidate Min Signal",
+        ConfigParam::Int, const_cast<int*>(&m_pressCandidateMinSignal), 0, 500));
+    schema.push_back(ConfigParam("PressCandidateMinSizeMm", "Press Min Size mm",
+        ConfigParam::Float, const_cast<float*>(&m_pressCandidateMinSizeMm), 0.0f, 5.0f));
+    schema.push_back(ConfigParam("DragThreshold", "Drag Threshold",
+        ConfigParam::Float, const_cast<float*>(&m_dragThreshold), 0.1f, 5.0f));
+    schema.push_back(ConfigParam("LongPressFrames", "LongPress Frames",
+        ConfigParam::Int, const_cast<int*>(&m_longPressFrames), 10, 120));
+    schema.push_back(ConfigParam("LongPressMoveTolerance", "LongPress Move Tolerance",
+        ConfigParam::Float, const_cast<float*>(&m_longPressMoveTolerance), 0.1f, 3.0f));
+    schema.push_back(ConfigParam("ReleasePendingFrames", "Release Pending Frames",
+        ConfigParam::Int, const_cast<int*>(&m_releasePendingFrames), 0, 10));
+    return schema;
 }
 
 // =============================================================================

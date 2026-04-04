@@ -12,7 +12,7 @@ public:
     bool Process(HeatmapFrame& frame) override;
     std::string GetName() const override { return "3x3 Gaussian Filter"; }
 
-    void DrawConfigUI() override;
+    std::vector<ConfigParam> GetConfigSchema() const override;
 
 private:
     std::vector<int16_t> m_temp;

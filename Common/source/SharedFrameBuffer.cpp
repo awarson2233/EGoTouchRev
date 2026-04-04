@@ -216,8 +216,12 @@ void SharedFrameWriter::Write(const Engine::HeatmapFrame& frame) {
         m_data->slaveSuffixValid = false;
     }
 
-    // Increment frame ID and signal write complete
+    // Increment frame IDs: slave always increments; master only when not skipped by 2:1 interleaving
     m_data->frameId.fetch_add(1, std::memory_order_relaxed);
+    m_data->slaveFrameId.fetch_add(1, std::memory_order_relaxed);
+    if (frame.masterWasRead) {
+        m_data->masterFrameId.fetch_add(1, std::memory_order_relaxed);
+    }
     m_data->lockFlag.store(0, std::memory_order_release);
 
     if (m_frameEvent) {
@@ -452,6 +456,16 @@ bool SharedFrameReader::Read(Engine::HeatmapFrame& out) {
 uint64_t SharedFrameReader::LastFrameId() const {
     if (!m_data) return 0;
     return m_data->frameId.load(std::memory_order_acquire);
+}
+
+uint64_t SharedFrameReader::LastSlaveFrameId() const {
+    if (!m_data) return 0;
+    return m_data->slaveFrameId.load(std::memory_order_acquire);
+}
+
+uint64_t SharedFrameReader::LastMasterFrameId() const {
+    if (!m_data) return 0;
+    return m_data->masterFrameId.load(std::memory_order_acquire);
 }
 
 void SharedFrameReader::Close() {

@@ -823,7 +823,7 @@ bool Chip::isStylusDetected() const {
 
 ChipResult<> Chip::GetFrame(void) {
 
-    // ── Idle 模式：500ms 睡眠后做一次帧获取检测唤醒 ──────────
+    // ── Idle 模式：50ms 睡眠后做一次帧获取检测唤醒 ──────────
     if (afe_mode.load() == THP_AFE_MODE::Idle) {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
@@ -845,11 +845,31 @@ ChipResult<> Chip::GetFrame(void) {
     }
 
     // ── Normal 模式：2:1 交错帧获取 ──────────────────────────
-    // 原厂顺序: Master → Slave（确保 master scan cycle 完成后再读 slave 数据）
+    // 对齐原厂 thp_afe_get_frame 的读取顺序：
+    //   iteration N   (奇数帧): Slave only   → block ~4.16ms
+    //   iteration N+1 (偶数帧): Slave first  → block ~4.16ms
+    //                           Master after → 此时已过 ~8.33ms，master 中断早已 ready，近即刻返回
+    //
+    // 原厂等效伪代码:
+    //   bVar40 = 1 (每次 GetFrame 入口置位)
+    //   loop: GetFrame(slave) → if bVar40==1: bVar40=0, continue
+    //                         → if bVar40==0: GetFrame(master) → output → return
 
-    // 1. 条件读 Master (touch, 有效 120Hz)
-    //    奇数帧 且 手写笔已连接 → 跳过 Master，复用上一帧数据
-    bool skipMaster = (m_frameCount & 1) != 0 && m_afe.GetStylusState().connected;
+    // ── 2:1 交错：isStylusDetected() 动态驱动 ─────────────────
+    //   检测到 stylus 帧数据 → m_stylusActive = true  → 奇数帧 skip master → slave 240Hz
+    //   stylus 消失 / idle   → m_stylusActive = false → 每帧 master+slave → 120Hz
+    bool skipMaster = (m_frameCount & 1) != 0 && m_stylusActive;
+
+    // 1. 永远先读 Slave（阻塞 ~4.16ms，匹配原厂"slave first"原则）
+    if (auto res = m_slave->GetFrame(back_data.data() + 5063, 339, nullptr); !res) {
+        if (m_slave->IsTimeoutError())
+            return std::unexpected(ChipError::Timeout);
+        LOG_ERROR("Device", "Chip::GetFrame", GetStateStr(), "Slave GetFrame failed!");
+        return res;
+    }
+
+    // 2. 偶数帧：slave 已消耗 ~4.16ms，前一奇数帧也消耗了 ~4.16ms
+    //    总计 ~8.33ms 已过，master 中断早已触发并在内核队列中 → 近即刻返回
     if (!skipMaster) {
         if (auto res = m_master->GetFrame(back_data.data(), 5063, nullptr); !res) {
             if (m_master->IsTimeoutError())
@@ -859,19 +879,25 @@ ChipResult<> Chip::GetFrame(void) {
         }
     }
 
-    // 2. 总是读 Slave (stylus, 有效 240Hz)
-    if (auto res = m_slave->GetFrame(back_data.data() + 5063, 339, nullptr); !res) {
-        if (m_slave->IsTimeoutError())
-            return std::unexpected(ChipError::Timeout);
-        LOG_ERROR("Device", "Chip::GetFrame", GetStateStr(), "Slave GetFrame failed!");
-        return res;
-    }
+    m_lastMasterWasRead = !skipMaster;  // 记录本帧 master 是否实际读取
     m_frameCount++;
+
+    // ── 帧级 stylus 检测 → 动态激活/停用 2:1 交错 ───────────
+    bool stylusNow = isStylusDetected();
+    if (stylusNow && !m_stylusActive) {
+        m_stylusActive = true;
+        LOG_INFO("Device", "Chip::GetFrame", GetStateStr(),
+                 "Stylus detected in frame data → 2:1 interleave ON (slave 240Hz)");
+    } else if (!stylusNow && m_stylusActive) {
+        m_stylusActive = false;
+        LOG_INFO("Device", "Chip::GetFrame", GetStateStr(),
+                 "Stylus lost in frame data → 2:1 interleave OFF (slave 120Hz)");
+    }
 
     // ── 零帧计数 & idle 自动进入 ─────────────────────────────
     constexpr uint32_t kIdleEntryThreshold = 600;  // ~5 秒 @120Hz
 
-    if (isFingerDetected() || isStylusDetected()) {
+    if (isFingerDetected() || stylusNow) {
         m_zeroFrameCount = 0;
     } else {
         m_zeroFrameCount++;
@@ -879,6 +905,7 @@ ChipResult<> Chip::GetFrame(void) {
             LOG_INFO("Device", "Chip::GetFrame", GetStateStr(),
                      "No input for {} frames → EnterIdle",
                      m_zeroFrameCount);
+            m_stylusActive = false;  // idle 进入时强制关闭 2:1
             (void)m_afe.EnterIdle();
             m_zeroFrameCount = 0;
         }

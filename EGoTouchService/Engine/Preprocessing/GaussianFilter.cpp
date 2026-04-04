@@ -1,5 +1,4 @@
 #include "GaussianFilter.h"
-#include "imgui.h"
 #include <algorithm>
 
 namespace Engine {
@@ -56,9 +55,11 @@ bool GaussianFilter::Process(HeatmapFrame& frame) {
     return true;
 }
 
-void GaussianFilter::DrawConfigUI() {
-    ImGui::TextWrapped("Increase Center Weight to reduce blurring.");
-    ImGui::SliderInt("Center Kernel Weight", &m_centerWeight, 1, 30);
+std::vector<ConfigParam> GaussianFilter::GetConfigSchema() const {
+    std::vector<ConfigParam> schema = IFrameProcessor::GetConfigSchema();
+    schema.push_back(ConfigParam("CenterWeight", "Center Kernel Weight",
+        ConfigParam::Int, const_cast<int*>(&m_centerWeight), 1, 30));
+    return schema;
 }
 
 } // namespace Engine

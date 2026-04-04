@@ -114,7 +114,17 @@ void PenEventBridge::OnPacketReceived(const std::vector<uint8_t>& packet) {
         SendInitParamEcho(packet.data() + 8, packet.size() - 8);
     }
 
-    // 3. 触发上层回调
+    // 3. NewPenConnectRequest (0x15) → 发送 0x2E01 确认配对握手
+    if (eventCode == 0x15) {
+        const std::vector<uint8_t> pkt2e01 = {
+            0x07, 0x00, 0x02, 0x00, 
+            0x01, 0x2E, 0x11, 0x00
+        };
+        SendRawPacket(pkt2e01);
+        LOG_INFO("PenEventBridge", "OnPacketReceived", "MCU", "Sent 0x2E01 pairing confirmation.");
+    }
+
+    // 4. 触发上层回调
     PenEventCallback cbCopy;
     {
         std::lock_guard<std::mutex> lk(m_cbMutex);

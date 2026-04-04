@@ -96,6 +96,7 @@ public:
 
     // Local performance stats
     int  GetAcquisitionFps() const { return m_fps.load(); }
+    int  GetSlaveAcquisitionFps() const { return m_slaveFps.load(); }
 
 private:
     static constexpr const wchar_t* kSharedMemName =
@@ -145,6 +146,7 @@ private:
 
     // FPS measurement
     std::atomic<int> m_fps{0};
+    std::atomic<int> m_slaveFps{0};
 
     // Global Service config mirrors
     bool m_srvModeFull = true;

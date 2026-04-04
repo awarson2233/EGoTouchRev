@@ -1,8 +1,10 @@
 #pragma once
 #include "EngineTypes.h"
+#include "ConfigSchema.h"
 #include <string>
 #include <iostream>
 #include <map>
+#include <vector>
 
 namespace Engine {
 
@@ -31,14 +33,17 @@ public:
     virtual bool IsEnabled() const { return m_enabled; }
     virtual void SetEnabled(bool enabled) { m_enabled = enabled; }
 
-    // Draw ImGui configuration panel for specific parameters
-    virtual void DrawConfigUI() {}
+    // Configuration schema (replaces DrawConfigUI)
+    virtual std::vector<ConfigParam> GetConfigSchema() const {
+        return {ConfigParam("Enabled", "Enable Processor", ConfigParam::Bool,
+                           const_cast<bool*>(&m_enabled))};
+    }
 
     // Configuration Serialization
     virtual void SaveConfig(std::ostream& out) const {
         out << "Enabled=" << m_enabled << "\n";
     }
-    
+
     virtual void LoadConfig(const std::string& key, const std::string& value) {
         if (key == "Enabled") m_enabled = (value == "1" || value == "true");
     }

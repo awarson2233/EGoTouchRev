@@ -36,6 +36,7 @@ namespace Himax {
             uint8_t current_slot;
             uint32_t m_zeroFrameCount = 0;   // 连续无输入帧计数（idle 进入判断）
             uint32_t m_frameCount = 0;       // 帧计数器（2:1 交错用）
+            bool     m_stylusActive = false; // 帧级 stylus 检测驱动 2:1 交错
             
             ic_operation        pic_op{};
             fw_operation        pfw_op{};
@@ -57,14 +58,15 @@ namespace Himax {
             ChipResult<> hx_sense_on(bool isHwReset);
             ChipResult<> hx_sense_off(bool check_en);
             ChipResult<> himax_mcu_power_on_init(void);
-
+            
             ChipResult<> himax_mcu_assign_sorting_mode(uint8_t* tmp_data);
             ChipResult<> himax_switch_data_type(DeviceType device, THP_INSPECTION_ENUM mode);
             ChipResult<> himax_switch_mode_inspection(THP_INSPECTION_ENUM mode);
             ChipResult<> himax_mcu_interface_on(void);
             ChipResult<> hx_set_N_frame(uint8_t nFrame);
-
+            
         public:
+            bool m_lastMasterWasRead = true; // 上一帧 master 是否实际被读取（供 DeviceRuntime 填写 masterWasRead）
             alignas(64) std::array<uint8_t, 6000> back_data{};
             THP_INSPECTION_ENUM m_inspection_mode;
             std::atomic<THP_AFE_MODE> afe_mode{THP_AFE_MODE::Normal};

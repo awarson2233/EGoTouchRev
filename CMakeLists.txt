@@ -22,7 +22,7 @@ set(COMMON_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/Common")
 set(IMGUI_ROOT "${COMMON_ROOT}/imgui-docking")
 
 # Collect ImGui source files
-file(GLOB IMGUI_SOURCES 
+file(GLOB IMGUI_SOURCES
     "${IMGUI_ROOT}/imgui.cpp"
     "${IMGUI_ROOT}/imgui_demo.cpp"
     "${IMGUI_ROOT}/imgui_draw.cpp"
@@ -35,19 +35,27 @@ file(GLOB COMMON_HEADERS "${COMMON_ROOT}/include/*.h")
 
 add_subdirectory("${COMMON_ROOT}/spdlog-1.17.0" "spdlog_build")
 
+# Common library: Pure utilities (Logger, SharedFrameBuffer) - NO ImGui
 add_library(Common STATIC
     ${COMMON_SOURCES}
     ${COMMON_HEADERS}
-    ${IMGUI_SOURCES}
 )
 
 target_include_directories(Common PUBLIC
     "${COMMON_ROOT}/include"
-    "${IMGUI_ROOT}"
 )
 # Common links Engine for SharedFrameBuffer (EngineTypes.h)
 # Forward-declare include path; Engine target linked below after Engine is defined
 target_link_libraries(Common PUBLIC spdlog::spdlog)
+
+# ImGuiCommon library: UI framework (only for diagnostic tools)
+add_library(ImGuiCommon STATIC
+    ${IMGUI_SOURCES}
+)
+
+target_include_directories(ImGuiCommon PUBLIC
+    "${IMGUI_ROOT}"
+)
 
 # --- Device Module (Hardware Abstraction) ---
 set(DEVICE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/EGoTouchService/Device")
@@ -155,7 +163,7 @@ target_include_directories(EGoTouchApp PRIVATE
 )
 
 # Link D3D11 for the ImGui DX11 backend
-target_link_libraries(EGoTouchApp PRIVATE Device Engine Host Common d3d11 d3dcompiler dwmapi setupapi)
+target_link_libraries(EGoTouchApp PRIVATE Device Engine Host Common ImGuiCommon d3d11 d3dcompiler dwmapi setupapi)
 
 # --- EGoTouchService (Production Service Shell) ---
 set(SERVICE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/EGoTouchService")
@@ -186,7 +194,7 @@ target_include_directories(BtMcuTestTool PRIVATE
     "${IMGUI_ROOT}"
     "${IMGUI_ROOT}/backends"
 )
-target_link_libraries(BtMcuTestTool PRIVATE Device Common d3d11 d3dcompiler dwmapi setupapi)
+target_link_libraries(BtMcuTestTool PRIVATE Device Common ImGuiCommon d3d11 d3dcompiler dwmapi setupapi)
 
 option(EGO_BUILD_TESTS "Build local test executables" ON)
 if (EGO_BUILD_TESTS)

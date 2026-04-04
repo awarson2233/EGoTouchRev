@@ -84,8 +84,8 @@ struct StylusSolvePoint {
 struct StylusPacket {
     bool valid = false;
     uint8_t reportId = 0x08;
-    uint8_t length = 13;
-    std::array<uint8_t, 13> bytes{};
+    uint8_t length = 17;
+    std::array<uint8_t, 17> bytes{};
 };
 
 struct StylusFrameData {
@@ -177,6 +177,9 @@ struct HeatmapFrame {
 
     // 时间戳或其他元数据
     uint64_t timestamp;
+
+    // 帧采集元数据：master 是否在本帧被实际读取（false = 2:1 交错跳过）
+    bool masterWasRead = true;
 
     HeatmapFrame() : timestamp(0) {
         // 初始化矩阵全0

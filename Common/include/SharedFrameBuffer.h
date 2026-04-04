@@ -79,7 +79,9 @@ struct SharedStylusPacket {
 // The actual shared memory layout (all POD, no virtual, no STL)
 struct SharedFrameData {
     // Synchronization
-    alignas(64) std::atomic<uint64_t> frameId{0};
+    alignas(64) std::atomic<uint64_t> frameId{0};       // write counter (= slave rate, for frame-ready signal)
+    alignas(64) std::atomic<uint64_t> slaveFrameId{0};  // slave frame counter (same as frameId)
+    alignas(64) std::atomic<uint64_t> masterFrameId{0}; // master frame counter (incremented only when master was read)
     alignas(64) std::atomic<uint32_t> lockFlag{0}; // 0=readable, 1=writing
 
     // RuntimeSnapshot (flat)
@@ -87,7 +89,8 @@ struct SharedFrameData {
     bool     streaming         = false;
     int64_t  lastFrameProcessUs = 0;
     int64_t  avgFrameProcessUs  = 0;
-    int32_t  acquisitionFps    = 0;
+    int32_t  acquisitionFps    = 0;  // master FPS (unused by Service; computed by App)
+    int32_t  slaveAcquisitionFps = 0; // slave FPS  (unused by Service; computed by App)
     bool     vhfEnabled        = false;
     bool     vhfDeviceOpen     = false;
     bool     vhfTranspose      = false;
@@ -191,6 +194,8 @@ public:
     bool Open(const wchar_t* name);     // App opens existing mapping
     bool Read(Engine::HeatmapFrame& out);
     uint64_t LastFrameId() const;
+    uint64_t LastSlaveFrameId() const;
+    uint64_t LastMasterFrameId() const;
     const SharedFrameData* Raw() const { return m_data; }
     HANDLE FrameReadyEvent() const { return m_frameEvent; }
     void Close();
