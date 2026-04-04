@@ -74,10 +74,7 @@ void ServiceHost::ParseServiceConfig(const std::string& configPath) {
 bool ServiceHost::Start() {
     // ── 0. 解析运行模式 ──────────────────────────────────
     ParseServiceConfig(kConfigPath);
-    LOG_INFO("ServiceHost", "Start", "Boot",
-             "Service mode: {}, AutoMode: {}",
-             m_mode == ServiceMode::Full ? "full" : "touch_only",
-             m_autoMode);
+    LOG_INFO("Service", __func__, "Boot", "Service mode: {}, AutoMode: {}", m_mode == ServiceMode::Full ? "full" : "touch_only", m_autoMode);
 
     // ── 1. DeviceRuntime（先创建，后续模块依赖它） ─────────
     m_deviceRuntime = std::make_unique<DeviceRuntime>(
@@ -88,41 +85,32 @@ bool ServiceHost::Start() {
     BuildDefaultPipeline(kConfigPath);
 
     if (!m_deviceRuntime->Start()) {
-        LOG_ERROR("ServiceHost", "Start", "Boot",
-                  "DeviceRuntime::Start() failed.");
+        LOG_ERROR("Service", __func__, "Boot", "DeviceRuntime::Start() failed.");
         return false;
     }
-    LOG_INFO("ServiceHost", "Start", "Boot",
-             "DeviceRuntime started (auto mode).");
+    LOG_INFO("Service", __func__, "Boot", "DeviceRuntime started (auto mode).");
 
     // ── 2. SystemStateMonitor（事件 → DeviceRuntime 命令队列） ─
     m_sysMonitor = std::make_unique<Host::SystemStateMonitor>();
     bool monitorOk = m_sysMonitor->Start(
         [this](const Host::SystemStateEvent& ev) {
-            LOG_INFO("ServiceHost", "SystemEventCb", "Event",
-                     "System event: type={}",
-                     Host::ToString(ev.type));
+            LOG_INFO("Service", __func__, "Event", "System event: type={}", Host::ToString(ev.type));
             m_deviceRuntime->IngestSystemEvent(ev);
         });
 
     if (!monitorOk) {
-        LOG_WARN("ServiceHost", "Start", "Monitor",
-                 "SystemStateMonitor failed to start; "
-                 "running without system state detection.");
+        LOG_WARN("Service", __func__, "Monitor", "SystemStateMonitor failed to start; running without system state detection.");
         m_sysMonitor.reset();
     } else {
-        LOG_INFO("ServiceHost", "Start", "Monitor",
-                 "SystemStateMonitor started.");
+        LOG_INFO("Service", __func__, "Monitor", "SystemStateMonitor started.");
     }
 
 #ifdef _DEBUG
     // ── 3. Shared Memory (Service creates Global\\ mapping, debug only) ──
     if (!m_frameWriter.Create(Ipc::kSharedFrameName)) {
-        LOG_WARN("ServiceHost", "Start", "IPC",
-                 "Failed to create shared memory; App debug will be disabled.");
+        LOG_WARN("Service", __func__, "IPC", "Failed to create shared memory; App debug will be disabled.");
     } else {
-        LOG_INFO("ServiceHost", "Start", "IPC",
-                 "Shared memory created for App connection.");
+        LOG_INFO("Service", __func__, "IPC", "Shared memory created for App connection.");
     }
 #endif
 
@@ -138,15 +126,13 @@ bool ServiceHost::Start() {
         sa.bInheritHandle = FALSE;
         m_logEvent = CreateEventW(&sa, FALSE, FALSE, Ipc::kLogReadyEventName);
         if (!m_logEvent) {
-            LOG_WARN("ServiceHost", "Start", "IPC",
-                     "CreateEvent failed for LogReadyEvent: {}", GetLastError());
+            LOG_WARN("Service", __func__, "IPC", "CreateEvent failed for LogReadyEvent: {}", GetLastError());
         } else {
             Common::GuiLogSink::Instance()->SetNotifyEvent(m_logEvent);
         }
         m_penEvent = CreateEventW(&sa, FALSE, FALSE, Ipc::kPenReadyEventName);
         if (!m_penEvent) {
-            LOG_WARN("ServiceHost", "Start", "IPC",
-                     "CreateEvent failed for PenReadyEvent: {}", GetLastError());
+            LOG_WARN("Service", __func__, "IPC", "CreateEvent failed for PenReadyEvent: {}", GetLastError());
         }
     }
     m_configDirty.Open();
@@ -155,11 +141,9 @@ bool ServiceHost::Start() {
             return HandleIpcCommand(req);
         });
     m_ipcServer.Start();
-    LOG_INFO("ServiceHost", "Start", "Boot",
-             "IPC pipe server started.");
+    LOG_INFO("Service", __func__, "Boot", "IPC pipe server started.");
 
-    LOG_INFO("ServiceHost", "Start", "Boot",
-             "All modules started.");
+    LOG_INFO("Service", __func__, "Boot", "All modules started.");
 
     // ── 4. BT MCU（仅 Full 模式启用） ─────────────────────
     if (m_mode == ServiceMode::Full) {
@@ -173,9 +157,7 @@ bool ServiceHost::Start() {
 
                 case EC::PenConnStatus: {
                     const bool connected = !ev.payload.empty() && ev.payload[0] != 0;
-                    LOG_INFO("ServiceHost", "PenEventCb", "MCU",
-                             "PenConnStatus: {}.",
-                             connected ? "connected" : "disconnected");
+                    LOG_INFO("Service", __func__, "MCU", "PenConnStatus: {}.", connected ? "connected" : "disconnected");
                     if (m_deviceRuntime) {
                         command cmd{};
                         if (connected) {
@@ -200,9 +182,7 @@ bool ServiceHost::Start() {
                         snprintf(buf, sizeof(buf), "%02X ", ev.payload[i]);
                         hexDump += buf;
                     }
-                    LOG_INFO("ServiceHost", "PenEventCb", "MCU",
-                             "PenFreqJump (payload[{}]: {})",
-                             ev.payload.size(), hexDump);
+                    LOG_INFO("Service", __func__, "MCU", "PenFreqJump (payload[{}]: {})", ev.payload.size(), hexDump);
 
                     if (m_deviceRuntime) {
                         command cmd{};
@@ -217,8 +197,7 @@ bool ServiceHost::Start() {
                 case EC::PenTypeInfo: {
                     // 0x73: 笔类型 → set_stylus_id(pen_type) 频率表绑定
                     uint8_t penType = ev.payload.empty() ? 0 : ev.payload[0];
-                    LOG_INFO("ServiceHost", "PenEventCb", "MCU",
-                             "PenTypeInfo: pen_type={}.", penType);
+                    LOG_INFO("Service", __func__, "MCU", "PenTypeInfo: pen_type={}.", penType);
                     if (m_deviceRuntime) {
                         command cmd{};
                         cmd.type  = AFE_Command::SetStylusId;
@@ -236,21 +215,17 @@ bool ServiceHost::Start() {
                     if (mode == 1) modeStr = "writing";
                     else if (mode == 2) modeStr = "hovering";
                     else if (mode == 3) modeStr = "eraser";
-                    LOG_INFO("ServiceHost", "PenEventCb", "MCU",
-                             "PenCurStatus: mode={} ({}).", mode, modeStr);
+                    LOG_INFO("Service", __func__, "MCU", "PenCurStatus: mode={} ({}).", mode, modeStr);
                     break;
                 }
 
                 default:
-                    LOG_INFO("ServiceHost", "PenEventCb", "MCU",
-                             "MCU event 0x{:02X} received.",
-                             static_cast<uint8_t>(ev.code));
+                    LOG_INFO("Service", __func__, "MCU", "MCU event 0x{:02X} received.", static_cast<uint8_t>(ev.code));
                     break;
                 }
             });
         m_penEventBridge->Start();
-        LOG_INFO("ServiceHost", "Start", "MCU",
-                 "PenEventBridge started (col00 event channel).");
+        LOG_INFO("Service", __func__, "MCU", "PenEventBridge started (col00 event channel).");
 
         // ── 4b. 压力通道 (col01): 'U' 报文频率 + 压感 ──────
         m_penPressureReader = std::make_unique<Himax::Pen::PenPressureReader>();
@@ -271,11 +246,9 @@ bool ServiceHost::Start() {
         }
 
         m_penPressureReader->Start();
-        LOG_INFO("ServiceHost", "Start", "MCU",
-                 "PenPressureReader started (col01 pressure channel).");
+        LOG_INFO("Service", __func__, "MCU", "PenPressureReader started (col01 pressure channel).");
     } else {
-        LOG_INFO("ServiceHost", "Start", "MCU",
-                 "Pen modules skipped (touch_only mode).");
+        LOG_INFO("Service", __func__, "MCU", "Pen modules skipped (touch_only mode).");
     }
 
     return true;
@@ -302,33 +275,28 @@ void ServiceHost::Stop() {
     if (m_penPressureReader) {
         m_penPressureReader->Stop();
         m_penPressureReader.reset();
-        LOG_INFO("ServiceHost", "Stop", "MCU",
-                 "PenPressureReader stopped.");
+        LOG_INFO("Service", __func__, "MCU", "PenPressureReader stopped.");
     }
     if (m_penEventBridge) {
         m_penEventBridge->Stop();
         m_penEventBridge.reset();
-        LOG_INFO("ServiceHost", "Stop", "MCU",
-                 "PenEventBridge stopped.");
+        LOG_INFO("Service", __func__, "MCU", "PenEventBridge stopped.");
     }
 
     if (m_sysMonitor) {
 
         m_sysMonitor->Stop();
         m_sysMonitor.reset();
-        LOG_INFO("ServiceHost", "Stop", "Monitor",
-                 "SystemStateMonitor stopped.");
+        LOG_INFO("Service", __func__, "Monitor", "SystemStateMonitor stopped.");
     }
 
     if (m_deviceRuntime) {
         m_deviceRuntime->Stop();
         m_deviceRuntime.reset();
-        LOG_INFO("ServiceHost", "Stop", "Device",
-                 "DeviceRuntime stopped.");
+        LOG_INFO("Service", __func__, "Device", "DeviceRuntime stopped.");
     }
 
-    LOG_INFO("ServiceHost", "Stop", "Shutdown",
-             "All modules stopped.");
+    LOG_INFO("Service", __func__, "Shutdown", "All modules stopped.");
 }
 
 // ── Pipeline 构建 ──────────────────────────────
@@ -342,9 +310,7 @@ void ServiceHost::BuildDefaultPipeline(const std::string& configPath) {
     pl.AddProcessor(std::make_unique<Engine::TouchTracker>());
     pl.AddProcessor(std::make_unique<Engine::CoordinateFilter>());
     pl.AddProcessor(std::make_unique<Engine::TouchGestureStateMachine>());
-    LOG_INFO("ServiceHost", "BuildDefaultPipeline", "Boot",
-             "Registered {} pipeline processors.",
-             pl.GetProcessors().size());
+    LOG_INFO("Service", __func__, "Boot", "Registered {} pipeline processors.", pl.GetProcessors().size());
 
     // Load saved config
     std::ifstream cfgIn(configPath);
@@ -369,11 +335,9 @@ void ServiceHost::BuildDefaultPipeline(const std::string& configPath) {
                 }
             }
         }
-        LOG_INFO("ServiceHost", "BuildDefaultPipeline", "Boot",
-                 "Loaded config from {}.", configPath);
+        LOG_INFO("Service", __func__, "Boot", "Loaded config from {}.", configPath);
     } else {
-        LOG_WARN("ServiceHost", "BuildDefaultPipeline", "Boot",
-                 "Config file not found: {}", configPath);
+        LOG_WARN("Service", __func__, "Boot", "Config file not found: {}", configPath);
     }
 }
 
@@ -397,15 +361,12 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(
                 });
             m_debugMode = true;
             resp.success = true;
-            LOG_INFO("ServiceHost", "HandleIpcCommand", "IPC",
-                     "Entered debug mode.");
+            LOG_INFO("Service", __func__, "IPC", "Entered debug mode.");
         } else {
-            LOG_ERROR("ServiceHost", "HandleIpcCommand", "IPC",
-                      "EnterDebugMode rejected: shared memory not available.");
+            LOG_ERROR("Service", __func__, "IPC", "EnterDebugMode rejected: shared memory not available.");
         }
 #else
-        LOG_WARN("ServiceHost", "HandleIpcCommand", "IPC",
-                 "EnterDebugMode not available in release build.");
+        LOG_WARN("Service", __func__, "IPC", "EnterDebugMode not available in release build.");
 #endif
         break;
     }
@@ -416,8 +377,7 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(
         m_debugMode = false;
 #endif
         resp.success = true;
-        LOG_INFO("ServiceHost", "HandleIpcCommand", "IPC",
-                 "Exited debug mode.");
+        LOG_INFO("Service", __func__, "IPC", "Exited debug mode.");
         break;
 
     case Ipc::IpcCommand::AfeCommand:
@@ -476,8 +436,7 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(
                     }
                 }
                 resp.success = true;
-                LOG_INFO("ServiceHost", "HandleIpcCommand", "IPC",
-                         "Config reloaded from {}.", kConfigPath);
+                LOG_INFO("Service", __func__, "IPC", "Config reloaded from {}.", kConfigPath);
             }
         }
         break;
@@ -498,8 +457,7 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(
                     out << "\n";
                 }
                 resp.success = true;
-                LOG_INFO("ServiceHost", "HandleIpcCommand", "IPC",
-                         "Config saved to {}.", kConfigPath);
+                LOG_INFO("Service", __func__, "IPC", "Config saved to {}.", kConfigPath);
             }
         }
         break;

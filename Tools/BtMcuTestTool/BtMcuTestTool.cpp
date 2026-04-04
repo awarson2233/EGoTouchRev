@@ -424,7 +424,7 @@ int main(int, char**)
     // freopen_s(&dummy, "CONOUT$", "w", stderr);
 
     Common::Logger::Init("BtMcuTestTool");
-    LOG_INFO("Tool", "main", "System", "--- BtMcuTestTool Starts ---");
+    LOG_INFO("Tool", __func__, "System", "--- BtMcuTestTool Starts ---");
 
     g_evtTransport = Himax::Pen::CreatePenUsbTransportWin32();
     g_pressTransport = Himax::Pen::CreatePenUsbTransportWin32();
@@ -517,24 +517,24 @@ int main(int, char**)
             if (evtPath.has_value()) {
                 auto res = g_evtTransport->Open(evtPath.value());
                 if (res.has_value()) {
-                    LOG_INFO("Tool", "Open", "Evt", "Event channel connected.");
+                    LOG_INFO("Tool", __func__, "Evt", "Event channel connected.");
                 } else {
-                    LOG_ERROR("Tool", "Open", "Evt", "Failed to open event channel.");
+                    LOG_ERROR("Tool", __func__, "Evt", "Failed to open event channel.");
                 }
             } else {
-                LOG_ERROR("Tool", "Open", "Evt", "Event device not found.");
+                LOG_ERROR("Tool", __func__, "Evt", "Event device not found.");
             }
             // Pressure channel
             auto pressPath = FindPressureDevicePath();
             if (pressPath.has_value()) {
                 auto res = g_pressTransport->Open(pressPath.value());
                 if (res.has_value()) {
-                    LOG_INFO("Tool", "Open", "Press", "Pressure channel connected.");
+                    LOG_INFO("Tool", __func__, "Press", "Pressure channel connected.");
                 } else {
-                    LOG_ERROR("Tool", "Open", "Press", "Failed to open pressure channel.");
+                    LOG_ERROR("Tool", __func__, "Press", "Failed to open pressure channel.");
                 }
             } else {
-                LOG_ERROR("Tool", "Open", "Press", "Pressure HID device not found.");
+                LOG_ERROR("Tool", __func__, "Press", "Pressure HID device not found.");
             }
 
             // Auto-handshake in background thread

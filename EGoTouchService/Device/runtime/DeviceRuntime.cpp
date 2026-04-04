@@ -44,13 +44,12 @@ DeviceRuntime::~DeviceRuntime() { Stop(); }
 bool DeviceRuntime::Start() {
     if (m_running.exchange(true)) return false;
     m_stopReason.store(StopReason::None);  // ← critical: clear stop reason for restart
-    m_state.store(workerState::ready);
+    SetState(workerState::ready);
     m_needSuspendDeinit = false;
     m_recoverCount = 0;
     m_lastNote = "Runtime started";
     m_thread = std::thread(&DeviceRuntime::WorkerMain, this);
-    LOG_INFO("Device", "DeviceRuntime::Start", "ready",
-             "Worker thread launched.");
+    LOG_INFO("Runtime", __func__, "ready", "Worker thread launched.");
     return true;
 }
 
@@ -58,7 +57,7 @@ void DeviceRuntime::Stop() {
     m_stopReason.store(StopReason::Shutdown);
     if (m_thread.joinable()) m_thread.join();
     m_running.store(false);
-    m_state.store(workerState::quit);
+    SetState(workerState::quit);
     m_lastNote = "Runtime stopped";
 }
 
@@ -98,31 +97,25 @@ void DeviceRuntime::IngestSystemEvent(
     switch (ev.type) {
     case ET::DisplayOff:
     case ET::LidOff:
-        LOG_INFO("Device", "IngestSystemEvent", "Policy",
-                 "Sleep event ({}), requesting suspend.",
-                 Host::ToString(ev.type));
+        LOG_INFO("Runtime", __func__, "Policy", "Sleep event ({}), requesting suspend.", Host::ToString(ev.type));
         m_chip.CancelPendingFrameRead();  // abort any blocking GetFrame NOW
         m_stopReason.store(StopReason::ScreenOff);
         break;
     case ET::DisplayOn:
     case ET::LidOn:
     case ET::ResumeAutomatic:
-        LOG_INFO("Device", "IngestSystemEvent", "Policy",
-                 "Wake event ({}), attempting resume.",
-                 Host::ToString(ev.type));
+        LOG_INFO("Runtime", __func__, "Policy", "Wake event ({}), attempting resume.", Host::ToString(ev.type));
         // suspend 状态下直接恢复，无需重建线程
         if (m_state.load() == workerState::suspend) {
-            m_state.store(workerState::ready);
-            LOG_INFO("Device", "IngestSystemEvent", "Policy",
-                     "Resumed from suspend → ready (zero-cost wakeup).");
+            SetState(workerState::ready);
+            LOG_INFO("Runtime", __func__, "Policy", "Resumed from suspend -> ready (zero-cost wakeup).");
         } else {
             Stop();
             Start();
         }
         break;
     case ET::Shutdown:
-        LOG_INFO("Device", "IngestSystemEvent", "Policy",
-                 "Shutdown event, requesting termination.");
+        LOG_INFO("Runtime", __func__, "Policy", "Shutdown event, requesting termination.");
         m_stopReason.store(StopReason::Shutdown);
         break;
     default: break;
@@ -188,9 +181,7 @@ bool DeviceRuntime::DrainCommands() {
         m_lastCmdId = qc.id;
         if (auto r = m_chip.m_afe.SendCommand(qc.cmd); !r) {
             RecordHistory(qc, false, "afe_sendCommand failed");
-            LOG_WARN("Device", "DrainCommands", "CmdExec",
-                     "Command '{}' (type={}) failed — skipping (non-fatal).",
-                     qc.reason, static_cast<int>(qc.cmd.type));
+            LOG_WARN("Runtime", __func__, "CmdExec", "Command '{}' (type={}) failed — skipping (non-fatal).", qc.reason, static_cast<int>(qc.cmd.type));
             // 不再触发 recover: AFE 命令失败不代表 bus 挂了
             continue;
         }
@@ -208,14 +199,12 @@ ThreadResult DeviceRuntime::WorkerMain() {
                                             std::memory_order_acq_rel);
         if (reason != StopReason::None) {
             if (reason == StopReason::ScreenOff) {
-                LOG_INFO("Device", "WorkerMain", "StopReq",
-                         "StopReason::ScreenOff consumed → suspend");
-                m_state.store(workerState::suspend);
+                LOG_INFO("Runtime", __func__, "StopReq", "StopReason::ScreenOff consumed -> suspend");
+                SetState(workerState::suspend);
                 m_needSuspendDeinit = true;   // 延迟到 OnSuspend 首次进入时执行
             } else {
-                LOG_INFO("Device", "WorkerMain", "StopReq",
-                         "StopReason::Shutdown consumed → quit");
-                m_state.store(workerState::quit);
+                LOG_INFO("Runtime", __func__, "StopReq", "StopReason::Shutdown consumed -> quit");
+                SetState(workerState::quit);
             }
             std::lock_guard<std::mutex> lk(m_mu);
             m_cmdQueue.clear();
@@ -232,8 +221,7 @@ ThreadResult DeviceRuntime::WorkerMain() {
         case workerState::quit:
             if (OnQuit()) {
                 m_running.store(false);  // allow restart via Start()
-                LOG_INFO("Device", "WorkerMain", "quit",
-                         "Worker exited, m_running=false.");
+                LOG_INFO("Runtime", __func__, "quit", "Worker exited, m_running=false.");
                 return ThreadResult();
             }
             break;
@@ -247,10 +235,10 @@ ThreadResult DeviceRuntime::WorkerMain() {
 void DeviceRuntime::OnReady() {
     if (m_autoMode.load()) {
         if (auto r = m_chip.Init(); !r) {
-            m_state.store(workerState::recover);
+            SetState(workerState::recover);
             return;
         }
-        m_state.store(workerState::streaming);
+        SetState(workerState::streaming);
     } else {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
@@ -264,15 +252,11 @@ void DeviceRuntime::OnStreaming() {
         // AFE 命令（如 EnableFreqShift）可能导致一两帧 bus 暂时失响应，不算致命。
         m_consecutiveFrameErrors++;
         if (m_consecutiveFrameErrors >= kMaxConsecutiveFrameErrors) {
-            LOG_ERROR("Device", "OnStreaming", "Streaming",
-                      "{} consecutive GetFrame failures → recover.",
-                      m_consecutiveFrameErrors);
+            LOG_ERROR("Runtime", __func__, "Streaming", "{} consecutive GetFrame failures -> recover.", m_consecutiveFrameErrors);
             m_consecutiveFrameErrors = 0;
-            m_state.store(workerState::recover);
+            SetState(workerState::recover);
         } else {
-            LOG_WARN("Device", "OnStreaming", "Streaming",
-                     "GetFrame failed ({}/{}), retrying...",
-                     m_consecutiveFrameErrors, kMaxConsecutiveFrameErrors);
+            LOG_WARN("Runtime", __func__, "Streaming", "GetFrame failed ({}/{}), retrying...", m_consecutiveFrameErrors, kMaxConsecutiveFrameErrors);
         }
         return;
     }
@@ -342,9 +326,7 @@ void DeviceRuntime::OnSuspend() {
     if (m_needSuspendDeinit) {
         m_chip.HoldReset();
         m_needSuspendDeinit = false;
-        LOG_INFO("Device", "OnSuspend", "suspend",
-                 "Entered suspend, chip reset held low. "
-                 "Waiting for wake event.");
+        LOG_INFO("Runtime", __func__, "suspend", "Entered suspend, chip reset held low. Waiting for wake event.");
     }
     // 低功耗等待，每 100ms 检查一次状态变更
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -355,11 +337,10 @@ void DeviceRuntime::OnRecover() {
 
     // 最大重试 30 次（500ms 间隔 ≈ 15 秒恢复窗口）
     if (m_recoverCount > 30) {
-        LOG_ERROR("Device", "OnRecover", "Recover",
-                  "Exceeded 30 recovery attempts, entering suspend.");
+        LOG_ERROR("Runtime", __func__, "Recover", "Exceeded 30 recovery attempts, entering suspend.");
         m_recoverCount = 0;
         m_needSuspendDeinit = true;
-        m_state.store(workerState::suspend);
+        SetState(workerState::suspend);
         return;
     }
 
@@ -370,14 +351,19 @@ void DeviceRuntime::OnRecover() {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 
-    LOG_INFO("Device", "OnRecover", "Recover",
-             "Recovery attempt {}/30...", m_recoverCount);
+    LOG_INFO("Runtime", __func__, "Recover", "Recovery attempt {}/30...", m_recoverCount);
 
     if (auto res = m_chip.check_bus(); !res) return;
     if (auto res = m_chip.Init(); !res) return;
 
-    LOG_INFO("Device", "OnRecover", "Recover",
-             "Recovery succeeded after {} attempts.", m_recoverCount);
-    m_state.store(workerState::streaming);
+    LOG_INFO("Runtime", __func__, "Recover", "Recovery succeeded after {} attempts.", m_recoverCount);
+    SetState(workerState::streaming);
     m_recoverCount = 0;
+}
+
+void DeviceRuntime::SetState(workerState newState) {
+    workerState old = m_state.exchange(newState, std::memory_order_acq_rel);
+    if (old != newState) {
+        LOG_INFO("Runtime", __func__, "StateTransition", "State changed: {} -> {}", ToString(old), ToString(newState));
+    }
 }

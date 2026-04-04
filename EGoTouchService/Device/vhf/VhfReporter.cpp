@@ -234,8 +234,7 @@ bool VhfReporter::EnsureDeviceOpen() {
         if (h != INVALID_HANDLE_VALUE) {
             m_handle = h;
             opened = true;
-            LOG_INFO("VhfReporter", "EnsureDeviceOpen", "VHF",
-                     "VHF device opened.");
+            LOG_INFO("VhfReporter", __func__, "VHF", "VHF device opened.");
             break;
         }
     }
@@ -267,10 +266,7 @@ bool VhfReporter::WritePacket(const uint8_t* data, size_t len,
                         &written, nullptr);
     if (!ok || written != len) {
         DWORD err = GetLastError();
-        LOG_WARN("VhfReporter", "WritePacket", "VHF",
-                 "Write {} failed (len={}, written={}, err={}), "
-                 "trying reopen.",
-                 tag, (unsigned)len, (unsigned)written, (unsigned)err);
+        LOG_WARN("VhfReporter", __func__, "VHF", "Write {} failed (len={}, written={}, err={}), trying reopen.", tag, (unsigned)len, (unsigned)written, (unsigned)err);
         ReopenDevice();
         return false;
     }

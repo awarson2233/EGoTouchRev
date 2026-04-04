@@ -35,17 +35,14 @@ bool StylusPipeline::ParseSlaveWords(
         std::array<uint16_t, kSlaveWordCount>& out) const {
     const size_t required = kSlaveHeaderBytes + kSlaveWordCount * 2;
     if (rawData.size() < required) {
-        LOG_DEBUG("StylusPipeline", "ParseSlaveWords", "SlaveFrame",
-                  "rawData too small: {} < {}",
-                  rawData.size(), required);
+        LOG_DEBUG("Engine", __func__, "SlaveFrame", "rawData too small: {} < {}",  rawData.size(), required);
         return false;
     }
     if (m_enableSlaveChecksum) {
         uint16_t cs = 0;
         if (!ValidateChecksum16(rawData.data() + kSlaveHeaderBytes,
                                 kSlaveWordCount, cs)) {
-            LOG_DEBUG("StylusPipeline", "ParseSlaveWords", "SlaveFrame",
-                      "Checksum failed: cs=0x{:04X}", cs);
+            LOG_DEBUG("Engine", __func__, "SlaveFrame", "Checksum failed: cs=0x{:04X}",  cs);
             return false;
         }
     }
@@ -131,11 +128,7 @@ bool StylusPipeline::Process(
     {
         static int sAnchorLogCount = 0;
         if ((sAnchorLogCount++ % 60) == 0) {
-            LOG_TRACE("StylusPipeline", "Process", "Anchor",
-                     "anchor=({},{}) grid_center={} sensor=({} rows, {} cols)",
-                     m_gridData.tx1.anchorRow, m_gridData.tx1.anchorCol,
-                     m_gridData.tx1.grid[4][4],
-                     m_sensorRows, m_sensorCols);
+            LOG_TRACE("Engine", __func__, "Anchor", "anchor=({},{}) grid_center={} sensor=({} rows, {} cols)",  m_gridData.tx1.anchorRow, m_gridData.tx1.anchorCol, m_gridData.tx1.grid[4][4], m_sensorRows, m_sensorCols);
         }
     }
 
@@ -250,8 +243,7 @@ bool StylusPipeline::Process(
         }
         static int sPressLogCount = 0;
         if ((sPressLogCount++ % 120) == 0) {
-            LOG_DEBUG("StylusPipeline", "Process", "Pressure",
-                     "btMcu={} active={}", btPress, finalCoor.valid);
+            LOG_DEBUG("Engine", __func__, "Pressure", "btMcu={} active={}",  btPress, finalCoor.valid);
         }
         SolvePressure(btPress, finalCoor.valid);
     }

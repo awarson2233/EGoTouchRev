@@ -21,19 +21,16 @@ void WINAPI ServiceShell::SvcMain(DWORD argc, LPWSTR* argv) {
     s->m_statusHandle = RegisterServiceCtrlHandlerExW(
         kServiceName, SvcCtrlHandlerEx, s);
     if (!s->m_statusHandle) {
-        LOG_ERROR("Shell", "SvcMain", "Boot",
-                  "RegisterServiceCtrlHandlerExW failed.");
+        LOG_ERROR("Service", __func__, "Boot", "RegisterServiceCtrlHandlerExW failed.");
         return;
     }
 
     s->ReportStatus(SERVICE_START_PENDING, 3000);
     s->m_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
 
-    LOG_INFO("Shell", "SvcMain", "Boot",
-             "Starting modules...");
+    LOG_INFO("Service", __func__, "Boot", "Starting modules...");
     if (!s->m_host.Start()) {
-        LOG_ERROR("Shell", "SvcMain", "Boot",
-                  "ServiceHost::Start() failed.");
+        LOG_ERROR("Service", __func__, "Boot", "ServiceHost::Start() failed.");
         s->ReportStatus(SERVICE_STOPPED);
         return;
     }
@@ -41,13 +38,12 @@ void WINAPI ServiceShell::SvcMain(DWORD argc, LPWSTR* argv) {
     s->RegisterPowerNotifications();
 
     s->ReportStatus(SERVICE_RUNNING);
-    LOG_INFO("Shell", "SvcMain", "Running",
-             "Service is running. Waiting for stop signal...");
+    LOG_INFO("Service", __func__, "Running", "Service is running. Waiting for stop signal...");
     s->WaitForStop();
     s->UnregisterPowerNotifications();
     s->m_host.Stop();
     s->ReportStatus(SERVICE_STOPPED);
-    LOG_INFO("Shell", "SvcMain", "Stopped", "Service stopped.");
+    LOG_INFO("Service", __func__, "Stopped", "Service stopped.");
 }
 
 DWORD WINAPI ServiceShell::SvcCtrlHandlerEx(
@@ -66,8 +62,7 @@ DWORD WINAPI ServiceShell::SvcCtrlHandlerEx(
     case SERVICE_CONTROL_STOP:
     case SERVICE_CONTROL_SHUTDOWN:
     case SERVICE_CONTROL_PRESHUTDOWN:
-        LOG_INFO("Shell", "CtrlHandler", "Stopping",
-                 "Received stop/shutdown control code={}.", ctrl);
+        LOG_INFO("Service", __func__, "Stopping", "Received stop/shutdown control code={}.", ctrl);
         // Signal MonitorShutDownEvent (index 6) so monitor thread sees it
         signalEvent(6);
         s->ReportStatus(SERVICE_STOP_PENDING, 5000);
@@ -77,7 +72,7 @@ DWORD WINAPI ServiceShell::SvcCtrlHandlerEx(
     case SERVICE_CONTROL_POWEREVENT: {
         // Handle PBT_APMRESUMEAUTOMATIC (system resumed from sleep)
         if (evtType == PBT_APMRESUMEAUTOMATIC) {
-            LOG_INFO("Shell", "PBT", "Power", "PBT_APMRESUMEAUTOMATIC");
+            LOG_INFO("Service", __func__, "Power", "PBT_APMRESUMEAUTOMATIC");
             signalEvent(7);  // PBT_APMRESUMEAUTOMATIC event
             return NO_ERROR;
         }
@@ -97,8 +92,7 @@ DWORD WINAPI ServiceShell::SvcCtrlHandlerEx(
 
         if (pbs->PowerSetting == kDisplayGuid && pbs->DataLength >= 4) {
             DWORD state = *reinterpret_cast<DWORD*>(pbs->Data);
-            LOG_INFO("Shell", "PBT", "Power",
-                     "GUID_CONSOLE_DISPLAY_STATE = {}", state);
+            LOG_INFO("Service", __func__, "Power", "GUID_CONSOLE_DISPLAY_STATE = {}", state);
             if (state >= 1) {
                 signalEvent(0);  // MonitorPowerOnEvent
                 signalEvent(2);  // MonitorConsoleDisplayOnEvent
@@ -109,8 +103,7 @@ DWORD WINAPI ServiceShell::SvcCtrlHandlerEx(
         }
         else if (pbs->PowerSetting == kLidGuid && pbs->DataLength >= 4) {
             DWORD state = *reinterpret_cast<DWORD*>(pbs->Data);
-            LOG_INFO("Shell", "PBT", "Power",
-                     "GUID_LIDSWITCH_STATE = {} (1=open, 0=closed)", state);
+            LOG_INFO("Service", __func__, "Power", "GUID_LIDSWITCH_STATE = {} (1=open, 0=closed)", state);
             if (state == 1) {
                 signalEvent(4);  // MonitorLidOnEvent
             } else {
@@ -137,19 +130,16 @@ void ServiceShell::RunAsConsole() {
         return TRUE;
     }, TRUE);
 
-    LOG_INFO("Shell", "RunAsConsole", "Boot",
-             "Starting modules (console mode)...");
+    LOG_INFO("Service", __func__, "Boot", "Starting modules (console mode)...");
     if (!m_host.Start()) {
-        LOG_ERROR("Shell", "RunAsConsole", "Boot",
-                  "ServiceHost::Start() failed.");
+        LOG_ERROR("Service", __func__, "Boot", "ServiceHost::Start() failed.");
         return;
     }
 
-    LOG_INFO("Shell", "RunAsConsole", "Running",
-             "Service running in console mode. Press Ctrl+C to stop.");
+    LOG_INFO("Service", __func__, "Running", "Service running in console mode. Press Ctrl+C to stop.");
     WaitForStop();
     m_host.Stop();
-    LOG_INFO("Shell", "RunAsConsole", "Stopped", "Console mode stopped.");
+    LOG_INFO("Service", __func__, "Stopped", "Console mode stopped.");
 }
 
 // ─── 辅助 ────────────────────────────────────
@@ -213,11 +203,7 @@ void ServiceShell::RegisterPowerNotifications() {
     m_hSuspendNotify = RegisterPowerSettingNotification(
         m_statusHandle, &kAwayGuid, DEVICE_NOTIFY_SERVICE_HANDLE);
 
-    LOG_INFO("Shell", "RegisterPowerNotifications", "Power",
-             "Registered PBT notifications (display={}, lid={}, away={}).",
-             m_hDisplayNotify != nullptr,
-             m_hLidNotify != nullptr,
-             m_hSuspendNotify != nullptr);
+    LOG_INFO("Service", __func__, "Power", "Registered PBT notifications (display={}, lid={}, away={}).", m_hDisplayNotify != nullptr, m_hLidNotify != nullptr, m_hSuspendNotify != nullptr);
 }
 
 void ServiceShell::UnregisterPowerNotifications() {

@@ -159,8 +159,7 @@ void SystemStateMonitor::WorkerLoop() {
             INFINITE);
 
         if (wait_result == WAIT_OBJECT_0) {
-            LOG_INFO("Monitor", "WorkerLoop", "Stop",
-                     "Stop event signaled, exiting monitor loop.");
+            LOG_INFO("Host", __func__, "Stop", "Stop event signaled, exiting monitor loop.");
             break;
         }
 
@@ -168,9 +167,7 @@ void SystemStateMonitor::WorkerLoop() {
             const std::size_t event_index = static_cast<std::size_t>(wait_result - WAIT_OBJECT_0 - 1);
             SystemStateEvent event = BuildEvent(event_index);
 
-            LOG_INFO("Monitor", "WorkerLoop", "Signal",
-                     "Named event[{}] signaled → type={}",
-                     event_index, ToString(event.type));
+            LOG_INFO("Host", __func__, "Signal", "Named event[{}] signaled → type={}",  event_index, ToString(event.type));
 
             if (m_callback) {
                 m_callback(event);
@@ -185,9 +182,7 @@ void SystemStateMonitor::WorkerLoop() {
         }
 
         // WAIT_FAILED/WAIT_ABANDONED are treated as hard stop for this monitor instance.
-        LOG_WARN("Monitor", "WorkerLoop", "Error",
-                 "WaitForMultipleObjects returned unexpected result: {}",
-                 wait_result);
+        LOG_WARN("Host", __func__, "Error", "WaitForMultipleObjects returned unexpected result: {}",  wait_result);
         break;
     }
 

@@ -1200,7 +1200,7 @@ void DiagnosticsWorkbench::ExportCurrentFrameToCSV(bool isAutoCapture) {
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
     if (ec) {
-        LOG_ERROR("App", "DiagnosticsWorkbench::ExportCurrentFrameToCSV", "System", "Failed to create directory: {}", dir.string());
+        LOG_ERROR("App", __func__, "UI", "Failed to create directory: {}", dir.string());
     }
     
     // We add a high-resolution counter parameter or thread ID to absolutely guarantee no overwrites
@@ -1218,7 +1218,7 @@ void DiagnosticsWorkbench::ExportCurrentFrameToCSV(bool isAutoCapture) {
 
     std::ofstream out(fullPath.string());
     if (!out.is_open()) {
-        LOG_INFO("App", "DiagnosticsWorkbench::ExportCurrentFrameToCSV", "Error", "Failed to open file for writing: {}", fullPath.string());
+        LOG_INFO("App", __func__, "UI", "Failed to open file for writing: {}", fullPath.string());
         return;
     }
 
@@ -1389,7 +1389,7 @@ void DiagnosticsWorkbench::ExportCurrentFrameToCSV(bool isAutoCapture) {
     }
 
     out.close();
-    LOG_INFO("App", "DiagnosticsWorkbench::ExportCurrentFrameToCSV", "UI", "Frame exported to {}", fullPath.string());
+    LOG_INFO("App", __func__, "UI", "Frame exported to {}", fullPath.string());
 }
 
 // ── BT MCU Panel (PenBridge Status — via IPC) ──
@@ -1505,11 +1505,9 @@ void DiagnosticsWorkbench::DrawSystemEventsPanel() {
             if (h) {
                 SetEvent(h);
                 CloseHandle(h);
-                LOG_INFO("App", "SystemEvents", "UI", "Signaled: {}", item.label);
+                LOG_INFO("App", __func__, "UI", "Signaled: {}", item.label);
             } else {
-                LOG_WARN("App", "SystemEvents", "UI",
-                         "Failed to open event (index={}, err={})",
-                         item.index, GetLastError());
+                LOG_WARN("App", __func__, "UI", "Failed to open event (index={}, err={})", item.index, GetLastError());
             }
         }
         ImGui::PopStyleColor(2);

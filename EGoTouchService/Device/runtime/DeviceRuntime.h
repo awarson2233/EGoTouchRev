@@ -146,6 +146,7 @@ private:
     void RecordHistory(const QueuedCommand& qc,
                        bool ok, const std::string& det);
 
+    void SetState(workerState newState);
     std::atomic<workerState> m_state{workerState::quit};
     std::atomic<StopReason> m_stopReason{StopReason::None};
     std::atomic<bool> m_autoMode{false};

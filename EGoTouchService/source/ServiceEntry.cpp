@@ -139,8 +139,7 @@ int wmain(int argc, wchar_t* argv[]) {
     Common::Logger::Init("EGoTouchService", "C:/ProgramData/EGoTouchRev/logs/",
                           Common::GuiLogSink::Instance());
 
-    LOG_INFO("Shell", "wmain", "Boot",
-             "Process priority set to REALTIME_PRIORITY_CLASS.");
+    LOG_INFO("Service", __func__, "Boot", "Process priority set to REALTIME_PRIORITY_CLASS.");
 
     const bool consoleMode =
         (argc >= 2 && std::wstring_view(argv[1]) == L"--console");
@@ -158,14 +157,10 @@ int wmain(int argc, wchar_t* argv[]) {
             DWORD err = GetLastError();
             if (err == ERROR_FAILED_SERVICE_CONTROLLER_CONNECT) {
                 // 双击运行或无 SCM 环境 → 退回控制台
-                LOG_WARN("Shell", "wmain", "Boot",
-                         "Not launched by SCM (err={}), "
-                         "falling back to console mode.", err);
+                LOG_WARN("Service", __func__, "Boot", "Not launched by SCM (err={}), falling back to console mode.", err);
                 Service::ServiceShell::Instance()->RunAsConsole();
             } else {
-                LOG_ERROR("Shell", "wmain", "Boot",
-                          "StartServiceCtrlDispatcherW failed, "
-                          "err={}.", err);
+                LOG_ERROR("Service", __func__, "Boot", "StartServiceCtrlDispatcherW failed, err={}.", err);
             }
         }
     }

@@ -49,8 +49,7 @@ ServiceProxy::~ServiceProxy() {
 bool ServiceProxy::Connect() {
     // 1. Open shared memory (Service owns the Global\\ mapping)
     if (!m_frameReader.Open(kSharedMemName)) {
-        LOG_ERROR("App", "ServiceProxy::Connect", "IPC",
-                  "Failed to open shared memory (Service not running?).");
+        LOG_ERROR("App", __func__, "IPC", "Failed to open shared memory (Service not running?).");
         return false;
     }
     // 2. Open config dirty flag
@@ -58,16 +57,14 @@ bool ServiceProxy::Connect() {
 
     // 3. Connect pipe to Service
     if (!m_client.Connect(3000)) {
-        LOG_ERROR("App", "ServiceProxy::Connect", "IPC",
-                  "Pipe connection failed.");
+        LOG_ERROR("App", __func__, "IPC", "Pipe connection failed.");
         m_frameReader.Close();
         return false;
     }
     // 4. Tell Service to enter debug mode
     auto resp = m_client.EnterDebugMode(kSharedMemName);
     if (!resp.success) {
-        LOG_ERROR("App", "ServiceProxy::Connect", "IPC",
-                  "EnterDebugMode rejected.");
+        LOG_ERROR("App", __func__, "IPC", "EnterDebugMode rejected.");
         m_client.Disconnect();
         m_frameReader.Close();
         return false;
@@ -75,30 +72,26 @@ bool ServiceProxy::Connect() {
     if (!m_logEvent) {
         m_logEvent = OpenEventW(SYNCHRONIZE, FALSE, Ipc::kLogReadyEventName);
         if (!m_logEvent) {
-            LOG_WARN("App", "ServiceProxy::Connect", "IPC",
-                     "OpenEvent failed for LogReadyEvent: {}", GetLastError());
+            LOG_WARN("App", __func__, "IPC", "OpenEvent failed for LogReadyEvent: {}", GetLastError());
         }
     }
     if (!m_penEvent) {
         m_penEvent = OpenEventW(SYNCHRONIZE, FALSE, Ipc::kPenReadyEventName);
         if (!m_penEvent) {
-            LOG_WARN("App", "ServiceProxy::Connect", "IPC",
-                     "OpenEvent failed for PenReadyEvent: {}", GetLastError());
+            LOG_WARN("App", __func__, "IPC", "OpenEvent failed for PenReadyEvent: {}", GetLastError());
         }
     }
     if (!m_pollStopEvent) {
         m_pollStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         if (!m_pollStopEvent) {
-            LOG_WARN("App", "ServiceProxy::Connect", "IPC",
-                     "CreateEvent failed for PollStopEvent: {}", GetLastError());
+            LOG_WARN("App", __func__, "IPC", "CreateEvent failed for PollStopEvent: {}", GetLastError());
         }
     }
     // 5. Start polling thread
     m_polling.store(true);
     m_pollThread = std::thread(&ServiceProxy::PollLoop, this);
 
-    LOG_INFO("App", "ServiceProxy::Connect", "IPC",
-             "Connected to EGoTouchService.");
+    LOG_INFO("App", __func__, "IPC", "Connected to EGoTouchService.");
     return true;
 }
 
@@ -131,8 +124,7 @@ void ServiceProxy::Disconnect() {
     m_configDirty.Close();
     m_fps.store(0);
     m_slaveFps.store(0);
-    LOG_INFO("App", "ServiceProxy::Disconnect", "IPC",
-             "Disconnected.");
+    LOG_INFO("App", __func__, "IPC", "Disconnected.");
 }
 
 // ── Auto-discovery ──
@@ -141,8 +133,7 @@ void ServiceProxy::StartAutoDiscovery(int intervalMs) {
     m_discoveryIntervalMs = intervalMs;
     m_discovering.store(true);
     m_discoveryThread = std::thread(&ServiceProxy::DiscoveryLoop, this);
-    LOG_INFO("App", "ServiceProxy::StartAutoDiscovery", "IPC",
-             "Auto-discovery started (interval={}ms).", intervalMs);
+    LOG_INFO("App", __func__, "IPC", "Auto-discovery started (interval={}ms).", intervalMs);
 }
 
 void ServiceProxy::StopAutoDiscovery() {
@@ -159,8 +150,7 @@ void ServiceProxy::DiscoveryLoop() {
     while (m_discovering.load()) {
         if (!IsConnected()) {
             if (Connect()) {
-                LOG_INFO("App", "ServiceProxy::DiscoveryLoop", "IPC",
-                         "Service discovered and connected.");
+                LOG_INFO("App", __func__, "IPC", "Service discovered and connected.");
             }
         }
         // Sleep in small increments so we can stop quickly
@@ -220,8 +210,7 @@ void ServiceProxy::SaveConfig() {
     // Notify Service to reload from config.ini
     m_configDirty.SetDirty();
     m_client.ReloadConfig();
-    LOG_INFO("App", "ServiceProxy::SaveConfig", "Config",
-             "Config saved and Service notified to reload.");
+    LOG_INFO("App", __func__, "IPC", "Config saved and Service notified to reload.");
 }
 
 void ServiceProxy::LoadConfig() {
@@ -339,8 +328,7 @@ void ServiceProxy::TriggerDVRExport(bool heatmap, bool master, bool slave) {
             }
         }
     }
-    LOG_INFO("App", "ServiceProxy::TriggerDVRExport", "DVR",
-             "Exported {} frames to {}/", frames.size(), dir);
+    LOG_INFO("App", __func__, "IPC", "Exported {} frames to {}/", frames.size(), dir);
 }
 
 // ── Poll loop with FPS measurement ──

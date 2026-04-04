@@ -41,11 +41,7 @@ namespace Himax {
 // ── AFE 命令分发器 ──────────────────────────────────────────────────────────
 
 ChipResult<> AfeController::SendCommand(command cmd) {
-    LOG_INFO("Device", "AfeController::SendCommand", m_chip.GetStateStr(),
-             "Dispatch cmd={}({}), param={}",
-             AfeCommandToString(cmd.type),
-             static_cast<int>(cmd.type),
-             static_cast<unsigned int>(cmd.param));
+    LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "Dispatch cmd={}({}), param={}", AfeCommandToString(cmd.type), static_cast<int>(cmd.type), static_cast<unsigned int>(cmd.param));
 
     switch (cmd.type) {
     case AFE_Command::ClearStatus:       return ClearStatus(cmd.param);
@@ -70,20 +66,17 @@ ChipResult<> AfeController::EnterIdle(uint8_t param) {
     if (m_chip.GetConnectionState() != ConnectionState::Connected)
         return std::unexpected(ChipError::InvalidOperation);
 
-    LOG_INFO("Device", "AfeController::EnterIdle", m_chip.GetStateStr(),
-             "Entering with param={}", static_cast<unsigned>(param));
+    LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "Entering with param={}", static_cast<unsigned>(param));
 
     if (auto res = HimaxProtocol::send_command(m_chip.GetMasterDevice(), 0x0a, param, m_chip.GetCurrentSlot()); !res) {
-        LOG_ERROR("Device", "AfeController::EnterIdle", m_chip.GetStateStr(),
-                  "Send ENTER_IDLE command failed!");
+        LOG_ERROR("HimaxAFE", __func__, m_chip.GetStateStr(), "Send ENTER_IDLE command failed!");
         return res;
     }
 
     if (auto res = m_chip.SetFrameReadIdlePolicy(); !res) return res;
     m_chip.SetAfeMode(THP_AFE_MODE::Idle);
 
-    LOG_INFO("Device", "AfeController::EnterIdle", m_chip.GetStateStr(),
-             "===== IDLE ENTER ===== No input detected, entering low-power idle.");
+    LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "===== IDLE ENTER ===== No input detected, entering low-power idle.");
     return {};
 }
 
@@ -91,9 +84,9 @@ ChipResult<> AfeController::ForceExitIdle() {
     if (m_chip.GetConnectionState() != ConnectionState::Connected)
         return std::unexpected(ChipError::InvalidOperation);
 
-    LOG_INFO("Device", "AfeController::ForceExitIdle", m_chip.GetStateStr(), "Entering!");
+    LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "Entering!");
     auto res = m_chip.NotifyTouchWakeup();
-    LOG_INFO("Device", "AfeController::ForceExitIdle", m_chip.GetStateStr(), "Out!");
+    LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "Out!");
     return res;
 }
 
@@ -101,16 +94,14 @@ ChipResult<> AfeController::StartCalibration(uint8_t param) {
     if (m_chip.GetConnectionState() != ConnectionState::Connected)
         return std::unexpected(ChipError::InvalidOperation);
 
-    LOG_INFO("Device", "AfeController::StartCalibration", m_chip.GetStateStr(),
-             "Entering with param={}", static_cast<unsigned>(param));
+    LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "Entering with param={}", static_cast<unsigned>(param));
 
     if (auto res = HimaxProtocol::send_command(m_chip.GetMasterDevice(), 0x01, param, m_chip.GetCurrentSlot()); !res) {
-        LOG_ERROR("Device", "AfeController::StartCalibration", m_chip.GetStateStr(),
-                  "Send AFE_START_CALBRATION command failed!");
+        LOG_ERROR("HimaxAFE", __func__, m_chip.GetStateStr(), "Send AFE_START_CALBRATION command failed!");
         return res;
     }
 
-    LOG_INFO("Device", "AfeController::StartCalibration", m_chip.GetStateStr(), "Out!");
+    LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "Out!");
     return {};
 }
 
@@ -118,7 +109,7 @@ ChipResult<> AfeController::EnableFreqShift() {
     if (m_chip.GetConnectionState() != ConnectionState::Connected)
         return std::unexpected(ChipError::InvalidOperation);
 
-    LOG_INFO("Device", "AfeController::EnableFreqShift", m_chip.GetStateStr(), "Entering!");
+    LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "Entering!");
     return HimaxProtocol::send_command(m_chip.GetMasterDevice(), 0x0d, 0x00, m_chip.GetCurrentSlot());
 }
 
@@ -127,12 +118,11 @@ ChipResult<> AfeController::DisableFreqShift() {
         return std::unexpected(ChipError::InvalidOperation);
 
     if (m_stylus.switchPolicy == 2) {
-        LOG_INFO("Device", "AfeController::DisableFreqShift", m_chip.GetStateStr(),
-                 "AUTO mode (switchPolicy=2), skipping disable command.");
+        LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "AUTO mode (switchPolicy=2), skipping disable command.");
         return {};
     }
 
-    LOG_INFO("Device", "AfeController::DisableFreqShift", m_chip.GetStateStr(), "Entering!");
+    LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "Entering!");
     return HimaxProtocol::send_command(m_chip.GetMasterDevice(), 0x02, 0x00, m_chip.GetCurrentSlot());
 }
 
@@ -142,12 +132,10 @@ ChipResult<> AfeController::ClearStatus(uint8_t cmd_val) {
 
     if (cmd_val & 0x40) {
         m_stylus.switchReqPending = false;
-        LOG_INFO("Device", "AfeController::ClearStatus", m_chip.GetStateStr(),
-                 "Cleared switchReqPending (0x40).");
+        LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "Cleared switchReqPending (0x40).");
     }
     if (cmd_val & 0x20) {
-        LOG_INFO("Device", "AfeController::ClearStatus", m_chip.GetStateStr(),
-                 "Cleared FreqSwitchForceFlag (0x20).");
+        LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "Cleared FreqSwitchForceFlag (0x20).");
     }
     return {};
 }
@@ -156,8 +144,7 @@ ChipResult<> AfeController::ForceToFreqPoint(uint8_t freq_idx) {
     if (m_chip.GetConnectionState() != ConnectionState::Connected)
         return std::unexpected(ChipError::InvalidOperation);
 
-    LOG_INFO("Device", "AfeController::ForceToFreqPoint", m_chip.GetStateStr(),
-             "Entering with freq_idx={}", static_cast<unsigned>(freq_idx));
+    LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "Entering with freq_idx={}", static_cast<unsigned>(freq_idx));
     return HimaxProtocol::send_command(m_chip.GetMasterDevice(), 0x0c, freq_idx, m_chip.GetCurrentSlot());
 }
 
@@ -165,8 +152,7 @@ ChipResult<> AfeController::ForceToScanRate(uint8_t rate_idx) {
     if (m_chip.GetConnectionState() != ConnectionState::Connected)
         return std::unexpected(ChipError::InvalidOperation);
 
-    LOG_INFO("Device", "AfeController::ForceToScanRate", m_chip.GetStateStr(),
-             "Entering with rate_idx={}", static_cast<unsigned>(rate_idx));
+    LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "Entering with rate_idx={}", static_cast<unsigned>(rate_idx));
     return HimaxProtocol::send_command(m_chip.GetMasterDevice(), 0x0e, rate_idx, m_chip.GetCurrentSlot());
 }
 
@@ -176,8 +162,7 @@ ChipResult<> AfeController::InitStylus(uint8_t pen_id) {
     if (m_chip.GetConnectionState() != ConnectionState::Connected)
         return std::unexpected(ChipError::InvalidOperation);
 
-    LOG_INFO("Device", "AfeController::InitStylus", m_chip.GetStateStr(),
-             "0x71 connect → EnableFreqShift + set_stylus_connect(1)");
+    LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "0x71 connect → EnableFreqShift + set_stylus_connect(1)");
 
     if (auto r = EnableFreqShift(); !r) return r;
 
@@ -187,8 +172,7 @@ ChipResult<> AfeController::InitStylus(uint8_t pen_id) {
     m_stylus.switchTargetIdx = 0;
     m_stylus.switchReqPending = false;
 
-    LOG_INFO("Device", "AfeController::InitStylus", m_chip.GetStateStr(),
-             "Stylus connected, waiting for PenTypeInfo (0x73) to bind freq pair.");
+    LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "Stylus connected, waiting for PenTypeInfo (0x73) to bind freq pair.");
     return {};
 }
 
@@ -196,9 +180,7 @@ ChipResult<> AfeController::SetStylusId(uint8_t pen_id) {
     if (m_chip.GetConnectionState() != ConnectionState::Connected)
         return std::unexpected(ChipError::InvalidOperation);
 
-    LOG_INFO("Device", "AfeController::SetStylusId", m_chip.GetStateStr(),
-             "0x73 pen_type={} → 查频率表绑定 FreqPair",
-             static_cast<unsigned>(pen_id));
+    LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "0x73 pen_type={} → 查频率表绑定 FreqPair", static_cast<unsigned>(pen_id));
 
     StylusFreqPair pair{0x00A1, 0x0018};  // 默认值（ID=5）
     for (auto& e : kFreqTable) {
@@ -212,9 +194,7 @@ ChipResult<> AfeController::SetStylusId(uint8_t pen_id) {
     m_stylus.pen_id   = pen_id;
     m_stylus.freqPair = pair;
 
-    LOG_INFO("Device", "AfeController::SetStylusId", m_chip.GetStateStr(),
-             "Stylus freq pair bound: freq0=0x{:04X}, freq1=0x{:04X}",
-             pair.freq0_cmd, pair.freq1_cmd);
+    LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "Stylus freq pair bound: freq0=0x{:04X}, freq1=0x{:04X}", pair.freq0_cmd, pair.freq1_cmd);
     return {};
 }
 
@@ -222,14 +202,14 @@ ChipResult<> AfeController::DisconnectStylus() {
     if (m_chip.GetConnectionState() != ConnectionState::Connected)
         return std::unexpected(ChipError::InvalidOperation);
 
-    LOG_INFO("Device", "AfeController::DisconnectStylus", m_chip.GetStateStr(),
-             "DisableFreqShift + reset StylusState");
+    LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "DisableFreqShift + reset StylusState");
 
     if (m_stylus.switchPolicy != 2) {
-        (void)DisableFreqShift();
+        if (auto res = DisableFreqShift(); !res) {
+            LOG_WARN("HimaxAFE", __func__, m_chip.GetStateStr(), "DisableFreqShift failed on disconnect, ignoring.");
+        }
     } else {
-        LOG_INFO("Device", "AfeController::DisconnectStylus", m_chip.GetStateStr(),
-                 "AUTO mode (policy=2) → skipping disable_freq_shift.");
+        LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "AUTO mode (policy=2) → skipping disable_freq_shift.");
     }
 
     m_stylus = StylusState{};
@@ -278,13 +258,11 @@ bool AfeController::ProcessStylusStatus() {
         uint32_t btAge = m_stylus.frameCounter - m_stylus.btLastSeenFrame;
         if (btAge > kBtPressureTimeout && !m_stylus.btPressureCleared) {
             m_stylus.btPressureCleared = true;
-            LOG_WARN("Device", "AfeController::ProcessStylusStatus", m_chip.GetStateStr(),
-                     "BT MCU silent >1s → pressure data reset.");
+            LOG_WARN("HimaxAFE", __func__, m_chip.GetStateStr(), "BT MCU silent >1s → pressure data reset.");
         }
         if (btAge > kBtHibernateTimeout) {
             m_stylus.btActive = false;
-            LOG_WARN("Device", "AfeController::ProcessStylusStatus", m_chip.GetStateStr(),
-                     "BT MCU heartbeat timeout (60s) → marking inactive.");
+            LOG_WARN("HimaxAFE", __func__, m_chip.GetStateStr(), "BT MCU heartbeat timeout (60s) → marking inactive.");
         }
     }
 
@@ -295,18 +273,14 @@ bool AfeController::ProcessStylusStatus() {
         m_stylus.lastSwitchFrame = m_stylus.frameCounter;
         m_stylus.btMismatchActive = false;
 
-        LOG_INFO("Device", "AfeController::ProcessStylusStatus", m_chip.GetStateStr(),
-                 "FreqShift done → freqIdx={}, tpFreq=[{},{}], btFreq=[{},{}]",
-                 m_stylus.freqIdx, tpFreq1, tpFreq2,
-                 m_stylus.btFreq1, m_stylus.btFreq2);
+        LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "FreqShift done → freqIdx={}, tpFreq=[{},{}], btFreq=[{},{}]", m_stylus.freqIdx, tpFreq1, tpFreq2, m_stylus.btFreq1, m_stylus.btFreq2);
     }
 
     // Pending 超时自愈
     if (m_stylus.switchReqPending) {
         uint32_t pendingAge = m_stylus.frameCounter - m_stylus.switchReqFrame;
         if (pendingAge > kPendingTimeout) {
-            LOG_WARN("Device", "AfeController::ProcessStylusStatus", m_chip.GetStateStr(),
-                     "FreqShift pending timeout ({} frames) → force clear.", pendingAge);
+            LOG_WARN("HimaxAFE", __func__, m_chip.GetStateStr(), "FreqShift pending timeout ({} frames) → force clear.", pendingAge);
             m_stylus.switchReqPending = false;
             m_stylus.lastSwitchFrame = m_stylus.frameCounter;
         }
@@ -334,9 +308,7 @@ bool AfeController::ProcessStylusStatus() {
                     m_stylus.switchReqPending = true;
                     m_stylus.switchReqFrame   = m_stylus.frameCounter;
                     m_stylus.btMismatchActive = false;
-                    LOG_INFO("Device", "AfeController::ProcessStylusStatus", m_chip.GetStateStr(),
-                             "BT-TP mismatch >30ms: tp={} bt={} → ForceToFreqPoint({})",
-                             tpFreq1, m_stylus.btFreq1, targetIdx);
+                    LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "BT-TP mismatch >30ms: tp={} bt={} → ForceToFreqPoint({})", tpFreq1, m_stylus.btFreq1, targetIdx);
                     return true;
                 }
             }
@@ -353,17 +325,13 @@ bool AfeController::ProcessStylusStatus() {
         m_stylus.switchTargetIdx  = 1;
         m_stylus.switchReqPending = true;
         m_stylus.switchReqFrame   = m_stylus.frameCounter;
-        LOG_INFO("Device", "AfeController::ProcessStylusStatus", m_chip.GetStateStr(),
-                 "F0({})−F1({})={} ≥{} → ForceToFreqPoint(1), tpFreq=[{},{}]",
-                 f0_noise, f1_noise, diff_01, kNoiseThresholdF0toF1, tpFreq1, tpFreq2);
+        LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "F0({})−F1({})={} ≥{} → ForceToFreqPoint(1), tpFreq=[{},{}]", f0_noise, f1_noise, diff_01, kNoiseThresholdF0toF1, tpFreq1, tpFreq2);
         return true;
     } else if (diff_10 > kNoiseThresholdF1toF0 && m_stylus.freqIdx != 0) {
         m_stylus.switchTargetIdx  = 0;
         m_stylus.switchReqPending = true;
         m_stylus.switchReqFrame   = m_stylus.frameCounter;
-        LOG_INFO("Device", "AfeController::ProcessStylusStatus", m_chip.GetStateStr(),
-                 "F1({})−F0({})={} >{} → ForceToFreqPoint(0), tpFreq=[{},{}]",
-                 f1_noise, f0_noise, diff_10, kNoiseThresholdF1toF0, tpFreq1, tpFreq2);
+        LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "F1({})−F0({})={} >{} → ForceToFreqPoint(0), tpFreq=[{},{}]", f1_noise, f0_noise, diff_10, kNoiseThresholdF1toF0, tpFreq1, tpFreq2);
         return true;
     }
     return false;
@@ -382,8 +350,7 @@ void AfeController::UpdateBtHeartbeat(uint8_t freq1, uint8_t freq2) {
     m_stylus.btPressureCleared = false;
 
     if (freqChanged) {
-        LOG_INFO("Device", "AfeController::UpdateBtHeartbeat", m_chip.GetStateStr(),
-                 "BT freq updated: [{}, {}]", freq1, freq2);
+        LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "BT freq updated: [{}, {}]", freq1, freq2);
     }
 }
 

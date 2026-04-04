@@ -11,8 +11,7 @@ bool IpcPipeServer::Start() {
     if (m_running.load()) return true;
     m_running.store(true);
     m_thread = std::thread(&IpcPipeServer::ServerLoop, this);
-    LOG_INFO("Ipc", "IpcPipeServer::Start", "IPC",
-             "Pipe server started.");
+    LOG_INFO("IPC", __func__, "IPC", "Pipe server started.");
     return true;
 }
 
@@ -24,8 +23,7 @@ void IpcPipeServer::Stop() {
         0, nullptr, OPEN_EXISTING, 0, nullptr);
     if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
     if (m_thread.joinable()) m_thread.join();
-    LOG_INFO("Ipc", "IpcPipeServer::Stop", "IPC",
-             "Pipe server stopped.");
+    LOG_INFO("IPC", __func__, "IPC", "Pipe server stopped.");
 }
 
 void IpcPipeServer::ServerLoop() {
@@ -48,8 +46,7 @@ void IpcPipeServer::ServerLoop() {
             1, sizeof(IpcResponse), sizeof(IpcRequest),
             0, &sa);
         if (pipe == INVALID_HANDLE_VALUE) {
-            LOG_ERROR("Ipc", "IpcPipeServer::ServerLoop", "IPC",
-                      "CreateNamedPipe failed: {}", GetLastError());
+            LOG_ERROR("IPC", __func__, "IPC", "CreateNamedPipe failed: {}",  GetLastError());
             break;
         }
 
@@ -61,8 +58,7 @@ void IpcPipeServer::ServerLoop() {
             CloseHandle(pipe);
             continue;
         }
-        LOG_INFO("Ipc", "IpcPipeServer::ServerLoop", "IPC",
-                 "Client connected.");
+        LOG_INFO("IPC", __func__, "IPC", "Client connected.");
 
         // Read/dispatch loop for this client
         while (m_running.load()) {
@@ -86,8 +82,7 @@ void IpcPipeServer::ServerLoop() {
 
         DisconnectNamedPipe(pipe);
         CloseHandle(pipe);
-        LOG_INFO("Ipc", "IpcPipeServer::ServerLoop", "IPC",
-                 "Client disconnected.");
+        LOG_INFO("IPC", __func__, "IPC", "Client disconnected.");
     }
 }
 

@@ -22,8 +22,7 @@ bool SharedFrameWriter::Open(const wchar_t* name) {
         sa.bInheritHandle = FALSE;
         m_mapHandle = OpenFileMappingW(FILE_MAP_WRITE, FALSE, name);
         if (!m_mapHandle) {
-            LOG_ERROR("Ipc", "SharedFrameWriter::Open", "IPC",
-                      "OpenFileMapping failed: {}", GetLastError());
+            LOG_ERROR("Common", __func__, "IPC", "OpenFileMapping failed: {}",  GetLastError());
             return false;
         }
     }
@@ -31,21 +30,18 @@ bool SharedFrameWriter::Open(const wchar_t* name) {
         MapViewOfFile(m_mapHandle, FILE_MAP_WRITE, 0, 0,
                       sizeof(SharedFrameData)));
     if (!m_data) {
-        LOG_ERROR("Ipc", "SharedFrameWriter::Open", "IPC",
-                  "MapViewOfFile failed: {}", GetLastError());
+        LOG_ERROR("Common", __func__, "IPC", "MapViewOfFile failed: {}",  GetLastError());
         CloseHandle(m_mapHandle);
         m_mapHandle = nullptr;
         return false;
     }
-    LOG_INFO("Ipc", "SharedFrameWriter::Open", "IPC",
-             "Shared memory opened for writing.");
+    LOG_INFO("Common", __func__, "IPC", "Shared memory opened for writing.");
 
     // Open frame-ready event (optional)
     m_frameEvent = OpenEventW(EVENT_MODIFY_STATE | SYNCHRONIZE, FALSE,
                               kFrameReadyEventName);
     if (!m_frameEvent) {
-        LOG_WARN("Ipc", "SharedFrameWriter::Open", "IPC",
-                 "OpenEvent failed for FrameReadyEvent: {}", GetLastError());
+        LOG_WARN("Common", __func__, "IPC", "OpenEvent failed for FrameReadyEvent: {}",  GetLastError());
     }
     return true;
 }
@@ -63,30 +59,25 @@ bool SharedFrameWriter::Create(const wchar_t* name) {
         INVALID_HANDLE_VALUE, &sa, PAGE_READWRITE,
         0, sizeof(SharedFrameData), name);
     if (!m_mapHandle) {
-        LOG_ERROR("Ipc", "SharedFrameWriter::Create", "IPC",
-                  "CreateFileMapping failed: {}", GetLastError());
+        LOG_ERROR("Common", __func__, "IPC", "CreateFileMapping failed: {}",  GetLastError());
         return false;
     }
     m_data = static_cast<SharedFrameData*>(
         MapViewOfFile(m_mapHandle, FILE_MAP_WRITE, 0, 0,
                       sizeof(SharedFrameData)));
     if (!m_data) {
-        LOG_ERROR("Ipc", "SharedFrameWriter::Create", "IPC",
-                  "MapViewOfFile failed: {}", GetLastError());
+        LOG_ERROR("Common", __func__, "IPC", "MapViewOfFile failed: {}",  GetLastError());
         CloseHandle(m_mapHandle);
         m_mapHandle = nullptr;
         return false;
     }
     std::memset(m_data, 0, sizeof(SharedFrameData));
-    LOG_INFO("Ipc", "SharedFrameWriter::Create", "IPC",
-             "Shared memory created for writing ({} bytes).",
-             sizeof(SharedFrameData));
+    LOG_INFO("Common", __func__, "IPC", "Shared memory created for writing ({} bytes).",  sizeof(SharedFrameData));
 
     // Create frame-ready event (auto-reset)
     m_frameEvent = CreateEventW(&sa, FALSE, FALSE, kFrameReadyEventName);
     if (!m_frameEvent) {
-        LOG_WARN("Ipc", "SharedFrameWriter::Create", "IPC",
-                 "CreateEvent failed for FrameReadyEvent: {}", GetLastError());
+        LOG_WARN("Common", __func__, "IPC", "CreateEvent failed for FrameReadyEvent: {}",  GetLastError());
     }
     return true;
 }
@@ -260,30 +251,26 @@ bool SharedFrameReader::Create(const wchar_t* name) {
         INVALID_HANDLE_VALUE, &sa, PAGE_READWRITE,
         0, sizeof(SharedFrameData), name);
     if (!m_mapHandle) {
-        LOG_ERROR("Ipc", "SharedFrameReader::Create", "IPC",
-                  "CreateFileMapping failed: {}", GetLastError());
+        LOG_ERROR("Common", __func__, "IPC", "CreateFileMapping failed: {}",  GetLastError());
         return false;
     }
     m_data = static_cast<SharedFrameData*>(
         MapViewOfFile(m_mapHandle, FILE_MAP_ALL_ACCESS, 0, 0,
                       sizeof(SharedFrameData)));
     if (!m_data) {
-        LOG_ERROR("Ipc", "SharedFrameReader::Create", "IPC",
-                  "MapViewOfFile failed: {}", GetLastError());
+        LOG_ERROR("Common", __func__, "IPC", "MapViewOfFile failed: {}",  GetLastError());
         CloseHandle(m_mapHandle);
         m_mapHandle = nullptr;
         return false;
     }
     // Zero-initialize
     std::memset(m_data, 0, sizeof(SharedFrameData));
-    LOG_INFO("Ipc", "SharedFrameReader::Create", "IPC",
-             "Shared memory created ({} bytes).", sizeof(SharedFrameData));
+    LOG_INFO("Common", __func__, "IPC", "Shared memory created ({} bytes).",  sizeof(SharedFrameData));
 
     // Create frame-ready event (auto-reset)
     m_frameEvent = CreateEventW(&sa, FALSE, FALSE, kFrameReadyEventName);
     if (!m_frameEvent) {
-        LOG_WARN("Ipc", "SharedFrameReader::Create", "IPC",
-                 "CreateEvent failed for FrameReadyEvent: {}", GetLastError());
+        LOG_WARN("Common", __func__, "IPC", "CreateEvent failed for FrameReadyEvent: {}",  GetLastError());
     }
     return true;
 }
@@ -291,29 +278,25 @@ bool SharedFrameReader::Create(const wchar_t* name) {
 bool SharedFrameReader::Open(const wchar_t* name) {
     m_mapHandle = OpenFileMappingW(FILE_MAP_READ, FALSE, name);
     if (!m_mapHandle) {
-        LOG_ERROR("Ipc", "SharedFrameReader::Open", "IPC",
-                  "OpenFileMapping failed: {}", GetLastError());
+        LOG_ERROR("Common", __func__, "IPC", "OpenFileMapping failed: {}",  GetLastError());
         return false;
     }
     m_data = static_cast<SharedFrameData*>(
         MapViewOfFile(m_mapHandle, FILE_MAP_READ, 0, 0,
                       sizeof(SharedFrameData)));
     if (!m_data) {
-        LOG_ERROR("Ipc", "SharedFrameReader::Open", "IPC",
-                  "MapViewOfFile failed: {}", GetLastError());
+        LOG_ERROR("Common", __func__, "IPC", "MapViewOfFile failed: {}",  GetLastError());
         CloseHandle(m_mapHandle);
         m_mapHandle = nullptr;
         return false;
     }
     m_lastReadId = 0;
-    LOG_INFO("Ipc", "SharedFrameReader::Open", "IPC",
-             "Shared memory opened for reading.");
+    LOG_INFO("Common", __func__, "IPC", "Shared memory opened for reading.");
 
     // Open frame-ready event
     m_frameEvent = OpenEventW(SYNCHRONIZE, FALSE, kFrameReadyEventName);
     if (!m_frameEvent) {
-        LOG_WARN("Ipc", "SharedFrameReader::Open", "IPC",
-                 "OpenEvent failed for FrameReadyEvent: {}", GetLastError());
+        LOG_WARN("Common", __func__, "IPC", "OpenEvent failed for FrameReadyEvent: {}",  GetLastError());
     }
     return true;
 }

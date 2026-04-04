@@ -8,9 +8,7 @@ bool IpcPipeClient::Connect(DWORD timeoutMs) {
     if (m_pipe != INVALID_HANDLE_VALUE) return true;
 
     if (!WaitNamedPipeW(kPipeName, timeoutMs)) {
-        LOG_ERROR("Ipc", "IpcPipeClient::Connect", "IPC",
-                  "No pipe server available (timeout={}ms).",
-                  timeoutMs);
+        LOG_ERROR("IPC", __func__, "IPC", "No pipe server available (timeout={}ms).",  timeoutMs);
         return false;
     }
 
@@ -18,8 +16,7 @@ bool IpcPipeClient::Connect(DWORD timeoutMs) {
         kPipeName, GENERIC_READ | GENERIC_WRITE,
         0, nullptr, OPEN_EXISTING, 0, nullptr);
     if (m_pipe == INVALID_HANDLE_VALUE) {
-        LOG_ERROR("Ipc", "IpcPipeClient::Connect", "IPC",
-                  "CreateFile failed: {}", GetLastError());
+        LOG_ERROR("IPC", __func__, "IPC", "CreateFile failed: {}",  GetLastError());
         return false;
     }
 
@@ -27,8 +24,7 @@ bool IpcPipeClient::Connect(DWORD timeoutMs) {
     DWORD mode = PIPE_READMODE_MESSAGE;
     SetNamedPipeHandleState(m_pipe, &mode, nullptr, nullptr);
 
-    LOG_INFO("Ipc", "IpcPipeClient::Connect", "IPC",
-             "Connected to service.");
+    LOG_INFO("IPC", __func__, "IPC", "Connected to service.");
     return true;
 }
 
@@ -45,16 +41,14 @@ IpcResponse IpcPipeClient::Send(const IpcRequest& req) {
 
     DWORD bytesWritten = 0;
     if (!WriteFile(m_pipe, &req, sizeof(req), &bytesWritten, nullptr)) {
-        LOG_ERROR("Ipc", "IpcPipeClient::Send", "IPC",
-                  "WriteFile failed: {}", GetLastError());
+        LOG_ERROR("IPC", __func__, "IPC", "WriteFile failed: {}",  GetLastError());
         Disconnect();
         return resp;
     }
 
     DWORD bytesRead = 0;
     if (!ReadFile(m_pipe, &resp, sizeof(resp), &bytesRead, nullptr)) {
-        LOG_ERROR("Ipc", "IpcPipeClient::Send", "IPC",
-                  "ReadFile failed: {}", GetLastError());
+        LOG_ERROR("IPC", __func__, "IPC", "ReadFile failed: {}",  GetLastError());
         Disconnect();
         return resp;
     }

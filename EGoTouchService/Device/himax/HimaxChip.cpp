@@ -71,19 +71,17 @@ Chip::Chip(const std::wstring& master_path, const std::wstring& slave_path, cons
 ChipResult<> Chip::SetFrameReadPolicy(bool block, uint8_t timeoutMs) {
     auto apply_policy = [&](HalDevice* dev, const char* devName) -> ChipResult<> {
         if (!dev || !dev->IsValid()) {
-            LOG_ERROR("Device", "Chip::SetFrameReadPolicy", GetStateStr(), "{} handle invalid", devName);
+            LOG_ERROR("HimaxChip", __func__, GetStateStr(), "{} handle invalid",  devName);
             return std::unexpected(ChipError::CommunicationError);
         }
 
         if (auto res = dev->SetBlock(block); !res) {
-            LOG_ERROR("Device", "Chip::SetFrameReadPolicy", GetStateStr(),
-                      "{} SetBlock({}) failed", devName, block ? 1 : 0);
+            LOG_ERROR("HimaxChip", __func__, GetStateStr(), "{} SetBlock({}) failed",  devName, block ? 1 : 0);
             return res;
         }
 
         if (auto res = dev->SetTimeOut(timeoutMs); !res) {
-            LOG_ERROR("Device", "Chip::SetFrameReadPolicy", GetStateStr(),
-                      "{} SetTimeOut({}) failed", devName, timeoutMs);
+            LOG_ERROR("HimaxChip", __func__, GetStateStr(), "{} SetTimeOut({}) failed",  devName, timeoutMs);
             return res;
         }
         return {};
@@ -92,8 +90,7 @@ ChipResult<> Chip::SetFrameReadPolicy(bool block, uint8_t timeoutMs) {
     if (auto res = apply_policy(m_master.get(), "Master"); !res) return res;
     if (auto res = apply_policy(m_slave.get(), "Slave"); !res) return res;
 
-    LOG_INFO("Device", "Chip::SetFrameReadPolicy", GetStateStr(),
-             "Applied read policy: block={}, timeout={}ms", block ? 1 : 0, timeoutMs);
+    LOG_INFO("HimaxChip", __func__, GetStateStr(), "Applied read policy: block={}, timeout={}ms",  block ? 1 : 0, timeoutMs);
     return {};
 }
 
@@ -118,8 +115,7 @@ ChipResult<> Chip::NotifyTouchWakeup() {
 
     if (auto res = SetFrameReadNormalPolicy(); !res) return res;
     afe_mode = THP_AFE_MODE::Normal;
-    LOG_INFO("Device", "Chip::NotifyTouchWakeup", GetStateStr(),
-             "===== IDLE EXIT ===== Touch wakeup → Normal mode.");
+    LOG_INFO("HimaxChip", __func__, GetStateStr(), "===== IDLE EXIT ===== Touch wakeup → Normal mode.");
     return {};
 }
 
@@ -168,17 +164,17 @@ ChipResult<> Chip::check_bus(void) {
 
     // Check Slave
     if (auto res = m_slave->ReadBus(0x13, tmp_data, 1); !res) {
-        LOG_ERROR("Device", "Chip::check_bus", GetStateStr(), "Slave Bus Dead! Error: {:d}", (int)res.error());
+        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "Slave Bus Dead! Error: {:d}",  (int)res.error());
         return std::unexpected(ChipError::CommunicationError);
     }
-    LOG_INFO("Device", "Chip::check_bus", GetStateStr(), "Slave Bus Alive! (0x13: 0x{:02X})", tmp_data[0]);
+    LOG_INFO("HimaxChip", __func__, GetStateStr(), "Slave Bus Alive! (0x13: 0x{:02X})",  tmp_data[0]);
 
     // Check Master
     if (auto res = m_master->ReadBus(0x13, tmp_data1, 1); !res) {
-        LOG_ERROR("Device", "Chip::check_bus", GetStateStr(), "Master Bus Dead! Error: {:d}", (int)res.error());
+        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "Master Bus Dead! Error: {:d}",  (int)res.error());
         return std::unexpected(ChipError::CommunicationError);
     }
-    LOG_INFO("Device", "Chip::check_bus", GetStateStr(), "Master Bus Alive! (0x13: 0x{:02X})", tmp_data1[0]);
+    LOG_INFO("HimaxChip", __func__, GetStateStr(), "Master Bus Alive! (0x13: 0x{:02X})",  tmp_data1[0]);
 
     return {};
 }
@@ -210,7 +206,7 @@ ChipResult<> Chip::himax_mcu_assign_sorting_mode(uint8_t* tmp_data) {
         }
     }
     if (!step_ok) {
-        LOG_ERROR("Device", "Chip::himax_mcu_assign_sorting_mode", GetStateStr(), "Failed to assign sorting mode!");
+        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "Failed to assign sorting mode!");
         return std::unexpected(ChipError::VerificationFailed);
     }
     return {};
@@ -223,7 +219,7 @@ ChipResult<> Chip::himax_switch_data_type(DeviceType device, THP_INSPECTION_ENUM
     uint8_t cnt = 50;
 
     if (!dev_res) {
-        LOG_ERROR("Device", "Chip::himax_switch_data_type", GetStateStr(), "get device failed");
+        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "get device failed");
         return std::unexpected(dev_res.error());
     }
     HalDevice* dev = *dev_res;
@@ -259,7 +255,7 @@ ChipResult<> Chip::himax_switch_data_type(DeviceType device, THP_INSPECTION_ENUM
         message = "HX_BACK_NORMAL_UNKNOW";
         break;
     }
-    LOG_INFO("Device", "Chip::himax_switch_data_type", GetStateStr(), "switch to {}!", message);
+    LOG_INFO("HimaxChip", __func__, GetStateStr(), "switch to {}!",  message);
 
     ChipResult<> step_ok = std::unexpected(ChipError::InternalError);
     do {
@@ -267,10 +263,10 @@ ChipResult<> Chip::himax_switch_data_type(DeviceType device, THP_INSPECTION_ENUM
     }while (!step_ok && --cnt > 0);
 
     if (step_ok) {
-        LOG_INFO("Device", "Chip::himax_switch_data_type", GetStateStr(), "switch to {} success!", message);
+        LOG_INFO("HimaxChip", __func__, GetStateStr(), "switch to {} success!",  message);
         return {};
     } else {
-        LOG_ERROR("Device", "Chip::himax_switch_data_type", GetStateStr(), "switch failed!");
+        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "switch failed!");
         return step_ok;
     }
 }
@@ -287,28 +283,28 @@ ChipResult<> Chip::hx_hw_reset_ahb_intf(DeviceType type) {
 
     uint8_t tmp_data[4];
     
-    LOG_INFO("Device", "Chip::hx_hw_reset_ahb_intf", GetStateStr(), "Enter!");
+    LOG_INFO("HimaxChip", __func__, GetStateStr(), "Enter!");
 
     himax_parse_assign_cmd(pfw_op.data_clear, tmp_data, 4);
     if (auto res = HimaxProtocol::register_write(dev, pdriver_op.addr_fw_define_2nd_flash_reload, tmp_data, 4); !res) {
-        LOG_ERROR("Device", "Chip::hx_hw_reset_ahb_intf", GetStateStr(), "clear reload failed");
+        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "clear reload failed");
         return res;
     }
 
     // 物理复位操作：经测试，Slave 句柄 (WinError 1168) 不支持复位控制，
     // 物理复位引脚仅绑定在 Master 句柄上，故统一由 m_master 执行。
     if (auto res = m_master->SetReset(0); !res) {
-        LOG_ERROR("Device", "Chip::hx_hw_reset_ahb_intf", GetStateStr(), "Physical SetReset(0) via Master failed, WinError: {}", (int)m_master->GetError());
+        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "Physical SetReset(0) via Master failed, WinError: {}",  (int)m_master->GetError());
         return res;
     }
 
     if (auto res = m_master->SetReset(1); !res) {
-        LOG_ERROR("Device", "Chip::hx_hw_reset_ahb_intf", GetStateStr(), "Physical SetReset(1) via Master failed, WinError: {}", (int)m_master->GetError());
+        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "Physical SetReset(1) via Master failed, WinError: {}",  (int)m_master->GetError());
         return res;
     }
 
     if (auto res = HimaxProtocol::burst_enable(dev, 1); !res) {
-        LOG_ERROR("Device", "Chip::hx_hw_reset_ahb_intf", GetStateStr(), "burst_enable set to 1 failed");
+        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "burst_enable set to 1 failed");
         return res;
     }
 
@@ -338,20 +334,20 @@ ChipResult<> Chip::hx_sw_reset_ahb_intf(DeviceType type) {
     }
 
     if (!safe_mode_ok) {
-        LOG_WARN("Device", "Chip::hx_sw_reset_ahb_intf", GetStateStr(), "Failed to enter Safe Mode before reset, proceeding anyway...");
+        LOG_WARN("HimaxChip", __func__, GetStateStr(), "Failed to enter Safe Mode before reset, proceeding anyway...");
     }
 
     Sleep(10);
     himax_parse_assign_cmd(pdriver_op.data_fw_define_flash_reload_en, tmp_data, 4);
     if (auto res = HimaxProtocol::register_write(dev, pdriver_op.addr_fw_define_2nd_flash_reload, tmp_data, 4); !res) {
-        LOG_ERROR("Device", "Chip::hx_sw_reset_ahb_intf", GetStateStr(), "clean reload done failed!");
+        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "clean reload done failed!");
         return res;
     }
     Sleep(10);
     
     himax_parse_assign_cmd(pfw_op.data_system_reset, tmp_data, 4);
     if (auto res = HimaxProtocol::register_write(dev, pfw_op.addr_system_reset, tmp_data, 4); !res) {
-        LOG_ERROR("Device", "Chip::hx_sw_reset_ahb_intf", GetStateStr(), "Failed to write System Reset command");
+        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "Failed to write System Reset command");
         return res;
     }
 
@@ -367,7 +363,7 @@ ChipResult<> Chip::hx_sw_reset_ahb_intf(DeviceType type) {
  * @return bool 是否成功
  */
 ChipResult<> Chip::himax_mcu_reload_disable(uint8_t disable) {
-    LOG_INFO("Device", "Chip::himax_mcu_reload_disable", GetStateStr(), "entering!");
+    LOG_INFO("HimaxChip", __func__, GetStateStr(), "entering!");
     std::array<uint8_t, 4> tmp_data{};
 
     if (disable) {
@@ -380,7 +376,7 @@ ChipResult<> Chip::himax_mcu_reload_disable(uint8_t disable) {
         return res;
     }
 
-    LOG_INFO("Device", "Chip::himax_mcu_reload_disable", GetStateStr(), "setting OK!");
+    LOG_INFO("HimaxChip", __func__, GetStateStr(), "setting OK!");
     return {};
 }
 
@@ -391,7 +387,7 @@ ChipResult<> Chip::himax_mcu_reload_disable(uint8_t disable) {
  */
 ChipResult<> Chip::hx_set_N_frame(uint8_t nFrame) {
     if (!m_master || !m_master->IsValid()) return std::unexpected(ChipError::CommunicationError);
-    LOG_INFO("Device", "Chip::hx_set_N_frame", GetStateStr(), "Enter!");
+    LOG_INFO("HimaxChip", __func__, GetStateStr(), "Enter!");
 
     std::array<uint8_t, 4> tmp_data{};
 
@@ -411,7 +407,7 @@ ChipResult<> Chip::hx_set_N_frame(uint8_t nFrame) {
     pack32(target2);
     if (auto res = HimaxProtocol::write_and_verify(m_master.get(), pfw_op.addr_set_frame_addr, tmp_data.data(), 4); !res) return res;
     
-    LOG_INFO("Device", "Chip::hx_set_N_frame", GetStateStr(), "Out!");
+    LOG_INFO("HimaxChip", __func__, GetStateStr(), "Out!");
     return {};
 }
 
@@ -420,7 +416,7 @@ ChipResult<> Chip::himax_switch_mode_inspection(THP_INSPECTION_ENUM mode) {
     constexpr int kUnlockAttempts = 20;
     std::array<uint8_t, 4> tmp_data{};
     bool clear = false;
-    LOG_INFO("Device", "Chip::himax_switch_mode_inspection", GetStateStr(), "Entering!");
+    LOG_INFO("HimaxChip", __func__, GetStateStr(), "Entering!");
 
     /*Stop Handshakng*/
     himax_parse_assign_cmd(psram_op.addr_rawdata_end, tmp_data.data(), 4);
@@ -431,7 +427,7 @@ ChipResult<> Chip::himax_switch_mode_inspection(THP_INSPECTION_ENUM mode) {
         }
     }
     if (!clear) {
-        LOG_ERROR("Device", "Chip::himax_switch_mode_inspection", GetStateStr(), "switch mode unlock failed after {} attempts", kUnlockAttempts);
+        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "switch mode unlock failed after {} attempts",  kUnlockAttempts);
         return std::unexpected(ChipError::VerificationFailed);
     }
 
@@ -466,11 +462,11 @@ ChipResult<> Chip::himax_switch_mode_inspection(THP_INSPECTION_ENUM mode) {
     }
 
     if (auto res = himax_mcu_assign_sorting_mode(tmp_data.data()); !res) {
-        LOG_ERROR("Device", "Chip::himax_switch_mode_inspection", GetStateStr(), "Failed to switch to {}", message);
+        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "Failed to switch to {}",  message);
         return res;
     }
     
-    LOG_INFO("Device", "Chip::himax_switch_mode_inspection", GetStateStr(), "Switching to {} Success", message);
+    LOG_INFO("HimaxChip", __func__, GetStateStr(), "Switching to {} Success",  message);
     return {};
 }
 
@@ -495,20 +491,20 @@ ChipResult<> Chip::himax_mcu_read_FW_status(void) {
 
     for (uint32_t addr : dbg_reg_ary) {
         if (auto res = HimaxProtocol::register_read(m_master.get(), addr, tmp_data.data(), 4); !res) return res;
-        LOG_INFO("Device", "Chip::himax_mcu_read_FW_status", GetStateStr(), "{:x} = {::#x}",addr, tmp_data);
+        // LOG_TRACE("HimaxChip", __func__, GetStateStr(), "{:x} = {::#x}",  ddr, tmp_data);
     }
     return {};
 }
 
 ChipResult<> Chip::himax_mcu_interface_on(void) {
-    LOG_INFO("Device", "Chip::himax_mcu_interface_on", GetStateStr(), "Enter!");
+    LOG_INFO("HimaxChip", __func__, GetStateStr(), "Enter!");
 
     std::array<uint8_t, 4> tmp_data{};
     std::array<uint8_t, 4> tmp_data2{};
     int cnt = 0;
     
     if (auto res = m_master->ReadBus(pic_op.addr_ahb_rdata_byte_0, tmp_data.data(), 4); !res) {
-        LOG_ERROR("Device", "Chip::himax_mcu_interface_on", GetStateStr(), "ReadBus failed");
+        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "ReadBus failed");
         return res;
     }        
     
@@ -516,13 +512,13 @@ ChipResult<> Chip::himax_mcu_interface_on(void) {
         tmp_data[0] = pic_op.data_conti;
         
         if (auto res = m_master->WriteBus(pic_op.addr_conti, NULL, tmp_data.data(), 1); !res) {
-            LOG_ERROR("Device", "Chip::himax_mcu_interface_on", GetStateStr(), "bus access fail!");
+            LOG_ERROR("HimaxChip", __func__, GetStateStr(), "bus access fail!");
             return res;
         }
         
         tmp_data[0] = pic_op.data_incr4;
         if (auto res = m_master->WriteBus(pic_op.addr_incr4, NULL, tmp_data.data(), 1); !res) {
-            LOG_ERROR("Device", "Chip::himax_mcu_interface_on", GetStateStr(), "bus access fail!");
+            LOG_ERROR("HimaxChip", __func__, GetStateStr(), "bus access fail!");
             return res;
         }
 
@@ -537,7 +533,7 @@ ChipResult<> Chip::himax_mcu_interface_on(void) {
     } while (++cnt < 10);
 
     if (cnt > 0) {
-        LOG_INFO("Device", "Chip::himax_mcu_interface_on", GetStateStr(), "Polling burst mode: {:d} times", cnt);
+        LOG_INFO("HimaxChip", __func__, GetStateStr(), "Polling burst mode: {:d} times",  cnt);
     }
     return {};
 }
@@ -548,7 +544,7 @@ ChipResult<> Chip::himax_mcu_interface_on(void) {
  * @return bool 是否成功
  */
 ChipResult<> Chip::hx_sense_on(bool FlashMode) {
-    LOG_INFO("Device", "Chip::hx_sense_on", GetStateStr(), "Enter, isHwReset = {}", FlashMode);
+    LOG_INFO("HimaxChip", __func__, GetStateStr(), "Enter, isHwReset = {}",  FlashMode);
     std::array<uint8_t, 4> tmp_data{};
 
     if (auto res = himax_mcu_interface_on(); !res) return res;
@@ -590,7 +586,7 @@ ChipResult<> Chip::hx_sense_off(bool check_en) {
         if (!step_ok) return step_ok;
 
         if ((back_data[0] != 0x05) || (check_en == false)) { 
-            LOG_INFO("Device", "Chip::hx_sense_off", GetStateStr(), "Do not need wait FW, status = 0x{:X}", back_data[0]);
+            LOG_INFO("HimaxChip", __func__, GetStateStr(), "Do not need wait FW, status = 0x{:X}",  back_data[0]);
             break;
         }
 
@@ -609,7 +605,7 @@ ChipResult<> Chip::hx_sense_off(bool check_en) {
         }
 
         if (auto res = HimaxProtocol::register_read(m_master.get(), pfw_op.addr_chk_fw_status, back_data.data(), 4); !res) return res;
-        LOG_INFO("Device", "Chip::hx_sense_off", GetStateStr(), "Check enter_safe_mode data[0]={:x}", back_data[0]);
+        LOG_INFO("HimaxChip", __func__, GetStateStr(), "Check enter_safe_mode data[0]={:x}",  back_data[0]);
 
         if (back_data[0] == 0x0C) {
             //reset TCON
@@ -624,12 +620,12 @@ ChipResult<> Chip::hx_sense_off(bool check_en) {
         Sleep(50);
     }while (cnt++ < 15);
 
-    LOG_INFO("Device", "Chip::hx_sense_off", GetStateStr(), "Out!");
+    LOG_INFO("HimaxChip", __func__, GetStateStr(), "Out!");
     return std::unexpected(ChipError::VerificationFailed);
 }
 
 ChipResult<> Chip::himax_mcu_power_on_init(void) {
-    LOG_INFO("Device", "Chip::himax_mcu_power_on_init", GetStateStr(), "entering!");
+    LOG_INFO("HimaxChip", __func__, GetStateStr(), "entering!");
     std::array<uint8_t, 4> tmp_data{0x01, 0x00, 0x00, 0x00};
     std::array<uint8_t, 4> tmp_data2{};
     uint8_t retry = 0;
@@ -641,20 +637,20 @@ ChipResult<> Chip::himax_mcu_power_on_init(void) {
 
     if (auto res = hx_sense_on(false); !res) return res;
 
-    LOG_INFO("Device", "Chip::himax_mcu_power_on_init", GetStateStr(), "waiting for FW reload data");
+    // LOG_TRACE("HimaxChip", __func__, GetStateStr(), "waiting for FW reload data");
 
     while (retry++ < 30) {
         if (auto res = HimaxProtocol::register_read(m_master.get(), pdriver_op.addr_fw_define_2nd_flash_reload, tmp_data.data(), 4); !res) return res;
         if ((tmp_data[3] == 0x00 && tmp_data[2] == 0x00 &&
 			tmp_data[1] == 0x72 && tmp_data[0] == 0xC0)) {
-            LOG_INFO("Device", "Chip::himax_mcu_power_on_init", GetStateStr(), "FW reload done!");
+            LOG_INFO("HimaxChip", __func__, GetStateStr(), "FW reload done!");
             return {};
         }
-        LOG_INFO("Device", "Chip::himax_mcu_power_on_init", GetStateStr(), "waiting for FW reload data %d", retry); 
+        // LOG_TRACE("HimaxChip", __func__, GetStateStr(), "waiting for FW reload data %d",  retry); 
         auto res = himax_mcu_read_FW_status(); // 打印 log
         Sleep(11);
     }
-    LOG_ERROR("Device", "Chip::himax_mcu_power_on_init", GetStateStr(), "FW reload timeout!");
+    LOG_ERROR("HimaxChip", __func__, GetStateStr(), "FW reload timeout!");
     return std::unexpected(ChipError::Timeout);
 }
 
@@ -668,7 +664,7 @@ ChipResult<> Chip::himax_mcu_power_on_init(void) {
 ChipResult<> Chip::Init(void) {
     if (auto res = hx_hw_reset_ahb_intf(DeviceType::Master); !res) return res;
     Sleep(10);
-    LOG_INFO("Device", "Chip::Init", GetStateStr(), "Starting initialization sequence...");
+    LOG_INFO("HimaxChip", __func__, GetStateStr(), "Starting initialization sequence...");
 
     std::array<uint8_t, 4> tmp_data = {0xA5, 0x5A, 0x00, 0x00};
 
@@ -685,17 +681,17 @@ ChipResult<> Chip::Init(void) {
     
     // 打开中断/数据采集通道
     if (auto res = m_master->IntOpen(); !res) {
-        LOG_ERROR("Device", "Chip::Init", GetStateStr(), "Master IntOpen failed!");
+        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "Master IntOpen failed!");
         return res;
     }
     if (auto res = m_slave->IntOpen(); !res) {
-        LOG_ERROR("Device", "Chip::Init", GetStateStr(), "Slave IntOpen failed!");
+        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "Slave IntOpen failed!");
         return res;
     }
 
     // Default to normal read policy after channel is opened.
     if (auto res = SetFrameReadNormalPolicy(); !res) {
-        LOG_ERROR("Device", "Chip::Init", GetStateStr(), "Apply normal read policy failed");
+        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "Apply normal read policy failed");
         return res;
     }
 
@@ -706,22 +702,20 @@ ChipResult<> Chip::Init(void) {
     m_afe.ResetStylusState();
 
     if (auto res = m_afe.StartCalibration(); !res) {
-        LOG_WARN("Device", "Chip::Init", GetStateStr(),
-                 "start_calibration failed (non-fatal), chip may use default rate");
+        LOG_WARN("HimaxChip", __func__, GetStateStr(), "start_calibration failed (non-fatal), chip may use default rate");
     } else {
-        LOG_INFO("Device", "Chip::Init", GetStateStr(), "start_calibration success.");
+        LOG_INFO("HimaxChip", __func__, GetStateStr(), "start_calibration success.");
     }
     
     // 强制芯片切换到 120Hz 扫描率（cmd=0x0E, val=0x00）
     // 确保上电后不处于芯片默认的低帧率或未知模式
     if (auto res = m_afe.ForceToScanRate(0x00); !res) {
-        LOG_WARN("Device", "Chip::Init", GetStateStr(),
-                 "force_to_scan_rate(120Hz) failed (non-fatal), chip may use default rate");
+        LOG_WARN("HimaxChip", __func__, GetStateStr(), "force_to_scan_rate(120Hz) failed (non-fatal), chip may use default rate");
     } else {
-        LOG_INFO("Device", "Chip::Init", GetStateStr(), "Scan rate forced to 120Hz.");
+        LOG_INFO("HimaxChip", __func__, GetStateStr(), "Scan rate forced to 120Hz.");
     }
 
-    LOG_INFO("Device", "Chip::Init", GetStateStr(), "Initialization and Sense ON successful.");
+    LOG_INFO("HimaxChip", __func__, GetStateStr(), "Initialization and Sense ON successful.");
     return {};
 }
 
@@ -730,22 +724,22 @@ ChipResult<> Chip::Deinit(bool check_en) {
     // immediately stop accessing the device.  Their GetConnectionState() checks will
     // fail before we tear down the channels below.
     m_connState.store(ConnectionState::Unconnected);
-    LOG_INFO("Device", "Chip::Deinit", GetStateStr(), "Starting Deinit sequence...");
+    LOG_INFO("HimaxChip", __func__, GetStateStr(), "Starting Deinit sequence...");
 
     // Send sense off if bus is accessible
     auto resOff = hx_sense_off(check_en);
     if (!resOff) {
-        LOG_WARN("Device", "Chip::Deinit", GetStateStr(), "hx_sense_off had issues during Deinit.");
+        LOG_WARN("HimaxChip", __func__, GetStateStr(), "hx_sense_off had issues during Deinit.");
     }
     
     auto m_res = m_master->IntClose();
     auto s_res = m_slave->IntClose();
     
     if (!m_res || !s_res) {
-         LOG_WARN("Device", "Chip::Deinit", GetStateStr(), "IntClose had issues during Deinit.");
+         LOG_WARN("HimaxChip", __func__, GetStateStr(), "IntClose had issues during Deinit.");
     }
     
-    LOG_INFO("Device", "Chip::Deinit", GetStateStr(), "Deinit successful.");
+    LOG_INFO("HimaxChip", __func__, GetStateStr(), "Deinit successful.");
     return {};
 }
 
@@ -762,13 +756,12 @@ void Chip::HoldReset() {
     (void)m_master->IntClose();
     (void)m_slave->IntClose();
 
-    LOG_INFO("Device", "Chip::HoldReset", "Unconnected",
-             "Reset held low, interrupt channels closed (suspend).");
+    LOG_INFO("HimaxChip", __func__, "Unconnected", "Reset held low, interrupt channels closed (suspend).");
 }
 
 Chip::~Chip() {
     if (m_connState.load() != ConnectionState::Unconnected) {
-        LOG_INFO("Device", "Chip::~Chip", GetStateStr(), "Implicitly calling Deinit().");
+        LOG_INFO("HimaxChip", __func__, GetStateStr(), "Implicitly calling Deinit().");
         (void)Deinit(false);
     }
 }
@@ -834,8 +827,7 @@ ChipResult<> Chip::GetFrame(void) {
         if (m_res && s_res) {
             if (isFingerDetected() || isStylusDetected()) {
                 (void)NotifyTouchWakeup();
-                LOG_INFO("Device", "Chip::GetFrame", GetStateStr(),
-                         "Input detected in idle → wakeup to Normal");
+                LOG_INFO("HimaxChip", __func__, GetStateStr(), "Input detected in idle → wakeup to Normal");
             }
             // 无输入: 丢弃 idle 帧，返回超时让 caller 继续循环
             return std::unexpected(ChipError::Timeout);
@@ -864,7 +856,7 @@ ChipResult<> Chip::GetFrame(void) {
     if (auto res = m_slave->GetFrame(back_data.data() + 5063, 339, nullptr); !res) {
         if (m_slave->IsTimeoutError())
             return std::unexpected(ChipError::Timeout);
-        LOG_ERROR("Device", "Chip::GetFrame", GetStateStr(), "Slave GetFrame failed!");
+        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "Slave GetFrame failed!");
         return res;
     }
 
@@ -874,7 +866,7 @@ ChipResult<> Chip::GetFrame(void) {
         if (auto res = m_master->GetFrame(back_data.data(), 5063, nullptr); !res) {
             if (m_master->IsTimeoutError())
                 return std::unexpected(ChipError::Timeout);
-            LOG_ERROR("Device", "Chip::GetFrame", GetStateStr(), "Master GetFrame failed!");
+            LOG_ERROR("HimaxChip", __func__, GetStateStr(), "Master GetFrame failed!");
             return res;
         }
     }
@@ -886,12 +878,10 @@ ChipResult<> Chip::GetFrame(void) {
     bool stylusNow = isStylusDetected();
     if (stylusNow && !m_stylusActive) {
         m_stylusActive = true;
-        LOG_INFO("Device", "Chip::GetFrame", GetStateStr(),
-                 "Stylus detected in frame data → 2:1 interleave ON (slave 240Hz)");
+        LOG_INFO("HimaxChip", __func__, GetStateStr(), "Stylus detected in frame data → 2:1 interleave ON (slave 240Hz)");
     } else if (!stylusNow && m_stylusActive) {
         m_stylusActive = false;
-        LOG_INFO("Device", "Chip::GetFrame", GetStateStr(),
-                 "Stylus lost in frame data → 2:1 interleave OFF (slave 120Hz)");
+        LOG_INFO("HimaxChip", __func__, GetStateStr(), "Stylus lost in frame data → 2:1 interleave OFF (slave 120Hz)");
     }
 
     // ── 零帧计数 & idle 自动进入 ─────────────────────────────
@@ -902,9 +892,7 @@ ChipResult<> Chip::GetFrame(void) {
     } else {
         m_zeroFrameCount++;
         if (m_zeroFrameCount >= kIdleEntryThreshold) {
-            LOG_INFO("Device", "Chip::GetFrame", GetStateStr(),
-                     "No input for {} frames → EnterIdle",
-                     m_zeroFrameCount);
+            LOG_INFO("HimaxChip", __func__, GetStateStr(), "No input for {} frames → EnterIdle",  m_zeroFrameCount);
             m_stylusActive = false;  // idle 进入时强制关闭 2:1
             (void)m_afe.EnterIdle();
             m_zeroFrameCount = 0;
@@ -913,10 +901,7 @@ ChipResult<> Chip::GetFrame(void) {
 
     // 调试：每 600 帧打计数日志
     if ((m_frameCount % 600) == 0) {
-        LOG_DEBUG("Device", "Chip::GetFrame", GetStateStr(),
-                 "[IDLE-DIAG] m_frameCount={} m_zeroFrameCount={} afe_mode={}",
-                 m_frameCount, m_zeroFrameCount,
-                 afe_mode.load() == THP_AFE_MODE::Idle ? "Idle" : "Normal");
+        LOG_DEBUG("HimaxChip", __func__, GetStateStr(), "[IDLE-DIAG] m_frameCount={} m_zeroFrameCount={} afe_mode={}",  m_frameCount, m_zeroFrameCount, afe_mode.load() == THP_AFE_MODE::Idle ? "Idle" : "Normal");
     }
 
     return {};

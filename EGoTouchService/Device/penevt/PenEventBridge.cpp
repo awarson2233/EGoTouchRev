@@ -77,8 +77,7 @@ void PenEventBridge::SendAck(uint8_t ackCode) {
         0x01, 0x80, 0x11, 0x00, ackCode
     };
     SendRawPacket(pkt);
-    LOG_INFO("PenEventBridge", "SendAck", "MCU",
-             "ACK sent: 0x{:02X}", ackCode);
+    LOG_INFO("PenEvent", __func__, "MCU", "ACK sent: 0x{:02X}", ackCode);
 }
 
 void PenEventBridge::SendInitParamEcho(const uint8_t* data, size_t len) {
@@ -89,8 +88,7 @@ void PenEventBridge::SendInitParamEcho(const uint8_t* data, size_t len) {
     pkt[6] = 0x11; pkt[7] = 0x20;
     std::copy(data, data + payloadLen, pkt.begin() + 8);
     SendRawPacket(pkt);
-    LOG_INFO("PenEventBridge", "SendInitParamEcho", "MCU",
-             "0x7D01 InitParam echo sent ({} bytes payload).", payloadLen);
+    LOG_INFO("PenEvent", __func__, "MCU", "0x7D01 InitParam echo sent ({} bytes payload).", payloadLen);
 }
 
 // ── BtHidChannel hooks ────────────────────────────────────────────────────
@@ -121,7 +119,7 @@ void PenEventBridge::OnPacketReceived(const std::vector<uint8_t>& packet) {
             0x01, 0x2E, 0x11, 0x00
         };
         SendRawPacket(pkt2e01);
-        LOG_INFO("PenEventBridge", "OnPacketReceived", "MCU", "Sent 0x2E01 pairing confirmation.");
+        LOG_INFO("PenEvent", __func__, "MCU", "Sent 0x2E01 pairing confirmation.");
     }
 
     // 4. 触发上层回调
@@ -146,7 +144,7 @@ void PenEventBridge::OnPacketReceived(const std::vector<uint8_t>& packet) {
 // ── 握手 ──────────────────────────────────────────────────────────────────
 void PenEventBridge::RunHandshake() {
     if (!IsTransportOpen()) return;
-    LOG_INFO("PenEventBridge", "RunHandshake", "MCU", "Sending 0x7101 + 0x7701 handshake.");
+    LOG_INFO("PenEvent", __func__, "MCU", "Sending 0x7101 + 0x7701 handshake.");
 
     const std::vector<uint8_t> q1 = {0x07,0x00,0x02,0x00, 0x01,0x71, 0x11,0x00};
     SendRawPacket(q1);
@@ -156,7 +154,7 @@ void PenEventBridge::RunHandshake() {
     const std::vector<uint8_t> q2 = {0x07,0x00,0x02,0x00, 0x01,0x77, 0x11,0x00};
     SendRawPacket(q2);
 
-    LOG_INFO("PenEventBridge", "RunHandshake", "MCU", "Handshake complete.");
+    LOG_INFO("PenEvent", __func__, "MCU", "Handshake complete.");
 }
 
 } // namespace Himax::Pen
