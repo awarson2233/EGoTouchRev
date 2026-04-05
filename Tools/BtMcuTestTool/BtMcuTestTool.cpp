@@ -577,19 +577,19 @@ int main(int, char**)
         ImGui::InputText("Payload (Hex Space Separated)", customPayloadBuf, sizeof(customPayloadBuf));
         if (ImGui::Button("Send Custom")) {
             uint32_t cmdId = 0;
-            sscanf_s(customCmdBuf, "%x", &cmdId);
-            
-            std::vector<uint8_t> payload;
-            char* next_token = nullptr;
-            char* token = strtok_s(customPayloadBuf, " ", &next_token);
-            while (token != nullptr) {
-                uint32_t val = 0;
-                if (sscanf_s(token, "%x", &val) == 1) {
-                    payload.push_back(static_cast<uint8_t>(val));
+            if (sscanf_s(customCmdBuf, "%x", &cmdId) == 1) {
+                std::vector<uint8_t> payload;
+                char* next_token = nullptr;
+                char* token = strtok_s(customPayloadBuf, " ", &next_token);
+                while (token != nullptr) {
+                    uint32_t val = 0;
+                    if (sscanf_s(token, "%x", &val) == 1) {
+                        payload.push_back(static_cast<uint8_t>(val));
+                    }
+                    token = strtok_s(nullptr, " ", &next_token);
                 }
-                token = strtok_s(nullptr, " ", &next_token);
+                SendPacket(static_cast<uint16_t>(cmdId), payload);
             }
-            SendPacket(static_cast<uint16_t>(cmdId), payload);
         }
 
         ImGui::Separator();
@@ -611,8 +611,9 @@ int main(int, char**)
         ImGui::SameLine();
         if (ImGui::Button("Send ACK")) {
             uint32_t ackVal = 0;
-            sscanf_s(ackBuf, "%x", &ackVal);
-            SendPacket(0x8001, {static_cast<uint8_t>(ackVal)});
+            if (sscanf_s(ackBuf, "%x", &ackVal) == 1) {
+                SendPacket(0x8001, {static_cast<uint8_t>(ackVal)});
+            }
         }
 
         ImGui::Separator();
