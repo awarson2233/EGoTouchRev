@@ -3,6 +3,7 @@
 
 #include <array>
 #include <utility>
+#include <sddl.h>
 
 namespace Host {
 
@@ -19,31 +20,38 @@ constexpr std::array<const wchar_t*, SystemStateMonitor::kEventCount> kNamedEven
     L"Global\\PBT_APMRESUMEAUTOMATIC",
 };
 
-SECURITY_ATTRIBUTES BuildPermissiveGlobalSa(SECURITY_DESCRIPTOR& sd) {
-    SECURITY_ATTRIBUTES sa{};
-    sa.nLength = sizeof(sa);
-    sa.bInheritHandle = FALSE;
-    sa.lpSecurityDescriptor = nullptr;
-
-    if (InitializeSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION) != 0 &&
-        SetSecurityDescriptorDacl(&sd, TRUE, nullptr, FALSE) != 0) {
-        sa.lpSecurityDescriptor = &sd;
-    }
-
-    return sa;
-}
-
 HANDLE OpenOrCreateNamedEvent(const wchar_t* name) {
     HANDLE handle = OpenEventW(SYNCHRONIZE | EVENT_MODIFY_STATE, FALSE, name);
     if (handle != nullptr) {
         return handle;
     }
 
-    SECURITY_DESCRIPTOR sd{};
-    SECURITY_ATTRIBUTES sa = BuildPermissiveGlobalSa(sd);
-    LPSECURITY_ATTRIBUTES sa_ptr = sa.lpSecurityDescriptor != nullptr ? &sa : nullptr;
+    SECURITY_ATTRIBUTES sa{};
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = FALSE;
+    sa.lpSecurityDescriptor = nullptr;
 
-    return CreateEventW(sa_ptr, TRUE, FALSE, name);
+    // Secure SDDL:
+    // D: DACL
+    // (A;;GA;;;SY) -> Allow Generic All for SYSTEM
+    // (A;;GA;;;BA) -> Allow Generic All for Built-in Administrators
+    // (A;;GRGW;;;BU) -> Allow Generic Read/Write for Built-in Users
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            L"D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;BU)",
+            SDDL_REVISION_1,
+            &sa.lpSecurityDescriptor,
+            nullptr)) {
+        // Fallback to default security descriptor if conversion fails
+        sa.lpSecurityDescriptor = nullptr;
+    }
+
+    HANDLE new_handle = CreateEventW(sa.lpSecurityDescriptor ? &sa : nullptr, TRUE, FALSE, name);
+
+    if (sa.lpSecurityDescriptor != nullptr) {
+        LocalFree(sa.lpSecurityDescriptor);
+    }
+
+    return new_handle;
 }
 
 } // namespace
