@@ -43,7 +43,7 @@ ninja
 
 # 2. Package the MSI Installer (Requires .NET)
 cd ..
-wix build -arch arm64 scripts/EGoTouchSetup.wxs -ext WixToolset.UI.wixext -o build/EGoTouch_ARM64_v1.0.msi
+wix build -arch arm64 scripts/EGoTouchSetup.wxs -ext WixToolset.UI.wixext -loc scripts/zh-CN.wxl -o build/EGoTouch_ARM64_v1.0.msi
 ```
 
 ---

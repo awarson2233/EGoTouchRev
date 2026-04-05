@@ -4,6 +4,9 @@ project(EGoTouchRev VERSION 0.1.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Use static MSVC runtime to avoid missing VCRUNTIME140.dll on target machines
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 # --- Platform compatibility ---
 # Prevent Windows.h from defining min/max macros that conflict with std::min/std::max
 # Suppress MSVC CRT deprecation warnings (e.g. localtime -> localtime_s)
