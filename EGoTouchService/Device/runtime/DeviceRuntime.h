@@ -108,6 +108,9 @@ public:
     /// 注入 BT MCU 压感值（由 PenBridge 线程写入，StylusPipeline 帧内读取）
     void SetBtMcuPressure(uint16_t p) { m_stylusPipeline.SetBtMcuPressure(p); }
 
+    /// 蓝牙按键数据注入（由 PenBridge / BLE 线程写入）
+    void UpdateButtonFromBle(uint8_t raw) { m_stylusPipeline.UpdateButtonFromBle(raw); }
+
     /// BT 频率提供者：每帧调用获取最新 BT MCU 频率 (freq1, freq2)
     using BtFreqProvider = std::function<std::pair<uint8_t, uint8_t>()>;
     void SetBtFreqProvider(BtFreqProvider fn) { m_btFreqProvider = std::move(fn); }

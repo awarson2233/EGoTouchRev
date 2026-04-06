@@ -163,6 +163,36 @@ struct SharedFrameData {
     bool     stylusNoPressInk = false;
     uint8_t  stylusPipelineStage = 0;  // 0=ok,1=slaveParse,2=tx1,3=peak,4=coord,5=noise
 
+    // ── P2 Pipeline Diagnostic Monitor (populated from DbgCoordBreakdown) ──
+    // Coordinate solver
+    uint16_t dbgAnchorRow  = 0;
+    uint16_t dbgAnchorCol  = 0;
+    int32_t  dbgRawDim1    = 0;
+    int32_t  dbgRawDim2    = 0;
+    int32_t  dbgFinalDim1  = 0;
+    int32_t  dbgFinalDim2  = 0;
+    float    dbgCenterOff  = 0.f;
+    float    dbgPointX     = 0.f;
+    float    dbgPointY     = 0.f;
+    bool     dbgCoordValid = false;
+    // Post-processing metrics
+    float    dbgSpeedInstant  = 0.f;
+    float    dbgSpeedShortAvg = 0.f;
+    float    dbgSpeedFullAvg  = 0.f;
+    float    dbgIirCoef       = 0.f;
+    bool     dbgIsHover       = false;
+    bool     dbgIsEdge        = false;
+    // Tilt
+    float    dbgTiltDiffX  = 0.f;
+    float    dbgTiltDiffY  = 0.f;
+    // Pressure / Signal
+    uint16_t dbgPeakSignal     = 0;
+    uint16_t dbgRawPressure    = 0;
+    uint16_t dbgMappedPressure = 0;
+    // VHF state
+    uint8_t  dbgVhfPenState      = 0;
+    uint8_t  dbgLinearFilterState = 0;
+
     // Raw suffix data for Master/Slave status tables
     uint8_t  masterSuffix[kMasterSuffixBytes]{};
     uint8_t  slaveSuffix[kSlaveSuffixBytes]{};

@@ -12,6 +12,22 @@ TouchGestureStateMachine::TouchGestureStateMachine() {
 // Process
 // =============================================================================
 bool TouchGestureStateMachine::Process(HeatmapFrame& frame) {
+    if (!m_enabled) return true;
+
+    // Bypass mode: skip state machine, directly map tracker state → reportEvent.
+    if (m_bypassStateMachine) {
+        for (auto& c : frame.contacts) {
+            if (c.id <= 0 || !c.isReported) continue;
+            switch (c.state) {
+            case TouchStateDown: c.reportEvent = TouchReportDown; break;
+            case TouchStateMove: c.reportEvent = TouchReportMove; break;
+            case TouchStateUp:   c.reportEvent = TouchReportUp;   break;
+            default: break;
+            }
+        }
+        return true;
+    }
+
     // Build slot→contact mapping.
     std::array<TouchContact*, kMaxSlots> contactForSlot{};
     contactForSlot.fill(nullptr);
@@ -55,6 +71,12 @@ bool TouchGestureStateMachine::Process(HeatmapFrame& frame) {
     for (auto& c : frame.contacts) {
         const int idx = c.id - 1;
         if (idx < 0 || idx >= kMaxSlots) continue;
+        // Skip Up contacts from tracker — suppress from VHF output.
+        // Phase 3 handles Up lifecycle with its own push_back contact.
+        if (c.state == TouchStateUp) {
+            c.isReported = false;
+            continue;
+        }
         const auto& slot = m_slots[idx];
 
         switch (slot.phase) {
@@ -320,6 +342,8 @@ std::vector<ConfigParam> TouchGestureStateMachine::GetConfigSchema() const {
         ConfigParam::Float, const_cast<float*>(&m_longPressMoveTolerance), 0.1f, 3.0f));
     schema.push_back(ConfigParam("ReleasePendingFrames", "Release Pending Frames",
         ConfigParam::Int, const_cast<int*>(&m_releasePendingFrames), 0, 10));
+    schema.push_back(ConfigParam("BypassStateMachine", "Bypass State Machine",
+        ConfigParam::Bool, const_cast<bool*>(&m_bypassStateMachine)));
     return schema;
 }
 
@@ -335,6 +359,7 @@ void TouchGestureStateMachine::SaveConfig(std::ostream& out) const {
     out << "LongPressFrames=" << m_longPressFrames << "\n";
     out << "LongPressMoveTolerance=" << m_longPressMoveTolerance << "\n";
     out << "ReleasePendingFrames=" << m_releasePendingFrames << "\n";
+    out << "BypassStateMachine=" << (m_bypassStateMachine?"1":"0") << "\n";
 }
 
 void TouchGestureStateMachine::LoadConfig(
@@ -355,6 +380,8 @@ void TouchGestureStateMachine::LoadConfig(
         m_longPressMoveTolerance = std::max(0.01f, std::stof(value));
     else if (key == "ReleasePendingFrames")
         m_releasePendingFrames = std::clamp(std::stoi(value), 0, 30);
+    else if (key == "BypassStateMachine")
+        m_bypassStateMachine = (value == "1" || value == "true");
 }
 
 } // namespace Engine

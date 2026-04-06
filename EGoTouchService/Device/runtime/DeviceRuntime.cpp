@@ -309,6 +309,31 @@ void DeviceRuntime::OnStreaming() {
         if (!touchOnly) {
             touchFrame.stylus = m_stylusPipeline.GetLastResult();
             touchFrame.stylus.packet = stylusPacket;
+            // ── Copy P2 pipeline diagnostics for IPC transport ──
+            const auto& dbg = m_stylusPipeline.GetDebugCoord();
+            touchFrame.stylus.dbgAnchorRow  = dbg.anchorRow;
+            touchFrame.stylus.dbgAnchorCol  = dbg.anchorCol;
+            touchFrame.stylus.dbgRawDim1    = dbg.rawDim1;
+            touchFrame.stylus.dbgRawDim2    = dbg.rawDim2;
+            touchFrame.stylus.dbgFinalDim1  = dbg.finalDim1;
+            touchFrame.stylus.dbgFinalDim2  = dbg.finalDim2;
+            touchFrame.stylus.dbgCenterOff  = dbg.centerOff;
+            touchFrame.stylus.dbgPointX     = dbg.pointX;
+            touchFrame.stylus.dbgPointY     = dbg.pointY;
+            touchFrame.stylus.dbgCoordValid = dbg.valid;
+            touchFrame.stylus.dbgSpeedInstant  = dbg.speedInstant;
+            touchFrame.stylus.dbgSpeedShortAvg = dbg.speedShortAvg;
+            touchFrame.stylus.dbgSpeedFullAvg  = dbg.speedFullAvg;
+            touchFrame.stylus.dbgIirCoef       = dbg.iirCoef;
+            touchFrame.stylus.dbgIsHover       = dbg.isHover;
+            touchFrame.stylus.dbgIsEdge        = dbg.isEdge;
+            touchFrame.stylus.dbgTiltDiffX  = dbg.tiltDiffX;
+            touchFrame.stylus.dbgTiltDiffY  = dbg.tiltDiffY;
+            touchFrame.stylus.dbgPeakSignal     = dbg.peakSignal;
+            touchFrame.stylus.dbgRawPressure    = dbg.rawPressure;
+            touchFrame.stylus.dbgMappedPressure = dbg.mappedPressure;
+            touchFrame.stylus.dbgVhfPenState      = dbg.vhfPenState;
+            touchFrame.stylus.dbgLinearFilterState = dbg.linearFilterState;
         }
         m_framePushCb(touchFrame);
     }

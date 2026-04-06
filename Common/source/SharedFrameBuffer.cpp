@@ -202,6 +202,30 @@ void SharedFrameWriter::Write(const Engine::HeatmapFrame& frame) {
     m_data->stylusMaxRawPeak = s.maxRawPeak;
     m_data->stylusNoPressInk = s.noPressInkActive;
     m_data->stylusPipelineStage = s.pipelineStage;
+    // P2 pipeline diagnostics
+    m_data->dbgAnchorRow  = s.dbgAnchorRow;
+    m_data->dbgAnchorCol  = s.dbgAnchorCol;
+    m_data->dbgRawDim1    = s.dbgRawDim1;
+    m_data->dbgRawDim2    = s.dbgRawDim2;
+    m_data->dbgFinalDim1  = s.dbgFinalDim1;
+    m_data->dbgFinalDim2  = s.dbgFinalDim2;
+    m_data->dbgCenterOff  = s.dbgCenterOff;
+    m_data->dbgPointX     = s.dbgPointX;
+    m_data->dbgPointY     = s.dbgPointY;
+    m_data->dbgCoordValid = s.dbgCoordValid;
+    m_data->dbgSpeedInstant  = s.dbgSpeedInstant;
+    m_data->dbgSpeedShortAvg = s.dbgSpeedShortAvg;
+    m_data->dbgSpeedFullAvg  = s.dbgSpeedFullAvg;
+    m_data->dbgIirCoef       = s.dbgIirCoef;
+    m_data->dbgIsHover       = s.dbgIsHover;
+    m_data->dbgIsEdge        = s.dbgIsEdge;
+    m_data->dbgTiltDiffX  = s.dbgTiltDiffX;
+    m_data->dbgTiltDiffY  = s.dbgTiltDiffY;
+    m_data->dbgPeakSignal     = s.dbgPeakSignal;
+    m_data->dbgRawPressure    = s.dbgRawPressure;
+    m_data->dbgMappedPressure = s.dbgMappedPressure;
+    m_data->dbgVhfPenState      = s.dbgVhfPenState;
+    m_data->dbgLinearFilterState = s.dbgLinearFilterState;
 
     // Raw suffix data from rawData
     if (frame.rawData.size() >= 5063) {
@@ -435,6 +459,30 @@ bool SharedFrameReader::Read(Engine::HeatmapFrame& out) {
     os.maxRawPeak = m_data->stylusMaxRawPeak;
     os.noPressInkActive = m_data->stylusNoPressInk;
     os.pipelineStage = m_data->stylusPipelineStage;
+    // P2 pipeline diagnostics
+    os.dbgAnchorRow  = m_data->dbgAnchorRow;
+    os.dbgAnchorCol  = m_data->dbgAnchorCol;
+    os.dbgRawDim1    = m_data->dbgRawDim1;
+    os.dbgRawDim2    = m_data->dbgRawDim2;
+    os.dbgFinalDim1  = m_data->dbgFinalDim1;
+    os.dbgFinalDim2  = m_data->dbgFinalDim2;
+    os.dbgCenterOff  = m_data->dbgCenterOff;
+    os.dbgPointX     = m_data->dbgPointX;
+    os.dbgPointY     = m_data->dbgPointY;
+    os.dbgCoordValid = m_data->dbgCoordValid;
+    os.dbgSpeedInstant  = m_data->dbgSpeedInstant;
+    os.dbgSpeedShortAvg = m_data->dbgSpeedShortAvg;
+    os.dbgSpeedFullAvg  = m_data->dbgSpeedFullAvg;
+    os.dbgIirCoef       = m_data->dbgIirCoef;
+    os.dbgIsHover       = m_data->dbgIsHover;
+    os.dbgIsEdge        = m_data->dbgIsEdge;
+    os.dbgTiltDiffX  = m_data->dbgTiltDiffX;
+    os.dbgTiltDiffY  = m_data->dbgTiltDiffY;
+    os.dbgPeakSignal     = m_data->dbgPeakSignal;
+    os.dbgRawPressure    = m_data->dbgRawPressure;
+    os.dbgMappedPressure = m_data->dbgMappedPressure;
+    os.dbgVhfPenState      = m_data->dbgVhfPenState;
+    os.dbgLinearFilterState = m_data->dbgLinearFilterState;
 
     // Reconstruct rawData suffix for DrawMasterSuffixTable/DrawSlaveSuffixTable
     // We need rawData[4807..5062] for master and [5070..5401] for slave

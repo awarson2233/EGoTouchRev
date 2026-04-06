@@ -102,6 +102,7 @@ private:
     float m_longPressMoveTolerance = 0.8f;// Max drift from anchor for longpress.
 
     int m_releasePendingFrames = 0;       // Grace frames (0 = instant Up).
+    bool m_bypassStateMachine = false;    // Skip state machine, direct tracker→VHF.
 
     void UpdateSlot(GestureSlot& slot, const TouchContact* contact, int slotIndex);
 };

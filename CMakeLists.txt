@@ -113,6 +113,9 @@ add_library(Engine STATIC
     EGoTouchService/Engine/StylusSolver/GridPeakDetector.cpp
     EGoTouchService/Engine/StylusSolver/CoordinateSolver.cpp
     EGoTouchService/Engine/StylusSolver/CoorPostProcessor.cpp
+    EGoTouchService/Engine/StylusSolver/EdgeLiftCorrector.cpp
+    EGoTouchService/Engine/StylusSolver/CoorReviser.cpp
+    EGoTouchService/Engine/StylusSolver/LinearFilter.cpp
     EGoTouchService/Engine/StylusSolver/StylusPipeline.cpp
 )
 
