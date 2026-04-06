@@ -115,6 +115,7 @@ private:
     Asa::CoordinateSolver    m_coordSolver;
     Asa::CoorPostProcessor   m_postProcessor;
     Asa::EdgeLiftCorrector   m_edgeLiftCorrector;
+    bool                     m_elcEnabled = true; // P1: Edge-lift corrector switch
     Asa::CoorReviser         m_coorReviser;       // P2: TX2 dual-freq revision
     Asa::LinearFilter        m_linearFilter;      // P2: 7-state line filter
 

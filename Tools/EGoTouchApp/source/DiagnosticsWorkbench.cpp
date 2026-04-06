@@ -600,43 +600,14 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
 
     // -- Stylus Pipeline Config (official ASA pipeline) --
     if (ImGui::BeginTabBar("StylusSubTabs")) {
-        if (ImGui::BeginTabItem("Pipeline Config")) {
-            auto schema = m_proxy->GetStylusPipeline().GetConfigSchema();
-            ConfigUIRenderer::RenderConfigSchema(schema, "Stylus Pipeline");
-            ImGui::EndTabItem();
-        }
-        if (ImGui::BeginTabItem("Live Status")) {
-            const auto& s = m_currentFrame.stylus;
-            ImGui::Text("Slave Valid: %s", s.slaveValid ? "YES" : "NO");
-            ImGui::Text("Status: 0x%08X", s.status);
-            ImGui::Text("Point Valid: %s", s.point.valid ? "YES" : "NO");
-            if (s.point.valid) {
-                ImGui::Text("X: %.1f  Y: %.1f", s.point.x, s.point.y);
-            }
-            ImGui::Text("Pressure: %u", s.pressure);
-            ImGui::Text("Button: %u", s.button);
-            ImGui::Text("Tilt X: %d  Y: %d",
-                static_cast<int>(s.point.tiltX),
-                static_cast<int>(s.point.tiltY));
-            const char* animLabels[] = {"Leave","Hover","Contact","Lifting"};
-            int ai = std::clamp(static_cast<int>(s.animState), 0, 3);
-            ImGui::Text("Lifecycle: %s", animLabels[ai]);
+        auto schema = m_proxy->GetStylusPipeline().GetConfigSchema();
+        const auto& sd = m_currentFrame.stylus;
+        
+        if (ImGui::BeginTabItem("Solver (Coordinate)")) {
+            ConfigUIRenderer::RenderConfigSchema(schema, "Stylus Solver", Engine::ConfigParam::Solver);
+            
             ImGui::Separator();
-            ImGui::Text("Packet Valid: %s", s.packet.valid ? "YES" : "NO");
-            const char* stageNames[] = {
-                "OK", "SlaveParseErr", "TX1Invalid", "NoPeak",
-                "CoordFail", "NoiseReject"};
-            int si = std::clamp(static_cast<int>(s.pipelineStage), 0, 5);
-            if (s.pipelineStage == 0)
-                ImGui::TextColored(ImVec4(0.2f,0.9f,0.3f,1), "Pipeline: %s", stageNames[si]);
-            else
-                ImGui::TextColored(ImVec4(1.0f,0.3f,0.3f,1), "Pipeline: %s (%d)", stageNames[si], si);
-
-            // ── 实时坐标分解 (from IPC SharedFrameData) ────────
-            ImGui::Separator();
-            ImGui::TextColored(ImVec4(0.4f,0.85f,1.0f,1.f),
-                "[Coord Breakdown] (Row=Y, Col=X)");
-            const auto& sd = m_currentFrame.stylus;
+            ImGui::TextColored(ImVec4(0.4f,0.85f,1.0f,1.f), "[Coord Breakdown] (Row=Y, Col=X)");
             ImGui::Text("  anchorRow(Y) = %u   (%u * %.1f = %.1f)",
                 sd.dbgAnchorRow, sd.dbgAnchorRow,
                 static_cast<float>(Asa::kCoorUnit),
@@ -650,88 +621,93 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
             ImGui::Text("  finalDim1(Y) = %d", sd.dbgFinalDim1);
             ImGui::Text("  finalDim2(X) = %d", sd.dbgFinalDim2);
             ImGui::Text("  centerOff    = %.1f", sd.dbgCenterOff);
-            ImGui::Separator();
             if (sd.dbgCoordValid) {
                 ImGui::TextColored(ImVec4(0.2f,0.9f,0.4f,1),
-                    "  point.X = anchorCol*kU + finalDim2 - cOff");
-                ImGui::TextColored(ImVec4(0.2f,0.9f,0.4f,1),
-                    "         = %.1f + %d - %.1f = %.2f",
-                    static_cast<float>(sd.dbgAnchorCol) * Asa::kCoorUnit,
-                    sd.dbgFinalDim2, sd.dbgCenterOff, sd.dbgPointX);
+                    "  point.X = anchorCol*kU + finalDim2 - cOff = %.2f", sd.dbgPointX);
                 ImGui::TextColored(ImVec4(0.4f,0.7f,1.0f,1),
-                    "  point.Y = anchorRow*kU + finalDim1 - cOff");
-                ImGui::TextColored(ImVec4(0.4f,0.7f,1.0f,1),
-                    "         = %.1f + %d - %.1f = %.2f",
-                    static_cast<float>(sd.dbgAnchorRow) * Asa::kCoorUnit,
-                    sd.dbgFinalDim1, sd.dbgCenterOff, sd.dbgPointY);
+                    "  point.Y = anchorRow*kU + finalDim1 - cOff = %.2f", sd.dbgPointY);
             } else {
-                ImGui::TextColored(ImVec4(0.7f,0.7f,0.0f,1),
-                    "  [coord invalid this frame]");
+                ImGui::TextColored(ImVec4(0.7f,0.7f,0.0f,1), "  [coord invalid this frame]");
             }
+            ImGui::EndTabItem();
+        }
 
-            // ── P2: Post-Processing Metrics ──
+        if (ImGui::BeginTabItem("Filters (Smoothing)")) {
+            ConfigUIRenderer::RenderConfigSchema(schema, "Stylus Filters", Engine::ConfigParam::Filter);
+
             ImGui::Separator();
-            ImGui::TextColored(ImVec4(1.0f,0.85f,0.4f,1.f),
-                "[Post-Processing]");
+            ImGui::TextColored(ImVec4(1.0f,0.85f,0.4f,1.f), "[Post-Processing]");
             ImGui::Text("  Speed: instant=%.1f  short=%.1f  full=%.1f",
                 sd.dbgSpeedInstant, sd.dbgSpeedShortAvg, sd.dbgSpeedFullAvg);
             ImGui::Text("  IIR Coef: %.3f  %s",
                 sd.dbgIirCoef,
                 sd.dbgIirCoef < 0.3f ? "(strong smooth)" :
-                sd.dbgIirCoef > 0.8f ? "(fast track)" : "(moderate)");
+                (sd.dbgIirCoef > 0.8f ? "(fast track)" : "(moderate)"));
+            
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(0.9f,0.9f,0.5f,1.f), "[Linear Filter]");
+            const char* lfStates[] = {
+                "Init","Wait","Collect","CurveLine",
+                "EnterStraight","StraightLine","ExitStraight"};
+            int lfs = std::clamp(static_cast<int>(sd.dbgLinearFilterState), 0, 6);
+            ImGui::Text("  State: %d (%s)", lfs, lfStates[lfs]);
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Behavior (Tilt/Edge)")) {
+            ConfigUIRenderer::RenderConfigSchema(schema, "Stylus Behavior", Engine::ConfigParam::Behavior);
+
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(0.8f,0.6f,1.0f,1.f), "[Tilt Diagnostics]");
+            ImGui::Text("  TX1-TX2 Diff: dX=%.1f  dY=%.1f", sd.dbgTiltDiffX, sd.dbgTiltDiffY);
+            
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(1.0f,0.85f,0.4f,1.f), "[Edge/Hover]");
             ImGui::Text("  Mode: %s%s",
                 sd.dbgIsHover ? "Hover" : "Write",
                 sd.dbgIsEdge  ? " + Edge" : "");
+            const char* animLabels[] = {"Leave","Hover","Contact","Lifting"};
+            int ai = std::clamp(static_cast<int>(sd.animState), 0, 3);
+            ImGui::Text("  Lifecycle: %s", animLabels[ai]);
+            ImGui::EndTabItem();
+        }
 
-            // ── P2: Tilt Diagnostics ──
-            ImGui::Separator();
-            ImGui::TextColored(ImVec4(0.8f,0.6f,1.0f,1.f),
-                "[Tilt Diagnostics]");
-            ImGui::Text("  TX1-TX2 Diff: dX=%.1f  dY=%.1f",
-                sd.dbgTiltDiffX, sd.dbgTiltDiffY);
+        if (ImGui::BeginTabItem("Output (HID/Pressure)")) {
+            ConfigUIRenderer::RenderConfigSchema(schema, "Stylus Output", Engine::ConfigParam::Output);
+            ConfigUIRenderer::RenderConfigSchema(schema, "Stylus General", Engine::ConfigParam::General);
 
-            // ── P2: Pressure Chain ──
             ImGui::Separator();
-            ImGui::TextColored(ImVec4(1.0f,0.5f,0.3f,1.f),
-                "[Pressure Chain]");
+            ImGui::TextColored(ImVec4(1.0f,0.5f,0.3f,1.f), "[Pressure Chain]");
             ImGui::Text("  Peak Signal: %u", sd.dbgPeakSignal);
             ImGui::Text("  Raw Pressure (BT MCU): %u", sd.dbgRawPressure);
             ImGui::Text("  Mapped Pressure: %u", sd.dbgMappedPressure);
 
-            // ── P2: VHF Output State ──
             ImGui::Separator();
-            ImGui::TextColored(ImVec4(0.3f,1.0f,0.8f,1.f),
-                "[VHF Pen State]");
-            {
-                uint8_t ps = sd.dbgVhfPenState;
-                bool inRange   = (ps >> 5) & 1;
-                bool tipSwitch = (ps >> 0) & 1;
-                bool barrel    = (ps >> 1) & 1;
-                ImGui::Text("  byte[1] = 0x%02X", ps);
-                ImGui::Text("  InRange=%s  TipSwitch=%s  Barrel=%s",
-                    inRange ? "YES" : "no",
-                    tipSwitch ? "YES" : "no",
-                    barrel ? "YES" : "no");
-                if (inRange && tipSwitch)
-                    ImGui::TextColored(ImVec4(0.2f,0.9f,0.3f,1), "  => Writing (ink active)");
-                else if (inRange)
-                    ImGui::TextColored(ImVec4(0.6f,0.8f,1.0f,1), "  => Hovering (cursor only)");
-                else
-                    ImGui::TextColored(ImVec4(0.5f,0.5f,0.5f,1), "  => Out of range");
-            }
-
-            // ── P2: Linear Filter FSM ──
+            ImGui::TextColored(ImVec4(0.3f,1.0f,0.8f,1.f), "[VHF Pen State]");
+            uint8_t ps = sd.dbgVhfPenState;
+            bool inRange   = (ps >> 5) & 1;
+            bool tipSwitch = (ps >> 0) & 1;
+            bool barrel    = (ps >> 1) & 1;
+            ImGui::Text("  byte[1] = 0x%02X", ps);
+            ImGui::Text("  InRange=%s  TipSwitch=%s  Barrel=%s",
+                inRange ? "YES" : "no", tipSwitch ? "YES" : "no", barrel ? "YES" : "no");
+            if (inRange && tipSwitch)
+                ImGui::TextColored(ImVec4(0.2f,0.9f,0.3f,1), "  => Writing (ink active)");
+            else if (inRange)
+                ImGui::TextColored(ImVec4(0.6f,0.8f,1.0f,1), "  => Hovering (cursor only)");
+            else
+                ImGui::TextColored(ImVec4(0.5f,0.5f,0.5f,1), "  => Out of range");
+            
             ImGui::Separator();
-            ImGui::TextColored(ImVec4(0.9f,0.9f,0.5f,1.f),
-                "[Linear Filter]");
-            {
-                const char* lfStates[] = {
-                    "Init","Wait","Collect","CurveLine",
-                    "EnterStraight","StraightLine","ExitStraight"};
-                int lfs = std::clamp(static_cast<int>(sd.dbgLinearFilterState), 0, 6);
-                ImGui::Text("  State: %d (%s)", lfs, lfStates[lfs]);
-            }
-
+            const char* stageNames[] = {
+                "OK", "SlaveParseErr", "TX1Invalid", "NoPeak",
+                "CoordFail", "NoiseReject"};
+            int si = std::clamp(static_cast<int>(sd.pipelineStage), 0, 5);
+            if (sd.pipelineStage == 0)
+                ImGui::TextColored(ImVec4(0.2f,0.9f,0.3f,1), "Pipeline Status: %s", stageNames[si]);
+            else
+                ImGui::TextColored(ImVec4(1.0f,0.3f,0.3f,1), "Pipeline Status: %s (%d)", stageNames[si], si);
+            
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();
