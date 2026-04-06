@@ -4,15 +4,16 @@
     测试版本安装包声明区：
     包含完整的诊断上位机与测试工具。
   -->
-  <Package Name="EGoTouch Controller Software (Test Version)" Manufacturer="EGoTouch Team" Version="1.9.9" 
+  <Package Name="!(loc.ProductNameTest)" Manufacturer="!(loc.Manufacturer)" Version="1.9.9"
            UpgradeCode="434AC770-0762-431A-9ABC-DB2F9DB289AD" 
-           Scope="perMachine">
+           Scope="perMachine"
+           Language="!(loc.Language)">
 
     <!-- 支持自动覆盖升级 -->
-    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." AllowSameVersionUpgrades="yes" />
+    <MajorUpgrade DowngradeErrorMessage="!(loc.DowngradeError)" AllowSameVersionUpgrades="yes" />
 
     <ui:WixUI Id="WixUI_Minimal" />
-    <WixVariable Id="WixUILicenseRtf" Value="scripts\EULA.rtf" />
+    <WixVariable Id="WixUILicenseRtf" Value="!(loc.LicenseRtf)" />
 
     <MediaTemplate EmbedCab="yes" />
 
@@ -30,8 +31,8 @@
             Id="EGoTouchServiceInstaller"
             Type="ownProcess"
             Name="EGoTouchService"
-            DisplayName="EGoTouch Capacitive Touch Driver (Test)"
-            Description="EGoTouch Capacitive Touch Driver Service - Test Version."
+            DisplayName="!(loc.ServiceDisplayNameTest)"
+            Description="!(loc.ServiceDescriptionTest)"
             Start="auto"           
             Account="LocalSystem"
             ErrorControl="normal" />

@@ -1,0 +1,49 @@
+name: Native ARM64 Build Verification (clang-cl)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-arm64:
+    # Use the native GitHub-hosted Windows ARM64 runner
+    runs-on: windows-11-arm
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Configure MSVC for ARM64
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: arm64
+
+      - name: CMake Configure (clang-cl)
+        # On a native ARM64 host, we can use the ARM64-native clang-cl
+        # No need for cross-compilation flags (CMAKE_SYSTEM_NAME etc.)
+        # but we preserve them to be explicit.
+        run: |
+          cmake -G "Ninja" -S . -B build `
+                -DCMAKE_BUILD_TYPE=Release `
+                -DCMAKE_C_COMPILER=clang-cl `
+                -DCMAKE_CXX_COMPILER=clang-cl `
+                -DHIMAX_ENABLE_NEON=ON `
+                -DEGO_BUILD_TESTS=ON
+
+      - name: CMake Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Run Unit Tests (Native)
+        # Since we are on an ARM64 host, we can now actually RUN the tests!
+        working-directory: build
+        run: |
+          # Only running HostSystemStateMonitorTest as it doesn't require hardware
+          if (Test-Path "HostSystemStateMonitorTest.exe") {
+            .\HostSystemStateMonitorTest.exe
+          }

@@ -92,6 +92,18 @@ void SharedFrameWriter::Write(const Engine::HeatmapFrame& frame) {
                 sizeof(frame.heatmapMatrix));
     m_data->timestamp = frame.timestamp;
 
+    // Copy zones & peaks
+    std::memcpy(m_data->touchZones, frame.touchZones.data(), sizeof(m_data->touchZones));
+    std::memcpy(m_data->peakZones, frame.peakZones.data(), sizeof(m_data->peakZones));
+    const int numPeaks = std::min(static_cast<int>(frame.peaks.size()), 30);
+    m_data->peakCount = static_cast<uint8_t>(numPeaks);
+    for (int i = 0; i < numPeaks; ++i) {
+        m_data->peaks[i].r = frame.peaks[i].r;
+        m_data->peaks[i].c = frame.peaks[i].c;
+        m_data->peaks[i].z = frame.peaks[i].z;
+        m_data->peaks[i].id = frame.peaks[i].id;
+    }
+
     // Copy contacts (flatten vector → fixed array)
     const int n = std::min(static_cast<int>(frame.contacts.size()),
                            kMaxSharedContacts);
@@ -318,6 +330,14 @@ bool SharedFrameReader::Read(Engine::HeatmapFrame& out) {
     std::memcpy(out.heatmapMatrix, m_data->heatmapMatrix,
                 sizeof(out.heatmapMatrix));
     out.timestamp = m_data->timestamp;
+
+    // Restore zones & peaks
+    std::memcpy(out.touchZones.data(), m_data->touchZones, sizeof(m_data->touchZones));
+    std::memcpy(out.peakZones.data(), m_data->peakZones, sizeof(m_data->peakZones));
+    out.peaks.clear();
+    for (int i = 0; i < m_data->peakCount; ++i) {
+        out.peaks.push_back({m_data->peaks[i].r, m_data->peaks[i].c, m_data->peaks[i].z, m_data->peaks[i].id});
+    }
 
     // Copy contacts
     out.contacts.resize(m_data->contactCount);

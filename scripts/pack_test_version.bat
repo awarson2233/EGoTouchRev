@@ -17,7 +17,7 @@ echo.
 echo [2/3] Preparing MSI Component variables...
 :: WiX v4 build command requires wix.exe
 :: Make sure wix is installed on the user system.
-wix build -ext WixToolset.UI.wixext -arch x64 scripts\EGoTouchTestSetup.wxs -out build\EGoTouchTestSetup.msi
+wix build -ext WixToolset.UI.wixext -arch x64 scripts\EGoTouchTestSetup.wxs -loc scripts\zh-CN.wxl -out build\EGoTouchTestSetup.msi
 if %errorlevel% neq 0 (
     echo [ERROR] WiX build failed.
     exit /b %errorlevel%

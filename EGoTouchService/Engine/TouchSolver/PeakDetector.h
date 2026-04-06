@@ -12,6 +12,7 @@ struct Peak {
     int     neighborSignalSum; // Sum of 8-neighbor signals (Peak_CalcZn)
     uint8_t id = 0;           // Persistent ID (Peak_IDTracking)
     uint16_t tzAge = 0;       // TZ_UpdatePeakTzAge: frames in same zone
+    int     macroZoneArea = 0; // Area of the hosting MacroZone
 };
 
 /// TSACore-aligned peak detector.
@@ -22,26 +23,29 @@ class PeakDetector {
 public:
     static constexpr int kRows = 40;
     static constexpr int kCols = 60;
-    static constexpr int kMaxPeaks = 20;
 
-    void Detect(const HeatmapFrame& frame);
+    void Detect(const HeatmapFrame& frame, const std::vector<MacroZone>& macroZones);
 
     const std::vector<Peak>& GetPeaks() const { return m_peaks; }
 
     // --- Tuneable parameters (exposed to UI) ---
-    int16_t m_threshold        = 800;   // g_sigThold
-    int16_t m_sigTholdLimit    = 1200;  // g_sigTholdLimit
-    int16_t m_edgeThreshold    = 400;   // g_toeSigThold
-    bool    m_edgeThresholdEnabled = false;
+    int m_threshold            = 800;   // g_sigThold
+    int m_sigTholdLimit        = 1200;  // g_sigTholdLimit
+    int m_edgeThreshold        = 400;   // g_toeSigThold
+    bool m_edgeThresholdEnabled = false;
     bool    m_z8Filter         = true;
     bool    m_z1Filter         = true;
     bool    m_pressureDriftFilter  = true;
     bool    m_edgePeakFilter       = true;
+    int     m_z8Radius             = 1;     // Radius for Z8 filter NMS
+    int     m_maxPeaks             = 20;    // Maximum number of peaks
+    int     m_pressureDriftDebounceLimit = 3; // Debounce frames
     int     m_prevTouchCount       = 0;  // Set by caller each frame
+    int     m_macroZoneMinArea     = 2;  // Min MacroZone area for valid peak
 
 private:
     // --- Sub-algorithms (TSACore-aligned) ---
-    void DetectInRange(const HeatmapFrame& frame);
+    void DetectInRange(const HeatmapFrame& frame, const std::vector<MacroZone>& macroZones);
     bool DetectPressureDrift(const HeatmapFrame& frame,
                              int col, int row) const;
     void ApplyZ8Filter();

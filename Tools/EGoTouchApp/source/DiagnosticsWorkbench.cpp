@@ -478,7 +478,13 @@ void DiagnosticsWorkbench::DrawControlPanel() {
     
     ImGui::Separator();
     ImGui::Text("Auto-Capture (Debug)");
-    ImGui::SliderInt("Target Peaks", &m_autoExportTargetPeaks, 0, 5, m_autoExportTargetPeaks == 0 ? "Disabled" : "%d Peaks");
+    const char* captureModes[] = { "Disabled", "Peak Appear", "Touch Drop" };
+    ImGui::Combo("Capture Mode", &m_autoCaptureMode, captureModes, IM_ARRAYSIZE(captureModes));
+    if (m_autoCaptureMode == 1) {
+        ImGui::SliderInt("Target Peaks", &m_autoExportTargetPeaks, 1, 5, "%d Peaks");
+    } else if (m_autoCaptureMode == 2) {
+        ImGui::TextWrapped("Captures the frame when all tracked contacts disappear (peaks drop to 0 from >0).");
+    }
     
 
 
@@ -762,144 +768,178 @@ void DiagnosticsWorkbench::DrawHeatmap() {
         }
     }
     
-    // 绘制 FeatureExtractor (Phase 4.1/4.2) 提取到的 Peaks 和 Zones
-    if (m_proxy) {
-        const auto& processors = m_proxy->GetPipeline().GetProcessors();
-        for (const auto& proc : processors) {
-            // Find our FeatureExtractor in the pipeline
-            if (auto extractor = dynamic_cast<Engine::FeatureExtractor*>(proc.get())) {
-                if (extractor->IsEnabled()) {
-                    // ── Snapshot: 拷贝所有数据，隔绝处理线程 ──
-                    const auto peaks    = extractor->GetPeaks();      // vector copy
-                    const auto zones    = extractor->GetTouchZones(); // array copy
-                    const auto zoneEdge = extractor->GetZoneEdge();   // array copy
+    // 绘制 IPC 传递来的 Peaks 和 Zones
+    {
+        const auto& peaks = m_currentFrame.peaks;
+        const auto& zones = m_currentFrame.touchZones;
+        
+        int currentPeakCount = peaks.size();
+        int currentContactCount = static_cast<int>(m_currentFrame.contacts.size());
+        // Auto-Capture logic
+        if (m_autoCaptureMode == 1) {
+            // Mode 1: Peak Appear — capture when N peaks first appear
+            if (m_autoExportTargetPeaks > 0 && 
+                currentPeakCount == m_autoExportTargetPeaks && 
+                m_lastPeakCount != m_autoExportTargetPeaks) {
+                ExportCurrentFrameToCSV(true);
+            }
+        } else if (m_autoCaptureMode == 2) {
+            // Mode 2: Touch Drop — capture the frame where contacts vanish
+            // (contacts went from >0 to 0, meaning touch was lost this frame)
+            if (currentContactCount == 0 && m_lastContactCount > 0) {
+                ExportCurrentFrameToCSV(true);
+            }
+        }
+        m_lastPeakCount = currentPeakCount;
+        m_lastContactCount = currentContactCount;
+
+        // Draw Touch Zones (Color Outlines)
+        for (int r = 0; r < rows; ++r) {
+            for (int c = 0; c < cols; ++c) {
+                uint8_t zoneId = zones[r * cols + c];
+                if (zoneId > 0) {
+                    int mirrored_r = rows - 1 - r;
+                    int mirrored_c = cols - 1 - c;
                     
-                    int currentPeakCount = peaks.size();
-                    // Auto-Capture logic for N fingers
-                    if (m_autoExportTargetPeaks > 0 && 
-                        currentPeakCount == m_autoExportTargetPeaks && 
-                        m_lastPeakCount != m_autoExportTargetPeaks) {
-                        ExportCurrentFrameToCSV(true); // Auto
+                    ImVec2 p_min = ImVec2(canvas_p.x + mirrored_c * cell_w, canvas_p.y + mirrored_r * cell_h);
+                    ImVec2 p_max = ImVec2(p_min.x + cell_w, p_min.y + cell_h);
+                    
+                    // Color based on zone ID (cycle through bright colors)
+                    ImVec4 outlineCol;
+                    switch (zoneId % 6) {
+                        case 1: outlineCol = ImVec4(1.0f, 0.0f, 0.0f, 1.0f); break; // Red
+                        case 2: outlineCol = ImVec4(0.0f, 1.0f, 0.0f, 1.0f); break; // Green
+                        case 3: outlineCol = ImVec4(0.0f, 0.5f, 1.0f, 1.0f); break; // Light Blue
+                        case 4: outlineCol = ImVec4(1.0f, 0.0f, 1.0f, 1.0f); break; // Magenta
+                        case 5: outlineCol = ImVec4(0.0f, 1.0f, 1.0f, 1.0f); break; // Cyan
+                        case 0: outlineCol = ImVec4(1.0f, 0.5f, 0.0f, 1.0f); break; // Orange
                     }
-                    m_lastPeakCount = currentPeakCount;
+                    
+                    ImU32 colU32 = ImGui::ColorConvertFloat4ToU32(outlineCol);
+                    
+                    // Subtle transparent fill
+                    draw_list->AddRectFilled(p_min, p_max, ImGui::ColorConvertFloat4ToU32(ImVec4(outlineCol.x, outlineCol.y, outlineCol.z, 0.2f)));
 
-                    // Draw Touch Zones (Color Outlines)
-                    for (int r = 0; r < rows; ++r) {
-                        for (int c = 0; c < cols; ++c) {
-                            uint8_t zoneId = zones[r * cols + c];
-                            if (zoneId > 0) {
-                                int mirrored_r = rows - 1 - r;
-                                int mirrored_c = cols - 1 - c;
-                                
-                                ImVec2 p_min = ImVec2(canvas_p.x + mirrored_c * cell_w, canvas_p.y + mirrored_r * cell_h);
-                                ImVec2 p_max = ImVec2(p_min.x + cell_w, p_min.y + cell_h);
-                                
-                                // Color based on zone ID (cycle through bright colors)
-                                ImVec4 outlineCol;
-                                switch (zoneId % 6) {
-                                    case 1: outlineCol = ImVec4(1.0f, 0.0f, 0.0f, 1.0f); break; // Red
-                                    case 2: outlineCol = ImVec4(0.0f, 1.0f, 0.0f, 1.0f); break; // Green
-                                    case 3: outlineCol = ImVec4(0.0f, 0.5f, 1.0f, 1.0f); break; // Light Blue
-                                    case 4: outlineCol = ImVec4(1.0f, 0.0f, 1.0f, 1.0f); break; // Magenta
-                                    case 5: outlineCol = ImVec4(0.0f, 1.0f, 1.0f, 1.0f); break; // Cyan
-                                    case 0: outlineCol = ImVec4(1.0f, 0.5f, 0.0f, 1.0f); break; // Orange
-                                }
-                                
-                                ImU32 colU32 = ImGui::ColorConvertFloat4ToU32(outlineCol);
-                                
-                                // Subtle transparent fill
-                                draw_list->AddRectFilled(p_min, p_max, ImGui::ColorConvertFloat4ToU32(ImVec4(outlineCol.x, outlineCol.y, outlineCol.z, 0.2f)));
+                    // Draw boundaries only on edges facing a different zone
+                    // Matrix mapping -> Visual mapping Check
+                    bool v_diff_top    = (r == rows - 1) || (zones[(r + 1) * cols + c] != zoneId);
+                    bool v_diff_bottom = (r == 0)        || (zones[(r - 1) * cols + c] != zoneId);
+                    bool v_diff_left   = (c == cols - 1) || (zones[r * cols + (c + 1)] != zoneId);
+                    bool v_diff_right  = (c == 0)        || (zones[r * cols + (c - 1)] != zoneId);
 
-                                // Draw boundaries only on edges facing a different zone
-                                // Matrix mapping -> Visual mapping Check
-                                bool v_diff_top    = (r == rows - 1) || (zones[(r + 1) * cols + c] != zoneId);
-                                bool v_diff_bottom = (r == 0)        || (zones[(r - 1) * cols + c] != zoneId);
-                                bool v_diff_left   = (c == cols - 1) || (zones[r * cols + (c + 1)] != zoneId);
-                                bool v_diff_right  = (c == 0)        || (zones[r * cols + (c - 1)] != zoneId);
+                    float border_thickness = 2.0f;
+                    if (v_diff_top)    draw_list->AddLine(ImVec2(p_min.x, p_min.y), ImVec2(p_max.x, p_min.y), colU32, border_thickness);
+                    if (v_diff_bottom) draw_list->AddLine(ImVec2(p_min.x, p_max.y), ImVec2(p_max.x, p_max.y), colU32, border_thickness);
+                    if (v_diff_left)   draw_list->AddLine(ImVec2(p_min.x, p_min.y), ImVec2(p_min.x, p_max.y), colU32, border_thickness);
+                    if (v_diff_right)  draw_list->AddLine(ImVec2(p_max.x, p_min.y), ImVec2(p_max.x, p_max.y), colU32, border_thickness);
 
-                                float border_thickness = 2.0f;
-                                if (v_diff_top)    draw_list->AddLine(ImVec2(p_min.x, p_min.y), ImVec2(p_max.x, p_min.y), colU32, border_thickness);
-                                if (v_diff_bottom) draw_list->AddLine(ImVec2(p_min.x, p_max.y), ImVec2(p_max.x, p_max.y), colU32, border_thickness);
-                                if (v_diff_left)   draw_list->AddLine(ImVec2(p_min.x, p_min.y), ImVec2(p_min.x, p_max.y), colU32, border_thickness);
-                                if (v_diff_right)  draw_list->AddLine(ImVec2(p_max.x, p_min.y), ImVec2(p_max.x, p_max.y), colU32, border_thickness);
+                }
+            }
+        }
 
-                            }
-                        }
-                    }
+        // Draw Peak Zones (MicroZones) edge visualization
+        const auto& pzones = m_currentFrame.peakZones;
+        for (int r = 0; r < rows; ++r) {
+            for (int c = 0; c < cols; ++c) {
+                int idx = r * cols + c;
+                int mr = rows - 1 - r, mc = cols - 1 - c;
+                ImVec2 p0(canvas_p.x + mc*cell_w, canvas_p.y + mr*cell_h);
+                ImVec2 p1(p0.x + cell_w, p0.y + cell_h);
 
-                    // Draw Zone edge visualization
-                    for (int r = 0; r < rows; ++r) {
-                        for (int c = 0; c < cols; ++c) {
-                            int idx = r * cols + c;
-                            int mr = rows - 1 - r, mc = cols - 1 - c;
-                            ImVec2 p0(canvas_p.x + mc*cell_w, canvas_p.y + mr*cell_h);
-                            ImVec2 p1(p0.x + cell_w, p0.y + cell_h);
-
-                            // Zone edge: colored per-side lines
-                            if (zoneEdge[idx] && zones[idx] > 0) {
-                                ImVec4 zC;
-                                switch (zones[idx]%6) {
-                                    case 1: zC={1,.2f,.2f,1}; break;
-                                    case 2: zC={.2f,1,.2f,1}; break;
-                                    case 3: zC={.3f,.6f,1,1}; break;
-                                    case 4: zC={1,.2f,1,1};   break;
-                                    case 5: zC={.2f,1,1,1};   break;
-                                    case 0: zC={1,.6f,.1f,1}; break;
-                                }
-                                ImU32 zCol = ImGui::ColorConvertFloat4ToU32(zC);
-                                uint8_t zid = zones[idx];
-                                auto nz = [&](int ri,int ci)->uint8_t {
-                                    if(ri<0||ri>=rows||ci<0||ci>=cols) return 0;
-                                    return zones[ri*cols+ci];
-                                };
-                                if(nz(r+1,c)!=zid) draw_list->AddLine(p0,{p1.x,p0.y},zCol,2.5f);
-                                if(nz(r-1,c)!=zid) draw_list->AddLine({p0.x,p1.y},p1,zCol,2.5f);
-                                if(nz(r,c+1)!=zid) draw_list->AddLine(p0,{p0.x,p1.y},zCol,2.5f);
-                                if(nz(r,c-1)!=zid) draw_list->AddLine({p1.x,p0.y},p1,zCol,2.5f);
-                            }
-                        }
-                    }
-                    // Draw Peaks (Crosshairs)
-                    for (const auto& peak : peaks) {
-                        int pr = peak.r;
-                        int pc = peak.c;
-                        int16_t peakValue = peak.z;
-                        
-                        // Mirror matrix coordinates exactly like the heatmap loop
-                        int mirrored_r = rows - 1 - pr;
-                        int mirrored_c = cols - 1 - pc;
-                        
-                        // Calculate center of the cell
-                        float cx = canvas_p.x + mirrored_c * cell_w + cell_w * 0.5f;
-                        float cy = canvas_p.y + mirrored_r * cell_h + cell_h * 0.5f;
-                        
-                        // Draw a prominent Yellow Cross marker
-                        ImU32 markerColor = IM_COL32(255, 255, 0, 255); // Yellow
-                        float crossSize = std::min(cell_w, cell_h) * 0.6f; // 120% of cell size to stick out
-                        
-                        draw_list->AddLine(ImVec2(cx - crossSize, cy), ImVec2(cx + crossSize, cy), markerColor, 2.0f);
-                        draw_list->AddLine(ImVec2(cx, cy - crossSize), ImVec2(cx, cy + crossSize), markerColor, 2.0f);
-                        
-                        // Draw the pressure value text
-                        char label[32];
-                        snprintf(label, sizeof(label), "%d", peakValue);
-                        ImU32 textColor = IM_COL32(255, 255, 255, 255); // White text
-                        ImU32 outlineColor = IM_COL32(0, 0, 0, 255);    // Black outline
-
-                        ImVec2 textPos(cx + 4.0f, cy + 4.0f);
-                        
-                        // Draw text outline (shadow)
-                        draw_list->AddText(ImVec2(textPos.x - 1, textPos.y - 1), outlineColor, label);
-                        draw_list->AddText(ImVec2(textPos.x + 1, textPos.y - 1), outlineColor, label);
-                        draw_list->AddText(ImVec2(textPos.x - 1, textPos.y + 1), outlineColor, label);
-                        draw_list->AddText(ImVec2(textPos.x + 1, textPos.y + 1), outlineColor, label);
-                        
-                        // Draw main text
-                        draw_list->AddText(textPos, textColor, label);
+                // PeakZone edge: white/grey thin lines to separate internal splits
+                if (pzones[idx] > 0) {
+                    uint8_t zid = pzones[idx];
+                    auto nz = [&](int ri,int ci)->uint8_t {
+                        if(ri<0||ri>=rows||ci<0||ci>=cols) return 0;
+                        return pzones[ri*cols+ci];
+                    };
+                    bool edge = (nz(r+1,c)!=zid) || (nz(r-1,c)!=zid) || (nz(r,c+1)!=zid) || (nz(r,c-1)!=zid);
+                    if (edge) {
+                        ImU32 zCol = IM_COL32(255, 255, 255, 180); // Translucent white for micro-zones
+                        float t = 1.0f; // thinner line
+                        if(nz(r+1,c)!=zid) draw_list->AddLine(p0,{p1.x,p0.y},zCol,t);
+                        if(nz(r-1,c)!=zid) draw_list->AddLine({p0.x,p1.y},p1,zCol,t);
+                        if(nz(r,c+1)!=zid) draw_list->AddLine(p0,{p0.x,p1.y},zCol,t);
+                        if(nz(r,c-1)!=zid) draw_list->AddLine({p1.x,p0.y},p1,zCol,t);
                     }
                 }
-                break; // Found it, no need to keep looking
             }
+        }
+        // Draw Peaks (Crosshairs)
+        for (const auto& peak : peaks) {
+            int pr = peak.r;
+            int pc = peak.c;
+            int16_t peakValue = peak.z;
+            
+            // Mirror matrix coordinates exactly like the heatmap loop
+            int mirrored_r = rows - 1 - pr;
+            int mirrored_c = cols - 1 - pc;
+            
+            // Calculate center of the cell
+            float cx = canvas_p.x + mirrored_c * cell_w + cell_w * 0.5f;
+            float cy = canvas_p.y + mirrored_r * cell_h + cell_h * 0.5f;
+            
+            // Draw a prominent Yellow Cross marker
+            ImU32 markerColor = IM_COL32(255, 255, 0, 255); // Yellow
+            float crossSize = std::min(cell_w, cell_h) * 0.6f; // 120% of cell size to stick out
+            
+            draw_list->AddLine(ImVec2(cx - crossSize, cy), ImVec2(cx + crossSize, cy), markerColor, 2.0f);
+            draw_list->AddLine(ImVec2(cx, cy - crossSize), ImVec2(cx, cy + crossSize), markerColor, 2.0f);
+            
+            // Draw the pressure value text
+            char label[32];
+            snprintf(label, sizeof(label), "%d", peakValue);
+            ImU32 textColor = IM_COL32(255, 255, 255, 255); // White text
+            ImU32 outlineColor = IM_COL32(0, 0, 0, 255);    // Black outline
+
+            ImVec2 textPos(cx + 4.0f, cy + 4.0f);
+            
+            // Draw text outline (shadow)
+            draw_list->AddText(ImVec2(textPos.x - 1, textPos.y - 1), outlineColor, label);
+            draw_list->AddText(ImVec2(textPos.x + 1, textPos.y - 1), outlineColor, label);
+            draw_list->AddText(ImVec2(textPos.x - 1, textPos.y + 1), outlineColor, label);
+            draw_list->AddText(ImVec2(textPos.x + 1, textPos.y + 1), outlineColor, label);
+            
+            // Draw main text
+            draw_list->AddText(textPos, textColor, label);
+        }
+
+        // Draw Real Contacts (Green X)
+        for (const auto& contact : m_currentFrame.contacts) {
+            float c_c = contact.x;
+            float c_r = contact.y;
+            
+            // Since contact.x and contact.y are sub-pixel grid coordinates (like 0.5~59.5, 0.5~39.5)
+            // mirror them exactly like the peaks.
+            float mirrored_r = (rows - 1.0f) - c_r;
+            float mirrored_c = (cols - 1.0f) - c_c;
+            
+            float cx = canvas_p.x + mirrored_c * cell_w + cell_w * 0.5f;
+            float cy = canvas_p.y + mirrored_r * cell_h + cell_h * 0.5f;
+            
+            // Draw a prominent Green 'X' marker
+            ImU32 markerColor = IM_COL32(0, 255, 0, 255); // Green
+            float crossSize = std::min(cell_w, cell_h) * 0.5f;
+            
+            draw_list->AddLine(ImVec2(cx - crossSize, cy - crossSize), ImVec2(cx + crossSize, cy + crossSize), markerColor, 2.5f);
+            draw_list->AddLine(ImVec2(cx - crossSize, cy + crossSize), ImVec2(cx + crossSize, cy - crossSize), markerColor, 2.5f);
+            
+            // Draw the ID text next to the contact
+            char label[32];
+            snprintf(label, sizeof(label), "ID:%d", contact.id);
+            ImU32 textColor = IM_COL32(0, 255, 0, 255);     // Green text
+            ImU32 outlineColor = IM_COL32(0, 0, 0, 255);    // Black outline
+
+            ImVec2 textPos(cx + 6.0f, cy - 12.0f);
+            
+            // Draw text outline (shadow)
+            draw_list->AddText(ImVec2(textPos.x - 1, textPos.y - 1), outlineColor, label);
+            draw_list->AddText(ImVec2(textPos.x + 1, textPos.y - 1), outlineColor, label);
+            draw_list->AddText(ImVec2(textPos.x - 1, textPos.y + 1), outlineColor, label);
+            draw_list->AddText(ImVec2(textPos.x + 1, textPos.y + 1), outlineColor, label);
+            
+            // Draw main text
+            draw_list->AddText(textPos, textColor, label);
         }
     }
     
@@ -1223,7 +1263,29 @@ void DiagnosticsWorkbench::ExportCurrentFrameToCSV(bool isAutoCapture) {
     }
 
     out << "--- EGoTouch Frame Export ---\n";
-    out << "Timestamp: " << m_currentFrame.timestamp << "\n\n";
+    out << "Timestamp: " << m_currentFrame.timestamp << "\n";
+    out << "CaptureMode," << (isAutoCapture ? (m_autoCaptureMode == 1 ? "PeakAppear" : "TouchDrop") : "Manual") << "\n\n";
+    // Config parameters snapshot
+    if (m_proxy) {
+        out << "--- Config Parameters ---\n";
+        for (const auto& p : m_proxy->GetPipeline().GetProcessors()) {
+            auto schema = p->GetConfigSchema();
+            if (schema.empty()) continue;
+            out << "[" << p->GetName() << "]\n";
+            std::ostringstream cfgStream;
+            p->SaveConfig(cfgStream);
+            out << cfgStream.str();
+        }
+        out << "\n";
+    }
+    // Peaks summary
+    out << "--- Peaks ---\n";
+    out << "Count," << m_currentFrame.peaks.size() << "\n";
+    out << "R,C,Z,ID\n";
+    for (const auto& pk : m_currentFrame.peaks) {
+        out << pk.r << "," << pk.c << "," << pk.z << "," << static_cast<unsigned int>(pk.id) << "\n";
+    }
+    out << "\n";
     out << "--- Contacts ---\n";
     out << "Count," << m_currentFrame.contacts.size() << "\n";
     out << "ID,X,Y,State,Area,SignalSum,SizeMm,Reported,ReportEvent,LifeFlags,ReportFlags,DebugFlags\n";

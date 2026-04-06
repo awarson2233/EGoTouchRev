@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WixLocalization Culture="en-US" xmlns="http://wixtoolset.org/schemas/v4/wxl">
+  <String Id="Language" Value="1033" />
+  <String Id="ProductName" Value="EGoTouch Controller Software" />
+  <String Id="ProductNameTest" Value="EGoTouch Controller Software (Test Version)" />
+  <String Id="Manufacturer" Value="EGoTouch Team" />
+  <String Id="DowngradeError" Value="A newer version of [ProductName] is already installed." />
+  <String Id="LicenseRtf" Value="scripts\EULA.rtf" />
+  <String Id="ServiceDisplayName" Value="EGoTouch Capacitive Touch Driver" />
+  <String Id="ServiceDescription" Value="EGoTouch Capacitive Touch Driver Service - Manages touch frame acquisition, algorithm processing, and HID injection." />
+  <String Id="ServiceDisplayNameTest" Value="EGoTouch Capacitive Touch Driver (Test)" />
+  <String Id="ServiceDescriptionTest" Value="EGoTouch Capacitive Touch Driver Service - Test Version." />
+</WixLocalization>

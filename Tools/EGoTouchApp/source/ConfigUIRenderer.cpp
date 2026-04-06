@@ -1,5 +1,6 @@
 #include "ConfigUIRenderer.h"
 #include "imgui.h"
+#include <algorithm>
 
 namespace App {
 
@@ -10,54 +11,61 @@ void ConfigUIRenderer::RenderConfigSchema(
     if (schema.empty()) return;
 
     for (const auto& param : schema) {
+        // Appending ## makes the ID unique in ImGui without rendering the suffix
+        std::string label = param.displayName + "##" + sectionName + "_" + param.key;
+        
         switch (param.type) {
             case Engine::ConfigParam::Bool:
-                ImGui::Checkbox(param.displayName.c_str(),
+                ImGui::Checkbox(label.c_str(),
                                static_cast<bool*>(param.valuePtr));
                 break;
 
-            case Engine::ConfigParam::Int:
+            case Engine::ConfigParam::Int: {
+                int* ptr = static_cast<int*>(param.valuePtr);
                 if (param.maxVal > param.minVal) {
-                    ImGui::SliderInt(param.displayName.c_str(),
-                                    static_cast<int*>(param.valuePtr),
-                                    static_cast<int>(param.minVal),
-                                    static_cast<int>(param.maxVal));
-                } else {
-                    ImGui::InputInt(param.displayName.c_str(),
-                                   static_cast<int*>(param.valuePtr));
-                }
-                break;
-
-            case Engine::ConfigParam::Float:
-                if (param.maxVal > param.minVal) {
-                    ImGui::SliderFloat(param.displayName.c_str(),
-                                      static_cast<float*>(param.valuePtr),
-                                      param.minVal, param.maxVal);
-                } else {
-                    ImGui::InputFloat(param.displayName.c_str(),
-                                     static_cast<float*>(param.valuePtr));
-                }
-                break;
-
-            case Engine::ConfigParam::Double:
-                if (param.maxVal > param.minVal) {
-                    float fval = static_cast<float>(*static_cast<double*>(param.valuePtr));
-                    if (ImGui::SliderFloat(param.displayName.c_str(), &fval,
-                                          param.minVal, param.maxVal)) {
-                        *static_cast<double*>(param.valuePtr) = static_cast<double>(fval);
+                    if (ImGui::SliderInt(label.c_str(), ptr,
+                                         static_cast<int>(param.minVal),
+                                         static_cast<int>(param.maxVal))) {
+                        *ptr = std::clamp(*ptr, static_cast<int>(param.minVal), static_cast<int>(param.maxVal));
                     }
                 } else {
-                    double* dptr = static_cast<double*>(param.valuePtr);
-                    float fval = static_cast<float>(*dptr);
-                    if (ImGui::InputFloat(param.displayName.c_str(), &fval)) {
-                        *dptr = static_cast<double>(fval);
+                    ImGui::InputInt(label.c_str(), ptr);
+                }
+                break;
+            }
+
+            case Engine::ConfigParam::Float: {
+                float* ptr = static_cast<float*>(param.valuePtr);
+                if (param.maxVal > param.minVal) {
+                    if (ImGui::SliderFloat(label.c_str(), ptr, param.minVal, param.maxVal)) {
+                        *ptr = std::clamp(*ptr, param.minVal, param.maxVal);
+                    }
+                } else {
+                    ImGui::InputFloat(label.c_str(), ptr);
+                }
+                break;
+            }
+
+            case Engine::ConfigParam::Double: {
+                double* ptr = static_cast<double*>(param.valuePtr);
+                if (param.maxVal > param.minVal) {
+                    float fval = static_cast<float>(*ptr);
+                    if (ImGui::SliderFloat(label.c_str(), &fval, param.minVal, param.maxVal)) {
+                        fval = std::clamp(fval, param.minVal, param.maxVal);
+                        *ptr = static_cast<double>(fval);
+                    }
+                } else {
+                    float fval = static_cast<float>(*ptr);
+                    if (ImGui::InputFloat(label.c_str(), &fval)) {
+                        *ptr = static_cast<double>(fval);
                     }
                 }
                 break;
+            }
 
             case Engine::ConfigParam::String:
                 // String support can be added if needed
-                ImGui::Text("%s: (string)", param.displayName.c_str());
+                ImGui::Text("%s: (string)", label.c_str());
                 break;
         }
     }

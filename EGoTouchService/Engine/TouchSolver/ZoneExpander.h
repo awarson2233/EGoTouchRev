@@ -32,8 +32,8 @@ public:
     int GetZoneCount() const { return m_zoneCount; }
 
     // Tuneable parameters
-    uint8_t m_tholdScaleNumer = 0x40; // ~50%  (TSACore DAT)
-    uint8_t m_tholdScaleShift = 7;    // >>7
+    int m_tholdScaleNumer = 0x40; // ~50%  (TSACore DAT)
+    int m_tholdScaleShift = 7;    // >>7
     bool m_dilateErode = true;
     int m_maxTouches = kMaxTouches;    // SigSumFilter: max contacts (0=unlimited)
     EdgeBounds m_edgeBounds;           // Sensor grid limits for edge processing

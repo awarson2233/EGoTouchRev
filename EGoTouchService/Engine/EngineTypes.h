@@ -56,6 +56,19 @@ struct TouchPacket {
     std::array<uint8_t, 32> bytes{};
 };
 
+struct TouchPeak {
+    int r = 0;
+    int c = 0;
+    int16_t z = 0;
+    uint8_t id = 0;
+};
+
+// Represents a connected component in the heatmap greater than a global threshold
+struct MacroZone {
+    std::vector<int> pixels; // 1D indices (r * cols + c)
+    int area = 0;
+};
+
 struct StylusSolvePoint {
     bool valid = false;
     float x = 0.0f;
@@ -171,6 +184,11 @@ struct HeatmapFrame {
     // 从 heatmap 中解析出来的触控点列表
     std::vector<TouchContact> contacts;
     std::array<TouchPacket, 2> touchPackets{};
+
+    // 识别出的原始波峰和区域连通图映射（供 IPC 可视化）
+    std::vector<TouchPeak> peaks;
+    std::array<uint8_t, 2400> touchZones{}; // Now used for MacroZones
+    std::array<uint8_t, 2400> peakZones{};  // Used for MicroZones (per-peak segmented regions)
 
     // Stylus data parsed from slave overlay and solved in StylusProcessor.
     StylusFrameData stylus;

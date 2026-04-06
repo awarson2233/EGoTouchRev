@@ -67,6 +67,9 @@ private:
     bool m_exportSlaveStatus = false;
     int m_autoExportTargetPeaks = 0;
     int m_lastPeakCount = 0;
+    int m_lastContactCount = 0;
+    // Auto-capture mode: 0=disabled, 1=on peak appear, 2=on touch drop (contact disappears)
+    int m_autoCaptureMode = 0;
 
     // AFE control
     int m_afeIdleParam = 0;

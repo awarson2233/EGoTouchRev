@@ -7,15 +7,22 @@ namespace Engine {
 // ────────────────────────────────────────────────────────
 // Public entry — mirrors TSACore Peak_Process()
 // ────────────────────────────────────────────────────────
-void PeakDetector::Detect(const HeatmapFrame& frame) {
+void PeakDetector::Detect(const HeatmapFrame& frame, const std::vector<MacroZone>& macroZones) {
     // Step 1: DetectInRange — asymmetric 8-neighbor local max
-    DetectInRange(frame);
+    DetectInRange(frame, macroZones);
 
     // Step 2: Z8 Filter — signal >> 5 > neighborCount → remove
     if (m_z8Filter) ApplyZ8Filter();
 
     // Step 3: Z1 Filter — signal < threshold → remove
     if (m_z1Filter) ApplyZ1Filter(m_threshold);
+
+    // Step 3.5: MacroZone min area filter — remove peaks from tiny zones
+    if (m_macroZoneMinArea > 1) {
+        m_peaks.erase(std::remove_if(m_peaks.begin(), m_peaks.end(),
+            [this](const Peak& p) { return p.macroZoneArea < m_macroZoneMinArea; }),
+            m_peaks.end());
+    }
 
     // Step 4: Edge peak filter — weak edge peaks < maxSig*5/8
     if (m_edgePeakFilter) ApplyEdgePeakFilter();
@@ -24,8 +31,8 @@ void PeakDetector::Detect(const HeatmapFrame& frame) {
     SortPeaks();
 
     // Step 6: Cap to max
-    if (static_cast<int>(m_peaks.size()) > kMaxPeaks)
-        m_peaks.resize(kMaxPeaks);
+    if (static_cast<int>(m_peaks.size()) > m_maxPeaks)
+        m_peaks.resize(m_maxPeaks);
 
     // Step 7: Peak_IDTracking — assign persistent IDs
     TrackPeakIDs();
@@ -36,19 +43,22 @@ void PeakDetector::Detect(const HeatmapFrame& frame) {
 // Down neighbors: signal[n] <= peak  (allows equal)
 // Up+Left neighbors: signal[n] < peak (strict)
 // ────────────────────────────────────────────────────────
-void PeakDetector::DetectInRange(const HeatmapFrame& frame) {
+void PeakDetector::DetectInRange(const HeatmapFrame& frame, const std::vector<MacroZone>& macroZones) {
     m_peaks.clear();
-    m_peaks.reserve(kMaxPeaks + 4);
+    m_peaks.reserve(m_maxPeaks + 4);
 
     const int rowEnd = kRows - 1;
     const int colEnd = kCols - 1;
 
     auto val = [&](int r, int c) -> int16_t {
-        return frame.heatmapMatrix[r][c];
+         return frame.heatmapMatrix[r][c];
     };
 
-    for (int r = 0; r <= rowEnd; ++r) {
-        for (int c = 0; c <= colEnd; ++c) {
+    for (const auto& zone : macroZones) {
+        for (int idx : zone.pixels) {
+            int r = idx / kCols;
+            int c = idx % kCols;
+
             const int16_t v = val(r, c);
 
             // Edge-specific threshold (TSACore: g_toeSigThold)
@@ -59,31 +69,26 @@ void PeakDetector::DetectInRange(const HeatmapFrame& frame) {
             }
             if (v < thold) continue;
 
-            // --- Asymmetric 8-neighbor local-max test ---
-            // Down direction (row+1): allow EQUAL  (<= v)
-            const bool atBot = (r >= rowEnd);
-            const bool atTop = (r <= 0);
-            const bool atLft = (c <= 0);
-            const bool atRgt = (c >= colEnd);
-
-            // Down-right
-            if (!atBot && !atRgt && val(r+1, c+1) > v) continue;
-            // Down
-            if (!atBot && val(r+1, c) > v) continue;
-            // Down-left
-            if (!atBot && !atLft && val(r+1, c-1) > v) continue;
-            // Right
-            if (!atRgt && val(r, c+1) > v) continue;
-
-            // Left (strict <)
-            if (!atLft && val(r, c-1) >= v) continue;
-
-            // Up-right (strict <)
-            if (!atTop && !atRgt && val(r-1, c+1) >= v) continue;
-            // Up (strict <)
-            if (!atTop && val(r-1, c) >= v) continue;
-            // Up-left (strict <)
-            if (!atTop && !atLft && val(r-1, c-1) >= v) continue;
+            // --- Asymmetric Local-Max Test (scales with m_z8Radius) ---
+            bool isPeak = true;
+            for (int dr = -m_z8Radius; dr <= m_z8Radius; ++dr) {
+                for (int dc = -m_z8Radius; dc <= m_z8Radius; ++dc) {
+                    if (dr == 0 && dc == 0) continue;
+                    int nr = r + dr;
+                    int nc = c + dc;
+                    if (nr >= 0 && nr < kRows && nc >= 0 && nc < kCols) {
+                        int16_t nv = val(nr, nc);
+                        bool after = (dr > 0) || (dr == 0 && dc > 0);
+                        if (after) {
+                            if (nv > v) { isPeak = false; break; }
+                        } else {
+                            if (nv >= v) { isPeak = false; break; }
+                        }
+                    }
+                }
+                if (!isPeak) break;
+            }
+            if (!isPeak) continue;
 
             // PressureDrift check
             if (m_pressureDriftFilter &&
@@ -91,10 +96,10 @@ void PeakDetector::DetectInRange(const HeatmapFrame& frame) {
                 continue;
             }
 
-            // Peak_CalcZn: sum all 8 neighbor signals
+            // Peak_CalcZn: sum neighbors up to m_z8Radius
             int nbrSigSum = 0;
-            for (int dr = -1; dr <= 1; ++dr)
-                for (int dc = -1; dc <= 1; ++dc) {
+            for (int dr = -m_z8Radius; dr <= m_z8Radius; ++dr)
+                for (int dc = -m_z8Radius; dc <= m_z8Radius; ++dc) {
                     if (dr == 0 && dc == 0) continue;
                     int nr = r + dr, nc = c + dc;
                     if (nr >= 0 && nr < kRows &&
@@ -102,17 +107,17 @@ void PeakDetector::DetectInRange(const HeatmapFrame& frame) {
                         nbrSigSum += val(nr, nc);
                 }
 
-            // TSACore Peak_Insert: cap at kMaxPeaks, replace weakest
-            if (static_cast<int>(m_peaks.size()) < kMaxPeaks) {
-                m_peaks.push_back({r, c, v, nbrSigSum, 0});
+            // TSACore Peak_Insert: cap at m_maxPeaks, replace weakest
+            if (static_cast<int>(m_peaks.size()) < m_maxPeaks) {
+                m_peaks.push_back({r, c, v, nbrSigSum, 0, 0, zone.area});
             } else {
                 // Buffer full — find weakest peak and replace
                 int weakIdx = 0;
-                for (int k = 1; k < kMaxPeaks; ++k)
+                for (int k = 1; k < m_maxPeaks; ++k)
                     if (m_peaks[k].z < m_peaks[weakIdx].z)
                         weakIdx = k;
                 if (m_peaks[weakIdx].z < v)
-                    m_peaks[weakIdx] = {r, c, v, nbrSigSum, 0};
+                    m_peaks[weakIdx] = {r, c, v, nbrSigSum, 0, 0, zone.area};
             }
         }
     }
