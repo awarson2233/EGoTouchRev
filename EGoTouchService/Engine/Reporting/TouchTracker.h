@@ -59,6 +59,8 @@ private:
     float m_accBoostSizeMm = 1.6f;
     float m_predictionScale = 1.0f;
     int m_liftOffHoldFrames = 1;
+    bool m_liftOffPredictEnabled = true;
+    float m_liftOffVelocityDecay = 0.5f;
     int m_touchDownDebounceFrames = 0;
     bool m_dynamicDebounceEnabled = true;
     int m_touchDownDebounceMaxExtra = 2;

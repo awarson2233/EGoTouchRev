@@ -91,11 +91,14 @@ add_library(Engine STATIC
     EGoTouchService/Engine/Preprocessing/SignalConditioningFilter.cpp
     EGoTouchService/Engine/Preprocessing/GaussianFilter.cpp
     # TouchSolver
+    EGoTouchService/Engine/TouchSolver/MacroZoneDetector.cpp
+    EGoTouchService/Engine/TouchSolver/MicroZoneSegmenter.cpp
     EGoTouchService/Engine/TouchSolver/PeakDetector.cpp
     EGoTouchService/Engine/TouchSolver/ZoneExpander.cpp
     EGoTouchService/Engine/TouchSolver/EdgeCompensation.cpp
     EGoTouchService/Engine/TouchSolver/TouchSize.cpp
     EGoTouchService/Engine/TouchSolver/EdgeRejection.cpp
+    EGoTouchService/Engine/TouchSolver/PalmRejector.cpp
     EGoTouchService/Engine/TouchSolver/CoordinateFilter.cpp
     EGoTouchService/Engine/TouchSolver/FeatureExtractor.cpp
     # Reporting

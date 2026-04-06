@@ -345,7 +345,7 @@ bool TouchTracker::Process(HeatmapFrame& frame) {
         if (nextTracks.size() < static_cast<size_t>(m_maxTouchCount)) nextTracks.push_back(t);
     }
 
-    // ---- Unmatched previous tracks → Up ----
+    // ---- Unmatched previous tracks → Hold / Predict / Up ----
     for (size_t p = 0; p < preCount; ++p) {
         if (preMatched[p]) continue;
         TrackState t = m_tracks[p];
@@ -353,6 +353,7 @@ bool TouchTracker::Process(HeatmapFrame& frame) {
         if (t.stylusSuppressFrames > 0) t.stylusSuppressFrames -= 1;
 
         if (!t.upEventEmitted && t.missed > m_liftOffHoldFrames) {
+            // Hold period expired → emit Up event
             TouchContact up;
             up.id = t.id;
             up.x = t.x; up.y = t.y;
@@ -369,9 +370,37 @@ bool TouchTracker::Process(HeatmapFrame& frame) {
             up.reportEvent = TouchReportUp;
             if (out.size() < static_cast<size_t>(m_maxTouchCount)) out.push_back(up);
             t.upEventEmitted = true;
+        } else if (!t.upEventEmitted && m_liftOffPredictEnabled) {
+            // Still within hold period → emit predicted Move to bridge the gap
+            const float predictX = t.x + t.vx;
+            const float predictY = t.y + t.vy;
+            // Clamp to sensor bounds
+            t.x = std::clamp(predictX, 0.0f, static_cast<float>(kCols));
+            t.y = std::clamp(predictY, 0.0f, static_cast<float>(kRows));
+            // Decay velocity each predicted frame
+            t.vx *= m_liftOffVelocityDecay;
+            t.vy *= m_liftOffVelocityDecay;
+
+            TouchContact pred;
+            pred.id = t.id;
+            pred.x = t.x; pred.y = t.y;
+            pred.state = TouchStateMove;
+            pred.area = t.area; pred.signalSum = t.signalSum;
+            pred.sizeMm = t.sizeMm;
+            pred.isEdge = IsEdgeTouch(pred.x,pred.y,kCols,kRows,kEdgeMargin);
+            pred.isReported = true;
+            pred.prevIndex = static_cast<int>(p);
+            pred.debugFlags = 0x08; // Predicted contact flag
+            pred.lifeFlags = TouchLifeMapped;
+            if (pred.isEdge) pred.lifeFlags |= TouchLifeEdge;
+            pred.reportFlags = 0;
+            pred.reportEvent = TouchReportIdle;
+            if (out.size() < static_cast<size_t>(m_maxTouchCount)) out.push_back(pred);
         }
         if (t.missed <= (m_liftOffHoldFrames + 1)) {
-            t.vx = 0; t.vy = 0;
+            if (!m_liftOffPredictEnabled) {
+                t.vx = 0; t.vy = 0;  // Legacy: zero velocity when prediction off
+            }
             if (nextTracks.size() < static_cast<size_t>(m_maxTouchCount))
                 nextTracks.push_back(t);
         }
@@ -430,6 +459,10 @@ std::vector<ConfigParam> TouchTracker::GetConfigSchema() const {
         ConfigParam::Float, const_cast<float*>(&m_predictionScale), 0.0f, 2.0f));
     schema.push_back(ConfigParam("LiftOffHoldFrames", "LiftOff Hold", 
         ConfigParam::Int, const_cast<int*>(&m_liftOffHoldFrames), 0, 10));
+    schema.push_back(ConfigParam("LiftOffPredictEnabled", "LiftOff Predict", 
+        ConfigParam::Bool, const_cast<bool*>(&m_liftOffPredictEnabled)));
+    schema.push_back(ConfigParam("LiftOffVelocityDecay", "LiftOff Vel Decay", 
+        ConfigParam::Float, const_cast<float*>(&m_liftOffVelocityDecay), 0.0f, 1.0f));
 
     // --- Debounce & Rejection ---
     schema.push_back(ConfigParam("TouchDownDebounceFrames", "Down Debounce", 
@@ -469,6 +502,8 @@ void TouchTracker::SaveConfig(std::ostream& os) const {
     os << "AccBoostSizeMm=" << m_accBoostSizeMm << "\n";
     os << "PredictionScale=" << m_predictionScale << "\n";
     os << "LiftOffHoldFrames=" << m_liftOffHoldFrames << "\n";
+    os << "LiftOffPredictEnabled=" << (m_liftOffPredictEnabled?"1":"0") << "\n";
+    os << "LiftOffVelocityDecay=" << m_liftOffVelocityDecay << "\n";
     os << "TouchDownDebounceFrames=" << m_touchDownDebounceFrames << "\n";
     os << "DynamicDebounceEnabled=" << (m_dynamicDebounceEnabled?"1":"0") << "\n";
     os << "TouchDownDebounceMaxExtra=" << m_touchDownDebounceMaxExtra << "\n";
@@ -514,6 +549,8 @@ void TouchTracker::LoadConfig(const std::string& key, const std::string& value) 
     else if (key=="AccBoostSizeMm")           m_accBoostSizeMm = std::stof(value);
     else if (key=="PredictionScale")          m_predictionScale = std::stof(value);
     else if (key=="LiftOffHoldFrames")        m_liftOffHoldFrames = std::stoi(value);
+    else if (key=="LiftOffPredictEnabled")    m_liftOffPredictEnabled = toBool(value);
+    else if (key=="LiftOffVelocityDecay")     m_liftOffVelocityDecay = std::clamp(std::stof(value),0.0f,1.0f);
     else if (key=="TouchDownDebounceFrames")  m_touchDownDebounceFrames = std::stoi(value);
     else if (key=="DynamicDebounceEnabled")   m_dynamicDebounceEnabled = toBool(value);
     else if (key=="TouchDownDebounceMaxExtra")m_touchDownDebounceMaxExtra = std::stoi(value);

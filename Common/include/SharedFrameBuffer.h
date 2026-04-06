@@ -99,7 +99,16 @@ struct SharedFrameData {
     int16_t  heatmapMatrix[40][60]{};
     uint64_t timestamp = 0;
 
-    // Touch contacts
+    // Touch contacts & Features
+    uint8_t touchZones[40][60]{};
+    uint8_t peakZones[40][60]{};
+    struct SharedPeak {
+        int r, c;
+        int16_t z;
+        uint8_t id;
+    } peaks[30]{};
+    uint8_t peakCount = 0;
+    
     uint8_t contactCount = 0;
     SharedContact contacts[kMaxSharedContacts]{};
     SharedTouchPacket touchPackets[2]{};
