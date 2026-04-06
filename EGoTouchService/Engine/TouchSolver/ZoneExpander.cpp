@@ -202,14 +202,13 @@ void ZoneExpander::DilateAndErode() {
 // they fell into. Adds absorbed peaks to owning zone's list.
 // ────────────────────────────────────────────────────────
 void ZoneExpander::ScanAbsorbedPeaks(const std::vector<Peak>& peaks) {
-    static constexpr int kMaxZoneId = PeakDetector::kMaxPeaks + 1;
-    // Build zoneId→unitIndex map
-    std::array<int, kMaxZoneId> zoneToUnit{};
+    // Build zoneId→unitIndex map (zone ID is uint8_t, so max 256)
+    std::array<int, 256> zoneToUnit{};
     zoneToUnit.fill(-1);
     for (int pi = 0; pi < static_cast<int>(m_units.size()); ++pi) {
         if (m_units[pi].area == 0) continue;
         uint8_t zid = static_cast<uint8_t>(pi + 1);
-        if (zid < kMaxZoneId) zoneToUnit[zid] = pi;
+        zoneToUnit[zid] = pi;
     }
 
     for (int pi = 0; pi < static_cast<int>(peaks.size()); ++pi) {
@@ -217,7 +216,6 @@ void ZoneExpander::ScanAbsorbedPeaks(const std::vector<Peak>& peaks) {
         int idx = pk.r * kCols + pk.c;
         uint8_t zid = m_touchZones[idx];
         if (zid == 0) continue;
-        if (zid >= kMaxZoneId) continue;
         int ownerUnit = zoneToUnit[zid];
         if (ownerUnit < 0 || ownerUnit >= (int)m_units.size()) continue;
         // Check if this peak is already registered

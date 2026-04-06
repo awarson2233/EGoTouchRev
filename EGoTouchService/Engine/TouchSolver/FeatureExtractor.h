@@ -2,10 +2,13 @@
 
 #include "IFrameProcessor.h"
 #include "PeakDetector.h"
+#include "MacroZoneDetector.h"
+#include "MicroZoneSegmenter.h"
 #include "ZoneExpander.h"
 #include "EdgeCompensation.h"
 #include "TouchSize.h"
 #include "EdgeRejection.h"
+#include "PalmRejector.h"
 #include <string>
 #include <mutex>
 
@@ -41,11 +44,14 @@ public:
     }
 
     // 供外部直接调参 (仅在 UI 线程建议用)
+    MacroZoneDetector  m_macroZoneDet;
     PeakDetector       m_peakDet;
+    MicroZoneSegmenter m_microZoneSeg;
     ZoneExpander       m_zoneExp;
     EdgeCompensator    m_edgeComp;
     TouchSizeCalculator m_touchSize;
     EdgeRejector       m_edgeReject;
+    PalmRejector       m_palmReject;
 
     // UI 线程安全缓存 (由 Process 线程写入)
     int m_cachedPeakCount = 0;

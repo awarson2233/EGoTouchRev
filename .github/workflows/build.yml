@@ -1,0 +1,47 @@
+name: ARM64 Build Verification (clang-cl)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-arm64:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Configure MSVC for ARM64
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: arm64
+
+      - name: Install Ninja
+        run: choco install ninja
+
+      - name: CMake Configure (clang-cl)
+        # Using clang-cl as the compiler and targeting ARM64
+        # We specify CMAKE_SYSTEM_NAME and CMAKE_SYSTEM_PROCESSOR for cross-compilation
+        run: |
+          cmake -G "Ninja" -S . -B build `
+                -DCMAKE_BUILD_TYPE=Release `
+                -DCMAKE_C_COMPILER=clang-cl `
+                -DCMAKE_CXX_COMPILER=clang-cl `
+                -DCMAKE_SYSTEM_NAME=Windows `
+                -DCMAKE_SYSTEM_PROCESSOR=ARM64 `
+                -DEGO_BUILD_TESTS=ON
+
+      - name: CMake Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Run Tests (Optional)
+        # Note: Hosted runners cannot execute ARM64 binaries directly without emulation (e.g. QEMU)
+        # However, we can still verify successful compilation of test targets.
+        run: echo "ARM64 build successful. Skipping execution on x64 host."
