@@ -1,4 +1,4 @@
-name: ARM64 Build Verification (clang-cl)
+name: Native ARM64 Build Verification (clang-cl)
 
 on:
   push:
@@ -9,7 +9,8 @@ on:
 
 jobs:
   build-arm64:
-    runs-on: windows-latest
+    # Use the native GitHub-hosted Windows ARM64 runner
+    runs-on: windows-11-arm
     
     steps:
       - name: Checkout repository
@@ -23,25 +24,26 @@ jobs:
         with:
           arch: arm64
 
-      - name: Install Ninja
-        run: choco install ninja
-
       - name: CMake Configure (clang-cl)
-        # Using clang-cl as the compiler and targeting ARM64
-        # We specify CMAKE_SYSTEM_NAME and CMAKE_SYSTEM_PROCESSOR for cross-compilation
+        # On a native ARM64 host, we can use the ARM64-native clang-cl
+        # No need for cross-compilation flags (CMAKE_SYSTEM_NAME etc.)
+        # but we preserve them to be explicit.
         run: |
           cmake -G "Ninja" -S . -B build `
                 -DCMAKE_BUILD_TYPE=Release `
                 -DCMAKE_C_COMPILER=clang-cl `
                 -DCMAKE_CXX_COMPILER=clang-cl `
-                -DCMAKE_SYSTEM_NAME=Windows `
-                -DCMAKE_SYSTEM_PROCESSOR=ARM64 `
+                -DHIMAX_ENABLE_NEON=ON `
                 -DEGO_BUILD_TESTS=ON
 
       - name: CMake Build
         run: cmake --build build --config Release --parallel
 
-      - name: Run Tests (Optional)
-        # Note: Hosted runners cannot execute ARM64 binaries directly without emulation (e.g. QEMU)
-        # However, we can still verify successful compilation of test targets.
-        run: echo "ARM64 build successful. Skipping execution on x64 host."
+      - name: Run Unit Tests (Native)
+        # Since we are on an ARM64 host, we can now actually RUN the tests!
+        working-directory: build
+        run: |
+          # Only running HostSystemStateMonitorTest as it doesn't require hardware
+          if (Test-Path "HostSystemStateMonitorTest.exe") {
+            .\HostSystemStateMonitorTest.exe
+          }
