@@ -1,16 +1,22 @@
 #include "ConfigUIRenderer.h"
 #include "imgui.h"
 #include <algorithm>
+#include <optional>
 
 namespace App {
 
 void ConfigUIRenderer::RenderConfigSchema(
     const std::vector<Engine::ConfigParam>& schema,
-    const std::string& sectionName) {
+    const std::string& sectionName,
+    std::optional<Engine::ConfigParam::Category> filterCategory) {
 
     if (schema.empty()) return;
 
     for (const auto& param : schema) {
+        if (filterCategory.has_value() && param.category != filterCategory.value()) {
+            continue;
+        }
+
         // Appending ## makes the ID unique in ImGui without rendering the suffix
         std::string label = param.displayName + "##" + sectionName + "_" + param.key;
         
