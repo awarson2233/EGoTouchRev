@@ -18,6 +18,7 @@
 #include <synchapi.h>
 #include <windows.h>
 #include <winscard.h>
+#include <cstring>
 
 
 constexpr uint8_t OP_WRITE_MASTER = 0xF2;

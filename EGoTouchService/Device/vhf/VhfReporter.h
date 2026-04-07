@@ -9,9 +9,9 @@
 #include "EngineTypes.h"
 
 #ifndef _WINDOWS_
-#include <Windows.h>
+#include <windows.h>
 #endif
-#include <SetupAPI.h>
+#include <setupapi.h>
 
 /// VhfReporter — 负责将 Pipeline 输出的 TouchPacket /
 /// StylusPacket 通过 VHF HID 注入器驱动写入系统。

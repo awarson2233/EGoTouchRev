@@ -1,9 +1,9 @@
 #include "SystemStateMonitor.h"
 #include "Logger.h"
+#include "SecurityUtils.h"
 
 #include <array>
 #include <utility>
-#include <sddl.h>
 
 namespace Host {
 
@@ -26,32 +26,10 @@ HANDLE OpenOrCreateNamedEvent(const wchar_t* name) {
         return handle;
     }
 
-    SECURITY_ATTRIBUTES sa{};
-    sa.nLength = sizeof(sa);
-    sa.bInheritHandle = FALSE;
-    sa.lpSecurityDescriptor = nullptr;
+    Security::ScopedSecurityAttributes scopedSa;
+    SECURITY_ATTRIBUTES* saPtr = scopedSa.get();
 
-    // Secure SDDL:
-    // D: DACL
-    // (A;;GA;;;SY) -> Allow Generic All for SYSTEM
-    // (A;;GA;;;BA) -> Allow Generic All for Built-in Administrators
-    // (A;;GRGW;;;BU) -> Allow Generic Read/Write for Built-in Users
-    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            L"D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;BU)",
-            SDDL_REVISION_1,
-            &sa.lpSecurityDescriptor,
-            nullptr)) {
-        // Fallback to default security descriptor if conversion fails
-        sa.lpSecurityDescriptor = nullptr;
-    }
-
-    HANDLE new_handle = CreateEventW(sa.lpSecurityDescriptor ? &sa : nullptr, TRUE, FALSE, name);
-
-    if (sa.lpSecurityDescriptor != nullptr) {
-        LocalFree(sa.lpSecurityDescriptor);
-    }
-
-    return new_handle;
+    return CreateEventW(saPtr, TRUE, FALSE, name);
 }
 
 } // namespace

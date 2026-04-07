@@ -1,6 +1,7 @@
 #include "SharedFrameBuffer.h"
 #include "EngineTypes.h"
 #include "Logger.h"
+#include "SecurityUtils.h"
 #include <algorithm>
 #include <cstring>
 
@@ -13,16 +14,13 @@ bool SharedFrameWriter::Open(const wchar_t* name) {
     if (!m_mapHandle) {
         // If OpenFileMapping fails, try creating with permissive access
         // (for cross-session Service writes to App-created mapping)
-        SECURITY_DESCRIPTOR sd{};
-        InitializeSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION);
-        SetSecurityDescriptorDacl(&sd, TRUE, nullptr, FALSE);
-        SECURITY_ATTRIBUTES sa{};
-        sa.nLength = sizeof(sa);
-        sa.lpSecurityDescriptor = &sd;
-        sa.bInheritHandle = FALSE;
-        m_mapHandle = OpenFileMappingW(FILE_MAP_WRITE, FALSE, name);
+        Security::ScopedSecurityAttributes scopedSa;
+        SECURITY_ATTRIBUTES* saPtr = scopedSa.get();
+        m_mapHandle = CreateFileMappingW(
+            INVALID_HANDLE_VALUE, saPtr, PAGE_READWRITE,
+            0, sizeof(SharedFrameData), name);
         if (!m_mapHandle) {
-            LOG_ERROR("Common", __func__, "IPC", "OpenFileMapping failed: {}",  GetLastError());
+            LOG_ERROR("Common", __func__, "IPC", "CreateFileMapping failed: {}",  GetLastError());
             return false;
         }
     }
@@ -47,16 +45,11 @@ bool SharedFrameWriter::Open(const wchar_t* name) {
 }
 
 bool SharedFrameWriter::Create(const wchar_t* name) {
-    SECURITY_DESCRIPTOR sd{};
-    InitializeSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION);
-    SetSecurityDescriptorDacl(&sd, TRUE, nullptr, FALSE);
-    SECURITY_ATTRIBUTES sa{};
-    sa.nLength = sizeof(sa);
-    sa.lpSecurityDescriptor = &sd;
-    sa.bInheritHandle = FALSE;
+    Security::ScopedSecurityAttributes scopedSa;
+    SECURITY_ATTRIBUTES* saPtr = scopedSa.get();
 
     m_mapHandle = CreateFileMappingW(
-        INVALID_HANDLE_VALUE, &sa, PAGE_READWRITE,
+        INVALID_HANDLE_VALUE, saPtr, PAGE_READWRITE,
         0, sizeof(SharedFrameData), name);
     if (!m_mapHandle) {
         LOG_ERROR("Common", __func__, "IPC", "CreateFileMapping failed: {}",  GetLastError());
@@ -75,7 +68,7 @@ bool SharedFrameWriter::Create(const wchar_t* name) {
     LOG_INFO("Common", __func__, "IPC", "Shared memory created for writing ({} bytes).",  sizeof(SharedFrameData));
 
     // Create frame-ready event (auto-reset)
-    m_frameEvent = CreateEventW(&sa, FALSE, FALSE, kFrameReadyEventName);
+    m_frameEvent = CreateEventW(saPtr, FALSE, FALSE, kFrameReadyEventName);
     if (!m_frameEvent) {
         LOG_WARN("Common", __func__, "IPC", "CreateEvent failed for FrameReadyEvent: {}",  GetLastError());
     }
@@ -275,16 +268,11 @@ void SharedFrameWriter::Close() {
 
 bool SharedFrameReader::Create(const wchar_t* name) {
     // Build permissive security descriptor for cross-session access
-    SECURITY_DESCRIPTOR sd{};
-    InitializeSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION);
-    SetSecurityDescriptorDacl(&sd, TRUE, nullptr, FALSE);
-    SECURITY_ATTRIBUTES sa{};
-    sa.nLength = sizeof(sa);
-    sa.lpSecurityDescriptor = &sd;
-    sa.bInheritHandle = FALSE;
+    Security::ScopedSecurityAttributes scopedSa;
+    SECURITY_ATTRIBUTES* saPtr = scopedSa.get();
 
     m_mapHandle = CreateFileMappingW(
-        INVALID_HANDLE_VALUE, &sa, PAGE_READWRITE,
+        INVALID_HANDLE_VALUE, saPtr, PAGE_READWRITE,
         0, sizeof(SharedFrameData), name);
     if (!m_mapHandle) {
         LOG_ERROR("Common", __func__, "IPC", "CreateFileMapping failed: {}",  GetLastError());
@@ -304,7 +292,7 @@ bool SharedFrameReader::Create(const wchar_t* name) {
     LOG_INFO("Common", __func__, "IPC", "Shared memory created ({} bytes).",  sizeof(SharedFrameData));
 
     // Create frame-ready event (auto-reset)
-    m_frameEvent = CreateEventW(&sa, FALSE, FALSE, kFrameReadyEventName);
+    m_frameEvent = CreateEventW(saPtr, FALSE, FALSE, kFrameReadyEventName);
     if (!m_frameEvent) {
         LOG_WARN("Common", __func__, "IPC", "CreateEvent failed for FrameReadyEvent: {}",  GetLastError());
     }
