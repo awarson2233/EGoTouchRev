@@ -227,6 +227,14 @@ if (EGO_BUILD_TESTS)
     target_link_libraries(CommonLoggerTest PRIVATE Common)
 
     add_test(NAME CommonLoggerTest COMMAND CommonLoggerTest)
+
+    add_executable(CommonSharedFrameBufferTest
+        Tools/tests/SharedFrameBufferTest.cpp
+    )
+    target_include_directories(CommonSharedFrameBufferTest PRIVATE "${COMMON_ROOT}/include" "${ENGINE_ROOT}")
+    target_link_libraries(CommonSharedFrameBufferTest PRIVATE Common Engine)
+
+    add_test(NAME CommonSharedFrameBufferTest COMMAND CommonSharedFrameBufferTest)
 endif()
 
 
