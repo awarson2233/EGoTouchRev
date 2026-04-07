@@ -192,6 +192,8 @@ target_link_libraries(EGoTouchService PRIVATE Device Host Common advapi32 setupa
 # EGoTouchService uses wmain (console subsystem) for service/console dual mode
 if(MSVC)
     set_target_properties(EGoTouchService PROPERTIES LINK_FLAGS "/SUBSYSTEM:CONSOLE")
+elseif(MINGW)
+    target_link_options(EGoTouchService PRIVATE "-municode")
 endif()
 
 # --- BtMcuTestTool (ImGui BT Protocol Validator) ---
@@ -227,6 +229,14 @@ if (EGO_BUILD_TESTS)
     target_link_libraries(CommonLoggerTest PRIVATE Common)
 
     add_test(NAME CommonLoggerTest COMMAND CommonLoggerTest)
+
+    add_executable(CommonIpcPipeClientTest
+        Tools/tests/IpcPipeClientTest.cpp
+    )
+    target_include_directories(CommonIpcPipeClientTest PRIVATE "${COMMON_ROOT}/include")
+    target_link_libraries(CommonIpcPipeClientTest PRIVATE Common)
+
+    add_test(NAME CommonIpcPipeClientTest COMMAND CommonIpcPipeClientTest)
 endif()
 
 
