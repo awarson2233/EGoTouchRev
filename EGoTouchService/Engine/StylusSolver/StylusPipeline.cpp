@@ -66,6 +66,16 @@ bool StylusPipeline::Process(
     m_lastResult = StylusFrameData{};
     outPacket = StylusPacket{};
 
+    // P2 #20: Frequency shift output freeze
+    // TSACore: ReleaseASAReportInFreqShifting → memcpy(cur←prev)
+    // During freq shifting, freeze output to prevent coordinate noise.
+    if (m_freqShiftFreezing && m_hasLastGoodFrame) {
+        m_lastResult = m_lastGoodFrame;
+        m_lastResult.pipelineStage = 6; // FreqShift frozen
+        BuildStylusPacket(outPacket);
+        return outPacket.valid;
+    }
+
 
 
     // 1. Parse slave words
@@ -111,8 +121,24 @@ bool StylusPipeline::Process(
     if (!m_gridData.tx1.valid) {
         m_lastResult.point.valid = false;
         m_lastResult.pipelineStage = 2; // TX1 invalid (no pen)
-        if (!m_prevValid) { m_postProcessor.Reset(); ResetTilt(); ResetCalibration(); m_coorReviser.Reset(); m_linearFilter.Reset(); }
+
+        // P3 #21: Pen exit smoothing — if pen was inking, freeze 1 frame
+        if (m_prevValid && HandlePenExitSmooth(outPacket)) {
+            m_prevValid = false;
+            m_wasInking = false;
+            UpdatePenLifecycle(false, false);
+            m_prevStatus = m_lastResult.status;
+            return outPacket.valid;
+        }
+
+        if (!m_prevValid) {
+            m_postProcessor.Reset(); ResetTilt(); ResetCalibration();
+            m_coorReviser.Reset(); m_linearFilter.Reset();
+            m_signalSuppressActive = false;  // P1: reset hysteresis
+            m_hasLastGoodFrame = false;       // P1: reset noise freeze
+        }
         m_prevValid = false;
+        m_wasInking = false;  // P3: clear inking state
         UpdatePenLifecycle(false, false);
         if (m_emitPacketWhenInvalid) BuildStylusPacket(outPacket);
         m_prevStatus = m_lastResult.status;
@@ -124,6 +150,15 @@ bool StylusPipeline::Process(
         static int sAnchorLogCount = 0;
         if ((sAnchorLogCount++ % 60) == 0) {
             LOG_TRACE("Engine", __func__, "Anchor", "anchor=({},{}) grid_center={} sensor=({} rows, {} cols)",  m_gridData.tx1.anchorRow, m_gridData.tx1.anchorCol, m_gridData.tx1.grid[4][4], m_sensorRows, m_sensorCols);
+        }
+    }
+
+    // 4b. P3 #22: Common-Mode Filtering (TSACore: HPP3_CMFProcess / GetCMN)
+    // Morphological min-max filtering to remove common-mode baseline noise.
+    if (m_cmfEnabled) {
+        ApplyCommonModeFilter(m_gridData.tx1.grid);
+        if (m_gridData.tx2.valid) {
+            ApplyCommonModeFilter(m_gridData.tx2.grid);
         }
     }
 
@@ -169,9 +204,21 @@ bool StylusPipeline::Process(
                     Asa::kCoorUnit - centerOff;
 
     // 8. HPP3 Noise post-process
+    //    P1: Freeze output on noise detection instead of skipping.
+    //    TSACore: memcpy(curASOut <- prevASOut) + return 5.
+    //    Result: pen continues to report last-known-good position.
     if (m_hpp3NoisePostEnabled && ApplyHpp3NoisePost(rawCoor)) {
+        if (m_hasLastGoodFrame) {
+            // Freeze: replay last known-good frame
+            m_lastResult = m_lastGoodFrame;
+            m_lastResult.pipelineStage = 5; // mark as noise-frozen
+            BuildStylusPacket(outPacket);
+            // Keep prevValid=true so IIR/jitter state stays valid
+            return outPacket.valid;
+        }
+        // No good frame available yet — fall through as invalid
         m_lastResult.point.valid = false;
-        m_lastResult.pipelineStage = 5; // Noise rejected
+        m_lastResult.pipelineStage = 5;
         m_prevValid = false;
         UpdatePenLifecycle(false, false);
         if (m_emitPacketWhenInvalid) BuildStylusPacket(outPacket);
@@ -179,18 +226,28 @@ bool StylusPipeline::Process(
         return false;
     }
 
-    // 9. Post-processing chain (IIR, jitter) — now on GLOBAL coordinates
-    //    P1: pass hover/edge flags for 3-mode IIR coefficient selection
+    // ═══════════════════════════════════════════════════════════════
+    // Post-processing chain — TSACore order (ASA_CoorPostProcess)
+    //   1. LinearFilter  → 2. PushHistory → 3. 3PointAvg
+    //   4. CoorRevise    → 5. CalcSpeed   → 6. GetIIRCoef
+    //   7. IIR filter    → 8. Jitter      → 9. Calibration
+    // ═══════════════════════════════════════════════════════════════
+
     const bool isHover = (m_lastResult.pressure == 0);
     const bool isEdge  = m_edgeLiftCorrector.IsInEdgeRegion(
         static_cast<float>(rawCoor.dim1), static_cast<float>(rawCoor.dim2),
         m_sensorRows, m_sensorCols);
-    auto postCoor = m_postProcessor.Process(rawCoor, isHover, isEdge);
 
-    // 9b. P2: LinearFilter (7-state line detection)
-    postCoor = m_linearFilter.Process(postCoor, m_lastResult.pressure);
+    // Step 9a. LinearFilter (7-state line detection)
+    auto postCoor = m_linearFilter.Process(rawCoor, m_lastResult.pressure);
 
-    // 9c. P2: CoorReviser (TX2 dual-frequency revision)
+    // Step 9b. PushHistory (TSACore: GetRealTimeCoor2Buf)
+    m_postProcessor.StepPushHistory(postCoor);
+
+    // Step 9c. 3-point average (TSACore: Get3PointAvgFilter)
+    postCoor = m_postProcessor.Step3PointAvg(postCoor);
+
+    // Step 9d. CoorReviser (TX2 dual-frequency revision)
     if (m_coorReviser.enabled && m_gridData.tx2.valid) {
         auto tx2Peak = m_peakDetector.FindPeak(m_gridData.tx2.grid);
         if (tx2Peak.valid) {
@@ -201,15 +258,32 @@ bool StylusPipeline::Process(
                 m_lastResult.point.tx2X = static_cast<float>(tx2Coor.dim1) / Asa::kCoorUnit;
                 m_lastResult.point.tx2Y = static_cast<float>(tx2Coor.dim2) / Asa::kCoorUnit;
 
-                // Convert TX2 to global too
+                // Convert TX2 to global
                 tx2Coor.dim1 += static_cast<int32_t>(m_gridData.tx2.anchorCol) *
                                 Asa::kCoorUnit - centerOff;
                 tx2Coor.dim2 += static_cast<int32_t>(m_gridData.tx2.anchorRow) *
                                 Asa::kCoorUnit - centerOff;
             }
-            postCoor = m_coorReviser.Revise(postCoor, tx2Coor);
+            postCoor = m_coorReviser.Revise(postCoor, tx2Coor,
+                                             m_lastResult.pressure);
         }
     }
+
+    // Step 9e. Speed calculation (TSACore: GetCoorSpeed)
+    //          Uses post-CoorRevise coordinates from ring buffer
+    m_postProcessor.StepCalcSpeed();
+
+    // Step 9f. Dynamic IIR coefficient (TSACore: GetIIRCoef)
+    const float iirCoef = m_postProcessor.StepCalcIIRCoef(isHover, isEdge);
+
+    // Step 9g. IIR coordinate filter (TSACore: CoorFilterProcess)
+    postCoor = m_postProcessor.StepIIR(postCoor, iirCoef);
+
+    // Step 9h. Jitter offset compensation (TSACore: AftCoorProcess)
+    postCoor = m_postProcessor.StepJitter(postCoor, isEdge);
+
+    // Step 9i. Update 3-point history for next frame
+    m_postProcessor.StepUpdate3PtHistory(postCoor);
 
     // 10. Calibration (Phase 6)
     auto finalCoor = m_calibEnabled ? ApplyCalibration(postCoor) : postCoor;
@@ -245,6 +319,21 @@ bool StylusPipeline::Process(
     m_dbg.tiltDiffY = m_prevTiltDiffY;
     m_dbg.peakSignal = m_lastResult.signalX;
 
+    // ── P3/P4: Extended pipeline diagnostics ──
+    m_dbg.signalRatio       = m_signalRatio;
+    m_dbg.freqShiftFreezing = false;  // TODO: implement freq-shift freezing
+    m_dbg.exitSmoothed      = (m_lastResult.pipelineStage == 7);
+    m_dbg.cmfEnabled        = m_cmfEnabled;
+    m_dbg.coorReviserActive = m_coorReviser.enabled;
+    m_dbg.coorRevDeltaX     = m_coorReviser.GetLastDeltaX();
+    m_dbg.coorRevDeltaY     = m_coorReviser.GetLastDeltaY();
+    m_dbg.tiltAnomalyDamped = m_tiltAnomalyDamped;
+    m_dbg.sigSuppressActive = false;  // TODO: implement signal suppression
+    m_dbg.penLifecycle      = static_cast<uint8_t>(m_penLifecycle);
+    m_dbg.wasInking         = m_wasInking;
+    m_dbg.avg3PtDim1        = postCoor.dim1;
+    m_dbg.avg3PtDim2        = postCoor.dim2;
+
     // 10b. Edge coordinate compensation
     if (m_edgeCoorPostEnabled)
         EdgeCoorPostProcess(m_lastResult.point.x, m_lastResult.point.y);
@@ -265,6 +354,33 @@ bool StylusPipeline::Process(
     if (m_tiltEnabled && m_gridData.tx2.valid) {
         auto tx2Peak = m_peakDetector.FindPeak(m_gridData.tx2.grid);
         if (tx2Peak.valid) {
+            // P2 #15: Compute TX1/TX2 signal ratio (TSACore GetTX1TX2SignalRatio)
+            {
+                const int tx1Sig = static_cast<int>(m_lastResult.signalX);
+                const int tx2Sig = static_cast<int>(std::clamp(
+                    m_gridData.tx2.grid[tx2Peak.peakRow][tx2Peak.peakCol],
+                    static_cast<int16_t>(0), static_cast<int16_t>(0x7FFF)));
+                uint16_t ratio;
+                if (tx1Sig > 0 && tx2Sig < tx1Sig * 5) {
+                    ratio = static_cast<uint16_t>(tx2Sig * 100 / tx1Sig);
+                } else {
+                    ratio = 500;  // capped at 500%
+                }
+                // Push to ring buffer (TSACore: BufTX1TX2SignalRatio)
+                m_signalRatioBufCount = std::min(
+                    m_signalRatioBufCount + 1, kSignalRatioBufLen);
+                for (int i = kSignalRatioBufLen - 1; i > 0; --i)
+                    m_signalRatioBuf[static_cast<size_t>(i)] =
+                        m_signalRatioBuf[static_cast<size_t>(i - 1)];
+                m_signalRatioBuf[0] = ratio;
+                // Average for diagnostic
+                int sum = 0;
+                for (int i = 0; i < m_signalRatioBufCount; ++i)
+                    sum += m_signalRatioBuf[static_cast<size_t>(i)];
+                m_signalRatio = static_cast<uint16_t>(
+                    sum / std::max(1, m_signalRatioBufCount));
+            }
+
             auto tx2Proj = m_peakDetector.ProjectTo1D(
                 m_gridData.tx2.grid, tx2Peak);
             auto tx2Coor = m_coordSolver.Solve(tx2Proj);
@@ -307,7 +423,7 @@ bool StylusPipeline::Process(
             LOG_DEBUG("Engine", __func__, "Pressure", "btMcu={} active={}",  btPress, finalCoor.valid);
         }
         SolvePressure(btPress, finalCoor.valid,
-                      static_cast<int>(m_lastResult.signalX));
+                      static_cast<int>(m_lastResult.signalX), isEdge);
     }
 
     // 13. Button (from slave header)
@@ -324,6 +440,11 @@ bool StylusPipeline::Process(
     m_prevValid = finalCoor.valid;
     m_prevStatus = m_lastResult.status;
     BuildStylusPacket(outPacket);
+    // P1: Save last known-good frame for noise freeze (#19)
+    m_lastGoodFrame = m_lastResult;
+    m_hasLastGoodFrame = true;
+    // P3 #21: Track inking state for pen exit smoothing
+    if (m_lastResult.pressure > 0) m_wasInking = true;
     // ── 上报：最终压力和 VHF 状态 ──
     m_dbg.rawPressure = m_lastResult.point.rawPressure;
     m_dbg.mappedPressure = m_lastResult.pressure;
@@ -376,6 +497,22 @@ void StylusPipeline::SolveTilt(
 
     float diffX = static_cast<float>(c2.dim1 - c1.dim1) / 1024.0f;
     float diffY = static_cast<float>(c2.dim2 - c1.dim2) / 1024.0f;
+
+    // P2 #15: Tilt coord diff anomaly detection
+    // TSACore: when TX1/TX2 peak positions mismatch or diff jumps too far,
+    // use buffered value (1/8 IIR blend) instead of raw diff.
+    m_tiltAnomalyDamped = false;
+    if (m_tiltHasHistory) {
+        const float jumpX = std::abs(diffX - m_prevTiltDiffX);
+        const float jumpY = std::abs(diffY - m_prevTiltDiffY);
+        if (jumpX > m_tiltDiffAnomalyThreshold ||
+            jumpY > m_tiltDiffAnomalyThreshold) {
+            // Anomalous jump: blend 1/8 new + 7/8 old (heavy damping)
+            diffX = m_prevTiltDiffX * 0.875f + diffX * 0.125f;
+            diffY = m_prevTiltDiffY * 0.875f + diffY * 0.125f;
+            m_tiltAnomalyDamped = true;
+        }
+    }
 
     // Shift into diff buffer
     m_tiltDiffBufCount = std::min(10, m_tiltDiffBufCount + 1);
@@ -440,7 +577,7 @@ void StylusPipeline::SolveTilt(
 // ══════════════════════════════════════════════
 void StylusPipeline::SolvePressure(
         uint16_t rawPressure, bool active,
-        int signalStrength) {
+        int signalStrength, bool isEdge) {
     if (!active) {
         m_lastResult.pressure = 0;
         m_prevPressure = 0;
@@ -448,14 +585,28 @@ void StylusPipeline::SolvePressure(
         return;
     }
 
-    // P2: Signal strength suppression
-    // When TX1 signal is too weak, force pressure to 0 to prevent ghost traces
-    if (m_pressureSignalSuppressEnabled &&
-        signalStrength < m_pressureSignalSuppressThreshold &&
-        signalStrength > 0) {
-        m_lastResult.pressure = 0;
-        m_prevPressure = 0;
-        return;
+    // P1: Signal strength suppression with hysteresis (TSACore HPP3_SuppressBtPressBySignal)
+    // Uses enter/exit thresholds + state flag to prevent rapid toggling.
+    // TSACore also skips suppression when coordinate is in edge region.
+    if (m_pressureSignalSuppressEnabled && signalStrength > 0) {
+        if (!m_signalSuppressActive) {
+            // Not suppressing → enter suppression if signal drops below
+            // enter threshold AND not in edge region
+            if (signalStrength < m_pressureSignalSuppressEnter && !isEdge) {
+                m_signalSuppressActive = true;
+            }
+        } else {
+            // Currently suppressing → exit only when signal rises above
+            // exit threshold (higher than enter to prevent oscillation)
+            if (signalStrength > m_pressureSignalSuppressExit) {
+                m_signalSuppressActive = false;
+            }
+        }
+        if (m_signalSuppressActive) {
+            m_lastResult.pressure = 0;
+            m_prevPressure = 0;
+            return;
+        }
     }
     // Polynomial mapping
     const int x = static_cast<int>(rawPressure);
@@ -590,6 +741,123 @@ bool StylusPipeline::ApplyHpp3NoisePost(
     m_prevValidY = cy;
     m_prevValidPoint = true;
     return false;
+}
+
+// ══════════════════════════════════════════════
+// P3 #21: HandlePenExitSmooth
+// TSACore: ReleaseASAReportExitStylus
+// When pen was inking and signal is lost, freeze output for 1 frame
+// using the last known-good frame data, with edge coordinate snapping
+// if the pen exited at a panel edge.
+// ══════════════════════════════════════════════
+bool StylusPipeline::HandlePenExitSmooth(StylusPacket& outPacket) {
+    if (!m_exitSmoothEnabled) return false;
+    if (!m_wasInking) return false;  // not inking → no smoothing needed
+    if (!m_hasLastGoodFrame) return false;  // no good frame to freeze
+
+    // Freeze to last known-good frame
+    m_lastResult = m_lastGoodFrame;
+
+    // TSACore: EdgeCoorProcessExitStylusWithInk
+    // If the last coordinate was in an edge region AND jumped significantly
+    // from the frame before, snap coordinates to the pre-jump position.
+    // This prevents the final frame from showing a wild coordinate excursion.
+    const float lastX = m_lastGoodFrame.point.x;
+    const float lastY = m_lastGoodFrame.point.y;
+    const float prevX = m_prevPointX;
+    const float prevY = m_prevPointY;
+
+    // Edge region check (first/last pitch)
+    const float dimXMax = static_cast<float>(m_sensorCols) * Asa::kCoorUnit;
+    const float dimYMax = static_cast<float>(m_sensorRows) * Asa::kCoorUnit;
+    const float edgeTh = static_cast<float>(Asa::kCoorUnit);  // 0x400
+
+    bool atEdge = (lastX < edgeTh || lastX > dimXMax - edgeTh ||
+                   lastY < edgeTh || lastY > dimYMax - edgeTh);
+
+    if (atEdge) {
+        // Distance check: if large jump → snap to previous position
+        float dx = lastX - prevX;
+        float dy = lastY - prevY;
+        if (dx * dx + dy * dy > 0x200 * 0x200) {  // 512² units threshold
+            m_lastResult.point.x = prevX;
+            m_lastResult.point.y = prevY;
+        }
+    }
+
+    m_lastResult.pipelineStage = 7;  // Exit smooth
+    m_lastResult.point.valid = true;
+    BuildStylusPacket(outPacket);
+
+    // Reset inking flag — only smooth once
+    m_wasInking = false;
+    return true;
+}
+
+// ══════════════════════════════════════════════
+// P3 #22: ApplyCommonModeFilter
+// TSACore: HPP3_CMFProcess / GetCMN
+// Morphological open (erosion then dilation) on each row and column
+// of the 9×9 grid to estimate common-mode baseline, then subtract.
+// ══════════════════════════════════════════════
+void StylusPipeline::ApplyCommonModeFilter(
+        int16_t grid[Asa::kGridDim][Asa::kGridDim]) {
+    constexpr int N = Asa::kGridDim;
+    const int w = std::clamp(m_cmfWindowSize, 1, N - 1);
+
+    // Helper: 1D morphological open (erosion→dilation) on a vector
+    // This estimates the common-mode baseline.
+    auto morphOpen1D = [&](int16_t* arr, int len) {
+        std::array<int16_t, Asa::kGridDim> eroded{};
+        std::array<int16_t, Asa::kGridDim> dilated{};
+
+        // Erosion: min over window [i-w, i+w]
+        for (int i = 0; i < len; ++i) {
+            int lo = std::max(0, i - w);
+            int hi = std::min(len - 1, i + w);
+            int16_t minVal = arr[lo];
+            for (int j = lo + 1; j <= hi; ++j) {
+                if (arr[j] < minVal) minVal = arr[j];
+            }
+            eroded[static_cast<size_t>(i)] = minVal;
+        }
+
+        // Dilation: max over erosion result with same window
+        for (int i = 0; i < len; ++i) {
+            int lo = std::max(0, i - w);
+            int hi = std::min(len - 1, i + w);
+            int16_t maxVal = eroded[static_cast<size_t>(lo)];
+            for (int j = lo + 1; j <= hi; ++j) {
+                if (eroded[static_cast<size_t>(j)] > maxVal)
+                    maxVal = eroded[static_cast<size_t>(j)];
+            }
+            dilated[static_cast<size_t>(i)] = maxVal;
+        }
+
+        // Subtract baseline: arr[i] -= dilated[i]
+        for (int i = 0; i < len; ++i) {
+            arr[i] -= dilated[static_cast<size_t>(i)];
+            // Clamp to non-negative (signal should be >= 0 after CMF)
+            if (arr[i] < 0) arr[i] = 0;
+        }
+    };
+
+    // Apply to each row (dim1 direction)
+    for (int r = 0; r < N; ++r) {
+        morphOpen1D(grid[r], N);
+    }
+
+    // Apply to each column (dim2 direction)
+    for (int c = 0; c < N; ++c) {
+        std::array<int16_t, Asa::kGridDim> col{};
+        for (int r = 0; r < N; ++r) {
+            col[static_cast<size_t>(r)] = grid[r][c];
+        }
+        morphOpen1D(col.data(), N);
+        for (int r = 0; r < N; ++r) {
+            grid[r][c] = col[static_cast<size_t>(r)];
+        }
+    }
 }
 
 // ══════════════════════════════════════════════
@@ -870,6 +1138,23 @@ std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
             ConfigParam::Int, const_cast<int*>(&m_pressureTailDecay), 1, 200, Cat::Output),
         ConfigParam("sp.slaveHdrBtnOffset", "Button Byte Offset",
             ConfigParam::Int, const_cast<int*>(&m_slaveHdrBtnOffset), 0, 6, Cat::Output),
+        // P1: Signal suppression hysteresis
+        ConfigParam("sp.sigSuppressEnabled", "Signal Suppress Enabled",
+            ConfigParam::Bool, const_cast<bool*>(&m_pressureSignalSuppressEnabled), Cat::Output),
+        ConfigParam("sp.sigSuppressEnter", "Signal Suppress Enter Thr",
+            ConfigParam::Int, const_cast<int*>(&m_pressureSignalSuppressEnter), 10, 2000, Cat::Output),
+        ConfigParam("sp.sigSuppressExit", "Signal Suppress Exit Thr",
+            ConfigParam::Int, const_cast<int*>(&m_pressureSignalSuppressExit), 10, 3000, Cat::Output),
+
+        // P3: Pen exit smoothing, TP pattern, CMF
+        ConfigParam("sp.exitSmoothEnabled", "Pen Exit Smooth",
+            ConfigParam::Bool, const_cast<bool*>(&m_exitSmoothEnabled), Cat::Behavior),
+        ConfigParam("sp.cmfEnabled", "CMF Enabled",
+            ConfigParam::Bool, const_cast<bool*>(&m_cmfEnabled), Cat::Filter),
+        ConfigParam("sp.cmfWindowSize", "CMF Window Size",
+            ConfigParam::Int, const_cast<int*>(&m_cmfWindowSize), 1, 8, Cat::Filter),
+        ConfigParam("sp.tpPatternEnabled", "TP Pattern Comp Enabled",
+            ConfigParam::Bool, const_cast<bool*>(&m_tpPatternCompEnabled), Cat::Solver),
     };
 }
 
@@ -940,6 +1225,13 @@ void StylusPipeline::SaveConfig(std::ostream& out) const {
         << m_pressureTailMin << "\n";
     out << "sp.pressTailDecay="
         << m_pressureTailDecay << "\n";
+    // P1: Signal suppression hysteresis
+    out << "sp.sigSuppressEnabled="
+        << m_pressureSignalSuppressEnabled << "\n";
+    out << "sp.sigSuppressEnter="
+        << m_pressureSignalSuppressEnter << "\n";
+    out << "sp.sigSuppressExit="
+        << m_pressureSignalSuppressExit << "\n";
     // HPP3 Noise
     out << "sp.hpp3NoiseEnabled="
         << m_hpp3NoisePostEnabled << "\n";
@@ -1038,6 +1330,13 @@ void StylusPipeline::LoadConfig(
         m_pressureTailMin = toInt(value);
     else if (key == "sp.pressTailDecay")
         m_pressureTailDecay = toInt(value);
+    // P1: Signal suppression hysteresis
+    else if (key == "sp.sigSuppressEnabled")
+        m_pressureSignalSuppressEnabled = toBool(value);
+    else if (key == "sp.sigSuppressEnter")
+        m_pressureSignalSuppressEnter = toInt(value);
+    else if (key == "sp.sigSuppressExit")
+        m_pressureSignalSuppressExit = toInt(value);
     // HPP3 Noise
     else if (key == "sp.hpp3NoiseEnabled")
         m_hpp3NoisePostEnabled = toBool(value);
@@ -1054,6 +1353,15 @@ void StylusPipeline::LoadConfig(
     // Calibration
     else if (key == "sp.calibEnabled")
         m_calibEnabled = toBool(value);
+    // P3: Exit smooth, CMF, TP pattern
+    else if (key == "sp.exitSmoothEnabled")
+        m_exitSmoothEnabled = toBool(value);
+    else if (key == "sp.cmfEnabled")
+        m_cmfEnabled = toBool(value);
+    else if (key == "sp.cmfWindowSize")
+        m_cmfWindowSize = toInt(value);
+    else if (key == "sp.tpPatternEnabled")
+        m_tpPatternCompEnabled = toBool(value);
 }
 
 void StylusPipeline::SetBtMcuPressure(uint16_t p) {

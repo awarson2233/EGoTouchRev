@@ -193,6 +193,21 @@ struct SharedFrameData {
     uint8_t  dbgVhfPenState      = 0;
     uint8_t  dbgLinearFilterState = 0;
 
+    // P3/P4: Extended pipeline diagnostics
+    uint16_t dbgSignalRatio       = 0;     // TX1/TX2 信号比 (%)
+    bool     dbgFreqShiftFreezing = false; // 频率跳变冻结
+    bool     dbgExitSmoothed      = false; // 抬笔平滑触发
+    bool     dbgCmfEnabled        = false; // CMF 启用
+    bool     dbgCoorRevActive     = false; // TX2 修正启用
+    float    dbgCoorRevDeltaX     = 0.f;   // TX2 修正量 X
+    float    dbgCoorRevDeltaY     = 0.f;   // TX2 修正量 Y
+    bool     dbgTiltAnomalyDamped = false; // 倾斜异常抑制
+    bool     dbgSigSuppressActive = false; // 信号抑制激活
+    uint8_t  dbgPenLifecycle      = 0;     // 笔生命周期
+    bool     dbgWasInking         = false; // 笔书写中
+    int32_t  dbgAvg3PtDim1        = 0;     // 3点均值 X
+    int32_t  dbgAvg3PtDim2        = 0;     // 3点均值 Y
+
     // Raw suffix data for Master/Slave status tables
     uint8_t  masterSuffix[kMasterSuffixBytes]{};
     uint8_t  slaveSuffix[kSlaveSuffixBytes]{};

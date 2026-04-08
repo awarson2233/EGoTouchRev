@@ -226,6 +226,20 @@ void SharedFrameWriter::Write(const Engine::HeatmapFrame& frame) {
     m_data->dbgMappedPressure = s.dbgMappedPressure;
     m_data->dbgVhfPenState      = s.dbgVhfPenState;
     m_data->dbgLinearFilterState = s.dbgLinearFilterState;
+    // P3/P4 diagnostics
+    m_data->dbgSignalRatio       = s.dbgSignalRatio;
+    m_data->dbgFreqShiftFreezing = s.dbgFreqShiftFreezing;
+    m_data->dbgExitSmoothed      = s.dbgExitSmoothed;
+    m_data->dbgCmfEnabled        = s.dbgCmfEnabled;
+    m_data->dbgCoorRevActive     = s.dbgCoorRevActive;
+    m_data->dbgCoorRevDeltaX     = s.dbgCoorRevDeltaX;
+    m_data->dbgCoorRevDeltaY     = s.dbgCoorRevDeltaY;
+    m_data->dbgTiltAnomalyDamped = s.dbgTiltAnomalyDamped;
+    m_data->dbgSigSuppressActive = s.dbgSigSuppressActive;
+    m_data->dbgPenLifecycle      = s.dbgPenLifecycle;
+    m_data->dbgWasInking         = s.dbgWasInking;
+    m_data->dbgAvg3PtDim1        = s.dbgAvg3PtDim1;
+    m_data->dbgAvg3PtDim2        = s.dbgAvg3PtDim2;
 
     // Raw suffix data from rawData
     if (frame.rawData.size() >= 5063) {
@@ -483,6 +497,20 @@ bool SharedFrameReader::Read(Engine::HeatmapFrame& out) {
     os.dbgMappedPressure = m_data->dbgMappedPressure;
     os.dbgVhfPenState      = m_data->dbgVhfPenState;
     os.dbgLinearFilterState = m_data->dbgLinearFilterState;
+    // P3/P4 diagnostics
+    os.dbgSignalRatio       = m_data->dbgSignalRatio;
+    os.dbgFreqShiftFreezing = m_data->dbgFreqShiftFreezing;
+    os.dbgExitSmoothed      = m_data->dbgExitSmoothed;
+    os.dbgCmfEnabled        = m_data->dbgCmfEnabled;
+    os.dbgCoorRevActive     = m_data->dbgCoorRevActive;
+    os.dbgCoorRevDeltaX     = m_data->dbgCoorRevDeltaX;
+    os.dbgCoorRevDeltaY     = m_data->dbgCoorRevDeltaY;
+    os.dbgTiltAnomalyDamped = m_data->dbgTiltAnomalyDamped;
+    os.dbgSigSuppressActive = m_data->dbgSigSuppressActive;
+    os.dbgPenLifecycle      = m_data->dbgPenLifecycle;
+    os.dbgWasInking         = m_data->dbgWasInking;
+    os.dbgAvg3PtDim1        = m_data->dbgAvg3PtDim1;
+    os.dbgAvg3PtDim2        = m_data->dbgAvg3PtDim2;
 
     // Reconstruct rawData suffix for DrawMasterSuffixTable/DrawSlaveSuffixTable
     // We need rawData[4807..5062] for master and [5070..5401] for slave

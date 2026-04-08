@@ -46,6 +46,13 @@ public:
         return m_lastResult;
     }
 
+    /// P2 #20: Frequency shift output freeze control.
+    /// Call with true when frequency shift starts, false when done.
+    /// During freeze, Process() will output the last known-good frame.
+    void SetFreqShiftFreezing(bool freezing) {
+        m_freqShiftFreezing = freezing;
+    }
+
     std::vector<ConfigParam> GetConfigSchema() const;
     void SaveConfig(std::ostream& out) const;
     void LoadConfig(const std::string& key,
@@ -85,6 +92,21 @@ public:
         // ── Stage 5: VHF state ──
         uint8_t  vhfPenState = 0;      // byte[1]: InRange|TipSwitch|Barrel
         uint8_t  linearFilterState = 0; // 直线滤波状态机当前状态 (0-6)
+
+        // ── Stage 6: P2/P3/P4 Pipeline diagnostics ──
+        uint16_t signalRatio       = 0;     // TX1/TX2 信号强度比 (%)
+        bool     freqShiftFreezing = false; // 频率跳变冻结状态
+        bool     exitSmoothed      = false; // 抬笔平滑触发
+        bool     cmfEnabled        = false; // CMF 是否启用
+        bool     coorReviserActive = false; // TX2 修正已启用
+        float    coorRevDeltaX     = 0.f;   // TX2 修正量 X
+        float    coorRevDeltaY     = 0.f;   // TX2 修正量 Y
+        bool     tiltAnomalyDamped = false; // 倾斜角异常抑制触发
+        bool     sigSuppressActive = false; // 信号抑制激活
+        uint8_t  penLifecycle      = 0;     // 笔生命周期状态
+        bool     wasInking         = false; // 笔是否在书写
+        int32_t  avg3PtDim1        = 0;     // 3点均值中间坐标 X
+        int32_t  avg3PtDim2        = 0;     // 3点均值中间坐标 Y
     };
     const DbgCoordBreakdown& GetDebugCoord() const { return m_dbg; }
 
@@ -126,6 +148,10 @@ private:
     uint32_t m_prevStatus = 0;
     float m_prevPointX = 0.0f;  // P1: previous frame X for edge-lift detection
     float m_prevPointY = 0.0f;  // P1: previous frame Y for edge-lift detection
+    // P2 #20: Frequency shift freeze flag
+    // When true, output is frozen to lastGoodFrame until shift completes.
+    // Set by external frequency shift controller; cleared after shift done.
+    bool m_freqShiftFreezing = false;
 
     // ── BLE button state (decoupled from hardcoded logic) ──
     std::atomic<uint8_t> m_bleButtonState{0};  // bit0: barrel, bit1: eraser
@@ -152,6 +178,15 @@ private:
     float m_prevTiltDiffX = 0.0f;
     float m_prevTiltDiffY = 0.0f;
     bool  m_tiltHasHistory = false;
+    // P2 #15: TX1/TX2 signal ratio for tilt anomaly detection
+    // TSACore: GetTX1TX2SignalRatio + BufTX1TX2SignalRatio (3-frame avg)
+    static constexpr int kSignalRatioBufLen = 3;
+    std::array<uint16_t, kSignalRatioBufLen> m_signalRatioBuf{};
+    int m_signalRatioBufCount = 0;
+    uint16_t m_signalRatio = 100;  // percent: TX2_signal*100/TX1_signal
+    // When signal ratio is anomalous (too large diff), use buffered tilt diff
+    float m_tiltDiffAnomalyThreshold = 3.0f;  // max allowed coord diff jump
+    bool  m_tiltAnomalyDamped = false;  // diagnostic: true when anomaly damping fired
 
     void SolveTilt(const Asa::AsaCoorResult& tx1Coor,
                    const Asa::AsaCoorResult& tx2Coor);
@@ -178,13 +213,17 @@ private:
     int   m_pressureTailCounter = 0;
 
     void SolvePressure(uint16_t rawPressure, bool active,
-                       int signalStrength = 0);
+                       int signalStrength = 0, bool isEdge = false);
 
-    // P2: Signal strength threshold for pressure suppression.
-    // If TX1 peak signal < this threshold, pressure is forced to 0
-    // to prevent "ghost writing" when pen is far from panel.
-    int m_pressureSignalSuppressThreshold = 30;
+    // P1: Signal strength pressure suppression with hysteresis.
+    // Mirrors TSACore HPP3_SuppressBtPressBySignal:
+    //   - Enter suppression when signal < enterThreshold && not in edge
+    //   - Exit suppression  when signal > exitThreshold
+    //   - Uses g_hpp3ExitFlag state to prevent oscillation.
     bool m_pressureSignalSuppressEnabled = false;
+    int  m_pressureSignalSuppressEnter = 200;  // prmt[0x24C]: enter suppression below this
+    int  m_pressureSignalSuppressExit  = 300;  // prmt[0x24E]: exit suppression above this
+    bool m_signalSuppressActive = false;       // hysteresis state flag (g_hpp3ExitFlag)
 
     // ── Sensor dimensions (full sensor array, not just 9x9 grid) ──
     // 屏幕方向: 右下角(0,0), 左上角(39,59)
@@ -230,6 +269,9 @@ private:
     bool EvaluateRecheck() const;
 
     // ── HPP3 Noise Post Process (migrated) ──
+    // P1: Changed from frame-skip to freeze-output.
+    // When noise is detected, output is frozen to last known-good frame
+    // (mirrors TSACore: memcpy(curASOut ← prevASOut) + return 5).
     bool m_hpp3NoisePostEnabled = false;  // disabled for initial bringup
     int  m_hpp3SignalRatioFactor = 5;
     int  m_hpp3SignalDropFactor = 5;
@@ -237,6 +279,9 @@ private:
     float m_prevValidX = 0.0f;
     float m_prevValidY = 0.0f;
     bool  m_prevValidPoint = false;
+    // P1: Last known-good frame data for freeze output
+    StylusFrameData m_lastGoodFrame{};
+    bool m_hasLastGoodFrame = false;
     bool ApplyHpp3NoisePost(const Asa::AsaCoorResult& coor);
 
     // ── Pen Lifecycle Tracker ──
@@ -250,6 +295,13 @@ private:
     int  m_liftingFrameCount = 0;
     int  m_liftingTimeout = 10;
     void UpdatePenLifecycle(bool penValid, bool penDown);
+
+    // P3 #21: Pen exit smoothing (TSACore: ReleaseASAReportExitStylus)
+    // When pen transitions from valid→invalid while inking, freeze output
+    // for 1 frame with edge coordinate snapping if at panel edge.
+    bool m_exitSmoothEnabled = true;
+    bool m_wasInking = false;  // true if prev frame had pressure > 0
+    bool HandlePenExitSmooth(StylusPacket& outPacket);
 
     // ── ASACalibration_Process (Phase 6 — rolling average) ──
     static constexpr int kCalibWindow = 5;
@@ -268,6 +320,21 @@ private:
     // ── Config ──
     bool m_enableSlaveChecksum = false;  // unverified; disable until checksum format is confirmed
     bool m_emitPacketWhenInvalid = true;
+
+    // P3 #16: TP Pattern Compensation (TSACore: CoorTpPatternCompensate)
+    // Cubic polynomial on (TX1-TX2) diff, applied temporarily for RefreshTX1Pos.
+    // Since we don't have RefreshTX1Pos, this is a no-op placeholder.
+    // Enabled only if bit6 of feature flag is set.
+    bool m_tpPatternCompEnabled = false;
+    std::array<double, 4> m_tpPatternCoefDim1{{0.0, 0.0, 0.0, 0.0}};
+    std::array<double, 4> m_tpPatternCoefDim2{{0.0, 0.0, 0.0, 0.0}};
+
+    // P3 #22: Common-Mode Filtering (TSACore: HPP3_CMFProcess / GetCMN)
+    // Morphological min-max filtering on raw 1D projections to estimate
+    // common-mode noise, then subtract it before interpolation.
+    bool m_cmfEnabled = false;
+    int  m_cmfWindowSize = 6;  // erosion/dilation window half-width
+    void ApplyCommonModeFilter(int16_t grid[Asa::kGridDim][Asa::kGridDim]);
 
     // ── BT MCU 外部压感注入与防抖 ────────────────────────────────────────────────
     struct BtPressureSample {

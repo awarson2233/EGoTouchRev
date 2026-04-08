@@ -334,6 +334,20 @@ void DeviceRuntime::OnStreaming() {
             touchFrame.stylus.dbgMappedPressure = dbg.mappedPressure;
             touchFrame.stylus.dbgVhfPenState      = dbg.vhfPenState;
             touchFrame.stylus.dbgLinearFilterState = dbg.linearFilterState;
+            // ── Copy P3/P4 pipeline diagnostics ──
+            touchFrame.stylus.dbgSignalRatio       = dbg.signalRatio;
+            touchFrame.stylus.dbgFreqShiftFreezing = dbg.freqShiftFreezing;
+            touchFrame.stylus.dbgExitSmoothed      = dbg.exitSmoothed;
+            touchFrame.stylus.dbgCmfEnabled        = dbg.cmfEnabled;
+            touchFrame.stylus.dbgCoorRevActive     = dbg.coorReviserActive;
+            touchFrame.stylus.dbgCoorRevDeltaX     = dbg.coorRevDeltaX;
+            touchFrame.stylus.dbgCoorRevDeltaY     = dbg.coorRevDeltaY;
+            touchFrame.stylus.dbgTiltAnomalyDamped = dbg.tiltAnomalyDamped;
+            touchFrame.stylus.dbgSigSuppressActive = dbg.sigSuppressActive;
+            touchFrame.stylus.dbgPenLifecycle      = dbg.penLifecycle;
+            touchFrame.stylus.dbgWasInking         = dbg.wasInking;
+            touchFrame.stylus.dbgAvg3PtDim1        = dbg.avg3PtDim1;
+            touchFrame.stylus.dbgAvg3PtDim2        = dbg.avg3PtDim2;
         }
         m_framePushCb(touchFrame);
     }
