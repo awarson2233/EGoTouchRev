@@ -2,6 +2,7 @@
 #include "ConfigSchema.h"
 #include <vector>
 #include <string>
+#include <optional>
 
 namespace App {
 
@@ -10,7 +11,8 @@ class ConfigUIRenderer {
 public:
     static void RenderConfigSchema(
         const std::vector<Engine::ConfigParam>& schema,
-        const std::string& sectionName);
+        const std::string& sectionName,
+        std::optional<Engine::ConfigParam::Category> filterCategory = std::nullopt);
 };
 
 } // namespace App

@@ -273,8 +273,20 @@ void DeviceRuntime::OnStreaming() {
     // 1. 手写笔频率跟踪（仅 Full 模式）
     if (!touchOnly) {
         if (m_chip.m_afe.ProcessStylusStatus()) {
-            SubmitCommand({AFE_Command::ForceToFreqPoint, m_chip.m_afe.GetStylusState().switchTargetIdx},
-                          CommandSource::SystemPolicy, "Stylus Freq Sync Requested");
+            auto targetIdx = m_chip.m_afe.GetStylusState().switchTargetIdx;
+
+            // 1a. TPIC 侧切频
+            SubmitCommand({AFE_Command::ForceToFreqPoint, targetIdx},
+                          CommandSource::SystemPolicy, "Stylus Freq Sync (TP)");
+
+            // 1b. BT 笔侧切频 —— 通过 col00 通知 MCU
+            if (m_btScanModeSender) {
+                uint8_t newFreq = m_chip.m_afe.GetTpicFreq(targetIdx);
+                bool ok = m_btScanModeSender(newFreq, newFreq);
+                LOG_INFO("Runtime", __func__, "FreqSync",
+                         "BT ScanMode sent: freqIdx={}, tpicFreq=0x{:02X}, ok={}",
+                         targetIdx, newFreq, ok);
+            }
         }
     }
 

@@ -878,10 +878,8 @@ ChipResult<> Chip::GetFrame(void) {
     bool stylusNow = isStylusDetected();
     if (stylusNow && !m_stylusActive) {
         m_stylusActive = true;
-        LOG_INFO("HimaxChip", __func__, GetStateStr(), "Stylus detected in frame data → 2:1 interleave ON (slave 240Hz)");
     } else if (!stylusNow && m_stylusActive) {
         m_stylusActive = false;
-        LOG_INFO("HimaxChip", __func__, GetStateStr(), "Stylus lost in frame data → 2:1 interleave OFF (slave 120Hz)");
     }
 
     // ── 零帧计数 & idle 自动进入 ─────────────────────────────
