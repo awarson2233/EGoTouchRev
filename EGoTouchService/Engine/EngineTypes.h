@@ -196,6 +196,21 @@ struct StylusFrameData {
     uint16_t dbgMappedPressure = 0;
     uint8_t  dbgVhfPenState      = 0;
     uint8_t  dbgLinearFilterState = 0;
+
+    // ── P3/P4 Extended pipeline diagnostics ──
+    uint16_t dbgSignalRatio       = 0;
+    bool     dbgFreqShiftFreezing = false;
+    bool     dbgExitSmoothed      = false;
+    bool     dbgCmfEnabled        = false;
+    bool     dbgCoorRevActive     = false;
+    float    dbgCoorRevDeltaX     = 0.f;
+    float    dbgCoorRevDeltaY     = 0.f;
+    bool     dbgTiltAnomalyDamped = false;
+    bool     dbgSigSuppressActive = false;
+    uint8_t  dbgPenLifecycle      = 0;
+    bool     dbgWasInking         = false;
+    int32_t  dbgAvg3PtDim1        = 0;
+    int32_t  dbgAvg3PtDim2        = 0;
 };
 
 // 整个管线中流转的帧结构体

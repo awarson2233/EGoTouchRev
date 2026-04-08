@@ -16,17 +16,14 @@ namespace Asa {
 ///   5: StraightLine       → 6: ExitStraight (if deviation detected)
 ///   6: ExitStraightLine   → 3: CurveLine
 ///
-/// When drawing a straight line (states 4-5), the coordinate perpendicular
-/// to the line direction is locked/filtered, greatly reducing hand tremor.
-///
-/// Uses least-squares line fitting (UpdateStraightLinePrmt) on a rolling
-/// buffer to detect line direction and measure deviation.
+/// P2: Refactored to match TSACore:
+///   - Init→Wait→Collect are single-frame transitions (no bufCount gate)
+///   - Two LineFit sets: global (all buffered points) + current (includes cur point)
+///   - Aging weight: effective N = (kMaxBufLen - bufCount) for normalization
+///   - BufStraightPaintPoint / BufShortDistancePoint tracking
 class LinearFilter {
 public:
     /// Process one coordinate frame through the state machine.
-    /// @param coor  Input coordinate (post-interpolation, pre-IIR)
-    /// @param pressure  Current pressure (0 = pen up)
-    /// @return Filtered coordinate
     AsaCoorResult Process(const AsaCoorResult& coor, uint16_t pressure);
 
     /// Reset state machine to Init
@@ -39,19 +36,13 @@ public:
     bool enabled = false;
 
     // ── Configuration ──
-    /// Minimum frames to collect before judging line (states 0-2)
-    int collectFrames = 3;
-
-    /// Minimum buffer length before line fitting begins
+    /// Minimum buffer length before attempting line fit in CurveLine state
     int minFitLength = 20;
 
-    /// Maximum residual (mean squared error) to enter straight mode
+    /// Maximum residual (mean squared distance) to enter straight mode
     float enterResidualThreshold = 50.0f;
 
-    /// Maximum deviation to stay in straight mode
-    float stayMaxDeviation = 150.0f;
-
-    /// Exit straight mode if deviation exceeds this
+    /// Exit straight mode if max deviation exceeds this
     float exitDeviation = 200.0f;
 
     /// Perpendicular constraint strength (0–1).
@@ -71,27 +62,45 @@ private:
 
     State m_state = State::Init;
 
-    // ── Rolling buffer for line fitting ──
+    // ── Rolling buffer for line fitting (TSACore: g_asaStraightLineX/YBuf) ──
     static constexpr int kMaxBufLen = 400;
     struct Point { int32_t x; int32_t y; };
     std::array<Point, kMaxBufLen> m_buf{};
     int m_bufCount = 0;
 
+    // ── Short distance buffer (TSACore: g_asaShortDisBuf) ──
+    // Tracks recent short-distance points for line entry detection
+    static constexpr int kShortDisBufLen = 20;
+    std::array<Point, kShortDisBufLen> m_shortDisBuf{};
+    int m_shortDisBufCount = 0;
+
     // ── Line fit results ──
+    // TSACore maintains two fits: global (all points) and current (+ cur point)
     struct LineFit {
-        float slope = 0.0f;     // A (y = Ax + B)
+        float slope = 0.0f;     // A (y = Ax + B or x = Ay + B)
         float intercept = 0.0f; // B
-        float residual = 0.0f;  // mean squared error
-        float maxDev = 0.0f;    // max single-point deviation
+        float normFactor = 1.0f;// sqrt(A*A + 1) for distance calculation
+        float totalDist = 0.0f; // sum of squared perpendicular distances
+        float maxDist = 0.0f;   // max single-point squared distance
+        float lastDist = 0.0f;  // last-point squared distance
         bool  valid = false;
         bool  useYasX = false;  // true: fit x = Ay + B (steep line)
     };
-    LineFit m_fit;
+    LineFit m_fitGlobal;   // global fit (all buffered points, no current)
+    LineFit m_fitCurrent;  // current fit (including current point)
 
     // ── Methods ──
     void PushPoint(const AsaCoorResult& c);
-    LineFit FitLine(int startIdx, int count) const;
-    AsaCoorResult ConstrainToLine(const AsaCoorResult& c) const;
+    void PushShortDisPoint(const AsaCoorResult& c);
+
+    /// TSACore: UpdateStraightLinePrmt
+    /// @param includeCurrent if true, include current point in fit
+    /// @param agingWeight effective N for normalization (400 - bufCount)
+    LineFit FitLine(bool includeCurrent, int agingWeight) const;
+
+    /// Constrain coordinate to the fitted line
+    AsaCoorResult ConstrainToLine(const AsaCoorResult& c,
+                                  const LineFit& fit) const;
 
     void ProcessCurveLine(const AsaCoorResult& c);
     void ProcessEnterStraight(const AsaCoorResult& c);

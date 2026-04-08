@@ -15,32 +15,43 @@ void CoorPostProcessor::Reset() {
     m_offsetDim1 = m_offsetDim2 = 0;
     m_jitterActive = false;
     m_speed = SpeedMetrics{};
+    m_lastIirCoef = 0.0f;
 }
 
 // ══════════════════════════════════════════════
-// PushHistory — FIFO shift (index 0 = newest)
-// Mirrors TSACore memmove(&buf[1], &buf[0], 23*sizeof)
+// Step 1: PushHistory (TSACore: GetRealTimeCoor2Buf)
+// FIFO shift (index 0 = newest)
 // ══════════════════════════════════════════════
-void CoorPostProcessor::PushHistory(const AsaCoorResult& cur) {
-    // Shift all entries one slot toward the end
+void CoorPostProcessor::StepPushHistory(const AsaCoorResult& cur) {
     for (int i = kHistoryLen - 1; i > 0; --i) {
         m_history[static_cast<size_t>(i)] =
             m_history[static_cast<size_t>(i - 1)];
     }
     m_history[0] = cur;
     m_validHistory = std::min(m_validHistory + 1, kHistoryLen);
+    m_frameCount++;
 }
 
 // ══════════════════════════════════════════════
-// CalcSpeed — 3-tier path-accumulated speed
-// Mirrors TSACore GetCoorSpeed exactly:
-//   instant  = 1-frame segment distance
-//   shortAvg = avg of first 3 segments
-//   fullAvg  = avg of all valid segments
+// Step 2: 3-point average (TSACore: Get3PointAvgFilter)
 // ══════════════════════════════════════════════
-SpeedMetrics CoorPostProcessor::CalcSpeed() {
+AsaCoorResult CoorPostProcessor::Step3PointAvg(
+        const AsaCoorResult& cur) {
+    if (!enable3PointAvg) return cur;
+    if (!m_prev[0].valid || !m_prev[1].valid) return cur;
+    AsaCoorResult out = cur;
+    out.dim1 = (m_prev[1].dim1 + m_prev[0].dim1 + cur.dim1) / 3;
+    out.dim2 = (m_prev[1].dim2 + m_prev[0].dim2 + cur.dim2) / 3;
+    return out;
+}
+
+// ══════════════════════════════════════════════
+// Step 3: Speed calculation (TSACore: GetCoorSpeed)
+// 3-tier path-accumulated speed
+// ══════════════════════════════════════════════
+void CoorPostProcessor::StepCalcSpeed() {
     SpeedMetrics out{};
-    if (m_validHistory < 2) return out;
+    if (m_validHistory < 2) { m_speed = out; return; }
 
     const int segments = m_validHistory - 1;
     float accumPath = 0.0f;
@@ -55,33 +66,21 @@ SpeedMetrics CoorPostProcessor::CalcSpeed() {
         const float segDist = std::sqrt(dx * dx + dy * dy);
         accumPath += segDist;
 
-        // Instant speed = first segment
-        if (i == 0) {
-            out.instant = segDist;
-        }
-        // Short-term = average of first 3 segments
-        if (i == 2) {
-            out.shortAvg = accumPath / 3.0f;
-        }
+        if (i == 0) out.instant = segDist;
+        if (i == 2) out.shortAvg = accumPath / 3.0f;
     }
 
-    // Full-window average
     out.fullAvg = accumPath / static_cast<float>(segments);
+    if (segments < 3) out.shortAvg = out.fullAvg;
 
-    // If fewer than 3 segments, shortAvg = fullAvg
-    if (segments < 3) {
-        out.shortAvg = out.fullAvg;
-    }
-
-    return out;
+    m_speed = out;
 }
 
 // ══════════════════════════════════════════════
-// CalcIIRCoef — 3-mode adaptive coefficient
-// Mirrors TSACore GetIIRCoef with hover/write/edge modes
+// Step 4: Dynamic IIR coefficient (TSACore: GetIIRCoef)
+// Speed-driven linear interpolation between lo and hi
 // ══════════════════════════════════════════════
-float CoorPostProcessor::CalcIIRCoef(
-        float speed, bool isHover, bool isEdge) {
+float CoorPostProcessor::StepCalcIIRCoef(bool isHover, bool isEdge) {
     float lo, hi, thrLo, thrHi;
 
     if (isHover) {
@@ -98,18 +97,34 @@ float CoorPostProcessor::CalcIIRCoef(
         hi *= 0.5f;
     }
 
-    // Linear interpolation between low and high
-    if (speed <= thrLo) return lo;
-    if (speed >= thrHi) return hi;
-    const float t = (speed - thrLo) / (thrHi - thrLo);
-    return lo + t * (hi - lo);
+    // Linear interpolation between low and high speed thresholds
+    float speed = m_speed.instant;
+    float coef;
+    if (speed <= thrLo) {
+        coef = lo;
+    } else if (speed >= thrHi) {
+        coef = hi;
+    } else {
+        const float t = (speed - thrLo) / (thrHi - thrLo);
+        coef = lo + t * (hi - lo);
+    }
+
+    m_lastIirCoef = coef;
+    return coef;
 }
 
 // ══════════════════════════════════════════════
-// ApplyIIR — 1st-order IIR low-pass filter
+// Step 5: IIR filter (TSACore: CoorFilterProcess)
+// 1st-order IIR low-pass: out = prev*(1-coef) + cur*coef
 // ══════════════════════════════════════════════
-AsaCoorResult CoorPostProcessor::ApplyIIR(
+AsaCoorResult CoorPostProcessor::StepIIR(
         const AsaCoorResult& cur, float coef) {
+    if (!m_initialized) {
+        m_iirDim1 = static_cast<float>(cur.dim1);
+        m_iirDim2 = static_cast<float>(cur.dim2);
+        m_initialized = true;
+        return cur;
+    }
     AsaCoorResult out = cur;
     m_iirDim1 = m_iirDim1 * (1.0f - coef) +
                 static_cast<float>(cur.dim1) * coef;
@@ -121,37 +136,14 @@ AsaCoorResult CoorPostProcessor::ApplyIIR(
 }
 
 // ══════════════════════════════════════════════
-// Apply3PointAvg — 3-frame moving average
+// Step 6: Jitter offset compensation (TSACore: AftCoorProcess)
 // ══════════════════════════════════════════════
-AsaCoorResult CoorPostProcessor::Apply3PointAvg(
-        const AsaCoorResult& cur) {
-    if (!m_prev[0].valid || !m_prev[1].valid) return cur;
-    AsaCoorResult out = cur;
-    out.dim1 = (m_prev[1].dim1 + m_prev[0].dim1 + cur.dim1) / 3;
-    out.dim2 = (m_prev[1].dim2 + m_prev[0].dim2 + cur.dim2) / 3;
-    return out;
-}
-
-// ══════════════════════════════════════════════
-// ApplyJitterOffset — Offset-compensation method
-// Mirrors TSACore AftCoorProcess:
-//   1. On first frame (pen-down), record "anchor" position
-//   2. While displacement < threshold: accumulate offset
-//   3. Output = current_coord - offset
-//   4. When displacement > threshold: offset stays frozen
-//      (no sudden jump — offset just stops growing)
-//
-// Key advantage over simple lock:
-//   - Output always tracks current_coord minus a constant offset
-//   - No discontinuity when leaving dead zone
-// ══════════════════════════════════════════════
-AsaCoorResult CoorPostProcessor::ApplyJitterOffset(
+AsaCoorResult CoorPostProcessor::StepJitter(
         const AsaCoorResult& cur, bool isEdge) {
     const int32_t thr = isEdge ? jitterEdgeThreshold
                                : jitterCenterThreshold;
 
     if (!m_jitterActive) {
-        // First valid frame → set anchor, zero offset
         m_anchor = cur;
         m_offsetDim1 = 0;
         m_offsetDim2 = 0;
@@ -159,18 +151,13 @@ AsaCoorResult CoorPostProcessor::ApplyJitterOffset(
         return cur;
     }
 
-    // Displacement from anchor
     const int32_t dx = cur.dim1 - m_anchor.dim1;
     const int32_t dy = cur.dim2 - m_anchor.dim2;
 
     if (std::abs(dx) <= thr && std::abs(dy) <= thr) {
-        // Still in dead zone: accumulate offset
-        // offset = anchor - cur, so output = cur + offset = anchor
         m_offsetDim1 = m_anchor.dim1 - cur.dim1;
         m_offsetDim2 = m_anchor.dim2 - cur.dim2;
     }
-    // else: outside dead zone — offset stays frozen at last value.
-    // Output smoothly follows cur with a constant shift.
 
     AsaCoorResult out = cur;
     out.dim1 = cur.dim1 + m_offsetDim1;
@@ -179,58 +166,12 @@ AsaCoorResult CoorPostProcessor::ApplyJitterOffset(
 }
 
 // ══════════════════════════════════════════════
-// Process — main post-processing chain
+// Update 3-point history (after full chain)
 // ══════════════════════════════════════════════
-AsaCoorResult CoorPostProcessor::Process(
-        const AsaCoorResult& raw,
-        bool isHover, bool isEdge) {
-    if (!raw.valid) {
-        Reset();
-        return raw;
-    }
-
-    AsaCoorResult cur = raw;
-
-    // Stage 1: Linear filter (optional, complex state machine)
-    // if (enableLinearFilter) { ... } // TODO: Phase P2
-
-    // Stage 2: Push to ring buffer (index 0 = newest)
-    PushHistory(cur);
-
-    // Stage 3: 3-point average filter
-    if (enable3PointAvg && m_frameCount >= 2) {
-        cur = Apply3PointAvg(cur);
-    }
-
-    // Stage 4: CoorRevise (TX2 correction) — TODO: Phase P2
-
-    // Stage 5: Speed calculation (3-tier, path-accumulated)
-    m_speed = CalcSpeed();
-
-    // Stage 6: Dynamic IIR coefficient (hover/write/edge modes)
-    // Use instant speed for coefficient selection (matches TSACore)
-    const float coef = CalcIIRCoef(m_speed.instant, isHover, isEdge);
-    m_lastIirCoef = coef;
-
-    // Stage 7: IIR coordinate filter
-    if (!m_initialized) {
-        m_iirDim1 = static_cast<float>(cur.dim1);
-        m_iirDim2 = static_cast<float>(cur.dim2);
-        m_initialized = true;
-    } else {
-        cur = ApplyIIR(cur, coef);
-    }
-
-    // Stage 8: Jitter suppression (offset-compensation method)
-    cur = ApplyJitterOffset(cur, isEdge);
-
-    // Stage 9: FitToLcdScreen — done in StylusPipeline::BuildPacket
-
-    // Update 3-point history
+void CoorPostProcessor::StepUpdate3PtHistory(
+        const AsaCoorResult& result) {
     m_prev[1] = m_prev[0];
-    m_prev[0] = cur;
-    m_frameCount++;
-    return cur;
+    m_prev[0] = result;
 }
 
 } // namespace Asa

@@ -20,9 +20,11 @@ public:
     /// Revise TX1 coordinates using TX2 as reference.
     /// @param tx1 TX1 interpolated coordinate (primary)
     /// @param tx2 TX2 interpolated coordinate (reference)
+    /// @param curPressure current pressure (for lift-reset detection)
     /// @return Revised coordinate (improved TX1)
     AsaCoorResult Revise(const AsaCoorResult& tx1,
-                         const AsaCoorResult& tx2);
+                         const AsaCoorResult& tx2,
+                         uint16_t curPressure = 0);
 
     /// Reset internal state (call on pen-up)
     void Reset();
@@ -44,11 +46,17 @@ public:
     /// IIR smoothing for the delta to reject transient TX2 glitches.
     float deltaIirAlpha = 0.25f;
 
+    /// Diagnostic accessors for IIR delta
+    float GetLastDeltaX() const { return m_iirDeltaDim1; }
+    float GetLastDeltaY() const { return m_iirDeltaDim2; }
+
 private:
     bool  m_initialized = false;
     float m_iirDeltaDim1 = 0.0f;
     float m_iirDeltaDim2 = 0.0f;
     bool  m_prevValid = false;
+    // P2: Pressure-based reset (TSACore: prevPress!=0 && curPress==0 -> CoorReviseInit)
+    uint16_t m_prevPressure = 0;
 };
 
 } // namespace Asa

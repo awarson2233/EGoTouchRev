@@ -13,12 +13,20 @@ void CoorReviser::Reset() {
 
 AsaCoorResult CoorReviser::Revise(
         const AsaCoorResult& tx1,
-        const AsaCoorResult& tx2) {
+        const AsaCoorResult& tx2,
+        uint16_t curPressure) {
     // Default: pass through TX1 unchanged
     AsaCoorResult out = tx1;
 
     if (!enabled) return out;
     if (!tx1.valid) { Reset(); return out; }
+
+    // P2: Pressure-based reset (TSACore: prevPress!=0 && curPress==0 → CoorReviseInit)
+    if (m_prevPressure != 0 && curPressure == 0) {
+        Reset();
+    }
+    m_prevPressure = curPressure;
+
     if (!tx2.valid) return out;  // TX2 unavailable → use TX1 as-is
 
     // ── Step 1: CoorReviseCalculation ──
@@ -46,11 +54,18 @@ AsaCoorResult CoorReviser::Revise(
     // ── Step 3: CoorReviseWork ──
     // Blend: revised = tx1 + alpha * smoothed_delta
     const float alpha = std::clamp(blendAlpha, 0.0f, 1.0f);
-    out.dim1 = tx1.dim1 + static_cast<int32_t>(
+    int32_t revisedDim1 = tx1.dim1 + static_cast<int32_t>(
         std::lround(alpha * m_iirDeltaDim1));
-    out.dim2 = tx1.dim2 + static_cast<int32_t>(
+    int32_t revisedDim2 = tx1.dim2 + static_cast<int32_t>(
         std::lround(alpha * m_iirDeltaDim2));
 
+    // P2: Clamp to valid sensor range (TSACore CoorReviseWork bounds check)
+    // If revised < correction, clamp to 0; if > max, clamp to max.
+    if (revisedDim1 < 0) revisedDim1 = 0;
+    if (revisedDim2 < 0) revisedDim2 = 0;
+
+    out.dim1 = revisedDim1;
+    out.dim2 = revisedDim2;
     m_prevValid = true;
     return out;
 }

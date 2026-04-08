@@ -663,6 +663,9 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
             ImGui::Separator();
             ImGui::TextColored(ImVec4(0.8f,0.6f,1.0f,1.f), "[Tilt Diagnostics]");
             ImGui::Text("  TX1-TX2 Diff: dX=%.1f  dY=%.1f", sd.dbgTiltDiffX, sd.dbgTiltDiffY);
+            if (sd.dbgTiltAnomalyDamped)
+                ImGui::TextColored(ImVec4(1.0f,0.4f,0.4f,1), "  !! Tilt anomaly damping active");
+            ImGui::Text("  Signal Ratio (TX2/TX1): %u%%", sd.dbgSignalRatio);
             
             ImGui::Separator();
             ImGui::TextColored(ImVec4(1.0f,0.85f,0.4f,1.f), "[Edge/Hover]");
@@ -672,6 +675,26 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
             const char* animLabels[] = {"Leave","Hover","Contact","Lifting"};
             int ai = std::clamp(static_cast<int>(sd.animState), 0, 3);
             ImGui::Text("  Lifecycle: %s", animLabels[ai]);
+            
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(0.5f,0.9f,1.0f,1.f), "[P3/P4 Pipeline State]");
+            {
+                const char* lcLabels[] = {"Leave","Hover","Contact","Lifting"};
+                int li = std::clamp(static_cast<int>(sd.dbgPenLifecycle), 0, 3);
+                ImGui::Text("  Pen Lifecycle: %s", lcLabels[li]);
+            }
+            ImGui::Text("  Was Inking: %s", sd.dbgWasInking ? "YES" : "no");
+            ImGui::Text("  Exit Smoothed: %s", sd.dbgExitSmoothed ? "YES" : "no");
+            ImGui::Text("  CMF Enabled: %s", sd.dbgCmfEnabled ? "YES" : "no");
+            if (sd.dbgCoorRevActive) {
+                ImGui::TextColored(ImVec4(0.4f,1.0f,0.6f,1),
+                    "  CoorReviser: ON (dX=%.1f dY=%.1f)",
+                    sd.dbgCoorRevDeltaX, sd.dbgCoorRevDeltaY);
+            } else {
+                ImGui::Text("  CoorReviser: OFF");
+            }
+            ImGui::Text("  3Pt Avg: dim1=%d  dim2=%d", sd.dbgAvg3PtDim1, sd.dbgAvg3PtDim2);
+
             ImGui::EndTabItem();
         }
 
@@ -1017,11 +1040,25 @@ void DiagnosticsWorkbench::DrawSlaveHeatmap() {
         ImDrawList* draw_list = ImGui::GetWindowDrawList();
 
         auto draw_grid = [&](const Asa::FreqBlock& grid, float start_x, float start_y, const char* label, float ptX, float ptY) {
-            ImGui::SetCursorScreenPos(ImVec2(start_x, start_y - 20));
+            ImGui::SetCursorScreenPos(ImVec2(start_x, start_y - 25.0f));
             ImGui::Text("%s (Anchor: R%d C%d)", label, grid.anchorRow, grid.anchorCol);
             
             ImVec2 canvas_p(start_x, start_y);
             
+            // Draw axis title labels
+            draw_list->AddText(ImVec2(canvas_p.x + 9 * cell_w + 5.0f, canvas_p.y - 18.0f), IM_COL32(255, 255, 255, 255), "X");
+            draw_list->AddText(ImVec2(canvas_p.x - 18.0f, canvas_p.y + 9 * cell_h + 5.0f), IM_COL32(255, 255, 255, 255), "Y");
+
+            // Draw axis labels
+            for (int i = 0; i < 9; ++i) {
+                char buf[8];
+                snprintf(buf, sizeof(buf), "%d", 8 - i);
+                // X axis at top
+                draw_list->AddText(ImVec2(canvas_p.x + i * cell_w + cell_w * 0.5f - 4, canvas_p.y - 18.0f), IM_COL32(200, 200, 200, 255), buf);
+                // Y axis at left
+                draw_list->AddText(ImVec2(canvas_p.x - 18.0f, canvas_p.y + i * cell_h + cell_h * 0.5f - 6), IM_COL32(200, 200, 200, 255), buf);
+            }
+
             for (int r = 0; r < 9; ++r) {
                 for (int c = 0; c < 9; ++c) {
                     // Typical coordinate assumption: Y is Row, X is Col
@@ -1072,32 +1109,45 @@ void DiagnosticsWorkbench::DrawSlaveHeatmap() {
                 float cx = canvas_p.x + mirrored_c * cell_w + cell_w * 0.5f;
                 float cy = canvas_p.y + mirrored_r * cell_h + cell_h * 0.5f;
 
-                ImU32 markerColor = IM_COL32(255, 255, 0, 255); // Yellow Cross 'x'
+                ImU32 markerColor = IM_COL32(0, 255, 0, 255); // Green Cross 'x'
                 float crossSize = cell_w * 0.4f;
 
                 draw_list->AddLine(ImVec2(cx - crossSize, cy - crossSize), ImVec2(cx + crossSize, cy + crossSize), markerColor, 2.5f);
                 draw_list->AddLine(ImVec2(cx - crossSize, cy + crossSize), ImVec2(cx + crossSize, cy - crossSize), markerColor, 2.5f);
+                
+                // Draw sub-pixel coordinate label at top-right of the cross
+                char coordBuf[32];
+                snprintf(coordBuf, sizeof(coordBuf), "(%.2f, %.2f)", ptX, ptY);
+                ImVec2 textPos(cx + crossSize + 2.0f, cy - crossSize - 12.0f);
+                
+                draw_list->AddText(ImVec2(textPos.x - 1, textPos.y - 1), IM_COL32(0, 0, 0, 255), coordBuf);
+                draw_list->AddText(ImVec2(textPos.x + 1, textPos.y + 1), IM_COL32(0, 0, 0, 255), coordBuf);
+                draw_list->AddText(textPos, IM_COL32(0, 255, 0, 255), coordBuf);
             }
         };
 
-        ImVec2 cp = ImGui::GetCursorScreenPos();
+        ImVec2 base_cp = ImGui::GetCursorScreenPos();
+        base_cp.x += 20.0f; // Push right to avoid clipping Y axis
+        base_cp.y += 10.0f;
+
         // TX1 Grid
         if (gridData.tx1.valid) {
-            draw_grid(gridData.tx1, cp.x, cp.y + 20.0f, "TX1 Grid", m_currentFrame.stylus.point.tx1X, m_currentFrame.stylus.point.tx1Y);
+            draw_grid(gridData.tx1, base_cp.x, base_cp.y + 35.0f, "TX1 Grid", m_currentFrame.stylus.point.tx1X, m_currentFrame.stylus.point.tx1Y);
         } else {
+            ImGui::SetCursorScreenPos(base_cp);
             ImGui::Text("TX1 Grid Invalid");
         }
 
         // TX2 Grid
         if (gridData.tx2.valid) {
-            draw_grid(gridData.tx2, cp.x + draw_width + 40.0f, cp.y + 20.0f, "TX2 Grid", m_currentFrame.stylus.point.tx2X, m_currentFrame.stylus.point.tx2Y);
+            draw_grid(gridData.tx2, base_cp.x + draw_width + 50.0f, base_cp.y + 35.0f, "TX2 Grid", m_currentFrame.stylus.point.tx2X, m_currentFrame.stylus.point.tx2Y);
         } else {
-            ImGui::SetCursorScreenPos(ImVec2(cp.x + draw_width + 40.0f, cp.y));
+            ImGui::SetCursorScreenPos(ImVec2(base_cp.x + draw_width + 50.0f, base_cp.y));
             ImGui::Text("TX2 Grid Invalid");
         }
 
         // Advance cursor explicitly so following ImGui elements don't overlap the drawn rects
-        ImGui::Dummy(ImVec2(draw_width * 2 + 40.0f, cell_h * 9 + 40.0f));
+        ImGui::Dummy(ImVec2(draw_width * 2 + 50.0f, cell_h * 9 + 60.0f));
 
     } else {
         ImGui::Text("Insufficient Data. Needs Raw Suffix Array Length.");
