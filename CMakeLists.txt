@@ -192,6 +192,8 @@ target_link_libraries(EGoTouchService PRIVATE Device Host Common advapi32 setupa
 # EGoTouchService uses wmain (console subsystem) for service/console dual mode
 if(MSVC)
     set_target_properties(EGoTouchService PROPERTIES LINK_FLAGS "/SUBSYSTEM:CONSOLE")
+elseif(MINGW)
+    set_target_properties(EGoTouchService PROPERTIES LINK_FLAGS "-municode")
 endif()
 
 # --- BtMcuTestTool (ImGui BT Protocol Validator) ---

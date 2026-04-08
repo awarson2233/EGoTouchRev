@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Windows.h>
+#include <windows.h>
 #include "btmcu/PenUsbTransport.h"
 #include <atomic>
 #include <chrono>
