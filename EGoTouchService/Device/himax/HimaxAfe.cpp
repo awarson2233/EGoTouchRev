@@ -24,15 +24,14 @@ const char* AfeCommandToString(AFE_Command cmd) {
     }
 }
 
-/// 默认频率命令表（4 条目 + 1 默认笔 ID=5）
-/// 来源：Ghidra 逆向 himax_thp_drv.dll DAT_18016dc80
-static constexpr struct { uint8_t id; uint16_t f0; uint16_t f1; } kFreqTable[] = {
-    {0, 0x00A1, 0x0018},   // 笔 0
-    {1, 0x00A2, 0x0019},   // 笔 1
-    {2, 0x00A3, 0x001A},   // 笔 2
-    {3, 0x00A4, 0x001B},   // 笔 3
-    {5, 0x00A1, 0x0018},   // 默认笔 "CD54" (ID=5)
+/// TPIC 频率命令表（panel 级别，由 OTP project ID 决定）
+/// 来源：Ghidra 逆向 thp_afe_open_project → DAT_180195380 / DAT_180195384
+/// freq_idx=0 → 0x4B (75), freq_idx=1 → 0x71 (113)
+static constexpr uint8_t kTpicFreqTable[] = {
+    0x4B,   // freq[0] — 默认频点
+    0x71,   // freq[1] — 备用频点
 };
+static constexpr uint8_t kMaxFreqIdx = static_cast<uint8_t>(std::size(kTpicFreqTable));
 
 } // anonymous namespace
 
@@ -144,7 +143,12 @@ ChipResult<> AfeController::ForceToFreqPoint(uint8_t freq_idx) {
     if (m_chip.GetConnectionState() != ConnectionState::Connected)
         return std::unexpected(ChipError::InvalidOperation);
 
-    LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "Entering with freq_idx={}", static_cast<unsigned>(freq_idx));
+    if (freq_idx >= kMaxFreqIdx) {
+        LOG_WARN("HimaxAFE", __func__, m_chip.GetStateStr(), "freq_idx={} out of range (max={})", static_cast<unsigned>(freq_idx), kMaxFreqIdx);
+        return std::unexpected(ChipError::InvalidOperation);
+    }
+
+    LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "freq_idx={} → tpicFreq=0x{:02X}", static_cast<unsigned>(freq_idx), kTpicFreqTable[freq_idx]);
     return HimaxProtocol::send_command(m_chip.GetMasterDevice(), 0x0c, freq_idx, m_chip.GetCurrentSlot());
 }
 
@@ -154,6 +158,11 @@ ChipResult<> AfeController::ForceToScanRate(uint8_t rate_idx) {
 
     LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "Entering with rate_idx={}", static_cast<unsigned>(rate_idx));
     return HimaxProtocol::send_command(m_chip.GetMasterDevice(), 0x0e, rate_idx, m_chip.GetCurrentSlot());
+}
+
+uint8_t AfeController::GetTpicFreq(uint8_t idx) const {
+    if (idx >= kMaxFreqIdx) return kTpicFreqTable[0];  // fallback to default
+    return kTpicFreqTable[idx];
 }
 
 // ── 手写笔生命周期 ──────────────────────────────────────────────────────────
@@ -180,21 +189,13 @@ ChipResult<> AfeController::SetStylusId(uint8_t pen_id) {
     if (m_chip.GetConnectionState() != ConnectionState::Connected)
         return std::unexpected(ChipError::InvalidOperation);
 
-    LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "0x73 pen_type={} → 查频率表绑定 FreqPair", static_cast<unsigned>(pen_id));
+    m_stylus.pen_id = pen_id;
 
-    StylusFreqPair pair{0x00A1, 0x0018};  // 默认值（ID=5）
-    for (auto& e : kFreqTable) {
-        if (e.id == pen_id) {
-            pair.freq0_cmd = e.f0;
-            pair.freq1_cmd = e.f1;
-            break;
-        }
-    }
-
-    m_stylus.pen_id   = pen_id;
-    m_stylus.freqPair = pair;
-
-    LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "Stylus freq pair bound: freq0=0x{:04X}, freq1=0x{:04X}", pair.freq0_cmd, pair.freq1_cmd);
+    // 频率表绑定到 panel (kTpicFreqTable)，不与笔绑定。
+    // 这里只记录笔 ID，实际频率由 kTpicFreqTable[freqIdx] 决定。
+    LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(),
+             "pen_id={}, tpicFreq[0]=0x{:02X}, tpicFreq[1]=0x{:02X}",
+             static_cast<unsigned>(pen_id), kTpicFreqTable[0], kTpicFreqTable[1]);
     return {};
 }
 
@@ -303,12 +304,19 @@ bool AfeController::ProcessStylusStatus() {
             } else {
                 uint32_t mismatchAge = m_stylus.frameCounter - m_stylus.btMismatchFrame;
                 if (mismatchAge > kBtMismatchDebounce) {
-                    uint8_t targetIdx = (m_stylus.btFreq1 == m_stylus.freqPair.freq1_cmd) ? 1 : 0;
+                    // 根据 BT 报告的频率反查 kTpicFreqTable，确定目标 idx
+                    uint8_t targetIdx = 0;
+                    for (uint8_t i = 0; i < kMaxFreqIdx; ++i) {
+                        if (kTpicFreqTable[i] == m_stylus.btFreq1) {
+                            targetIdx = i;
+                            break;
+                        }
+                    }
                     m_stylus.switchTargetIdx  = targetIdx;
                     m_stylus.switchReqPending = true;
                     m_stylus.switchReqFrame   = m_stylus.frameCounter;
                     m_stylus.btMismatchActive = false;
-                    LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "BT-TP mismatch >30ms: tp={} bt={} → ForceToFreqPoint({})", tpFreq1, m_stylus.btFreq1, targetIdx);
+                    LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "BT-TP mismatch >30ms: tp=0x{:02X} bt=0x{:02X} → ForceToFreqPoint({})", tpFreq1, m_stylus.btFreq1, targetIdx);
                     return true;
                 }
             }

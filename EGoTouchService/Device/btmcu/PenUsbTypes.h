@@ -42,13 +42,13 @@ enum class PenSessionState : uint8_t {
 };
 
 struct PenUsbHeader {
-    uint8_t reportId = 0x07;
-    uint8_t direction = 0x00;
-    uint8_t protocol = 0x02;
-    uint8_t reserved0 = 0x00;
-    uint16_t commandId = 0x0000;
-    uint8_t transportTag = 0x11;
-    uint8_t option = 0x00;
+    uint8_t reportId     = 0x07;  // byte[0]: HID report type (always 0x07)
+    uint8_t hasPayload   = 0x00;  // byte[1]: 0x00=no payload, 0x01=has payload
+    uint8_t protocol     = 0x02;  // byte[2]: sub-protocol (always 0x02)
+    uint8_t reserved0    = 0x00;  // byte[3]: reserved
+    uint16_t commandId   = 0x0000;// byte[4,5]: command ID (little-endian)
+    uint8_t transportTag = 0x11;  // byte[6]: MCU transport marker (forced by SendPacket)
+    uint8_t payloadTag   = 0x00;  // byte[7]: 0x00=no payload, 0x20=has payload
 };
 
 struct PenUsbPacket {
