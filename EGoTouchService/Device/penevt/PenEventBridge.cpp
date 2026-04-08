@@ -1,11 +1,9 @@
 #include "penevt/PenEventBridge.h"
 #include "Logger.h"
 
-#include <windows.h>
-#include <setupapi.h>
-extern "C" {
+#include <Windows.h>
+#include <SetupAPI.h>
 #include <hidsdi.h>
-}
 #include <algorithm>
 #include <chrono>
 #include <cstdio>

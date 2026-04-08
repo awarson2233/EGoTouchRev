@@ -1,7 +1,6 @@
 #include "ServiceHost.h"
 #include "GuiLogSink.h"
 #include "Logger.h"
-#include "SecurityUtils.h"
 #include "IpcProtocol.h"
 #include "IFrameProcessor.h"
 #include <fstream>
@@ -118,15 +117,20 @@ bool ServiceHost::Start() {
     // ── 4. IPC Pipe Server ──────────────────────────────────
     // Create log/pen status events for App (cross-session)
     {
-        Security::ScopedSecurityAttributes scopedSa;
-        SECURITY_ATTRIBUTES* saPtr = scopedSa.get();
-        m_logEvent = CreateEventW(saPtr, FALSE, FALSE, Ipc::kLogReadyEventName);
+        SECURITY_DESCRIPTOR sd{};
+        InitializeSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION);
+        SetSecurityDescriptorDacl(&sd, TRUE, nullptr, FALSE);
+        SECURITY_ATTRIBUTES sa{};
+        sa.nLength = sizeof(sa);
+        sa.lpSecurityDescriptor = &sd;
+        sa.bInheritHandle = FALSE;
+        m_logEvent = CreateEventW(&sa, FALSE, FALSE, Ipc::kLogReadyEventName);
         if (!m_logEvent) {
             LOG_WARN("Service", __func__, "IPC", "CreateEvent failed for LogReadyEvent: {}", GetLastError());
         } else {
             Common::GuiLogSink::Instance()->SetNotifyEvent(m_logEvent);
         }
-        m_penEvent = CreateEventW(saPtr, FALSE, FALSE, Ipc::kPenReadyEventName);
+        m_penEvent = CreateEventW(&sa, FALSE, FALSE, Ipc::kPenReadyEventName);
         if (!m_penEvent) {
             LOG_WARN("Service", __func__, "IPC", "CreateEvent failed for PenReadyEvent: {}", GetLastError());
         }

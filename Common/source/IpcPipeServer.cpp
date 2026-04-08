@@ -1,6 +1,6 @@
 #include "IpcPipeServer.h"
 #include "Logger.h"
-#include "SecurityUtils.h"
+#include <sddl.h>
 
 namespace Ipc {
 
@@ -28,8 +28,24 @@ void IpcPipeServer::Stop() {
 }
 
 void IpcPipeServer::ServerLoop() {
-    Security::ScopedSecurityAttributes scopedSa;
-    SECURITY_ATTRIBUTES* saPtr = scopedSa.get();
+    // Build secure security descriptor for cross-session access
+    // (Service runs as SYSTEM, App runs as user)
+    // D: (DACL)
+    // (A;;GA;;;SY)  - Allow Full Access to SYSTEM
+    // (A;;GA;;;BA)  - Allow Full Access to Built-in Administrators
+    // (A;;GRGW;;;BU) - Allow Read/Write to Built-in Users
+    LPCWSTR sddl = L"D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;BU)";
+    PSECURITY_DESCRIPTOR pSd = nullptr;
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            sddl, SDDL_REVISION_1, &pSd, nullptr)) {
+        LOG_ERROR("IPC", __func__, "IPC", "Failed to create security descriptor: {}", GetLastError());
+        return;
+    }
+
+    SECURITY_ATTRIBUTES sa{};
+    sa.nLength = sizeof(sa);
+    sa.lpSecurityDescriptor = pSd;
+    sa.bInheritHandle = FALSE;
 
     while (m_running.load()) {
         // Create pipe instance
@@ -38,7 +54,7 @@ void IpcPipeServer::ServerLoop() {
             PIPE_ACCESS_DUPLEX,
             PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
             1, sizeof(IpcResponse), sizeof(IpcRequest),
-            0, saPtr);
+            0, &sa);
         if (pipe == INVALID_HANDLE_VALUE) {
             LOG_ERROR("IPC", __func__, "IPC", "CreateNamedPipe failed: {}",  GetLastError());
             break;
@@ -77,6 +93,10 @@ void IpcPipeServer::ServerLoop() {
         DisconnectNamedPipe(pipe);
         CloseHandle(pipe);
         LOG_INFO("IPC", __func__, "IPC", "Client disconnected.");
+    }
+
+    if (pSd) {
+        LocalFree(pSd);
     }
 }
 
