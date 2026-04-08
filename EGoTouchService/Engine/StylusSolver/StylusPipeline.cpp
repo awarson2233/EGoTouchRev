@@ -824,6 +824,18 @@ std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
         ConfigParam("sp.gravityFictEdge", "Gravity Fictitious Edge",
             ConfigParam::Bool, const_cast<bool*>(&m_coordSolver.gravityFictitiousEdge)),
 
+        // P0: Pitch Compensation (polynomial nonlinearity correction)
+        ConfigParam("sp.pitchCompDim1Enabled", "Pitch Comp Dim1 Enable",
+            ConfigParam::Bool, const_cast<bool*>(&m_coordSolver.pitchCompDim1.enabled)),
+        ConfigParam("sp.pitchCompDim2Enabled", "Pitch Comp Dim2 Enable",
+            ConfigParam::Bool, const_cast<bool*>(&m_coordSolver.pitchCompDim2.enabled)),
+
+        // P0: Gravity noise floor & fictitious edge
+        ConfigParam("sp.gravityNoiseFloor", "Gravity Noise Floor",
+            ConfigParam::Int, const_cast<int32_t*>(&m_coordSolver.gravityNoiseFloor), 0, 500),
+        ConfigParam("sp.gravityFictEdge", "Gravity Fictitious Edge",
+            ConfigParam::Bool, const_cast<bool*>(&m_coordSolver.gravityFictitiousEdge)),
+
         // Tilt
         // === Filter ===
         ConfigParam("sp.lfEnabled", "LinearFilter Enabled",
