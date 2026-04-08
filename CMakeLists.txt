@@ -4,6 +4,11 @@ project(EGoTouchRev VERSION 0.1.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+include(CTest)
+enable_testing()
+# Use static MSVC runtime to avoid missing VCRUNTIME140.dll on target machines
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 # --- Platform compatibility ---
 # Prevent Windows.h from defining min/max macros that conflict with std::min/std::max
 # Suppress MSVC CRT deprecation warnings (e.g. localtime -> localtime_s)
@@ -108,6 +113,9 @@ add_library(Engine STATIC
     EGoTouchService/Engine/StylusSolver/GridPeakDetector.cpp
     EGoTouchService/Engine/StylusSolver/CoordinateSolver.cpp
     EGoTouchService/Engine/StylusSolver/CoorPostProcessor.cpp
+    EGoTouchService/Engine/StylusSolver/EdgeLiftCorrector.cpp
+    EGoTouchService/Engine/StylusSolver/CoorReviser.cpp
+    EGoTouchService/Engine/StylusSolver/LinearFilter.cpp
     EGoTouchService/Engine/StylusSolver/StylusPipeline.cpp
 )
 
@@ -211,6 +219,14 @@ if (EGO_BUILD_TESTS)
         Tools/tests/RawdataBenchmarkTest.cpp
     )
     target_link_libraries(EngineRawdataBenchmarkTest PRIVATE Engine Common)
+
+    add_executable(CommonLoggerTest
+        Tools/tests/LoggerTest.cpp
+    )
+    target_include_directories(CommonLoggerTest PRIVATE "${COMMON_ROOT}/include")
+    target_link_libraries(CommonLoggerTest PRIVATE Common)
+
+    add_test(NAME CommonLoggerTest COMMAND CommonLoggerTest)
 endif()
 
 

@@ -22,6 +22,12 @@ private:
     void DrawControlPanel();
     void DrawInspectorPanel();
     void DrawLogPanel();
+    
+    void DrawFilterControls();
+    void DrawBehaviorControls();
+    void DrawOutputControls();
+
+    void DrawSlaveHeatmap(); // TX1 / TX2 9x9 Heatmap
 
     // Content panels (drawn inside Inspector tabs)
     void DrawTouchSolverPanel();
@@ -53,7 +59,8 @@ private:
     bool m_showStylusControlPanel = false;
     bool m_showMasterSuffixTable = true;
     bool m_showSlaveSuffixTable = true;
-    bool m_fullscreen = false;
+    bool m_fullscreen = false;                     // 按下 F11 时切换
+    bool m_showSlaveHeatmap = false;               // Slider for 9x9 Slave Heatmap
     int m_heatmapScale = 10;
     float m_colorRange = 1000.0f;
 

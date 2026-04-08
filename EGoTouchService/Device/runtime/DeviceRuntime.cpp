@@ -273,8 +273,20 @@ void DeviceRuntime::OnStreaming() {
     // 1. 手写笔频率跟踪（仅 Full 模式）
     if (!touchOnly) {
         if (m_chip.m_afe.ProcessStylusStatus()) {
-            SubmitCommand({AFE_Command::ForceToFreqPoint, m_chip.m_afe.GetStylusState().switchTargetIdx},
-                          CommandSource::SystemPolicy, "Stylus Freq Sync Requested");
+            auto targetIdx = m_chip.m_afe.GetStylusState().switchTargetIdx;
+
+            // 1a. TPIC 侧切频
+            SubmitCommand({AFE_Command::ForceToFreqPoint, targetIdx},
+                          CommandSource::SystemPolicy, "Stylus Freq Sync (TP)");
+
+            // 1b. BT 笔侧切频 —— 通过 col00 通知 MCU
+            if (m_btScanModeSender) {
+                uint8_t newFreq = m_chip.m_afe.GetTpicFreq(targetIdx);
+                bool ok = m_btScanModeSender(newFreq, newFreq);
+                LOG_INFO("Runtime", __func__, "FreqSync",
+                         "BT ScanMode sent: freqIdx={}, tpicFreq=0x{:02X}, ok={}",
+                         targetIdx, newFreq, ok);
+            }
         }
     }
 
@@ -309,6 +321,31 @@ void DeviceRuntime::OnStreaming() {
         if (!touchOnly) {
             touchFrame.stylus = m_stylusPipeline.GetLastResult();
             touchFrame.stylus.packet = stylusPacket;
+            // ── Copy P2 pipeline diagnostics for IPC transport ──
+            const auto& dbg = m_stylusPipeline.GetDebugCoord();
+            touchFrame.stylus.dbgAnchorRow  = dbg.anchorRow;
+            touchFrame.stylus.dbgAnchorCol  = dbg.anchorCol;
+            touchFrame.stylus.dbgRawDim1    = dbg.rawDim1;
+            touchFrame.stylus.dbgRawDim2    = dbg.rawDim2;
+            touchFrame.stylus.dbgFinalDim1  = dbg.finalDim1;
+            touchFrame.stylus.dbgFinalDim2  = dbg.finalDim2;
+            touchFrame.stylus.dbgCenterOff  = dbg.centerOff;
+            touchFrame.stylus.dbgPointX     = dbg.pointX;
+            touchFrame.stylus.dbgPointY     = dbg.pointY;
+            touchFrame.stylus.dbgCoordValid = dbg.valid;
+            touchFrame.stylus.dbgSpeedInstant  = dbg.speedInstant;
+            touchFrame.stylus.dbgSpeedShortAvg = dbg.speedShortAvg;
+            touchFrame.stylus.dbgSpeedFullAvg  = dbg.speedFullAvg;
+            touchFrame.stylus.dbgIirCoef       = dbg.iirCoef;
+            touchFrame.stylus.dbgIsHover       = dbg.isHover;
+            touchFrame.stylus.dbgIsEdge        = dbg.isEdge;
+            touchFrame.stylus.dbgTiltDiffX  = dbg.tiltDiffX;
+            touchFrame.stylus.dbgTiltDiffY  = dbg.tiltDiffY;
+            touchFrame.stylus.dbgPeakSignal     = dbg.peakSignal;
+            touchFrame.stylus.dbgRawPressure    = dbg.rawPressure;
+            touchFrame.stylus.dbgMappedPressure = dbg.mappedPressure;
+            touchFrame.stylus.dbgVhfPenState      = dbg.vhfPenState;
+            touchFrame.stylus.dbgLinearFilterState = dbg.linearFilterState;
         }
         m_framePushCb(touchFrame);
     }

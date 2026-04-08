@@ -1,5 +1,6 @@
 #include "IpcPipeServer.h"
 #include "Logger.h"
+#include <sddl.h>
 
 namespace Ipc {
 
@@ -27,14 +28,23 @@ void IpcPipeServer::Stop() {
 }
 
 void IpcPipeServer::ServerLoop() {
-    // Build permissive security descriptor for cross-session access
+    // Build secure security descriptor for cross-session access
     // (Service runs as SYSTEM, App runs as user)
-    SECURITY_DESCRIPTOR sd{};
-    InitializeSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION);
-    SetSecurityDescriptorDacl(&sd, TRUE, nullptr, FALSE);  // NULL DACL = full access
+    // D: (DACL)
+    // (A;;GA;;;SY)  - Allow Full Access to SYSTEM
+    // (A;;GA;;;BA)  - Allow Full Access to Built-in Administrators
+    // (A;;GRGW;;;BU) - Allow Read/Write to Built-in Users
+    LPCWSTR sddl = L"D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;BU)";
+    PSECURITY_DESCRIPTOR pSd = nullptr;
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            sddl, SDDL_REVISION_1, &pSd, nullptr)) {
+        LOG_ERROR("IPC", __func__, "IPC", "Failed to create security descriptor: {}", GetLastError());
+        return;
+    }
+
     SECURITY_ATTRIBUTES sa{};
     sa.nLength = sizeof(sa);
-    sa.lpSecurityDescriptor = &sd;
+    sa.lpSecurityDescriptor = pSd;
     sa.bInheritHandle = FALSE;
 
     while (m_running.load()) {
@@ -83,6 +93,10 @@ void IpcPipeServer::ServerLoop() {
         DisconnectNamedPipe(pipe);
         CloseHandle(pipe);
         LOG_INFO("IPC", __func__, "IPC", "Client disconnected.");
+    }
+
+    if (pSd) {
+        LocalFree(pSd);
     }
 }
 

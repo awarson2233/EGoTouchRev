@@ -171,6 +171,31 @@ struct StylusFrameData {
     // Diagnostic: which pipeline stage produced this result
     // 0=ok, 1=slaveParseFail, 2=tx1Invalid, 3=noPeak, 4=coordFail, 5=noiseReject
     uint8_t pipelineStage = 0;
+
+    // ── P2 Pipeline Diagnostic (populated from StylusPipeline::DbgCoordBreakdown) ──
+    uint16_t dbgAnchorRow  = 0;
+    uint16_t dbgAnchorCol  = 0;
+    int32_t  dbgRawDim1    = 0;
+    int32_t  dbgRawDim2    = 0;
+    int32_t  dbgFinalDim1  = 0;
+    int32_t  dbgFinalDim2  = 0;
+    float    dbgCenterOff  = 0.f;
+    float    dbgPointX     = 0.f;
+    float    dbgPointY     = 0.f;
+    bool     dbgCoordValid = false;
+    float    dbgSpeedInstant  = 0.f;
+    float    dbgSpeedShortAvg = 0.f;
+    float    dbgSpeedFullAvg  = 0.f;
+    float    dbgIirCoef       = 0.f;
+    bool     dbgIsHover       = false;
+    bool     dbgIsEdge        = false;
+    float    dbgTiltDiffX  = 0.f;
+    float    dbgTiltDiffY  = 0.f;
+    uint16_t dbgPeakSignal     = 0;
+    uint16_t dbgRawPressure    = 0;
+    uint16_t dbgMappedPressure = 0;
+    uint8_t  dbgVhfPenState      = 0;
+    uint8_t  dbgLinearFilterState = 0;
 };
 
 // 整个管线中流转的帧结构体

@@ -18,13 +18,6 @@ inline void WriteU16Le(std::array<uint8_t, 17>& b,
     b[off]     = static_cast<uint8_t>(v & 0xFF);
     b[off + 1] = static_cast<uint8_t>((v >> 8) & 0xFF);
 }
-inline void WriteU32Le(std::array<uint8_t, 17>& b,
-                       size_t off, uint32_t v) {
-    b[off]     = static_cast<uint8_t>(v & 0xFF);
-    b[off + 1] = static_cast<uint8_t>((v >> 8) & 0xFF);
-    b[off + 2] = static_cast<uint8_t>((v >> 16) & 0xFF);
-    b[off + 3] = static_cast<uint8_t>((v >> 24) & 0xFF);
-}
 } // namespace
 
 // ══════════════════════════════════════════════
@@ -87,6 +80,8 @@ bool StylusPipeline::Process(
         }
         m_prevValid = false;
         m_postProcessor.Reset();
+        m_coorReviser.Reset();
+        m_linearFilter.Reset();
         return false;
     }
     m_lastResult.slaveValid = true;
@@ -116,7 +111,7 @@ bool StylusPipeline::Process(
     if (!m_gridData.tx1.valid) {
         m_lastResult.point.valid = false;
         m_lastResult.pipelineStage = 2; // TX1 invalid (no pen)
-        if (!m_prevValid) { m_postProcessor.Reset(); ResetTilt(); ResetCalibration(); }
+        if (!m_prevValid) { m_postProcessor.Reset(); ResetTilt(); ResetCalibration(); m_coorReviser.Reset(); m_linearFilter.Reset(); }
         m_prevValid = false;
         UpdatePenLifecycle(false, false);
         if (m_emitPacketWhenInvalid) BuildStylusPacket(outPacket);
@@ -161,6 +156,18 @@ bool StylusPipeline::Process(
         return false;
     }
 
+    // ── 7b. LOCAL → GLOBAL coordinate conversion ──
+    // rawCoor.dim1/dim2 are local to the 9×9 window (range [0, 9*1024)).
+    m_lastResult.point.tx1X = static_cast<float>(rawCoor.dim1) / Asa::kCoorUnit;
+    m_lastResult.point.tx1Y = static_cast<float>(rawCoor.dim2) / Asa::kCoorUnit;
+
+    const int32_t centerOff =
+        m_anchorCenterOffset * Asa::kCoorUnit;
+    rawCoor.dim1 += static_cast<int32_t>(m_gridData.tx1.anchorCol) *
+                    Asa::kCoorUnit - centerOff;
+    rawCoor.dim2 += static_cast<int32_t>(m_gridData.tx1.anchorRow) *
+                    Asa::kCoorUnit - centerOff;
+
     // 8. HPP3 Noise post-process
     if (m_hpp3NoisePostEnabled && ApplyHpp3NoisePost(rawCoor)) {
         m_lastResult.point.valid = false;
@@ -172,28 +179,46 @@ bool StylusPipeline::Process(
         return false;
     }
 
-    // 9. Post-processing chain
-    auto postCoor = m_postProcessor.Process(rawCoor);
+    // 9. Post-processing chain (IIR, jitter) — now on GLOBAL coordinates
+    //    P1: pass hover/edge flags for 3-mode IIR coefficient selection
+    const bool isHover = (m_lastResult.pressure == 0);
+    const bool isEdge  = m_edgeLiftCorrector.IsInEdgeRegion(
+        static_cast<float>(rawCoor.dim1), static_cast<float>(rawCoor.dim2),
+        m_sensorRows, m_sensorCols);
+    auto postCoor = m_postProcessor.Process(rawCoor, isHover, isEdge);
+
+    // 9b. P2: LinearFilter (7-state line detection)
+    postCoor = m_linearFilter.Process(postCoor, m_lastResult.pressure);
+
+    // 9c. P2: CoorReviser (TX2 dual-frequency revision)
+    if (m_coorReviser.enabled && m_gridData.tx2.valid) {
+        auto tx2Peak = m_peakDetector.FindPeak(m_gridData.tx2.grid);
+        if (tx2Peak.valid) {
+            auto tx2Proj = m_peakDetector.ProjectTo1D(
+                m_gridData.tx2.grid, tx2Peak);
+            auto tx2Coor = m_coordSolver.Solve(tx2Proj);
+            if (tx2Coor.valid) {
+                m_lastResult.point.tx2X = static_cast<float>(tx2Coor.dim1) / Asa::kCoorUnit;
+                m_lastResult.point.tx2Y = static_cast<float>(tx2Coor.dim2) / Asa::kCoorUnit;
+
+                // Convert TX2 to global too
+                tx2Coor.dim1 += static_cast<int32_t>(m_gridData.tx2.anchorCol) *
+                                Asa::kCoorUnit - centerOff;
+                tx2Coor.dim2 += static_cast<int32_t>(m_gridData.tx2.anchorRow) *
+                                Asa::kCoorUnit - centerOff;
+            }
+            postCoor = m_coorReviser.Revise(postCoor, tx2Coor);
+        }
+    }
 
     // 10. Calibration (Phase 6)
     auto finalCoor = m_calibEnabled ? ApplyCalibration(postCoor) : postCoor;
     m_lastResult.pipelineStage = 0; // Success
 
     m_lastResult.point.valid = finalCoor.valid;
-    // Grid coordinate is local to the 9×9 window (0 ~ 9*1024).
-    // Sensor layout: Row direction = vertical = Y axis on screen
-    //                Col direction = horizontal = X axis on screen
-    // m_anchorCenterOffset: 0=anchor is top-left, 4=anchor is center of window
-    const float anchorRow = static_cast<float>(
-        m_gridData.tx1.anchorRow) * Asa::kCoorUnit;  // vertical (Y)
-    const float anchorCol = static_cast<float>(
-        m_gridData.tx1.anchorCol) * Asa::kCoorUnit;  // horizontal (X)
-    const float centerOff =
-        static_cast<float>(m_anchorCenterOffset) * Asa::kCoorUnit;
-    m_lastResult.point.x = anchorCol +
-        static_cast<float>(finalCoor.dim2) - centerOff;  // col + dim2
-    m_lastResult.point.y = anchorRow +
-        static_cast<float>(finalCoor.dim1) - centerOff;  // row + dim1
+    // Coordinates are now GLOBAL — use directly for point.x/y
+    m_lastResult.point.x = static_cast<float>(finalCoor.dim1);
+    m_lastResult.point.y = static_cast<float>(finalCoor.dim2);
 
     // 诊断：写入实时分解量（供 DrawConfigUI 展示）
     m_dbg.anchorRow = m_gridData.tx1.anchorRow;
@@ -206,10 +231,35 @@ bool StylusPipeline::Process(
     m_dbg.pointX    = m_lastResult.point.x;
     m_dbg.pointY    = m_lastResult.point.y;
     m_dbg.valid     = finalCoor.valid;
+    // ── P2: 扩展上报参数（上位机实时监控） ──
+    {
+        const auto& sp = m_postProcessor.GetSpeed();
+        m_dbg.speedInstant  = sp.instant;
+        m_dbg.speedShortAvg = sp.shortAvg;
+        m_dbg.speedFullAvg  = sp.fullAvg;
+    }
+    m_dbg.iirCoef   = m_postProcessor.GetLastIIRCoef();
+    m_dbg.isHover   = isHover;
+    m_dbg.isEdge    = isEdge;
+    m_dbg.tiltDiffX = m_prevTiltDiffX;
+    m_dbg.tiltDiffY = m_prevTiltDiffY;
+    m_dbg.peakSignal = m_lastResult.signalX;
 
     // 10b. Edge coordinate compensation
     if (m_edgeCoorPostEnabled)
         EdgeCoorPostProcess(m_lastResult.point.x, m_lastResult.point.y);
+
+    // 10c. P1: Edge-lift artifact correction
+    //      If the pen just lifted at the edge with a coordinate snap,
+    //      freeze to the previous frame's coordinate.
+    if (m_elcEnabled && m_edgeLiftCorrector.IsEdgeLiftArtifact(
+            m_lastResult.point.x, m_lastResult.point.y,
+            m_prevPointX, m_prevPointY,
+            m_lastResult.pressure, m_prevPressure,
+            m_sensorRows, m_sensorCols)) {
+        m_lastResult.point.x = m_prevPointX;
+        m_lastResult.point.y = m_prevPointY;
+    }
 
     // 11. TX2 for tilt
     if (m_tiltEnabled && m_gridData.tx2.valid) {
@@ -218,11 +268,22 @@ bool StylusPipeline::Process(
             auto tx2Proj = m_peakDetector.ProjectTo1D(
                 m_gridData.tx2.grid, tx2Peak);
             auto tx2Coor = m_coordSolver.Solve(tx2Proj);
-            if (tx2Coor.valid) SolveTilt(finalCoor, tx2Coor);
+            if (tx2Coor.valid) {
+                // Convert TX2 to global for consistent tilt diff
+                tx2Coor.dim1 += static_cast<int32_t>(m_gridData.tx2.anchorCol) *
+                                Asa::kCoorUnit - centerOff;
+                tx2Coor.dim2 += static_cast<int32_t>(m_gridData.tx2.anchorRow) *
+                                Asa::kCoorUnit - centerOff;
+                SolveTilt(finalCoor, tx2Coor);
+            }
         }
     }
 
     // 12. Pressure — BT MCU injection only (Task 1)
+    //     First, update signalX from peak data for signal-suppression gate.
+    m_lastResult.signalX = static_cast<uint16_t>(
+        std::clamp(m_gridData.tx1.grid[peak.peakRow][peak.peakCol],
+                   static_cast<int16_t>(0), static_cast<int16_t>(0x7FFF)));
     {
         uint16_t btPress = 0;
         {
@@ -245,7 +306,8 @@ bool StylusPipeline::Process(
         if ((sPressLogCount++ % 120) == 0) {
             LOG_DEBUG("Engine", __func__, "Pressure", "btMcu={} active={}",  btPress, finalCoor.valid);
         }
-        SolvePressure(btPress, finalCoor.valid);
+        SolvePressure(btPress, finalCoor.valid,
+                      static_cast<int>(m_lastResult.signalX));
     }
 
     // 13. Button (from slave header)
@@ -256,10 +318,17 @@ bool StylusPipeline::Process(
     // 14. Pen lifecycle
     UpdatePenLifecycle(finalCoor.valid, m_lastResult.pressure > 0);
 
-    // 15. Build packet
+    // 15. Build packet + save state for next frame
+    m_prevPointX = m_lastResult.point.x;
+    m_prevPointY = m_lastResult.point.y;
     m_prevValid = finalCoor.valid;
     m_prevStatus = m_lastResult.status;
     BuildStylusPacket(outPacket);
+    // ── 上报：最终压力和 VHF 状态 ──
+    m_dbg.rawPressure = m_lastResult.point.rawPressure;
+    m_dbg.mappedPressure = m_lastResult.pressure;
+    m_dbg.vhfPenState = outPacket.valid ? outPacket.bytes[1] : 0;
+    m_dbg.linearFilterState = static_cast<uint8_t>(m_linearFilter.GetState());
     return outPacket.valid;
 }
 
@@ -338,6 +407,17 @@ void StylusPipeline::SolveTilt(
     m_prevTiltDiffX = diffX;
     m_prevTiltDiffY = diffY;
 
+    // P2: Vector length clamp (TSACore step 9)
+    // If |diff_vector| > limit, scale to limit preserving direction
+    {
+        const float vecLen = std::sqrt(diffX * diffX + diffY * diffY);
+        const float limit = std::max(0.1f, m_tiltVectorClampLimit);
+        if (vecLen > limit && vecLen > 0.001f) {
+            diffX = diffX * (limit / vecLen);
+            diffY = diffY * (limit / vecLen);
+        }
+    }
+
     int outX = ConvertCoordDiffToTilt(diffX, false);
     int outY = ConvertCoordDiffToTilt(diffY, true);
 
@@ -359,11 +439,22 @@ void StylusPipeline::SolveTilt(
 // Pressure (migrated from StylusProcessor)
 // ══════════════════════════════════════════════
 void StylusPipeline::SolvePressure(
-        uint16_t rawPressure, bool active) {
-    if (!active || rawPressure == 0) {
+        uint16_t rawPressure, bool active,
+        int signalStrength) {
+    if (!active) {
         m_lastResult.pressure = 0;
         m_prevPressure = 0;
         m_pressureTailCounter = 0;
+        return;
+    }
+
+    // P2: Signal strength suppression
+    // When TX1 signal is too weak, force pressure to 0 to prevent ghost traces
+    if (m_pressureSignalSuppressEnabled &&
+        signalStrength < m_pressureSignalSuppressThreshold &&
+        signalStrength > 0) {
+        m_lastResult.pressure = 0;
+        m_prevPressure = 0;
         return;
     }
     // Polynomial mapping
@@ -387,11 +478,11 @@ void StylusPipeline::SolvePressure(
     mapped = mapped * std::clamp(m_pressureMapGainPercent, 1, 1000) / 100;
     mapped = std::clamp(mapped, 0, 0x0FFF);
 
-    // IIR
+    // IIR — P1: Q8 (÷256) to match TSACore (was Q7 ÷128)
     if (mapped > 0 && m_prevPressure > 0) {
-        const int w = std::clamp(m_pressureIirWeightQ7, 1, 127);
+        const int w = std::clamp(m_pressureIirWeightQ8, 1, 255);
         mapped = ((static_cast<int>(m_prevPressure) *
-                   (128 - w)) + mapped * w + 64) >> 7;
+                   (256 - w)) + mapped * w + 128) >> 8;
         mapped = std::clamp(mapped, 0, 0x0FFF);
     }
     // Tail decay
@@ -575,7 +666,17 @@ void StylusPipeline::ResetCalibration() {
 void StylusPipeline::BuildStylusPacket(StylusPacket& pkt) const {
     pkt = StylusPacket{};
     pkt.reportId = 0x08;
-    pkt.length = 17;
+    // ── HID Pen Report layout (from hidinjector.sys descriptor) ──
+    //   b[0]      : Report ID (0x08)
+    //   b[1]      : Status bits (TipSwitch:0, Barrel:1, Invert:2, Eraser:3, pad:4, InRange:5)
+    //   b[2]      : Contact Identifier
+    //   b[3..4]   : X position (uint16 LE, 0..16000)
+    //   b[5..6]   : Y position (uint16 LE, 0..25600)
+    //   b[7..8]   : Tip Pressure (uint16 LE, 0..4095)
+    //   b[9..10]  : X Tilt (int16 LE, -9000..+9000 centidegrees)
+    //   b[11..12] : Y Tilt (int16 LE, -9000..+9000 centidegrees)
+    // Total = 13 bytes
+    pkt.length = 13;
     if (!m_lastResult.point.valid && !m_emitPacketWhenInvalid) {
         pkt.valid = false; return;
     }
@@ -583,127 +684,192 @@ void StylusPipeline::BuildStylusPacket(StylusPacket& pkt) const {
     auto& b = pkt.bytes;
     b.fill(0);
     b[0] = 0x08;
-    b[1] = static_cast<uint8_t>(m_lastResult.status & 0x7F);
-    b[2] = 0x80;
-    if (m_lastResult.point.valid) {
-        // Full sensor coordinate range
-        // X(Col): [0, sensorCols * kCoorUnit)  Y(Row): [0, sensorRows * kCoorUnit)
-        const float kSensorRangeX =
-            static_cast<float>(m_sensorCols * Asa::kCoorUnit);
-        const float kSensorRangeY =
-            static_cast<float>(m_sensorRows * Asa::kCoorUnit);
 
-        const float gx = m_lastResult.point.x;
-        const float gy = m_lastResult.point.y;
-
-        // Map sensor coords to HID report coords (4-byte fields)
-        // X is inverted (landscape orientation convention)
-        uint32_t vx = static_cast<uint32_t>(std::clamp(
-            static_cast<int32_t>(std::lround(
-                (1.0f - gx / kSensorRangeX) * kHidMaxX)),
-            static_cast<int32_t>(0), static_cast<int32_t>(kHidMaxX)));
-        uint32_t vy = static_cast<uint32_t>(std::clamp(
-            static_cast<int32_t>(std::lround(
-                gy / kSensorRangeY * kHidMaxY)),
-            static_cast<int32_t>(0), static_cast<int32_t>(kHidMaxY)));
-        WriteU32Le(b, 3, vx);
-        WriteU32Le(b, 7, vy);
+    // ── Status byte ──
+    {
+        uint8_t penState = 0;
+        if (m_lastResult.point.valid)
+            penState |= (1u << 5);   // bit5 = InRange
+        if (m_lastResult.pressure > 0)
+            penState |= (1u << 0);   // bit0 = TipSwitch
+        // BarrelSwitch: driven by BLE button data via UpdateButtonFromBle()
+        // m_bleButtonState bit0 = barrel button
+        const uint8_t bleBtn = m_bleButtonState.load(std::memory_order_relaxed);
+        if (bleBtn & 0x01)
+            penState |= (1u << 1);   // bit1 = BarrelSwitch
+        b[1] = penState;
     }
-    WriteU16Le(b, 11, m_lastResult.pressure);
-    WriteU16Le(b, 13,
-        static_cast<uint16_t>(m_lastResult.point.tiltX));
-    WriteU16Le(b, 15,
-        static_cast<uint16_t>(m_lastResult.point.tiltY));
+
+    // ── Contact ID ──
+    b[2] = 0x00;
+
+    // ── X/Y coordinates (16-bit each) ──
+    // Axis mapping (matches Touch report in VhfReporter::BuildTouchReports):
+    //   Sensor Row (point.y, 40 rows, short edge 166mm) → HID X (16000)
+    //   Sensor Col (point.x, 60 cols, long edge 266mm)  → HID Y (25600)
+    //
+    // Physical orientation (user's screen):
+    //   Right-bottom = (col=0, row=0)
+    //   Left-top     = (col=60, row=40)
+    //
+    // HID orientation: (0,0) = top-left, X grows right, Y grows down
+    //   Row→HID_X: row=0(bottom) → HID_X=max(bottom), row=40(top) → HID_X=0(top)  ← no invert
+    //   Col→HID_Y: col=0(right) → HID_Y=max(right), col=60(left) → HID_Y=0(left)  ← invert
+    if (m_lastResult.point.valid) {
+        const float offsetRow = static_cast<float>(m_screenOffsetY);
+        const float offsetCol = static_cast<float>(m_screenOffsetX);
+        const float sensorRangeRow =
+            static_cast<float>(m_sensorRows * Asa::kCoorUnit);
+        const float sensorRangeCol =
+            static_cast<float>(m_sensorCols * Asa::kCoorUnit);
+        const float activeRow = sensorRangeRow - offsetRow -
+            static_cast<float>(m_screenEndMarginY);
+        const float activeCol = sensorRangeCol - offsetCol -
+            static_cast<float>(m_screenEndMarginX);
+
+        // point.y = row-direction value, point.x = col-direction value
+        float gy = std::clamp(m_lastResult.point.y - offsetRow, 0.0f,
+                              std::max(1.0f, activeRow));
+        float gx = std::clamp(m_lastResult.point.x - offsetCol, 0.0f,
+                              std::max(1.0f, activeCol));
+
+        // Row → HID X (16000): row=0(bottom)→max, row=40(top)→0
+        // No inversion needed: row increases upward, HID X=0 is top
+        const float normHidX = activeRow > 0.0f
+            ? (gy / activeRow) : 0.5f;
+        // Col → HID Y (25600): col=0(right)→max, col=60(left)→0
+        // Invert: col increases leftward, but HID Y=0 is left
+        const float normHidY = activeCol > 0.0f
+            ? (1.0f - gx / activeCol) : 0.5f;
+
+        uint16_t vx = static_cast<uint16_t>(std::clamp(
+            static_cast<int32_t>(std::lround(normHidX * kHidMaxX)),
+            0, static_cast<int32_t>(kHidMaxX)));
+        uint16_t vy = static_cast<uint16_t>(std::clamp(
+            static_cast<int32_t>(std::lround(normHidY * kHidMaxY)),
+            0, static_cast<int32_t>(kHidMaxY)));
+
+        WriteU16Le(b, 3, vx);   // HID X: b[3..4] — from sensor Row
+        WriteU16Le(b, 5, vy);   // HID Y: b[5..6] — from sensor Col
+    }
+
+    // ── Pressure (16-bit, 0..4095) ──
+    uint16_t press = static_cast<uint16_t>(
+        std::min(static_cast<uint32_t>(m_lastResult.pressure), 4095u));
+    WriteU16Le(b, 7, press);    // Pressure: b[7..8]
+
+    // ── Tilt X/Y (int16, centidegrees: value_deg * 100) ──
+    // TSACore GetTiltByCoorDif outputs degrees in [-90, +90].
+    // HID descriptor expects centidegrees [-9000, +9000].
+    int16_t tiltXCdeg = static_cast<int16_t>(std::clamp(
+        static_cast<int32_t>(m_lastResult.point.tiltX) * 100,
+        static_cast<int32_t>(-kTiltMax),
+        static_cast<int32_t>(kTiltMax)));
+    int16_t tiltYCdeg = static_cast<int16_t>(std::clamp(
+        static_cast<int32_t>(m_lastResult.point.tiltY) * 100,
+        static_cast<int32_t>(-kTiltMax),
+        static_cast<int32_t>(kTiltMax)));
+    WriteU16Le(b, 9,  static_cast<uint16_t>(tiltXCdeg));  // X Tilt: b[9..10]
+    WriteU16Le(b, 11, static_cast<uint16_t>(tiltYCdeg));  // Y Tilt: b[11..12]
 }
 
 // ══════════════════════════════════════════════
 // GetConfigSchema — Configuration metadata
 // ══════════════════════════════════════════════
 std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
+    using Cat = ConfigParam::Category;
     return {
         // General
         ConfigParam("sp.enableSlaveChecksum", "Enable Slave Checksum",
-            ConfigParam::Bool, const_cast<bool*>(&m_enableSlaveChecksum)),
+            ConfigParam::Bool, const_cast<bool*>(&m_enableSlaveChecksum), Cat::General),
         ConfigParam("sp.emitPacketWhenInvalid", "Emit Packet When Invalid",
-            ConfigParam::Bool, const_cast<bool*>(&m_emitPacketWhenInvalid)),
+            ConfigParam::Bool, const_cast<bool*>(&m_emitPacketWhenInvalid), Cat::General),
         ConfigParam("sp.buttonReleaseHold", "Button Release Hold",
-            ConfigParam::Int, const_cast<int*>(&m_buttonReleaseHoldFrames), 0, 10),
-
-        // Coordinate Mapping
-        ConfigParam("sp.sensorRows", "Sensor Rows (Y)",
-            ConfigParam::Int, const_cast<int*>(&m_sensorRows), 9, 80),
-        ConfigParam("sp.sensorCols", "Sensor Cols (X)",
-            ConfigParam::Int, const_cast<int*>(&m_sensorCols), 9, 80),
-        ConfigParam("sp.anchorCenterOffset", "Anchor Center Offset",
-            ConfigParam::Int, const_cast<int*>(&m_anchorCenterOffset), 0, 8),
-
-        // Edge Coordinate
-        ConfigParam("sp.edgeCoorPostEnabled", "Enable Edge Compensation",
-            ConfigParam::Bool, const_cast<bool*>(&m_edgeCoorPostEnabled)),
-
-        // Tilt
-        ConfigParam("sp.tiltEnabled", "Enable Tilt",
-            ConfigParam::Bool, const_cast<bool*>(&m_tiltEnabled)),
-        ConfigParam("sp.tiltKeepLast", "Keep Last On Invalid",
-            ConfigParam::Bool, const_cast<bool*>(&m_tiltKeepLastOnInvalid)),
-        ConfigParam("sp.tiltDiffAvgWin", "Diff Average Window",
-            ConfigParam::Int, const_cast<int*>(&m_tiltDiffAverageWindow), 1, 10),
-        ConfigParam("sp.tiltDegCellX", "Degree/Cell X",
-            ConfigParam::Float, const_cast<float*>(&m_tiltDegreePerCellX), 1.0f, 30.0f),
-        ConfigParam("sp.tiltDegCellY", "Degree/Cell Y",
-            ConfigParam::Float, const_cast<float*>(&m_tiltDegreePerCellY), 1.0f, 30.0f),
-        ConfigParam("sp.tiltNormLenX", "Norm Len X",
-            ConfigParam::Float, const_cast<float*>(&m_tiltNormLenX), 0.5f, 20.0f),
-        ConfigParam("sp.tiltNormLenY", "Norm Len Y",
-            ConfigParam::Float, const_cast<float*>(&m_tiltNormLenY), 0.5f, 20.0f),
-        ConfigParam("sp.tiltMaxDeg", "Max Degree",
-            ConfigParam::Int, const_cast<int*>(&m_tiltMaxDegree), 10, 89),
-        ConfigParam("sp.tiltJitterDeg", "Jitter Threshold",
-            ConfigParam::Int, const_cast<int*>(&m_tiltJitterThresholdDeg), 0, 10),
-        ConfigParam("sp.tiltIirOldW", "IIR Old Weight",
-            ConfigParam::Float, const_cast<float*>(&m_tiltCoordIirOldWeight), 0.0f, 0.99f),
-
-        // Pressure
-        ConfigParam("sp.pressPolyEnabled", "Polynomial Mapping",
-            ConfigParam::Bool, const_cast<bool*>(&m_pressurePolyEnabled)),
-        ConfigParam("sp.pressIirQ7", "IIR Weight (Q7)",
-            ConfigParam::Int, const_cast<int*>(&m_pressureIirWeightQ7), 1, 127),
-        ConfigParam("sp.pressSeg1Th", "Seg1 Threshold",
-            ConfigParam::Int, const_cast<int*>(&m_pressureMapSeg1Threshold), 0, 50),
-        ConfigParam("sp.pressSeg2Th", "Seg2 Threshold",
-            ConfigParam::Int, const_cast<int*>(&m_pressureMapSeg2Threshold), 50, 500),
-        ConfigParam("sp.pressGain", "Gain %",
-            ConfigParam::Int, const_cast<int*>(&m_pressureMapGainPercent), 10, 500),
-        ConfigParam("sp.pressTailFrames", "Tail Frames",
-            ConfigParam::Int, const_cast<int*>(&m_pressureTailFrames), 0, 20),
-        ConfigParam("sp.pressTailMin", "Tail Min",
-            ConfigParam::Int, const_cast<int*>(&m_pressureTailMin), 0, 100),
-        ConfigParam("sp.pressTailDecay", "Tail Decay Rate",
-            ConfigParam::Int, const_cast<int*>(&m_pressureTailDecay), 1, 200),
-
-        // HPP3 Noise
-        ConfigParam("sp.hpp3NoiseEnabled", "Enable HPP3 Noise",
-            ConfigParam::Bool, const_cast<bool*>(&m_hpp3NoisePostEnabled)),
-        ConfigParam("sp.hpp3JumpTh", "Jump Threshold",
-            ConfigParam::Float, const_cast<float*>(&m_hpp3CoorJumpThreshold), 1.0f, 100.0f),
-
-        // Recheck
-        ConfigParam("sp.recheckEnabled", "Enable Recheck",
-            ConfigParam::Bool, const_cast<bool*>(&m_recheckEnabled)),
-        ConfigParam("sp.recheckThBase", "Signal Thresh Base",
-            ConfigParam::Int, const_cast<int*>(&m_recheckSignalThreshBase), 10, 500),
-
-        // Pen Lifecycle
+            ConfigParam::Int, const_cast<int*>(&m_buttonReleaseHoldFrames), 0, 10, Cat::General),
         ConfigParam("sp.liftingTimeout", "Lifting Timeout",
-            ConfigParam::Int, const_cast<int*>(&m_liftingTimeout), 1, 30),
-
-        // Calibration
+            ConfigParam::Int, const_cast<int*>(&m_liftingTimeout), 1, 30, Cat::General),
         ConfigParam("sp.calibEnabled", "Enable Calibration",
-            ConfigParam::Bool, const_cast<bool*>(&m_calibEnabled)),
+            ConfigParam::Bool, const_cast<bool*>(&m_calibEnabled), Cat::General),
 
-        // Slave Header
+        // === Solver ===
+        ConfigParam("sp.coordUseTriangle", "Use Triangle Mode",
+            ConfigParam::Bool, const_cast<bool*>(&m_coordSolver.useTriangle), Cat::Solver),
+        ConfigParam("sp.coordEdgeCompBit3", "Triangle Edge Compensation",
+            ConfigParam::Bool, const_cast<bool*>(&m_coordSolver.edgeCompBit3), Cat::Solver),
+        ConfigParam("sp.sensorRows", "Sensor Rows (Y)",
+            ConfigParam::Int, const_cast<int*>(&m_sensorRows), 9, 80, Cat::Solver),
+        ConfigParam("sp.sensorCols", "Sensor Cols (X)",
+            ConfigParam::Int, const_cast<int*>(&m_sensorCols), 9, 80, Cat::Solver),
+        ConfigParam("sp.anchorCenterOffset", "Anchor Center Offset",
+            ConfigParam::Int, const_cast<int*>(&m_anchorCenterOffset), 0, 8, Cat::Solver),
+        ConfigParam("sp.pitchCompDim1Enabled", "Pitch Comp Dim1 Enable",
+            ConfigParam::Bool, const_cast<bool*>(&m_coordSolver.pitchCompDim1.enabled), Cat::Solver),
+        ConfigParam("sp.pitchCompDim2Enabled", "Pitch Comp Dim2 Enable",
+            ConfigParam::Bool, const_cast<bool*>(&m_coordSolver.pitchCompDim2.enabled), Cat::Solver),
+        ConfigParam("sp.gravityNoiseFloor", "Gravity Noise Floor",
+            ConfigParam::Int, const_cast<int32_t*>(&m_coordSolver.gravityNoiseFloor), 0, 500, Cat::Solver),
+        ConfigParam("sp.gravityFictEdge", "Gravity Fictitious Edge",
+            ConfigParam::Bool, const_cast<bool*>(&m_coordSolver.gravityFictitiousEdge), Cat::Solver),
+        ConfigParam("sp.recheckEnabled", "Enable Recheck",
+            ConfigParam::Bool, const_cast<bool*>(&m_recheckEnabled), Cat::Solver),
+        ConfigParam("sp.recheckThBase", "Signal Thresh Base",
+            ConfigParam::Int, const_cast<int*>(&m_recheckSignalThreshBase), 10, 500, Cat::Solver),
+
+        // === Filter ===
+        ConfigParam("sp.lfEnabled", "LinearFilter Enabled",
+            ConfigParam::Bool, const_cast<bool*>(&m_linearFilter.enabled), Cat::Filter),
+        ConfigParam("sp.hpp3NoiseEnabled", "Enable HPP3 Noise",
+            ConfigParam::Bool, const_cast<bool*>(&m_hpp3NoisePostEnabled), Cat::Filter),
+        ConfigParam("sp.hpp3JumpTh", "Jump Threshold",
+            ConfigParam::Float, const_cast<float*>(&m_hpp3CoorJumpThreshold), 1.0f, 100.0f, Cat::Filter),
+
+        // === Behavior ===
+        ConfigParam("sp.edgeCoorPostEnabled", "Enable Edge Coordinate Process",
+            ConfigParam::Bool, const_cast<bool*>(&m_edgeCoorPostEnabled), Cat::Behavior),
+        ConfigParam("sp.elcEnabled", "Enable Edge Lift Corrector",
+            ConfigParam::Bool, const_cast<bool*>(&m_elcEnabled), Cat::Behavior),
+        ConfigParam("sp.crEnabled", "Enable TX2 Coor Reviser",
+            ConfigParam::Bool, const_cast<bool*>(&m_coorReviser.enabled), Cat::Behavior),
+        ConfigParam("sp.tiltEnabled", "Enable Tilt",
+            ConfigParam::Bool, const_cast<bool*>(&m_tiltEnabled), Cat::Behavior),
+        ConfigParam("sp.tiltKeepLast", "Keep Last On Invalid",
+            ConfigParam::Bool, const_cast<bool*>(&m_tiltKeepLastOnInvalid), Cat::Behavior),
+        ConfigParam("sp.tiltDiffAvgWin", "Diff Average Window",
+            ConfigParam::Int, const_cast<int*>(&m_tiltDiffAverageWindow), 1, 10, Cat::Behavior),
+        ConfigParam("sp.tiltDegCellX", "Degree/Cell X",
+            ConfigParam::Float, const_cast<float*>(&m_tiltDegreePerCellX), 1.0f, 30.0f, Cat::Behavior),
+        ConfigParam("sp.tiltDegCellY", "Degree/Cell Y",
+            ConfigParam::Float, const_cast<float*>(&m_tiltDegreePerCellY), 1.0f, 30.0f, Cat::Behavior),
+        ConfigParam("sp.tiltNormLenX", "Norm Len X",
+            ConfigParam::Float, const_cast<float*>(&m_tiltNormLenX), 0.5f, 20.0f, Cat::Behavior),
+        ConfigParam("sp.tiltNormLenY", "Norm Len Y",
+            ConfigParam::Float, const_cast<float*>(&m_tiltNormLenY), 0.5f, 20.0f, Cat::Behavior),
+        ConfigParam("sp.tiltMaxDeg", "Max Degree",
+            ConfigParam::Int, const_cast<int*>(&m_tiltMaxDegree), 10, 89, Cat::Behavior),
+        ConfigParam("sp.tiltJitterDeg", "Jitter Threshold",
+            ConfigParam::Int, const_cast<int*>(&m_tiltJitterThresholdDeg), 0, 10, Cat::Behavior),
+        ConfigParam("sp.tiltIirOldW", "IIR Old Weight",
+            ConfigParam::Float, const_cast<float*>(&m_tiltCoordIirOldWeight), 0.0f, 0.99f, Cat::Behavior),
+
+        // === Output ===
+        ConfigParam("sp.pressPolyEnabled", "Polynomial Mapping",
+            ConfigParam::Bool, const_cast<bool*>(&m_pressurePolyEnabled), Cat::Output),
+        ConfigParam("sp.pressIirQ8", "IIR Weight (Q8)",
+            ConfigParam::Int, const_cast<int*>(&m_pressureIirWeightQ8), 1, 255, Cat::Output),
+        ConfigParam("sp.pressSeg1Th", "Seg1 Threshold",
+            ConfigParam::Int, const_cast<int*>(&m_pressureMapSeg1Threshold), 0, 50, Cat::Output),
+        ConfigParam("sp.pressSeg2Th", "Seg2 Threshold",
+            ConfigParam::Int, const_cast<int*>(&m_pressureMapSeg2Threshold), 50, 500, Cat::Output),
+        ConfigParam("sp.pressGain", "Gain %",
+            ConfigParam::Int, const_cast<int*>(&m_pressureMapGainPercent), 10, 500, Cat::Output),
+        ConfigParam("sp.pressTailFrames", "Tail Frames",
+            ConfigParam::Int, const_cast<int*>(&m_pressureTailFrames), 0, 20, Cat::Output),
+        ConfigParam("sp.pressTailMin", "Tail Min",
+            ConfigParam::Int, const_cast<int*>(&m_pressureTailMin), 0, 100, Cat::Output),
+        ConfigParam("sp.pressTailDecay", "Tail Decay Rate",
+            ConfigParam::Int, const_cast<int*>(&m_pressureTailDecay), 1, 200, Cat::Output),
         ConfigParam("sp.slaveHdrBtnOffset", "Button Byte Offset",
-            ConfigParam::Int, const_cast<int*>(&m_slaveHdrBtnOffset), 0, 6),
+            ConfigParam::Int, const_cast<int*>(&m_slaveHdrBtnOffset), 0, 6, Cat::Output),
     };
 }
 
@@ -717,6 +883,26 @@ void StylusPipeline::SaveConfig(std::ostream& out) const {
         << m_emitPacketWhenInvalid << "\n";
     out << "sp.buttonReleaseHold="
         << m_buttonReleaseHoldFrames << "\n";
+    out << "sp.coordUseTriangle="
+        << m_coordSolver.useTriangle << "\n";
+    out << "sp.coordEdgeCompBit3="
+        << m_coordSolver.edgeCompBit3 << "\n";
+    out << "sp.lfEnabled="
+        << m_linearFilter.enabled << "\n";
+    out << "sp.crEnabled="
+        << m_coorReviser.enabled << "\n";
+    out << "sp.elcEnabled="
+        << m_elcEnabled << "\n";
+    // P0: Pitch Compensation
+    out << "sp.pitchCompDim1Enabled="
+        << m_coordSolver.pitchCompDim1.enabled << "\n";
+    out << "sp.pitchCompDim2Enabled="
+        << m_coordSolver.pitchCompDim2.enabled << "\n";
+    // P0: Gravity
+    out << "sp.gravityNoiseFloor="
+        << m_coordSolver.gravityNoiseFloor << "\n";
+    out << "sp.gravityFictEdge="
+        << m_coordSolver.gravityFictitiousEdge << "\n";
     // Tilt
     out << "sp.tiltEnabled=" << m_tiltEnabled << "\n";
     out << "sp.tiltKeepLast="
@@ -740,8 +926,8 @@ void StylusPipeline::SaveConfig(std::ostream& out) const {
     // Pressure
     out << "sp.pressPolyEnabled="
         << m_pressurePolyEnabled << "\n";
-    out << "sp.pressIirQ7="
-        << m_pressureIirWeightQ7 << "\n";
+    out << "sp.pressIirQ8="
+        << m_pressureIirWeightQ8 << "\n";
     out << "sp.pressSeg1Th="
         << m_pressureMapSeg1Threshold << "\n";
     out << "sp.pressSeg2Th="
@@ -794,6 +980,26 @@ void StylusPipeline::LoadConfig(
         m_emitPacketWhenInvalid = toBool(value);
     else if (key == "sp.buttonReleaseHold")
         m_buttonReleaseHoldFrames = toInt(value);
+    else if (key == "sp.coordUseTriangle")
+        m_coordSolver.useTriangle = toBool(value);
+    else if (key == "sp.coordEdgeCompBit3")
+        m_coordSolver.edgeCompBit3 = toBool(value);
+    else if (key == "sp.lfEnabled")
+        m_linearFilter.enabled = toBool(value);
+    else if (key == "sp.crEnabled")
+        m_coorReviser.enabled = toBool(value);
+    else if (key == "sp.elcEnabled")
+        m_elcEnabled = toBool(value);
+    // P0: Pitch Compensation
+    else if (key == "sp.pitchCompDim1Enabled")
+        m_coordSolver.pitchCompDim1.enabled = toBool(value);
+    else if (key == "sp.pitchCompDim2Enabled")
+        m_coordSolver.pitchCompDim2.enabled = toBool(value);
+    // P0: Gravity
+    else if (key == "sp.gravityNoiseFloor")
+        m_coordSolver.gravityNoiseFloor = toInt(value);
+    else if (key == "sp.gravityFictEdge")
+        m_coordSolver.gravityFictitiousEdge = toBool(value);
     // Tilt
     else if (key == "sp.tiltEnabled")
         m_tiltEnabled = toBool(value);
@@ -818,8 +1024,8 @@ void StylusPipeline::LoadConfig(
     // Pressure
     else if (key == "sp.pressPolyEnabled")
         m_pressurePolyEnabled = toBool(value);
-    else if (key == "sp.pressIirQ7")
-        m_pressureIirWeightQ7 = toInt(value);
+    else if (key == "sp.pressIirQ8")
+        m_pressureIirWeightQ8 = toInt(value);
     else if (key == "sp.pressSeg1Th")
         m_pressureMapSeg1Threshold = toInt(value);
     else if (key == "sp.pressSeg2Th")

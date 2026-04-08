@@ -1,7 +1,6 @@
 #pragma once
 
 #include "IFrameProcessor.h"
-#include <array>
 #include <vector>
 
 namespace Engine {
@@ -58,9 +57,11 @@ private:
     float m_accThresholdBoost = 4.0f;
     float m_accBoostSizeMm = 1.6f;
     float m_predictionScale = 1.0f;
+    bool m_liftOffHoldEnabled = false;
     int m_liftOffHoldFrames = 1;
     bool m_liftOffPredictEnabled = true;
     float m_liftOffVelocityDecay = 0.5f;
+    float m_liftOffHoldSpeedThreshold = 0.5f; // min speed (cells/frame) to activate hold; below=instant Up
     int m_touchDownDebounceFrames = 0;
     bool m_dynamicDebounceEnabled = true;
     int m_touchDownDebounceMaxExtra = 2;

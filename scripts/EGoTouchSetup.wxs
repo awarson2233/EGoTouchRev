@@ -5,16 +5,17 @@
     - UpgradeCode 必须全局唯一，绝不能改，用于覆盖更新旧版本。
     - 我们使用 -arch arm64 命令行参数来设定原生架构
   -->
-  <Package Name="EGoTouch Controller Software" Manufacturer="EGoTouch Team" Version="1.0.0" 
+  <Package Name="!(loc.ProductName)" Manufacturer="!(loc.Manufacturer)" Version="1.0.0"
            UpgradeCode="434AC770-0762-431A-9ABC-DB2F9DB289AC" 
-           Scope="perMachine">
+           Scope="perMachine"
+           Language="!(loc.Language)">
 
     <!-- 支持自动覆盖升级：只要 UpgradeCode 不变，且提升 Version 号，它就会自动卸载旧版并覆盖安装新版 -->
-    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." AllowSameVersionUpgrades="yes" />
+    <MajorUpgrade DowngradeErrorMessage="!(loc.DowngradeError)" AllowSameVersionUpgrades="yes" />
 
     <!-- 开启基础的安装界面 UI (会提供一个“我同意”“下一步”“安装”的向导) -->
     <ui:WixUI Id="WixUI_Minimal" />
-    <WixVariable Id="WixUILicenseRtf" Value="scripts\\EULA.rtf" />
+    <WixVariable Id="WixUILicenseRtf" Value="!(loc.LicenseRtf)" />
 
     <!-- 用 CAB 文件打包我们所有零散文件并嵌在单个 MSI 内 -->
     <MediaTemplate EmbedCab="yes" />
@@ -36,8 +37,8 @@
             Id="EGoTouchServiceInstaller"
             Type="ownProcess"
             Name="EGoTouchService"
-            DisplayName="EGoTouch Capacitive Touch Driver"
-            Description="EGoTouch Capacitive Touch Driver Service - Manages touch frame acquisition, algorithm processing, and HID injection."
+            DisplayName="!(loc.ServiceDisplayName)"
+            Description="!(loc.ServiceDescription)"
             Start="auto"           
             Account="LocalSystem"
             ErrorControl="normal" />

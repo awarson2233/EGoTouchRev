@@ -352,8 +352,18 @@ bool TouchTracker::Process(HeatmapFrame& frame) {
         t.missed += 1;
         if (t.stylusSuppressFrames > 0) t.stylusSuppressFrames -= 1;
 
-        if (!t.upEventEmitted && t.missed > m_liftOffHoldFrames) {
-            // Hold period expired → emit Up event
+        // Determine effective hold frames.
+        // When hold is disabled, always immediate Up.
+        // When enabled, only hold if track was moving (sliding).
+        int effectiveHold = 0;
+        if (m_liftOffHoldEnabled) {
+            const float speedSq = t.vx * t.vx + t.vy * t.vy;
+            const float speedThSq = m_liftOffHoldSpeedThreshold * m_liftOffHoldSpeedThreshold;
+            effectiveHold = (speedSq > speedThSq) ? m_liftOffHoldFrames : 0;
+        }
+
+        if (!t.upEventEmitted && t.missed > effectiveHold) {
+            // Hold period expired (or bypassed for stationary tap) → emit Up event
             TouchContact up;
             up.id = t.id;
             up.x = t.x; up.y = t.y;
@@ -396,8 +406,27 @@ bool TouchTracker::Process(HeatmapFrame& frame) {
             pred.reportFlags = 0;
             pred.reportEvent = TouchReportIdle;
             if (out.size() < static_cast<size_t>(m_maxTouchCount)) out.push_back(pred);
+        } else if (!t.upEventEmitted) {
+            // Predict OFF, within hold period → freeze last position
+            // Keep reporting the contact at its last known position so VHF
+            // doesn't see it vanish. This bridges short touch drops.
+            TouchContact hold;
+            hold.id = t.id;
+            hold.x = t.x; hold.y = t.y;
+            hold.state = TouchStateMove;
+            hold.area = t.area; hold.signalSum = t.signalSum;
+            hold.sizeMm = t.sizeMm;
+            hold.isEdge = IsEdgeTouch(hold.x,hold.y,kCols,kRows,kEdgeMargin);
+            hold.isReported = true;
+            hold.prevIndex = static_cast<int>(p);
+            hold.debugFlags = 0x10; // Frozen/held contact flag
+            hold.lifeFlags = TouchLifeMapped;
+            if (hold.isEdge) hold.lifeFlags |= TouchLifeEdge;
+            hold.reportFlags = 0;
+            hold.reportEvent = TouchReportIdle;
+            if (out.size() < static_cast<size_t>(m_maxTouchCount)) out.push_back(hold);
         }
-        if (t.missed <= (m_liftOffHoldFrames + 1)) {
+        if (t.missed <= (effectiveHold + 1)) {
             if (!m_liftOffPredictEnabled) {
                 t.vx = 0; t.vy = 0;  // Legacy: zero velocity when prediction off
             }
@@ -457,12 +486,16 @@ std::vector<ConfigParam> TouchTracker::GetConfigSchema() const {
         ConfigParam::Float, const_cast<float*>(&m_alwaysMatchDistance), 0.5f, 6.0f));
     schema.push_back(ConfigParam("PredictionScale", "Prediction Scale", 
         ConfigParam::Float, const_cast<float*>(&m_predictionScale), 0.0f, 2.0f));
+    schema.push_back(ConfigParam("LiftOffHoldEnabled", "LiftOff Hold Enable", 
+        ConfigParam::Bool, const_cast<bool*>(&m_liftOffHoldEnabled)));
     schema.push_back(ConfigParam("LiftOffHoldFrames", "LiftOff Hold", 
         ConfigParam::Int, const_cast<int*>(&m_liftOffHoldFrames), 0, 10));
     schema.push_back(ConfigParam("LiftOffPredictEnabled", "LiftOff Predict", 
         ConfigParam::Bool, const_cast<bool*>(&m_liftOffPredictEnabled)));
     schema.push_back(ConfigParam("LiftOffVelocityDecay", "LiftOff Vel Decay", 
         ConfigParam::Float, const_cast<float*>(&m_liftOffVelocityDecay), 0.0f, 1.0f));
+    schema.push_back(ConfigParam("LiftOffHoldSpeedThreshold", "Hold Speed Threshold", 
+        ConfigParam::Float, const_cast<float*>(&m_liftOffHoldSpeedThreshold), 0.0f, 3.0f));
 
     // --- Debounce & Rejection ---
     schema.push_back(ConfigParam("TouchDownDebounceFrames", "Down Debounce", 
@@ -501,9 +534,11 @@ void TouchTracker::SaveConfig(std::ostream& os) const {
     os << "AccThresholdBoost=" << m_accThresholdBoost << "\n";
     os << "AccBoostSizeMm=" << m_accBoostSizeMm << "\n";
     os << "PredictionScale=" << m_predictionScale << "\n";
+    os << "LiftOffHoldEnabled=" << (m_liftOffHoldEnabled?"1":"0") << "\n";
     os << "LiftOffHoldFrames=" << m_liftOffHoldFrames << "\n";
     os << "LiftOffPredictEnabled=" << (m_liftOffPredictEnabled?"1":"0") << "\n";
     os << "LiftOffVelocityDecay=" << m_liftOffVelocityDecay << "\n";
+    os << "LiftOffHoldSpeedThreshold=" << m_liftOffHoldSpeedThreshold << "\n";
     os << "TouchDownDebounceFrames=" << m_touchDownDebounceFrames << "\n";
     os << "DynamicDebounceEnabled=" << (m_dynamicDebounceEnabled?"1":"0") << "\n";
     os << "TouchDownDebounceMaxExtra=" << m_touchDownDebounceMaxExtra << "\n";
@@ -548,9 +583,11 @@ void TouchTracker::LoadConfig(const std::string& key, const std::string& value) 
     else if (key=="AccThresholdBoost")        m_accThresholdBoost = std::stof(value);
     else if (key=="AccBoostSizeMm")           m_accBoostSizeMm = std::stof(value);
     else if (key=="PredictionScale")          m_predictionScale = std::stof(value);
+    else if (key=="LiftOffHoldEnabled")       m_liftOffHoldEnabled = toBool(value);
     else if (key=="LiftOffHoldFrames")        m_liftOffHoldFrames = std::stoi(value);
     else if (key=="LiftOffPredictEnabled")    m_liftOffPredictEnabled = toBool(value);
     else if (key=="LiftOffVelocityDecay")     m_liftOffVelocityDecay = std::clamp(std::stof(value),0.0f,1.0f);
+    else if (key=="LiftOffHoldSpeedThreshold") m_liftOffHoldSpeedThreshold = std::clamp(std::stof(value),0.0f,3.0f);
     else if (key=="TouchDownDebounceFrames")  m_touchDownDebounceFrames = std::stoi(value);
     else if (key=="DynamicDebounceEnabled")   m_dynamicDebounceEnabled = toBool(value);
     else if (key=="TouchDownDebounceMaxExtra")m_touchDownDebounceMaxExtra = std::stoi(value);

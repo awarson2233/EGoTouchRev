@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WixLocalization Culture="zh-CN" xmlns="http://wixtoolset.org/schemas/v4/wxl">
+  <String Id="Language" Value="2052" />
+  <String Id="ProductName" Value="EGoTouch Controller Software" />
+  <String Id="ProductNameTest" Value="EGoTouch Controller Software (Test Version)" />
+  <String Id="Manufacturer" Value="EGoTouch Team" />
+  <String Id="DowngradeError" Value="已经安装了更高版本的 [ProductName]。" />
+  <String Id="LicenseRtf" Value="scripts\EULA_zh-CN.rtf" />
+  <String Id="ServiceDisplayName" Value="EGoTouch Capacitive Touch Driver" />
+  <String Id="ServiceDescription" Value="EGoTouch 电容触控控制器驱动服务 — 管理触摸屏帧采集、算法处理与 HID 注入。" />
+  <String Id="ServiceDisplayNameTest" Value="EGoTouch Capacitive Touch Driver (Test)" />
+  <String Id="ServiceDescriptionTest" Value="EGoTouch 电容触控控制器驱动服务 — 测试版本。" />
+</WixLocalization>

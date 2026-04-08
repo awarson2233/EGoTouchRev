@@ -227,6 +227,16 @@ bool ServiceHost::Start() {
         m_penEventBridge->Start();
         LOG_INFO("Service", __func__, "MCU", "PenEventBridge started (col00 event channel).");
 
+        // BT 笔切频命令发送器：DeviceRuntime 在检测到频率不匹配时调用
+        if (m_deviceRuntime) {
+            m_deviceRuntime->SetBtScanModeSender(
+                [this](uint8_t freq1, uint8_t freq2) -> bool {
+                    if (!m_penEventBridge) return false;
+                    return m_penEventBridge->SendScanMode(freq1, freq2);
+                });
+            LOG_INFO("Service", __func__, "MCU", "BtScanModeSender injected via PenEventBridge (col00).");
+        }
+
         // ── 4b. 压力通道 (col01): 'U' 报文频率 + 压感 ──────
         m_penPressureReader = std::make_unique<Himax::Pen::PenPressureReader>();
         if (m_penEvent) m_penPressureReader->SetNotifyEvent(m_penEvent);

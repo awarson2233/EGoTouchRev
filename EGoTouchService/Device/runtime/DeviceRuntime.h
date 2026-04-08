@@ -108,9 +108,16 @@ public:
     /// 注入 BT MCU 压感值（由 PenBridge 线程写入，StylusPipeline 帧内读取）
     void SetBtMcuPressure(uint16_t p) { m_stylusPipeline.SetBtMcuPressure(p); }
 
+    /// 蓝牙按键数据注入（由 PenBridge / BLE 线程写入）
+    void UpdateButtonFromBle(uint8_t raw) { m_stylusPipeline.UpdateButtonFromBle(raw); }
+
     /// BT 频率提供者：每帧调用获取最新 BT MCU 频率 (freq1, freq2)
     using BtFreqProvider = std::function<std::pair<uint8_t, uint8_t>()>;
     void SetBtFreqProvider(BtFreqProvider fn) { m_btFreqProvider = std::move(fn); }
+
+    /// BT 笔切频命令发送器：由 ServiceHost 注入，通过 PenEventBridge (col00) 发送
+    using BtScanModeSender = std::function<bool(uint8_t freq1, uint8_t freq2)>;
+    void SetBtScanModeSender(BtScanModeSender fn) { m_btScanModeSender = std::move(fn); }
 
     // Frame push callback for IPC (called after pipeline+VHF in worker loop)
     using FramePushCallback = std::function<void(const Engine::HeatmapFrame&)>;
@@ -174,6 +181,7 @@ private:
     std::atomic<uint64_t> m_nextCmdId{1};
     FramePushCallback m_framePushCb;
     BtFreqProvider m_btFreqProvider;
+    BtScanModeSender m_btScanModeSender;
 
     std::atomic<bool> m_running{false};
     std::thread m_thread;
