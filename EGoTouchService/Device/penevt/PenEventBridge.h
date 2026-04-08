@@ -22,6 +22,14 @@ class PenEventBridge : public BtHidChannel {
 public:
     PenEventBridge() = default;
 
+    /// 向 BT MCU 发送 SetScanMode 命令，通知笔切换扫描频率。
+    /// 对应原厂 THP_Service::BtPen_SendPacket + ApDaemon::SetScanMode 的联合逻辑。
+    /// @param freq1  新的 TX1 频率码
+    /// @param freq2  新的 TX2 频率码
+    /// @param mode   0=正常扫描, 3=检测模式（默认 0）
+    /// @return true if packet was sent successfully
+    bool SendScanMode(uint8_t freq1, uint8_t freq2, uint8_t mode = 0);
+
     /// 设置 MCU 事件回调（线程安全）。回调从事件读取线程发起，不得长时间阻塞。
     void SetEventCallback(PenEventCallback cb);
     /// 设置状态事件句柄（用于通知 App 侧刷新状态）
@@ -43,6 +51,7 @@ private:
     void SendRawPacket(const std::vector<uint8_t>& pkt);
     void SendAck(uint8_t ackCode);
     void SendInitParamEcho(const uint8_t* data, size_t len);
+    void SendInitProtocolParams();
 
     mutable std::mutex m_cbMutex;
     PenEventCallback m_eventCallback;

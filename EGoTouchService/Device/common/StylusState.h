@@ -1,19 +1,14 @@
 #pragma once
 #include <cstdint>
 
-// ── 手写笔频率命令对 ─────────────────────────────────────────────────────────
-// 每支笔在芯片频率表中有两个频点命令（由 set_stylus_id 时绑定）
-struct StylusFreqPair {
-    uint16_t freq0_cmd = 0;   // 频点0命令（标准频率，默认扫描）
-    uint16_t freq1_cmd = 0;   // 频点1命令（240Hz 高频扫描）
-};
-
 // ── 用户态驱动侧手写笔状态 ────────────────────────────────────────────────────
-// 由 StylusFreqManager 维护，供 ProcessStylusStatus 使用
+// 由 AfeController 维护，供 ProcessStylusStatus 使用
+//
+// 频率表绑定到 TPIC panel (OTP ID)，不绑定到笔。
+// 参见 HimaxAfe.cpp 中的 kTpicFreqTable[]。
 struct StylusState {
     bool           connected        = false; // 手写笔已通过 BTMCU 连接
     uint8_t        pen_id           = 0;     // 注册的笔 ID（0-3 主表，5=默认）
-    StylusFreqPair freqPair;                 // 当前笔的频率命令对
     uint8_t        freqIdx          = 0;     // 当前使用的频点索引（0 或 1）
     uint8_t        switchPolicy     = 0;     // 0=禁用自动切换, 2=启用噪声触发切换
     uint8_t        switchTargetIdx  = 0;     // 目标频点（噪声判断后写入）

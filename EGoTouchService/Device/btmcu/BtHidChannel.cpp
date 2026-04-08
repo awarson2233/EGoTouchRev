@@ -36,15 +36,22 @@ void BtHidChannel::WorkerFunc() {
     while (m_running.load()) {
         auto path = FindDevicePath();
         if (path) {
+            // Log the found device path
+            std::string pathA(path->begin(), path->end());
+            LOG_INFO(ChannelName(), "WorkerFunc", "MCU",
+                     "[Thread] Found device: {}", pathA);
             auto res = m_transport->Open(*path);
             if (res) {
                 LOG_INFO(ChannelName(), "WorkerFunc", "MCU",
-                         "[Thread] Channel opened.");
+                         "[Thread] Channel opened successfully.");
                 break;
             }
+            LOG_WARN(ChannelName(), "WorkerFunc", "MCU",
+                     "[Thread] Open failed for device, retry...");
+        } else {
+            LOG_WARN(ChannelName(), "WorkerFunc", "MCU",
+                     "[Thread] Device not found, retry in 2s...");
         }
-        LOG_WARN(ChannelName(), "WorkerFunc", "MCU",
-                 "[Thread] Device not found, retry in 2s...");
         std::this_thread::sleep_for(std::chrono::seconds(2));
     }
 

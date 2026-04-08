@@ -32,6 +32,10 @@ public:
     ChipResult<> ForceToFreqPoint(uint8_t freq_idx);
     ChipResult<> ForceToScanRate(uint8_t rate_idx);
 
+    /// 查询 TPIC 频率表中指定索引的频率命令码
+    /// 用于 BT ScanMode 命令构造
+    uint8_t GetTpicFreq(uint8_t idx) const;
+
     // ── 手写笔生命周期管理 ─────────────────────────────────────
     ChipResult<> InitStylus(uint8_t pen_id = 5);
     ChipResult<> SetStylusId(uint8_t pen_id);
