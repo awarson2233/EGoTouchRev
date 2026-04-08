@@ -115,6 +115,10 @@ public:
     using BtFreqProvider = std::function<std::pair<uint8_t, uint8_t>()>;
     void SetBtFreqProvider(BtFreqProvider fn) { m_btFreqProvider = std::move(fn); }
 
+    /// BT 笔切频命令发送器：由 ServiceHost 注入，通过 PenEventBridge (col00) 发送
+    using BtScanModeSender = std::function<bool(uint8_t freq1, uint8_t freq2)>;
+    void SetBtScanModeSender(BtScanModeSender fn) { m_btScanModeSender = std::move(fn); }
+
     // Frame push callback for IPC (called after pipeline+VHF in worker loop)
     using FramePushCallback = std::function<void(const Engine::HeatmapFrame&)>;
     void SetFramePushCallback(FramePushCallback cb) { m_framePushCb = std::move(cb); }
@@ -177,6 +181,7 @@ private:
     std::atomic<uint64_t> m_nextCmdId{1};
     FramePushCallback m_framePushCb;
     BtFreqProvider m_btFreqProvider;
+    BtScanModeSender m_btScanModeSender;
 
     std::atomic<bool> m_running{false};
     std::thread m_thread;

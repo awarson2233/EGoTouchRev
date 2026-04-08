@@ -8,6 +8,7 @@
 #include "GridIIRProcessor.h"
 #include "FeatureExtractor.h"
 #include "StylusPipeline.h"
+#include "StylusSolver/AsaTypes.h"
 #include "TouchTracker.h"
 #include "CoordinateFilter.h"
 #include "imgui.h"
@@ -93,6 +94,7 @@ void DiagnosticsWorkbench::Render() {
     // ── Panels (each docked by name) ──
     DrawControlPanel();
     if (m_renderVisualization) DrawHeatmap();
+    if (m_showSlaveHeatmap) DrawSlaveHeatmap();
     DrawLogPanel();
     DrawInspectorPanel();
     DrawStatusBar();
@@ -494,6 +496,7 @@ void DiagnosticsWorkbench::DrawControlPanel() {
         ImGui::TextUnformatted("Visualization disabled: acquisition/processing threads keep running.");
     }
     ImGui::Checkbox("Fullscreen Heatmap", &m_fullscreen);
+    ImGui::Checkbox("Show Slave Heatmap (TX1/TX2)", &m_showSlaveHeatmap);
     ImGui::SliderInt("Heatmap Scale", &m_heatmapScale, 1, 30);
     ImGui::SliderFloat("Color Max Range", &m_colorRange, 100.0f, 10000.0f, "%.0f");
     
@@ -600,43 +603,14 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
 
     // -- Stylus Pipeline Config (official ASA pipeline) --
     if (ImGui::BeginTabBar("StylusSubTabs")) {
-        if (ImGui::BeginTabItem("Pipeline Config")) {
-            auto schema = m_proxy->GetStylusPipeline().GetConfigSchema();
-            ConfigUIRenderer::RenderConfigSchema(schema, "Stylus Pipeline");
-            ImGui::EndTabItem();
-        }
-        if (ImGui::BeginTabItem("Live Status")) {
-            const auto& s = m_currentFrame.stylus;
-            ImGui::Text("Slave Valid: %s", s.slaveValid ? "YES" : "NO");
-            ImGui::Text("Status: 0x%08X", s.status);
-            ImGui::Text("Point Valid: %s", s.point.valid ? "YES" : "NO");
-            if (s.point.valid) {
-                ImGui::Text("X: %.1f  Y: %.1f", s.point.x, s.point.y);
-            }
-            ImGui::Text("Pressure: %u", s.pressure);
-            ImGui::Text("Button: %u", s.button);
-            ImGui::Text("Tilt X: %d  Y: %d",
-                static_cast<int>(s.point.tiltX),
-                static_cast<int>(s.point.tiltY));
-            const char* animLabels[] = {"Leave","Hover","Contact","Lifting"};
-            int ai = std::clamp(static_cast<int>(s.animState), 0, 3);
-            ImGui::Text("Lifecycle: %s", animLabels[ai]);
+        auto schema = m_proxy->GetStylusPipeline().GetConfigSchema();
+        const auto& sd = m_currentFrame.stylus;
+        
+        if (ImGui::BeginTabItem("Solver (Coordinate)")) {
+            ConfigUIRenderer::RenderConfigSchema(schema, "Stylus Solver", Engine::ConfigParam::Solver);
+            
             ImGui::Separator();
-            ImGui::Text("Packet Valid: %s", s.packet.valid ? "YES" : "NO");
-            const char* stageNames[] = {
-                "OK", "SlaveParseErr", "TX1Invalid", "NoPeak",
-                "CoordFail", "NoiseReject"};
-            int si = std::clamp(static_cast<int>(s.pipelineStage), 0, 5);
-            if (s.pipelineStage == 0)
-                ImGui::TextColored(ImVec4(0.2f,0.9f,0.3f,1), "Pipeline: %s", stageNames[si]);
-            else
-                ImGui::TextColored(ImVec4(1.0f,0.3f,0.3f,1), "Pipeline: %s (%d)", stageNames[si], si);
-
-            // ── 实时坐标分解 (from IPC SharedFrameData) ────────
-            ImGui::Separator();
-            ImGui::TextColored(ImVec4(0.4f,0.85f,1.0f,1.f),
-                "[Coord Breakdown] (Row=Y, Col=X)");
-            const auto& sd = m_currentFrame.stylus;
+            ImGui::TextColored(ImVec4(0.4f,0.85f,1.0f,1.f), "[Coord Breakdown] (Row=Y, Col=X)");
             ImGui::Text("  anchorRow(Y) = %u   (%u * %.1f = %.1f)",
                 sd.dbgAnchorRow, sd.dbgAnchorRow,
                 static_cast<float>(Asa::kCoorUnit),
@@ -650,23 +624,13 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
             ImGui::Text("  finalDim1(Y) = %d", sd.dbgFinalDim1);
             ImGui::Text("  finalDim2(X) = %d", sd.dbgFinalDim2);
             ImGui::Text("  centerOff    = %.1f", sd.dbgCenterOff);
-            ImGui::Separator();
             if (sd.dbgCoordValid) {
                 ImGui::TextColored(ImVec4(0.2f,0.9f,0.4f,1),
-                    "  point.X = anchorCol*kU + finalDim2 - cOff");
-                ImGui::TextColored(ImVec4(0.2f,0.9f,0.4f,1),
-                    "         = %.1f + %d - %.1f = %.2f",
-                    static_cast<float>(sd.dbgAnchorCol) * Asa::kCoorUnit,
-                    sd.dbgFinalDim2, sd.dbgCenterOff, sd.dbgPointX);
+                    "  point.X = anchorCol*kU + finalDim2 - cOff = %.2f", sd.dbgPointX);
                 ImGui::TextColored(ImVec4(0.4f,0.7f,1.0f,1),
-                    "  point.Y = anchorRow*kU + finalDim1 - cOff");
-                ImGui::TextColored(ImVec4(0.4f,0.7f,1.0f,1),
-                    "         = %.1f + %d - %.1f = %.2f",
-                    static_cast<float>(sd.dbgAnchorRow) * Asa::kCoorUnit,
-                    sd.dbgFinalDim1, sd.dbgCenterOff, sd.dbgPointY);
+                    "  point.Y = anchorRow*kU + finalDim1 - cOff = %.2f", sd.dbgPointY);
             } else {
-                ImGui::TextColored(ImVec4(0.7f,0.7f,0.0f,1),
-                    "  [coord invalid this frame]");
+                ImGui::TextColored(ImVec4(0.7f,0.7f,0.0f,1), "  [coord invalid this frame]");
             }
 
             // ── P2: Post-Processing Metrics ──
@@ -732,6 +696,85 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
                 ImGui::Text("  State: %d (%s)", lfs, lfStates[lfs]);
             }
 
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Filters (Smoothing)")) {
+            ConfigUIRenderer::RenderConfigSchema(schema, "Stylus Filters", Engine::ConfigParam::Filter);
+
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(1.0f,0.85f,0.4f,1.f), "[Post-Processing]");
+            ImGui::Text("  Speed: instant=%.1f  short=%.1f  full=%.1f",
+                sd.dbgSpeedInstant, sd.dbgSpeedShortAvg, sd.dbgSpeedFullAvg);
+            ImGui::Text("  IIR Coef: %.3f  %s",
+                sd.dbgIirCoef,
+                sd.dbgIirCoef < 0.3f ? "(strong smooth)" :
+                (sd.dbgIirCoef > 0.8f ? "(fast track)" : "(moderate)"));
+            
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(0.9f,0.9f,0.5f,1.f), "[Linear Filter]");
+            const char* lfStates[] = {
+                "Init","Wait","Collect","CurveLine",
+                "EnterStraight","StraightLine","ExitStraight"};
+            int lfs = std::clamp(static_cast<int>(sd.dbgLinearFilterState), 0, 6);
+            ImGui::Text("  State: %d (%s)", lfs, lfStates[lfs]);
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Behavior (Tilt/Edge)")) {
+            ConfigUIRenderer::RenderConfigSchema(schema, "Stylus Behavior", Engine::ConfigParam::Behavior);
+
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(0.8f,0.6f,1.0f,1.f), "[Tilt Diagnostics]");
+            ImGui::Text("  TX1-TX2 Diff: dX=%.1f  dY=%.1f", sd.dbgTiltDiffX, sd.dbgTiltDiffY);
+            
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(1.0f,0.85f,0.4f,1.f), "[Edge/Hover]");
+            ImGui::Text("  Mode: %s%s",
+                sd.dbgIsHover ? "Hover" : "Write",
+                sd.dbgIsEdge  ? " + Edge" : "");
+            const char* animLabels[] = {"Leave","Hover","Contact","Lifting"};
+            int ai = std::clamp(static_cast<int>(sd.animState), 0, 3);
+            ImGui::Text("  Lifecycle: %s", animLabels[ai]);
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Output (HID/Pressure)")) {
+            ConfigUIRenderer::RenderConfigSchema(schema, "Stylus Output", Engine::ConfigParam::Output);
+            ConfigUIRenderer::RenderConfigSchema(schema, "Stylus General", Engine::ConfigParam::General);
+
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(1.0f,0.5f,0.3f,1.f), "[Pressure Chain]");
+            ImGui::Text("  Peak Signal: %u", sd.dbgPeakSignal);
+            ImGui::Text("  Raw Pressure (BT MCU): %u", sd.dbgRawPressure);
+            ImGui::Text("  Mapped Pressure: %u", sd.dbgMappedPressure);
+
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(0.3f,1.0f,0.8f,1.f), "[VHF Pen State]");
+            uint8_t ps = sd.dbgVhfPenState;
+            bool inRange   = (ps >> 5) & 1;
+            bool tipSwitch = (ps >> 0) & 1;
+            bool barrel    = (ps >> 1) & 1;
+            ImGui::Text("  byte[1] = 0x%02X", ps);
+            ImGui::Text("  InRange=%s  TipSwitch=%s  Barrel=%s",
+                inRange ? "YES" : "no", tipSwitch ? "YES" : "no", barrel ? "YES" : "no");
+            if (inRange && tipSwitch)
+                ImGui::TextColored(ImVec4(0.2f,0.9f,0.3f,1), "  => Writing (ink active)");
+            else if (inRange)
+                ImGui::TextColored(ImVec4(0.6f,0.8f,1.0f,1), "  => Hovering (cursor only)");
+            else
+                ImGui::TextColored(ImVec4(0.5f,0.5f,0.5f,1), "  => Out of range");
+            
+            ImGui::Separator();
+            const char* stageNames[] = {
+                "OK", "SlaveParseErr", "TX1Invalid", "NoPeak",
+                "CoordFail", "NoiseReject"};
+            int si = std::clamp(static_cast<int>(sd.pipelineStage), 0, 5);
+            if (sd.pipelineStage == 0)
+                ImGui::TextColored(ImVec4(0.2f,0.9f,0.3f,1), "Pipeline Status: %s", stageNames[si]);
+            else
+                ImGui::TextColored(ImVec4(1.0f,0.3f,0.3f,1), "Pipeline Status: %s (%d)", stageNames[si], si);
+            
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();
@@ -1015,11 +1058,120 @@ void DiagnosticsWorkbench::DrawHeatmap() {
     ImGui::End();
 }
 
+void DiagnosticsWorkbench::DrawSlaveHeatmap() {
+    ImGui::Begin("Slave Heatmap (TX1 & TX2)");
+
+    if (m_currentFrame.rawData.size() >= 5402) { 
+        // 1. Extract the raw 166-word block
+        std::vector<uint16_t> slaveWordsLocal(166);
+        const uint8_t* ptr = m_currentFrame.rawData.data() + 5070;
+        for (int i = 0; i < 166; ++i) {
+            slaveWordsLocal[i] = static_cast<uint16_t>(ptr[i * 2] | (ptr[i * 2 + 1] << 8));
+        }
+
+        // 2. Decode using ExtractGridFromSlaveWords
+        Asa::AsaGridData gridData = Asa::ExtractGridFromSlaveWords(slaveWordsLocal.data(), 166);
+
+        // 3. Define UI size and constants
+        ImVec2 canvas_sz = ImGui::GetContentRegionAvail();
+        // Fallback or dynamically size up to max container width
+        float draw_width = std::max(200.0f, canvas_sz.x * 0.45f); 
+        float cell_w = draw_width / 9.0f;
+        float cell_h = cell_w; // keep it square
+        ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+        auto draw_grid = [&](const Asa::FreqBlock& grid, float start_x, float start_y, const char* label, float ptX, float ptY) {
+            ImGui::SetCursorScreenPos(ImVec2(start_x, start_y - 20));
+            ImGui::Text("%s (Anchor: R%d C%d)", label, grid.anchorRow, grid.anchorCol);
+            
+            ImVec2 canvas_p(start_x, start_y);
+            
+            for (int r = 0; r < 9; ++r) {
+                for (int c = 0; c < 9; ++c) {
+                    // Typical coordinate assumption: Y is Row, X is Col
+                    // We mirror the display if it helps match Master heatmap
+                    int mirrored_r = 8 - r;
+                    int mirrored_c = 8 - c;
+                    
+                    int16_t val = grid.grid[mirrored_r][mirrored_c];
+                    float normalized = std::clamp((float)val / (m_colorRange), 0.0f, 1.0f);
+                    
+                    ImVec4 colorVec;
+                    if (normalized == 0.0f) {
+                        colorVec = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);
+                    } else {
+                        float v = normalized * 4.0f;
+                        float red = std::clamp(std::min(v - 1.5f, -v + 4.5f), 0.0f, 1.0f);
+                        float green = std::clamp(std::min(v - 0.5f, -v + 3.5f), 0.0f, 1.0f);
+                        float blue = std::clamp(std::min(v + 0.5f, -v + 2.5f), 0.0f, 1.0f);
+                        colorVec = ImVec4(red, green, blue, 1.0f);
+                    }
+
+                    ImU32 colU32 = ImGui::ColorConvertFloat4ToU32(colorVec);
+                    
+                    ImVec2 p_min(canvas_p.x + c * cell_w, canvas_p.y + r * cell_h);
+                    ImVec2 p_max(p_min.x + cell_w, p_min.y + cell_h);
+                    
+                    draw_list->AddRectFilled(p_min, p_max, colU32);
+                    draw_list->AddRect(p_min, p_max, IM_COL32(50, 50, 50, 255));
+                    
+                    // Draw cell value
+                    if (cell_w > 20.0f) {
+                        char vbuf[16];
+                        snprintf(vbuf, sizeof(vbuf), "%d", val);
+                        ImVec2 tsz = ImGui::CalcTextSize(vbuf);
+                        draw_list->AddText(ImVec2(p_min.x + (cell_w - tsz.x)*0.5f, p_min.y + (cell_h - tsz.y)*0.5f), 
+                                           IM_COL32(255, 255, 255, 255), vbuf);
+                    }
+                }
+            }
+
+            // Draw calculated sub-pixel Coordinate inside the grid
+            if (ptX >= 0.0f && ptY >= 0.0f) { // Valid calculated coordinate
+                // X mapped to col, Y mapped to row
+                // Mirrors have to match the cell rendering mapping
+                float mirrored_c = 8.0f - ptX;
+                float mirrored_r = 8.0f - ptY;
+
+                float cx = canvas_p.x + mirrored_c * cell_w + cell_w * 0.5f;
+                float cy = canvas_p.y + mirrored_r * cell_h + cell_h * 0.5f;
+
+                ImU32 markerColor = IM_COL32(255, 255, 0, 255); // Yellow Cross 'x'
+                float crossSize = cell_w * 0.4f;
+
+                draw_list->AddLine(ImVec2(cx - crossSize, cy - crossSize), ImVec2(cx + crossSize, cy + crossSize), markerColor, 2.5f);
+                draw_list->AddLine(ImVec2(cx - crossSize, cy + crossSize), ImVec2(cx + crossSize, cy - crossSize), markerColor, 2.5f);
+            }
+        };
+
+        ImVec2 cp = ImGui::GetCursorScreenPos();
+        // TX1 Grid
+        if (gridData.tx1.valid) {
+            draw_grid(gridData.tx1, cp.x, cp.y + 20.0f, "TX1 Grid", m_currentFrame.stylus.point.tx1X, m_currentFrame.stylus.point.tx1Y);
+        } else {
+            ImGui::Text("TX1 Grid Invalid");
+        }
+
+        // TX2 Grid
+        if (gridData.tx2.valid) {
+            draw_grid(gridData.tx2, cp.x + draw_width + 40.0f, cp.y + 20.0f, "TX2 Grid", m_currentFrame.stylus.point.tx2X, m_currentFrame.stylus.point.tx2Y);
+        } else {
+            ImGui::SetCursorScreenPos(ImVec2(cp.x + draw_width + 40.0f, cp.y));
+            ImGui::Text("TX2 Grid Invalid");
+        }
+
+        // Advance cursor explicitly so following ImGui elements don't overlap the drawn rects
+        ImGui::Dummy(ImVec2(draw_width * 2 + 40.0f, cell_h * 9 + 40.0f));
+
+    } else {
+        ImGui::Text("Insufficient Data. Needs Raw Suffix Array Length.");
+    }
+    ImGui::End();
+}
+
 void DiagnosticsWorkbench::DrawCoordinateTable() {
 
     if (m_currentFrame.contacts.empty()) {
-        ImGui::Text("No touches detected.");
-    } else {
         // Keep a stable UI order by touch ID, so rows do not jump when X/Y changes.
         std::vector<const Engine::TouchContact*> orderedContacts;
         orderedContacts.reserve(m_currentFrame.contacts.size());

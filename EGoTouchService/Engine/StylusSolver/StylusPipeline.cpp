@@ -774,26 +774,43 @@ void StylusPipeline::BuildStylusPacket(StylusPacket& pkt) const {
 // GetConfigSchema — Configuration metadata
 // ══════════════════════════════════════════════
 std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
+    using Cat = ConfigParam::Category;
     return {
         // General
         ConfigParam("sp.enableSlaveChecksum", "Enable Slave Checksum",
-            ConfigParam::Bool, const_cast<bool*>(&m_enableSlaveChecksum)),
+            ConfigParam::Bool, const_cast<bool*>(&m_enableSlaveChecksum), Cat::General),
         ConfigParam("sp.emitPacketWhenInvalid", "Emit Packet When Invalid",
-            ConfigParam::Bool, const_cast<bool*>(&m_emitPacketWhenInvalid)),
+            ConfigParam::Bool, const_cast<bool*>(&m_emitPacketWhenInvalid), Cat::General),
         ConfigParam("sp.buttonReleaseHold", "Button Release Hold",
-            ConfigParam::Int, const_cast<int*>(&m_buttonReleaseHoldFrames), 0, 10),
+            ConfigParam::Int, const_cast<int*>(&m_buttonReleaseHoldFrames), 0, 10, Cat::General),
+        ConfigParam("sp.liftingTimeout", "Lifting Timeout",
+            ConfigParam::Int, const_cast<int*>(&m_liftingTimeout), 1, 30, Cat::General),
+        ConfigParam("sp.calibEnabled", "Enable Calibration",
+            ConfigParam::Bool, const_cast<bool*>(&m_calibEnabled), Cat::General),
 
-        // Coordinate Mapping
+        // === Solver ===
+        ConfigParam("sp.coordUseTriangle", "Use Triangle Mode",
+            ConfigParam::Bool, const_cast<bool*>(&m_coordSolver.useTriangle), Cat::Solver),
+        ConfigParam("sp.coordEdgeCompBit3", "Triangle Edge Compensation",
+            ConfigParam::Bool, const_cast<bool*>(&m_coordSolver.edgeCompBit3), Cat::Solver),
         ConfigParam("sp.sensorRows", "Sensor Rows (Y)",
-            ConfigParam::Int, const_cast<int*>(&m_sensorRows), 9, 80),
+            ConfigParam::Int, const_cast<int*>(&m_sensorRows), 9, 80, Cat::Solver),
         ConfigParam("sp.sensorCols", "Sensor Cols (X)",
-            ConfigParam::Int, const_cast<int*>(&m_sensorCols), 9, 80),
+            ConfigParam::Int, const_cast<int*>(&m_sensorCols), 9, 80, Cat::Solver),
         ConfigParam("sp.anchorCenterOffset", "Anchor Center Offset",
-            ConfigParam::Int, const_cast<int*>(&m_anchorCenterOffset), 0, 8),
-
-        // Edge Coordinate
-        ConfigParam("sp.edgeCoorPostEnabled", "Enable Edge Compensation",
-            ConfigParam::Bool, const_cast<bool*>(&m_edgeCoorPostEnabled)),
+            ConfigParam::Int, const_cast<int*>(&m_anchorCenterOffset), 0, 8, Cat::Solver),
+        ConfigParam("sp.pitchCompDim1Enabled", "Pitch Comp Dim1 Enable",
+            ConfigParam::Bool, const_cast<bool*>(&m_coordSolver.pitchCompDim1.enabled), Cat::Solver),
+        ConfigParam("sp.pitchCompDim2Enabled", "Pitch Comp Dim2 Enable",
+            ConfigParam::Bool, const_cast<bool*>(&m_coordSolver.pitchCompDim2.enabled), Cat::Solver),
+        ConfigParam("sp.gravityNoiseFloor", "Gravity Noise Floor",
+            ConfigParam::Int, const_cast<int32_t*>(&m_coordSolver.gravityNoiseFloor), 0, 500, Cat::Solver),
+        ConfigParam("sp.gravityFictEdge", "Gravity Fictitious Edge",
+            ConfigParam::Bool, const_cast<bool*>(&m_coordSolver.gravityFictitiousEdge), Cat::Solver),
+        ConfigParam("sp.recheckEnabled", "Enable Recheck",
+            ConfigParam::Bool, const_cast<bool*>(&m_recheckEnabled), Cat::Solver),
+        ConfigParam("sp.recheckThBase", "Signal Thresh Base",
+            ConfigParam::Int, const_cast<int*>(&m_recheckSignalThreshBase), 10, 500, Cat::Solver),
 
         // P0: Pitch Compensation (polynomial nonlinearity correction)
         ConfigParam("sp.pitchCompDim1Enabled", "Pitch Comp Dim1 Enable",
@@ -808,68 +825,61 @@ std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
             ConfigParam::Bool, const_cast<bool*>(&m_coordSolver.gravityFictitiousEdge)),
 
         // Tilt
-        ConfigParam("sp.tiltEnabled", "Enable Tilt",
-            ConfigParam::Bool, const_cast<bool*>(&m_tiltEnabled)),
-        ConfigParam("sp.tiltKeepLast", "Keep Last On Invalid",
-            ConfigParam::Bool, const_cast<bool*>(&m_tiltKeepLastOnInvalid)),
-        ConfigParam("sp.tiltDiffAvgWin", "Diff Average Window",
-            ConfigParam::Int, const_cast<int*>(&m_tiltDiffAverageWindow), 1, 10),
-        ConfigParam("sp.tiltDegCellX", "Degree/Cell X",
-            ConfigParam::Float, const_cast<float*>(&m_tiltDegreePerCellX), 1.0f, 30.0f),
-        ConfigParam("sp.tiltDegCellY", "Degree/Cell Y",
-            ConfigParam::Float, const_cast<float*>(&m_tiltDegreePerCellY), 1.0f, 30.0f),
-        ConfigParam("sp.tiltNormLenX", "Norm Len X",
-            ConfigParam::Float, const_cast<float*>(&m_tiltNormLenX), 0.5f, 20.0f),
-        ConfigParam("sp.tiltNormLenY", "Norm Len Y",
-            ConfigParam::Float, const_cast<float*>(&m_tiltNormLenY), 0.5f, 20.0f),
-        ConfigParam("sp.tiltMaxDeg", "Max Degree",
-            ConfigParam::Int, const_cast<int*>(&m_tiltMaxDegree), 10, 89),
-        ConfigParam("sp.tiltJitterDeg", "Jitter Threshold",
-            ConfigParam::Int, const_cast<int*>(&m_tiltJitterThresholdDeg), 0, 10),
-        ConfigParam("sp.tiltIirOldW", "IIR Old Weight",
-            ConfigParam::Float, const_cast<float*>(&m_tiltCoordIirOldWeight), 0.0f, 0.99f),
+        // === Filter ===
+        ConfigParam("sp.lfEnabled", "LinearFilter Enabled",
+            ConfigParam::Bool, const_cast<bool*>(&m_linearFilter.enabled), Cat::Filter),
+        ConfigParam("sp.hpp3NoiseEnabled", "Enable HPP3 Noise",
+            ConfigParam::Bool, const_cast<bool*>(&m_hpp3NoisePostEnabled), Cat::Filter),
+        ConfigParam("sp.hpp3JumpTh", "Jump Threshold",
+            ConfigParam::Float, const_cast<float*>(&m_hpp3CoorJumpThreshold), 1.0f, 100.0f, Cat::Filter),
 
-        // Pressure
+        // === Behavior ===
+        ConfigParam("sp.edgeCoorPostEnabled", "Enable Edge Coordinate Process",
+            ConfigParam::Bool, const_cast<bool*>(&m_edgeCoorPostEnabled), Cat::Behavior),
+        ConfigParam("sp.elcEnabled", "Enable Edge Lift Corrector",
+            ConfigParam::Bool, const_cast<bool*>(&m_elcEnabled), Cat::Behavior),
+        ConfigParam("sp.crEnabled", "Enable TX2 Coor Reviser",
+            ConfigParam::Bool, const_cast<bool*>(&m_coorReviser.enabled), Cat::Behavior),
+        ConfigParam("sp.tiltEnabled", "Enable Tilt",
+            ConfigParam::Bool, const_cast<bool*>(&m_tiltEnabled), Cat::Behavior),
+        ConfigParam("sp.tiltKeepLast", "Keep Last On Invalid",
+            ConfigParam::Bool, const_cast<bool*>(&m_tiltKeepLastOnInvalid), Cat::Behavior),
+        ConfigParam("sp.tiltDiffAvgWin", "Diff Average Window",
+            ConfigParam::Int, const_cast<int*>(&m_tiltDiffAverageWindow), 1, 10, Cat::Behavior),
+        ConfigParam("sp.tiltDegCellX", "Degree/Cell X",
+            ConfigParam::Float, const_cast<float*>(&m_tiltDegreePerCellX), 1.0f, 30.0f, Cat::Behavior),
+        ConfigParam("sp.tiltDegCellY", "Degree/Cell Y",
+            ConfigParam::Float, const_cast<float*>(&m_tiltDegreePerCellY), 1.0f, 30.0f, Cat::Behavior),
+        ConfigParam("sp.tiltNormLenX", "Norm Len X",
+            ConfigParam::Float, const_cast<float*>(&m_tiltNormLenX), 0.5f, 20.0f, Cat::Behavior),
+        ConfigParam("sp.tiltNormLenY", "Norm Len Y",
+            ConfigParam::Float, const_cast<float*>(&m_tiltNormLenY), 0.5f, 20.0f, Cat::Behavior),
+        ConfigParam("sp.tiltMaxDeg", "Max Degree",
+            ConfigParam::Int, const_cast<int*>(&m_tiltMaxDegree), 10, 89, Cat::Behavior),
+        ConfigParam("sp.tiltJitterDeg", "Jitter Threshold",
+            ConfigParam::Int, const_cast<int*>(&m_tiltJitterThresholdDeg), 0, 10, Cat::Behavior),
+        ConfigParam("sp.tiltIirOldW", "IIR Old Weight",
+            ConfigParam::Float, const_cast<float*>(&m_tiltCoordIirOldWeight), 0.0f, 0.99f, Cat::Behavior),
+
+        // === Output ===
         ConfigParam("sp.pressPolyEnabled", "Polynomial Mapping",
             ConfigParam::Bool, const_cast<bool*>(&m_pressurePolyEnabled)),
         ConfigParam("sp.pressIirQ8", "IIR Weight (Q8)",
             ConfigParam::Int, const_cast<int*>(&m_pressureIirWeightQ8), 1, 255),
         ConfigParam("sp.pressSeg1Th", "Seg1 Threshold",
-            ConfigParam::Int, const_cast<int*>(&m_pressureMapSeg1Threshold), 0, 50),
+            ConfigParam::Int, const_cast<int*>(&m_pressureMapSeg1Threshold), 0, 50, Cat::Output),
         ConfigParam("sp.pressSeg2Th", "Seg2 Threshold",
-            ConfigParam::Int, const_cast<int*>(&m_pressureMapSeg2Threshold), 50, 500),
+            ConfigParam::Int, const_cast<int*>(&m_pressureMapSeg2Threshold), 50, 500, Cat::Output),
         ConfigParam("sp.pressGain", "Gain %",
-            ConfigParam::Int, const_cast<int*>(&m_pressureMapGainPercent), 10, 500),
+            ConfigParam::Int, const_cast<int*>(&m_pressureMapGainPercent), 10, 500, Cat::Output),
         ConfigParam("sp.pressTailFrames", "Tail Frames",
-            ConfigParam::Int, const_cast<int*>(&m_pressureTailFrames), 0, 20),
+            ConfigParam::Int, const_cast<int*>(&m_pressureTailFrames), 0, 20, Cat::Output),
         ConfigParam("sp.pressTailMin", "Tail Min",
-            ConfigParam::Int, const_cast<int*>(&m_pressureTailMin), 0, 100),
+            ConfigParam::Int, const_cast<int*>(&m_pressureTailMin), 0, 100, Cat::Output),
         ConfigParam("sp.pressTailDecay", "Tail Decay Rate",
-            ConfigParam::Int, const_cast<int*>(&m_pressureTailDecay), 1, 200),
-
-        // HPP3 Noise
-        ConfigParam("sp.hpp3NoiseEnabled", "Enable HPP3 Noise",
-            ConfigParam::Bool, const_cast<bool*>(&m_hpp3NoisePostEnabled)),
-        ConfigParam("sp.hpp3JumpTh", "Jump Threshold",
-            ConfigParam::Float, const_cast<float*>(&m_hpp3CoorJumpThreshold), 1.0f, 100.0f),
-
-        // Recheck
-        ConfigParam("sp.recheckEnabled", "Enable Recheck",
-            ConfigParam::Bool, const_cast<bool*>(&m_recheckEnabled)),
-        ConfigParam("sp.recheckThBase", "Signal Thresh Base",
-            ConfigParam::Int, const_cast<int*>(&m_recheckSignalThreshBase), 10, 500),
-
-        // Pen Lifecycle
-        ConfigParam("sp.liftingTimeout", "Lifting Timeout",
-            ConfigParam::Int, const_cast<int*>(&m_liftingTimeout), 1, 30),
-
-        // Calibration
-        ConfigParam("sp.calibEnabled", "Enable Calibration",
-            ConfigParam::Bool, const_cast<bool*>(&m_calibEnabled)),
-
-        // Slave Header
+            ConfigParam::Int, const_cast<int*>(&m_pressureTailDecay), 1, 200, Cat::Output),
         ConfigParam("sp.slaveHdrBtnOffset", "Button Byte Offset",
-            ConfigParam::Int, const_cast<int*>(&m_slaveHdrBtnOffset), 0, 6),
+            ConfigParam::Int, const_cast<int*>(&m_slaveHdrBtnOffset), 0, 6, Cat::Output),
     };
 }
 
@@ -883,6 +893,16 @@ void StylusPipeline::SaveConfig(std::ostream& out) const {
         << m_emitPacketWhenInvalid << "\n";
     out << "sp.buttonReleaseHold="
         << m_buttonReleaseHoldFrames << "\n";
+    out << "sp.coordUseTriangle="
+        << m_coordSolver.useTriangle << "\n";
+    out << "sp.coordEdgeCompBit3="
+        << m_coordSolver.edgeCompBit3 << "\n";
+    out << "sp.lfEnabled="
+        << m_linearFilter.enabled << "\n";
+    out << "sp.crEnabled="
+        << m_coorReviser.enabled << "\n";
+    out << "sp.elcEnabled="
+        << m_elcEnabled << "\n";
     // P0: Pitch Compensation
     out << "sp.pitchCompDim1Enabled="
         << m_coordSolver.pitchCompDim1.enabled << "\n";
@@ -970,6 +990,16 @@ void StylusPipeline::LoadConfig(
         m_emitPacketWhenInvalid = toBool(value);
     else if (key == "sp.buttonReleaseHold")
         m_buttonReleaseHoldFrames = toInt(value);
+    else if (key == "sp.coordUseTriangle")
+        m_coordSolver.useTriangle = toBool(value);
+    else if (key == "sp.coordEdgeCompBit3")
+        m_coordSolver.edgeCompBit3 = toBool(value);
+    else if (key == "sp.lfEnabled")
+        m_linearFilter.enabled = toBool(value);
+    else if (key == "sp.crEnabled")
+        m_coorReviser.enabled = toBool(value);
+    else if (key == "sp.elcEnabled")
+        m_elcEnabled = toBool(value);
     // P0: Pitch Compensation
     else if (key == "sp.pitchCompDim1Enabled")
         m_coordSolver.pitchCompDim1.enabled = toBool(value);
