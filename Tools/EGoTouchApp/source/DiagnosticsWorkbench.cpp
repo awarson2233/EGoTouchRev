@@ -632,6 +632,70 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
             } else {
                 ImGui::TextColored(ImVec4(0.7f,0.7f,0.0f,1), "  [coord invalid this frame]");
             }
+
+            // ── P2: Post-Processing Metrics ──
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(1.0f,0.85f,0.4f,1.f),
+                "[Post-Processing]");
+            ImGui::Text("  Speed: instant=%.1f  short=%.1f  full=%.1f",
+                sd.dbgSpeedInstant, sd.dbgSpeedShortAvg, sd.dbgSpeedFullAvg);
+            ImGui::Text("  IIR Coef: %.3f  %s",
+                sd.dbgIirCoef,
+                sd.dbgIirCoef < 0.3f ? "(strong smooth)" :
+                sd.dbgIirCoef > 0.8f ? "(fast track)" : "(moderate)");
+            ImGui::Text("  Mode: %s%s",
+                sd.dbgIsHover ? "Hover" : "Write",
+                sd.dbgIsEdge  ? " + Edge" : "");
+
+            // ── P2: Tilt Diagnostics ──
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(0.8f,0.6f,1.0f,1.f),
+                "[Tilt Diagnostics]");
+            ImGui::Text("  TX1-TX2 Diff: dX=%.1f  dY=%.1f",
+                sd.dbgTiltDiffX, sd.dbgTiltDiffY);
+
+            // ── P2: Pressure Chain ──
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(1.0f,0.5f,0.3f,1.f),
+                "[Pressure Chain]");
+            ImGui::Text("  Peak Signal: %u", sd.dbgPeakSignal);
+            ImGui::Text("  Raw Pressure (BT MCU): %u", sd.dbgRawPressure);
+            ImGui::Text("  Mapped Pressure: %u", sd.dbgMappedPressure);
+
+            // ── P2: VHF Output State ──
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(0.3f,1.0f,0.8f,1.f),
+                "[VHF Pen State]");
+            {
+                uint8_t ps = sd.dbgVhfPenState;
+                bool inRange   = (ps >> 5) & 1;
+                bool tipSwitch = (ps >> 0) & 1;
+                bool barrel    = (ps >> 1) & 1;
+                ImGui::Text("  byte[1] = 0x%02X", ps);
+                ImGui::Text("  InRange=%s  TipSwitch=%s  Barrel=%s",
+                    inRange ? "YES" : "no",
+                    tipSwitch ? "YES" : "no",
+                    barrel ? "YES" : "no");
+                if (inRange && tipSwitch)
+                    ImGui::TextColored(ImVec4(0.2f,0.9f,0.3f,1), "  => Writing (ink active)");
+                else if (inRange)
+                    ImGui::TextColored(ImVec4(0.6f,0.8f,1.0f,1), "  => Hovering (cursor only)");
+                else
+                    ImGui::TextColored(ImVec4(0.5f,0.5f,0.5f,1), "  => Out of range");
+            }
+
+            // ── P2: Linear Filter FSM ──
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(0.9f,0.9f,0.5f,1.f),
+                "[Linear Filter]");
+            {
+                const char* lfStates[] = {
+                    "Init","Wait","Collect","CurveLine",
+                    "EnterStraight","StraightLine","ExitStraight"};
+                int lfs = std::clamp(static_cast<int>(sd.dbgLinearFilterState), 0, 6);
+                ImGui::Text("  State: %d (%s)", lfs, lfStates[lfs]);
+            }
+
             ImGui::EndTabItem();
         }
 

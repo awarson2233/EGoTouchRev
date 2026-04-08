@@ -158,9 +158,9 @@ bool StylusPipeline::Process(
 
     // ── 7b. LOCAL → GLOBAL coordinate conversion ──
     // rawCoor.dim1/dim2 are local to the 9×9 window (range [0, 9*1024)).
-    m_lastResult.point.tx1X = static_cast<float>(rawCoor.dim1) / Asa::kCoorUnit;
-    m_lastResult.point.tx1Y = static_cast<float>(rawCoor.dim2) / Asa::kCoorUnit;
-
+    // TSACore's IIR operates on ABSOLUTE coordinates. We must convert
+    // to global sensor coordinates BEFORE the IIR filter, otherwise
+    // anchor shifts cause a ±1024 discontinuity in the IIR input.
     const int32_t centerOff =
         m_anchorCenterOffset * Asa::kCoorUnit;
     rawCoor.dim1 += static_cast<int32_t>(m_gridData.tx1.anchorCol) *
@@ -198,9 +198,6 @@ bool StylusPipeline::Process(
                 m_gridData.tx2.grid, tx2Peak);
             auto tx2Coor = m_coordSolver.Solve(tx2Proj);
             if (tx2Coor.valid) {
-                m_lastResult.point.tx2X = static_cast<float>(tx2Coor.dim1) / Asa::kCoorUnit;
-                m_lastResult.point.tx2Y = static_cast<float>(tx2Coor.dim2) / Asa::kCoorUnit;
-
                 // Convert TX2 to global too
                 tx2Coor.dim1 += static_cast<int32_t>(m_gridData.tx2.anchorCol) *
                                 Asa::kCoorUnit - centerOff;
@@ -252,7 +249,7 @@ bool StylusPipeline::Process(
     // 10c. P1: Edge-lift artifact correction
     //      If the pen just lifted at the edge with a coordinate snap,
     //      freeze to the previous frame's coordinate.
-    if (m_elcEnabled && m_edgeLiftCorrector.IsEdgeLiftArtifact(
+    if (m_edgeLiftCorrector.IsEdgeLiftArtifact(
             m_lastResult.point.x, m_lastResult.point.y,
             m_prevPointX, m_prevPointY,
             m_lastResult.pressure, m_prevPressure,
@@ -815,6 +812,19 @@ std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
         ConfigParam("sp.recheckThBase", "Signal Thresh Base",
             ConfigParam::Int, const_cast<int*>(&m_recheckSignalThreshBase), 10, 500, Cat::Solver),
 
+        // P0: Pitch Compensation (polynomial nonlinearity correction)
+        ConfigParam("sp.pitchCompDim1Enabled", "Pitch Comp Dim1 Enable",
+            ConfigParam::Bool, const_cast<bool*>(&m_coordSolver.pitchCompDim1.enabled)),
+        ConfigParam("sp.pitchCompDim2Enabled", "Pitch Comp Dim2 Enable",
+            ConfigParam::Bool, const_cast<bool*>(&m_coordSolver.pitchCompDim2.enabled)),
+
+        // P0: Gravity noise floor & fictitious edge
+        ConfigParam("sp.gravityNoiseFloor", "Gravity Noise Floor",
+            ConfigParam::Int, const_cast<int32_t*>(&m_coordSolver.gravityNoiseFloor), 0, 500),
+        ConfigParam("sp.gravityFictEdge", "Gravity Fictitious Edge",
+            ConfigParam::Bool, const_cast<bool*>(&m_coordSolver.gravityFictitiousEdge)),
+
+        // Tilt
         // === Filter ===
         ConfigParam("sp.lfEnabled", "LinearFilter Enabled",
             ConfigParam::Bool, const_cast<bool*>(&m_linearFilter.enabled), Cat::Filter),
@@ -853,9 +863,9 @@ std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
 
         // === Output ===
         ConfigParam("sp.pressPolyEnabled", "Polynomial Mapping",
-            ConfigParam::Bool, const_cast<bool*>(&m_pressurePolyEnabled), Cat::Output),
+            ConfigParam::Bool, const_cast<bool*>(&m_pressurePolyEnabled)),
         ConfigParam("sp.pressIirQ8", "IIR Weight (Q8)",
-            ConfigParam::Int, const_cast<int*>(&m_pressureIirWeightQ8), 1, 255, Cat::Output),
+            ConfigParam::Int, const_cast<int*>(&m_pressureIirWeightQ8), 1, 255),
         ConfigParam("sp.pressSeg1Th", "Seg1 Threshold",
             ConfigParam::Int, const_cast<int*>(&m_pressureMapSeg1Threshold), 0, 50, Cat::Output),
         ConfigParam("sp.pressSeg2Th", "Seg2 Threshold",
