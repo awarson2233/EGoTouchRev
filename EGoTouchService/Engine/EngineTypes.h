@@ -2,6 +2,7 @@
 #include <vector>
 #include <cstdint>
 #include <array>
+#include "FrameLayout.h"
 
 namespace Engine {
 
@@ -108,10 +109,6 @@ struct StylusFrameData {
     uint16_t checksum16 = 0;
     bool tx1BlockValid = false;
     bool tx2BlockValid = false;
-    std::array<uint16_t, 166> slaveWords{};
-
-    int16_t tx1Matrix[40][60]{};
-    int16_t tx2Matrix[40][60]{};
 
     uint32_t status = 0;
     uint16_t tx1Freq = 0x00A1;
@@ -120,13 +117,6 @@ struct StylusFrameData {
     uint32_t button = 0;
     uint16_t nextTx1Freq = 0x00A1;
     uint16_t nextTx2Freq = 0x0018;
-    bool masterMetaValid = false;
-    uint8_t masterMetaBaseWord = 0xFF;
-    uint16_t masterMetaTx1Freq = 0;
-    uint16_t masterMetaTx2Freq = 0;
-    uint16_t masterMetaPressure = 0;
-    uint32_t masterMetaButton = 0;
-    uint32_t masterMetaStatus = 0;
     uint32_t rawButton = 0;
     uint8_t buttonSource = 0; // 0=None, 1=MasterMeta, 2=SlaveWord
 
@@ -223,9 +213,15 @@ struct StylusFrameData {
 
 // 整个管线中流转的帧结构体
 struct HeatmapFrame {
-    // 原始下发的 5063 字节数据 （通常在解析后可以释放掉或清空）
+    // 原始下发的完整帧数据 (deprecated — 过渡期保留, Phase 3 完成后删除)
     std::vector<uint8_t> rawData;
     
+    // ── 结构化 Suffix (新增 — 替代 rawData 中的 magic-offset 访问) ──
+    Frame::MasterSuffixView masterSuffix{};
+    Frame::SlaveSuffixView  slaveSuffix{};
+    bool masterSuffixValid = false;
+    bool slaveSuffixValid  = false;
+
     // 40 x 60 的热力图矩阵, 数据类型 int16_t (便于基线减去后支持负数的死区操作)
     int16_t heatmapMatrix[40][60];
     

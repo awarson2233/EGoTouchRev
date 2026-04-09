@@ -2,7 +2,7 @@
 #include "himax/HimaxChip.h"
 #include "himax/HimaxProtocol.h"
 #include "Logger.h"
-
+#include "FrameLayout.h"
 #include <format>
 
 namespace {
@@ -224,27 +224,18 @@ bool AfeController::ProcessStylusStatus() {
 
     m_stylus.frameCounter++;
 
-    // 定位 master 帧内的状态表
-    constexpr size_t kMasterStatusOffset = 4807;
-    constexpr size_t kF0NoiseOffset      = kMasterStatusOffset + 0x1C;
-    constexpr size_t kF1NoiseOffset      = kMasterStatusOffset + 0x20;
-    constexpr size_t kFreqShiftDoneOffset = kMasterStatusOffset + 0x04;
-    constexpr size_t kTpFreq1Offset      = kMasterStatusOffset + 0x10;
-    constexpr size_t kTpFreq2Offset      = kMasterStatusOffset + 0x12;
-
+    // Build structured view from master status table bytes
     const auto& back_data = m_chip.GetFrameBuffer();
-    if (kF1NoiseOffset + 2 > back_data.size()) return false;
+    if (back_data.size() < Frame::kMasterFrameSize) return false;
 
-    auto readU16 = [&](size_t off) -> uint16_t {
-        return static_cast<uint16_t>(back_data[off]) |
-               (static_cast<uint16_t>(back_data[off + 1]) << 8);
-    };
+    Frame::MasterSuffixView suffix;
+    suffix.LoadFromBytes(back_data.data() + Frame::kMasterSuffixOffset);
 
-    uint16_t f0_noise = readU16(kF0NoiseOffset);
-    uint16_t f1_noise = readU16(kF1NoiseOffset);
-    uint16_t freqDone = readU16(kFreqShiftDoneOffset);
-    uint16_t tpFreq1  = readU16(kTpFreq1Offset);
-    uint16_t tpFreq2  = readU16(kTpFreq2Offset);
+    uint16_t f0_noise = suffix.penF0NoiseCount();
+    uint16_t f1_noise = suffix.penF1NoiseCount();
+    uint16_t freqDone = suffix.freqShiftDone();
+    uint16_t tpFreq1  = suffix.tpFreq1();
+    uint16_t tpFreq2  = suffix.tpFreq2();
 
     constexpr uint32_t kCooldownFrames     = 120;
     constexpr uint32_t kPendingTimeout     = 360;
