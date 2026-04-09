@@ -8,7 +8,7 @@
 #include "GridIIRProcessor.h"
 #include "FeatureExtractor.h"
 #include "StylusPipeline.h"
-#include "StylusSolver/AsaTypes.h"
+#include "StylusSolver/AsaTypes.hpp"
 #include "TouchTracker.h"
 #include "CoordinateFilter.h"
 #include "imgui.h"
@@ -1041,16 +1041,9 @@ void DiagnosticsWorkbench::DrawHeatmap() {
 void DiagnosticsWorkbench::DrawSlaveHeatmap() {
     ImGui::Begin("Slave Heatmap (TX1 & TX2)");
 
-    if (m_currentFrame.rawData.size() >= 5402) { 
-        // 1. Extract the raw 166-word block
-        std::vector<uint16_t> slaveWordsLocal(166);
-        const uint8_t* ptr = m_currentFrame.rawData.data() + 5070;
-        for (int i = 0; i < 166; ++i) {
-            slaveWordsLocal[i] = static_cast<uint16_t>(ptr[i * 2] | (ptr[i * 2 + 1] << 8));
-        }
-
-        // 2. Decode using ExtractGridFromSlaveWords
-        Asa::AsaGridData gridData = Asa::ExtractGridFromSlaveWords(slaveWordsLocal.data(), 166);
+    if (m_currentFrame.slaveSuffixValid) { 
+        // Use structured suffix view directly — no manual byte swap needed
+        Asa::AsaGridData gridData = Asa::ExtractGridFromSlaveWords(m_currentFrame.slaveSuffix.words, Frame::kSlaveSuffixWords);
 
         // 3. Define UI size and constants
         ImVec2 canvas_sz = ImGui::GetContentRegionAvail();
@@ -1124,11 +1117,13 @@ void DiagnosticsWorkbench::DrawSlaveHeatmap() {
             if (ptX >= 0.0f && ptY >= 0.0f) { // Valid calculated coordinate
                 // X mapped to col, Y mapped to row
                 // Mirrors have to match the cell rendering mapping
-                float mirrored_c = 8.0f - ptX;
-                float mirrored_r = 8.0f - ptY;
-
-                float cx = canvas_p.x + mirrored_c * cell_w + cell_w * 0.5f;
-                float cy = canvas_p.y + mirrored_r * cell_h + cell_h * 0.5f;
+                // Coordinate convention: ptX = gridCol + 0.5 at cell center
+                // (e.g., ptX=4.5 → centered on grid column 4)
+                // Cell c displays grid[8-c], center pixel at (c+0.5)*cell_w
+                // Grid column g → cell (8-g) → center pixel (8.5-g)*cell_w
+                // Since ptX = g+0.5, pixel = (9.0 - ptX) * cell_w
+                float cx = canvas_p.x + (9.0f - ptX) * cell_w;
+                float cy = canvas_p.y + (9.0f - ptY) * cell_h;
 
                 ImU32 markerColor = IM_COL32(0, 255, 0, 255); // Green Cross 'x'
                 float crossSize = cell_w * 0.4f;
@@ -1312,14 +1307,11 @@ void DiagnosticsWorkbench::DrawStylusPanel() {
     ImGui::Text("TX1 Block: %s | TX2 Block: %s",
                 stylus.tx1BlockValid ? "Y" : "N",
                 stylus.tx2BlockValid ? "Y" : "N");
-    ImGui::Text("MasterMeta: %s Base=%d Tx1/Tx2=%u/%u Press=%u Btn=0x%08X St=0x%08X",
-                stylus.masterMetaValid ? "Y" : "N",
-                stylus.masterMetaValid ? static_cast<int>(stylus.masterMetaBaseWord) : -1,
-                static_cast<unsigned int>(stylus.masterMetaTx1Freq),
-                static_cast<unsigned int>(stylus.masterMetaTx2Freq),
-                static_cast<unsigned int>(stylus.masterMetaPressure),
-                static_cast<unsigned int>(stylus.masterMetaButton),
-                static_cast<unsigned int>(stylus.masterMetaStatus));
+    ImGui::Text("MasterSuffix: %s  F0Noise=%u F1Noise=%u FreqDone=%u",
+                m_currentFrame.masterSuffixValid ? "Y" : "N",
+                m_currentFrame.masterSuffixValid ? static_cast<unsigned int>(m_currentFrame.masterSuffix.penF0NoiseCount()) : 0u,
+                m_currentFrame.masterSuffixValid ? static_cast<unsigned int>(m_currentFrame.masterSuffix.penF1NoiseCount()) : 0u,
+                m_currentFrame.masterSuffixValid ? static_cast<unsigned int>(m_currentFrame.masterSuffix.freqShiftDone()) : 0u);
     ImGui::Text("Status: 0x%08X", static_cast<unsigned int>(stylus.status));
     ImGui::Text("ASA Mode/DataType: %u / %u  Result:%u  Valid:%s",
                 static_cast<unsigned int>(stylus.asaMode),
@@ -1408,16 +1400,15 @@ void DiagnosticsWorkbench::DrawStylusPanel() {
 }
 
 void DiagnosticsWorkbench::DrawMasterSuffixTable() {
-    if (m_currentFrame.rawData.size() >= 5063) {
+    if (m_currentFrame.masterSuffixValid) {
         float itemWidth = ImGui::CalcTextSize("[000]: 0000 (00000)").x + ImGui::GetStyle().CellPadding.x * 2.0f + 10.0f;
         int columns = std::max(1, std::min(64, static_cast<int>(ImGui::GetContentRegionAvail().x / itemWidth)));
 
         if (ImGui::BeginTable("MasterSuffixTable", columns, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
-            const uint8_t* ptr = m_currentFrame.rawData.data() + 4807;
-            for (int i = 0; i < 128; ++i) {
+            for (int i = 0; i < Frame::kMasterSuffixWords; ++i) {
                 if (i % columns == 0) ImGui::TableNextRow();
                 ImGui::TableSetColumnIndex(i % columns);
-                uint16_t val = static_cast<uint16_t>(ptr[i * 2] | (ptr[i * 2 + 1] << 8));
+                uint16_t val = m_currentFrame.masterSuffix.words[i];
                 ImGui::Text("[%03d]: %04X (%5d)", i, val, val);
             }
             ImGui::EndTable();
@@ -1429,16 +1420,15 @@ void DiagnosticsWorkbench::DrawMasterSuffixTable() {
 }
 
 void DiagnosticsWorkbench::DrawSlaveSuffixTable() {
-    if (m_currentFrame.rawData.size() >= 5402) { // 5063 + 339 = 5402
+    if (m_currentFrame.slaveSuffixValid) {
         float itemWidth = ImGui::CalcTextSize("[000]: 0000 (00000)").x + ImGui::GetStyle().CellPadding.x * 2.0f + 10.0f;
         int columns = std::max(1, std::min(64, static_cast<int>(ImGui::GetContentRegionAvail().x / itemWidth)));
 
         if (ImGui::BeginTable("SlaveSuffixTable", columns, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
-            const uint8_t* ptr = m_currentFrame.rawData.data() + 5070; // 5063 + 7
-            for (int i = 0; i < 166; ++i) {
+            for (int i = 0; i < Frame::kSlaveSuffixWords; ++i) {
                 if (i % columns == 0) ImGui::TableNextRow();
                 ImGui::TableSetColumnIndex(i % columns);
-                uint16_t val = static_cast<uint16_t>(ptr[i * 2] | (ptr[i * 2 + 1] << 8));
+                uint16_t val = m_currentFrame.slaveSuffix.words[i];
                 ImGui::Text("[%03d]: %04X (%5d)", i, val, val);
             }
             ImGui::EndTable();
@@ -1556,13 +1546,14 @@ void DiagnosticsWorkbench::ExportCurrentFrameToCSV(bool isAutoCapture) {
     out << "ChecksumOK," << (m_currentFrame.stylus.checksumOk ? 1 : 0) << "\n";
     out << "Tx1BlockValid," << (m_currentFrame.stylus.tx1BlockValid ? 1 : 0) << "\n";
     out << "Tx2BlockValid," << (m_currentFrame.stylus.tx2BlockValid ? 1 : 0) << "\n";
-    out << "MasterMetaValid," << (m_currentFrame.stylus.masterMetaValid ? 1 : 0) << "\n";
-    out << "MasterMetaBaseWord," << static_cast<unsigned int>(m_currentFrame.stylus.masterMetaBaseWord) << "\n";
-    out << "MasterMetaTx1Freq," << m_currentFrame.stylus.masterMetaTx1Freq << "\n";
-    out << "MasterMetaTx2Freq," << m_currentFrame.stylus.masterMetaTx2Freq << "\n";
-    out << "MasterMetaPressure," << m_currentFrame.stylus.masterMetaPressure << "\n";
-    out << "MasterMetaButton," << m_currentFrame.stylus.masterMetaButton << "\n";
-    out << "MasterMetaStatus," << m_currentFrame.stylus.masterMetaStatus << "\n";
+    out << "MasterSuffixValid," << (m_currentFrame.masterSuffixValid ? 1 : 0) << "\n";
+    if (m_currentFrame.masterSuffixValid) {
+        out << "MasterSuffix_F0Noise," << m_currentFrame.masterSuffix.penF0NoiseCount() << "\n";
+        out << "MasterSuffix_F1Noise," << m_currentFrame.masterSuffix.penF1NoiseCount() << "\n";
+        out << "MasterSuffix_FreqShiftDone," << m_currentFrame.masterSuffix.freqShiftDone() << "\n";
+        out << "MasterSuffix_TpFreq1," << m_currentFrame.masterSuffix.tpFreq1() << "\n";
+        out << "MasterSuffix_TpFreq2," << m_currentFrame.masterSuffix.tpFreq2() << "\n";
+    }
     out << "Status," << m_currentFrame.stylus.status << "\n";
     out << "AsaMode," << static_cast<unsigned int>(m_currentFrame.stylus.asaMode) << "\n";
     out << "DataType," << static_cast<unsigned int>(m_currentFrame.stylus.dataType) << "\n";
@@ -1641,11 +1632,9 @@ void DiagnosticsWorkbench::ExportCurrentFrameToCSV(bool isAutoCapture) {
 
     if (m_exportMasterStatus) {
         out << "\n--- Master Frame Suffix (128 words) ---\n";
-        if (m_currentFrame.rawData.size() >= 5063) {
-            const uint8_t* ptr = m_currentFrame.rawData.data() + 4807;
-            for (int i = 0; i < 128; ++i) {
-                uint16_t val = static_cast<uint16_t>(ptr[i * 2] | (ptr[i * 2 + 1] << 8));
-                out << val;
+        if (m_currentFrame.masterSuffixValid) {
+            for (int i = 0; i < Frame::kMasterSuffixWords; ++i) {
+                out << m_currentFrame.masterSuffix.words[i];
                 if (i < 127) {
                     out << (((i + 1) % 16 == 0) ? "\n" : ",");
                 }
@@ -1658,11 +1647,9 @@ void DiagnosticsWorkbench::ExportCurrentFrameToCSV(bool isAutoCapture) {
 
     if (m_exportSlaveStatus) {
         out << "\n--- Slave Frame Suffix (166 words) ---\n";
-        if (m_currentFrame.rawData.size() >= 5402) {
-            const uint8_t* ptr = m_currentFrame.rawData.data() + 5070;
-            for (int i = 0; i < 166; ++i) {
-                uint16_t val = static_cast<uint16_t>(ptr[i * 2] | (ptr[i * 2 + 1] << 8));
-                out << val;
+        if (m_currentFrame.slaveSuffixValid) {
+            for (int i = 0; i < Frame::kSlaveSuffixWords; ++i) {
+                out << m_currentFrame.slaveSuffix.words[i];
                 if (i < 165) {
                     out << (((i + 1) % 16 == 0) ? "\n" : ",");
                 }

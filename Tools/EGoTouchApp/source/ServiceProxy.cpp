@@ -20,14 +20,14 @@
 #include <iomanip>
 #include <sstream>
 #include <filesystem>
-#include "AsaTypes.h"
+#include "AsaTypes.hpp"
 
 namespace App {
 
 static const std::string kConfigPath = "C:/ProgramData/EGoTouchRev/config.ini";
 
 ServiceProxy::ServiceProxy()
-    : m_dvrBuffer(std::make_unique<RingBuffer<Engine::HeatmapFrame, 480>>()) {
+    : m_dvrBuffer(std::make_unique<RingBuffer<Dvr::DvrFrameSlot, 480>>()) {
     // Build local pipeline (mirrors Service pipeline for GUI config editing)
     m_pipeline.AddProcessor(std::make_unique<Engine::MasterFrameParser>());
     m_pipeline.AddProcessor(std::make_unique<Engine::BaselineSubtraction>());
@@ -332,10 +332,42 @@ void ServiceProxy::TriggerDVRExport(bool heatmap, bool master, bool slave) {
         std::string dir = "exports/dvr/dvr_" + ts.str();
         fs::create_directories(dir);
 
+        // ── Helper: write standard DVR metadata header ──
+        auto writeDvrHeader = [&](std::ostream& out, const char* sectionName, bool includeTouchXY = true) {
+            out << "# DVR Export: " << sectionName << '\n';
+            out << "# ExportTime: " << ts.str() << '\n';
+            out << "# FrameCount: " << frames.size() << '\n';
+            if (!frames.empty()) {
+                out << "# FirstFrameTimestamp: " << frames.front().timestamp << '\n';
+                out << "# LastFrameTimestamp: "  << frames.back().timestamp << '\n';
+                // Master Suffix snapshot from first frame
+                const auto& ms = frames.front().masterSuffix;
+                out << "# MasterSuffix.freqShiftDone: "  << ms.words[Frame::MasterWord::kFreqShiftDone] << '\n';
+                out << "# MasterSuffix.tpFreq1: "        << ms.words[Frame::MasterWord::kTpFreq1] << '\n';
+                out << "# MasterSuffix.tpFreq2: "        << ms.words[Frame::MasterWord::kTpFreq2] << '\n';
+                out << "# MasterSuffix.penF0NoiseCount: " << ms.words[Frame::MasterWord::kPenF0NoiseCount] << '\n';
+                out << "# MasterSuffix.penF1NoiseCount: " << ms.words[Frame::MasterWord::kPenF1NoiseCount] << '\n';
+                if (includeTouchXY) {
+                    out << "# MasterSuffix.touchX: "      << ms.words[Frame::MasterWord::kTouchX] << '\n';
+                    out << "# MasterSuffix.touchY: "      << ms.words[Frame::MasterWord::kTouchY] << '\n';
+                }
+            }
+        };
+
         // ── Heatmap: per-frame 40x60 matrix CSV ──
         if (heatmap) {
             for (size_t i = 0; i < frames.size(); ++i) {
                 std::ofstream f(dir + "/frame_" + std::to_string(i) + ".csv");
+                // Per-frame header with that frame's master suffix
+                f << "# Frame " << i << " | Timestamp: " << frames[i].timestamp << '\n';
+                const auto& ms = frames[i].masterSuffix;
+                f << "# freqShiftDone=" << ms.words[Frame::MasterWord::kFreqShiftDone]
+                  << " tpFreq1=" << ms.words[Frame::MasterWord::kTpFreq1]
+                  << " tpFreq2=" << ms.words[Frame::MasterWord::kTpFreq2]
+                  << " F0Noise=" << ms.words[Frame::MasterWord::kPenF0NoiseCount]
+                  << " F1Noise=" << ms.words[Frame::MasterWord::kPenF1NoiseCount]
+                  << " touchXY=(" << ms.words[Frame::MasterWord::kTouchX]
+                  << "," << ms.words[Frame::MasterWord::kTouchY] << ")\n";
                 for (int r = 0; r < 40; ++r) {
                     for (int c = 0; c < 60; ++c) {
                         if (c) f << ',';
@@ -349,6 +381,7 @@ void ServiceProxy::TriggerDVRExport(bool heatmap, bool master, bool slave) {
         // ── Master status: contacts/peaks summary per frame ──
         if (master) {
             std::ofstream mf(dir + "/master_status.csv");
+            writeDvrHeader(mf, "master_status");
             mf << "Frame,Timestamp,MasterWasRead,PeakCount,ContactCount,"
                   "P0_R,P0_C,P0_Z,P1_R,P1_C,P1_Z,"
                   "C0_ID,C0_X,C0_Y,C0_State,C0_Area,C0_SigSum,"
@@ -357,10 +390,10 @@ void ServiceProxy::TriggerDVRExport(bool heatmap, bool master, bool slave) {
                 const auto& fr = frames[i];
                 mf << i << ',' << fr.timestamp << ','
                    << (fr.masterWasRead ? 1 : 0) << ','
-                   << fr.peaks.size() << ',' << fr.contacts.size();
+                   << static_cast<int>(fr.peakCount) << ',' << static_cast<int>(fr.contactCount);
                 // Up to 2 peaks
                 for (int p = 0; p < 2; ++p) {
-                    if (p < static_cast<int>(fr.peaks.size())) {
+                    if (p < fr.peakCount) {
                         mf << ',' << fr.peaks[p].r << ',' << fr.peaks[p].c
                            << ',' << fr.peaks[p].z;
                     } else {
@@ -369,7 +402,7 @@ void ServiceProxy::TriggerDVRExport(bool heatmap, bool master, bool slave) {
                 }
                 // Up to 2 contacts
                 for (int ci = 0; ci < 2; ++ci) {
-                    if (ci < static_cast<int>(fr.contacts.size())) {
+                    if (ci < fr.contactCount) {
                         const auto& ct = fr.contacts[ci];
                         mf << ',' << ct.id << ',' << ct.x << ',' << ct.y
                            << ',' << ct.state << ',' << ct.area << ',' << ct.signalSum;
@@ -384,6 +417,7 @@ void ServiceProxy::TriggerDVRExport(bool heatmap, bool master, bool slave) {
         // ── Slave status: raw 166-word suffix per frame ──
         if (slave) {
             std::ofstream wf(dir + "/slave_suffix.csv");
+            writeDvrHeader(wf, "slave_suffix", false);
             wf << "Frame,Timestamp";
             for (int w = 0; w < 166; ++w) {
                 if (w == 0) wf << ",TX1_Y";
@@ -395,15 +429,12 @@ void ServiceProxy::TriggerDVRExport(bool heatmap, bool master, bool slave) {
             wf << '\n';
             for (size_t i = 0; i < frames.size(); ++i) {
                 wf << i << ',' << frames[i].timestamp;
-                const auto& raw = frames[i].rawData;
-                if (raw.size() >= 5402) {
-                    const uint8_t* ptr = raw.data() + 5070;
-                    for (int w = 0; w < 166; ++w) {
-                        uint16_t word = static_cast<uint16_t>(ptr[w * 2] | (ptr[w * 2 + 1] << 8));
-                        wf << ',' << word;
+                if (frames[i].slaveSuffixValid) {
+                    for (int w = 0; w < Frame::kSlaveSuffixWords; ++w) {
+                        wf << ',' << frames[i].slaveSuffix.words[w];
                     }
                 } else {
-                    for (int w = 0; w < 166; ++w) wf << ",0";
+                    for (int w = 0; w < Frame::kSlaveSuffixWords; ++w) wf << ",0";
                 }
                 wf << '\n';
             }
@@ -418,7 +449,6 @@ void ServiceProxy::TriggerDVRExport(bool heatmap, bool master, bool slave) {
 
 // ── Poll loop with FPS measurement ──
 void ServiceProxy::PollLoop() {
-    m_latestFrame.rawData.reserve(5402);
 
     uint64_t lastFpsFrameId = m_frameReader.LastFrameId();
     uint64_t lastSlaveFpsFrameId = m_frameReader.LastSlaveFrameId();
@@ -488,7 +518,9 @@ void ServiceProxy::PollLoop() {
                     }
                 }
                 if (gotFrame && m_dvrBuffer) {
-                    m_dvrBuffer->PushOverwriting(m_latestFrame);
+                    Dvr::DvrFrameSlot slot;
+                    slot.CopyFrom(m_latestFrame);
+                    m_dvrBuffer->PushOverwriting(slot);
                 }
             }
             if (wt == WaitType::Log) {
