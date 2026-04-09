@@ -10,6 +10,9 @@ struct SpeedMetrics {
     float instant  = 0.0f;  // 1-frame displacement (瞬时速度)
     float shortAvg = 0.0f;  // 3-frame average path  (短期速度)
     float fullAvg  = 0.0f;  // full-window average path (全窗口平均速度)
+    // TSACore: DAT_1820dc30/dc34 — average per-axis displacement magnitude
+    float avgVelDim1 = 0.0f;  // |Σ dim1 displacement| / frames
+    float avgVelDim2 = 0.0f;  // |Σ dim2 displacement| / frames
 };
 
 /// CoorPostProcessor — Multi-stage coordinate post-processing chain.
@@ -34,7 +37,13 @@ public:
 
     /// Get last computed speed metrics
     const SpeedMetrics& GetSpeed() const { return m_speed; }
-    float GetLastIIRCoef() const { return m_lastIirCoef; }
+
+    /// Get last IIR coefficient as float (for diagnostic display)
+    float GetLastIIRCoef() const {
+        return (iirDivisorN > 0)
+            ? static_cast<float>(m_lastIirCoefInt) / static_cast<float>(iirDivisorN)
+            : 0.0f;
+    }
 
     // ══════════════════════════════════════════════
     // Individual pipeline steps (called by StylusPipeline)
@@ -49,55 +58,89 @@ public:
     AsaCoorResult Step3PointAvg(const AsaCoorResult& cur);
 
     /// Step 3: Calculate speed from ring buffer (GetCoorSpeed).
-    /// Updates internal m_speed.
+    /// Updates internal m_speed and m_motionFrameCount.
     void StepCalcSpeed();
 
     /// Step 4: Calculate dynamic IIR coefficient (GetIIRCoef).
-    /// Uses m_speed.instant, hover/edge flags.
-    /// Returns the coefficient and stores it internally.
-    float StepCalcIIRCoef(bool isHover, bool isEdge);
+    /// Mirrors TSACore: uses still/moving state machine + directional override.
+    /// No external parameters needed — uses internal speed metrics.
+    /// Returns the integer coefficient and stores it internally.
+    int StepCalcIIRCoef();
 
-    /// Step 5: Apply IIR filter (CoorFilterProcess).
-    AsaCoorResult StepIIR(const AsaCoorResult& cur, float coef);
+    /// Step 5: Apply IIR filter (CoorFilterProcess / CoorIIRFilterType).
+    /// Uses integer Q8 fixed-point matching TSACore exactly.
+    /// @param coefInt integer IIR coefficient from StepCalcIIRCoef()
+    AsaCoorResult StepIIR(const AsaCoorResult& cur, int coefInt);
 
     /// Step 6: Apply jitter offset compensation (AftCoorProcess).
+    /// Mirrors TSACore: dynamic threshold based on sensor/screen dimensions,
+    /// independent X/Y lock flags.
     AsaCoorResult StepJitter(const AsaCoorResult& cur, bool isEdge);
 
     /// Update 3-point history after the full chain completes.
     void StepUpdate3PtHistory(const AsaCoorResult& result);
 
     // ══════════════════════════════════════════════
-    // Configuration — IIR coefficients (speed-driven interpolation)
+    // Configuration — IIR coefficients (integer, matching TSACore)
+    // g_asaPrmtFlash offsets: [0xa5c..0xa60]
     // ══════════════════════════════════════════════
 
-    // ── Write mode (pen in contact) ──
-    // Gaokun flash: low=6, high=18, N=32 → α = coef/N
-    float writeIirLow   = 6.0f / 32.0f;    // 0.1875: strong smoothing at low speed
-    float writeIirHigh  = 18.0f / 32.0f;   // 0.5625: weak smoothing at high speed
-    float writeLowThr   = 20.0f;   // speed threshold: low  (original ~10)
-    float writeHighThr  = 204.0f;  // speed threshold: high (original 0xCC=204)
+    // ── Still mode (pen in contact but stationary): [0xa5e]/[0xa5f] ──
+    // Stronger smoothing for hover/stationary pen
+    int stillIirLow  = 6;   // [0xa5e]: low-speed coefficient
+    int stillIirHigh = 18;  // [0xa5f]: high-speed coefficient
 
-    // ── Hover mode (pen in range, no contact) ──
-    // Gaokun flash: low=2, high=16, N=32
-    float hoverIirLow   = 2.0f / 32.0f;    // 0.0625: very strong hover smoothing
-    float hoverIirHigh  = 16.0f / 32.0f;   // 0.5: moderate at high speed
-    float hoverLowThr   = 20.0f;   // speed threshold: low
-    float hoverHighThr  = 204.0f;  // speed threshold: high (0xCC)
+    // ── Moving mode (pen actively drawing): [0xa5c]/[0xa5d] ──
+    // Weaker smoothing for responsive tracking
+    int movingIirLow  = 6;   // [0xa5c]: low-speed coefficient
+    int movingIirHigh = 18;  // [0xa5d]: high-speed coefficient
 
-    // ── Edge mode modifier ──
-    // When isEdge=true, IIR coefficients are halved to reduce lag
-    // (mirrors TSACore: `if (edgeFlag) { coef >>= 1; }`)
-    bool  enableEdgeHalve = true;
+    // ── IIR divisor N: [0xa60] (Gaokun: 32) ──
+    // IIR formula: out = (coef * cur + (N - coef) * prev) / N
+    int iirDivisorN = 32;
+
+    // ── Speed thresholds ──
+    int stillLowSpeedThr  = 20;   // still mode: low speed threshold
+    int movingLowSpeedThr = 10;   // moving mode: low speed threshold
+    int highSpeedThr      = 204;  // 0xCC: high speed threshold (both modes)
+
+    // ── Motion detection: frames of continuous movement ──
+    // Mirrors TSACore (DAT_18231950 & 6): at least 2 frames of pen-valid + moving
+    int motionDetectFrames = 2;
+
+    // ── Directional velocity threshold for "edge" override ──
+    // TSACore: halve coefficients when direction is consistent (DAT_18230a84/c34 != 0)
+    bool enableDirectionalHalve = true;
 
     // ══════════════════════════════════════════════
     // Configuration — Jitter suppression (AftCoorProcess)
+    // g_asaPrmtFlash offsets: [0xa58..0xa5b]
     // ══════════════════════════════════════════════
 
-    int32_t jitterCenterThreshold = 20;  // center region dead zone
-    int32_t jitterEdgeThreshold   = 40;  // edge region dead zone (wider)
+    // Jitter threshold parameters (multiplied by sensorDim * 0x400 / screenDim)
+    // Edge: [0xa58]/[0xa59], Center: [0xa5a]/[0xa5b]
+    int jitterEdgeParamDim1   = 3;   // [0xa58]
+    int jitterEdgeParamDim2   = 3;   // [0xa59]
+    int jitterCenterParamDim1 = 2;   // [0xa5a]
+    int jitterCenterParamDim2 = 2;   // [0xa5b]
+
+    // Sensor and screen dimensions (for dynamic threshold calculation)
+    int sensorDimDim1 = 60;   // DAT_1820d610: number of sensor columns
+    int sensorDimDim2 = 40;   // DAT_1820d611: number of sensor rows
+    int screenDimDim1 = 16000; // g_asaPrmt[0x00]: screen logical width
+    int screenDimDim2 = 25600; // DAT_1820d602: screen logical height
 
     // 3-point average filter
     bool enable3PointAvg = true;
+
+    // Jitter suppression (AftCoorProcess)
+    bool enableJitter = true;
+
+    // ── IIR skip condition ──
+    // TSACore: CoorFilterProcess skips IIR for the first few frames
+    // (DAT_18231c28 & 1 == 0 || DAT_1823194c < 2 ... )
+    // Approximation: skip until m_frameCount >= iirSkipFrames
+    int iirSkipFrames = 2;
 
 private:
     // ── Internal state ──
@@ -112,19 +155,31 @@ private:
     // ── 3-point average ──
     AsaCoorResult m_prev[2]{};
 
-    // ── IIR filter state ──
-    float m_iirDim1 = 0.0f;
-    float m_iirDim2 = 0.0f;
+    // ── IIR filter state (Q8 fixed-point) ──
+    // Stores coordinate × 256 + fractional remainder
+    // Matches TSACore CoorIIRFilterType exactly
+    int32_t m_iirDim1Q8 = 0;
+    int32_t m_iirDim2Q8 = 0;
 
     // ── Jitter offset compensation state ──
+    // TSACore: independent X/Y lock flags (flagLockX_7809, flagLockY_7810)
     AsaCoorResult m_anchor{};
     int32_t m_offsetDim1 = 0;
     int32_t m_offsetDim2 = 0;
+    bool    m_lockDim1 = false;
+    bool    m_lockDim2 = false;
     bool    m_jitterActive = false;
 
     // ── Speed ──
     SpeedMetrics m_speed{};
-    float m_lastIirCoef = 0.0f;
+    int m_lastIirCoefInt = 0;
+
+    // ── Motion state machine ──
+    // Mirrors TSACore (DAT_18231950 & 6): track consecutive moving frames
+    int m_motionFrameCount = 0;
+
+    /// Integer IIR filter core: (coef * cur + (N - coef) * prev) / N
+    static int32_t IIRFilterQ8(int32_t prevQ8, int32_t curQ8, int coef, int N);
 };
 
 } // namespace Asa

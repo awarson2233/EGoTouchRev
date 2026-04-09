@@ -98,4 +98,45 @@ inline AsaGridData ExtractGridFromSlaveWords(
     return out;
 }
 
+// ── Sensor pitch size constants ──
+static constexpr int kMaxSensorDim = 80;  // max sensor cells per dimension
+
+/// SensorPitchSizeMap — Non-uniform pitch table mapping.
+/// Mirrors TSACore SensorPitchSizeMap exactly.
+///
+/// Converts a local coordinate (in kCoorUnit=0x400 units per grid cell)
+/// into a physical-space coordinate using per-cell pitch weights.
+///
+/// @param localCoor   Local coordinate in kCoorUnit (0x400) units
+/// @param pitchTable  Array of per-cell pitch weights (double[kMaxSensorDim+1])
+///                    If pitchTable[0] == 100.0, function is a passthrough (uniform pitch)
+/// @param coorUnit    Coordinate unit (0x400)
+/// @return Physical coordinate (weighted by pitch table)
+inline int32_t SensorPitchSizeMap(int32_t localCoor,
+                                   const double* pitchTable,
+                                   int coorUnit = kCoorUnit) {
+    // TSACore: if pitchTable[0] == 100.0, bypass (uniform pitch)
+    if (pitchTable[0] == 100.0) {
+        return localCoor;
+    }
+
+    if (coorUnit == 0) return 0;
+
+    // Grid cell index and fractional remainder within that cell
+    const int cellIdx = localCoor / coorUnit;
+    const int frac    = localCoor % coorUnit;  // [0, coorUnit)
+
+    // Bounds check: cellIdx must be in [0, kMaxSensorDim-1]
+    if (cellIdx < 0 || cellIdx >= kMaxSensorDim - 1) return 0;
+
+    // TSACore: Weighted interpolation between adjacent pitch entries
+    // result = pitchTable[cellIdx+1] * frac + pitchTable[cellIdx] * (coorUnit - frac)
+    // The pitch table entries act as scaling weights per cell
+    const double result =
+        pitchTable[cellIdx + 1] * static_cast<double>(frac) +
+        pitchTable[cellIdx]     * static_cast<double>(coorUnit - frac);
+
+    return static_cast<int32_t>(result);
+}
+
 } // namespace Asa

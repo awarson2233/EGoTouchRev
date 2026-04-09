@@ -290,7 +290,8 @@ void ServiceHost::BuildDefaultPipeline(const std::string& configPath) {
     LOG_INFO("Service", __func__, "Boot", "Registered {} pipeline processors.", pl.GetProcessors().size());
 
     // Load saved config
-    if (LoadPipelineConfig(configPath, pl)) {
+    if (LoadPipelineConfig(configPath, pl,
+                           &m_deviceRuntime->GetStylusPipeline())) {
         LOG_INFO("Service", __func__, "Boot", "Loaded config from {}.", configPath);
     } else {
         LOG_WARN("Service", __func__, "Boot", "Config file not found: {}", configPath);
@@ -369,7 +370,8 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(
             m_deviceRuntime->SetStylusVhfEnabled(m_stylusVhfEnabled);
 
             auto& pl = m_deviceRuntime->GetPipeline();
-            if (LoadPipelineConfig(kConfigPath, pl)) {
+            if (LoadPipelineConfig(kConfigPath, pl,
+                                   &m_deviceRuntime->GetStylusPipeline())) {
                 resp.success = true;
                 LOG_INFO("Service", __func__, "IPC", "Config reloaded from {}.", kConfigPath);
             }

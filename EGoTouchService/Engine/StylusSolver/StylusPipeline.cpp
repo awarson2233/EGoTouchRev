@@ -92,6 +92,7 @@ bool StylusPipeline::Process(
         m_postProcessor.Reset();
         m_coorReviser.Reset();
         m_linearFilter.Reset();
+        m_oneEuroFilter.Reset();
         return false;
     }
     m_lastResult.slaveValid = true;
@@ -132,7 +133,7 @@ bool StylusPipeline::Process(
         }
 
         if (!m_prevValid) {
-            m_postProcessor.Reset(); ResetTilt(); ResetCalibration();
+            m_postProcessor.Reset(); m_oneEuroFilter.Reset(); ResetTilt(); ResetCalibration();
             m_coorReviser.Reset(); m_linearFilter.Reset();
             m_signalSuppressActive = false;  // P1: reset hysteresis
             m_hasLastGoodFrame = false;       // P1: reset noise freeze
@@ -143,14 +144,6 @@ bool StylusPipeline::Process(
         if (m_emitPacketWhenInvalid) BuildStylusPacket(outPacket);
         m_prevStatus = m_lastResult.status;
         return false;
-    }
-
-    // Log anchor + computed full coordinate for debug (throttled)
-    {
-        static int sAnchorLogCount = 0;
-        if ((sAnchorLogCount++ % 60) == 0) {
-            LOG_TRACE("Engine", __func__, "Anchor", "anchor=({},{}) grid_center={} sensor=({} rows, {} cols)",  m_gridData.tx1.anchorRow, m_gridData.tx1.anchorCol, m_gridData.tx1.grid[4][4], m_sensorRows, m_sensorCols);
-        }
     }
 
     // 4b. P3 #22: Common-Mode Filtering (TSACore: HPP3_CMFProcess / GetCMN)
@@ -198,10 +191,26 @@ bool StylusPipeline::Process(
 
     const int32_t centerOff =
         m_anchorCenterOffset * Asa::kCoorUnit;
-    rawCoor.dim1 += static_cast<int32_t>(m_gridData.tx1.anchorCol) *
-                    Asa::kCoorUnit - centerOff;
-    rawCoor.dim2 += static_cast<int32_t>(m_gridData.tx1.anchorRow) *
-                    Asa::kCoorUnit - centerOff;
+
+    // TSACore: SensorPitchSizeMapDim1/Dim2
+    // Convert local 9×9 coordinate to full-sensor coordinate using pitch table.
+    // First compute the full-sensor local coordinate (anchor-based offset)
+    {
+        int32_t globalDim1 = rawCoor.dim1 +
+            static_cast<int32_t>(m_gridData.tx1.anchorCol) * Asa::kCoorUnit - centerOff;
+        int32_t globalDim2 = rawCoor.dim2 +
+            static_cast<int32_t>(m_gridData.tx1.anchorRow) * Asa::kCoorUnit - centerOff;
+
+        if (m_pitchMapEnabled) {
+            rawCoor.dim1 = Asa::SensorPitchSizeMap(
+                globalDim1, m_pitchTableDim1.data(), Asa::kCoorUnit);
+            rawCoor.dim2 = Asa::SensorPitchSizeMap(
+                globalDim2, m_pitchTableDim2.data(), Asa::kCoorUnit);
+        } else {
+            rawCoor.dim1 = globalDim1;
+            rawCoor.dim2 = globalDim2;
+        }
+    }
 
     // 8. HPP3 Noise post-process
     //    P1: Freeze output on noise detection instead of skipping.
@@ -231,20 +240,25 @@ bool StylusPipeline::Process(
     //   1. LinearFilter  → 2. PushHistory → 3. 3PointAvg
     //   4. CoorRevise    → 5. CalcSpeed   → 6. GetIIRCoef
     //   7. IIR filter    → 8. Jitter      → 9. Calibration
+    //
+    // filterMode: 0=IIR, 1=1-Euro, 2=Bypass (skip ALL smoothing)
     // ═══════════════════════════════════════════════════════════════
 
-    const bool isHover = (m_lastResult.pressure == 0);
     const bool isEdge  = m_edgeLiftCorrector.IsInEdgeRegion(
         static_cast<float>(rawCoor.dim1), static_cast<float>(rawCoor.dim2),
         m_sensorRows, m_sensorCols);
 
     // Step 9a. LinearFilter (7-state line detection)
-    auto postCoor = m_linearFilter.Process(rawCoor, m_lastResult.pressure);
+    auto postCoor = m_linearFilter.enabled
+        ? m_linearFilter.Process(rawCoor, m_lastResult.pressure)
+        : rawCoor;
 
     // Step 9b. PushHistory (TSACore: GetRealTimeCoor2Buf)
+    //          Always run — needed for speed diagnostics
     m_postProcessor.StepPushHistory(postCoor);
 
     // Step 9c. 3-point average (TSACore: Get3PointAvgFilter)
+    //          Controlled by m_postProcessor.enable3PointAvg
     postCoor = m_postProcessor.Step3PointAvg(postCoor);
 
     // Step 9d. CoorReviser (TX2 dual-frequency revision)
@@ -270,16 +284,23 @@ bool StylusPipeline::Process(
     }
 
     // Step 9e. Speed calculation (TSACore: GetCoorSpeed)
-    //          Uses post-CoorRevise coordinates from ring buffer
+    //          Always run — needed for diagnostics
     m_postProcessor.StepCalcSpeed();
 
     // Step 9f. Dynamic IIR coefficient (TSACore: GetIIRCoef)
-    const float iirCoef = m_postProcessor.StepCalcIIRCoef(isHover, isEdge);
+    //          Always computed for diagnostics
+    const int iirCoefInt = m_postProcessor.StepCalcIIRCoef();
 
-    // Step 9g. IIR coordinate filter (TSACore: CoorFilterProcess)
-    postCoor = m_postProcessor.StepIIR(postCoor, iirCoef);
+    // Step 9g. Coordinate smoothing filter (mode-switched)
+    //   0 = IIR (TSACore Q8), 1 = 1-Euro adaptive, 2 = None (bypass)
+    if (m_filterMode == 0) {
+        postCoor = m_postProcessor.StepIIR(postCoor, iirCoefInt);
+    } else if (m_filterMode == 1) {
+        postCoor = m_oneEuroFilter.Filter(postCoor);
+    }
 
     // Step 9h. Jitter offset compensation (TSACore: AftCoorProcess)
+    //          Controlled by m_postProcessor.enableJitter
     postCoor = m_postProcessor.StepJitter(postCoor, isEdge);
 
     // Step 9i. Update 3-point history for next frame
@@ -313,7 +334,7 @@ bool StylusPipeline::Process(
         m_dbg.speedFullAvg  = sp.fullAvg;
     }
     m_dbg.iirCoef   = m_postProcessor.GetLastIIRCoef();
-    m_dbg.isHover   = isHover;
+    m_dbg.isHover   = (m_lastResult.pressure == 0);
     m_dbg.isEdge    = isEdge;
     m_dbg.tiltDiffX = m_prevTiltDiffX;
     m_dbg.tiltDiffY = m_prevTiltDiffY;
@@ -350,8 +371,10 @@ bool StylusPipeline::Process(
         m_lastResult.point.y = m_prevPointY;
     }
 
-    // 11. TX2 for tilt
-    if (m_tiltEnabled && m_gridData.tx2.valid) {
+    // 11. TX2 for tilt + diagnostic coordinate output
+    //     Always process TX2 when grid is valid, even if tilt is disabled,
+    //     so that tx2X/tx2Y diagnostic fields are populated for the UI.
+    if (m_gridData.tx2.valid) {
         auto tx2Peak = m_peakDetector.FindPeak(m_gridData.tx2.grid);
         if (tx2Peak.valid) {
             // P2 #15: Compute TX1/TX2 signal ratio (TSACore GetTX1TX2SignalRatio)
@@ -385,12 +408,18 @@ bool StylusPipeline::Process(
                 m_gridData.tx2.grid, tx2Peak);
             auto tx2Coor = m_coordSolver.Solve(tx2Proj);
             if (tx2Coor.valid) {
-                // Convert TX2 to global for consistent tilt diff
+                // ★ Write TX2 LOCAL diagnostic coordinates (for heatmap cross display)
+                m_lastResult.point.tx2X = static_cast<float>(tx2Coor.dim1) / Asa::kCoorUnit;
+                m_lastResult.point.tx2Y = static_cast<float>(tx2Coor.dim2) / Asa::kCoorUnit;
+
+                // Convert TX2 to global for tilt diff
                 tx2Coor.dim1 += static_cast<int32_t>(m_gridData.tx2.anchorCol) *
                                 Asa::kCoorUnit - centerOff;
                 tx2Coor.dim2 += static_cast<int32_t>(m_gridData.tx2.anchorRow) *
                                 Asa::kCoorUnit - centerOff;
-                SolveTilt(finalCoor, tx2Coor);
+                if (m_tiltEnabled) {
+                    SolveTilt(finalCoor, tx2Coor);
+                }
             }
         }
     }
@@ -417,10 +446,6 @@ bool StylusPipeline::Process(
                     if (it->pressure > btPress) btPress = it->pressure;
                 }
             }
-        }
-        static int sPressLogCount = 0;
-        if ((sPressLogCount++ % 120) == 0) {
-            LOG_DEBUG("Engine", __func__, "Pressure", "btMcu={} active={}",  btPress, finalCoor.valid);
         }
         SolvePressure(btPress, finalCoor.valid,
                       static_cast<int>(m_lastResult.signalX), isEdge);
@@ -1056,7 +1081,7 @@ std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
             ConfigParam::Int, const_cast<int*>(&m_buttonReleaseHoldFrames), 0, 10, Cat::General),
         ConfigParam("sp.liftingTimeout", "Lifting Timeout",
             ConfigParam::Int, const_cast<int*>(&m_liftingTimeout), 1, 30, Cat::General),
-        ConfigParam("sp.calibEnabled", "Enable Calibration",
+        ConfigParam("sp.calibEnabled", "Rolling Avg (5-frame)",
             ConfigParam::Bool, const_cast<bool*>(&m_calibEnabled), Cat::General),
 
         // === Solver ===
@@ -1086,6 +1111,26 @@ std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
         // === Filter ===
         ConfigParam("sp.lfEnabled", "LinearFilter Enabled",
             ConfigParam::Bool, const_cast<bool*>(&m_linearFilter.enabled), Cat::Filter),
+        ConfigParam("sp.lfMinFitLen", "LF Min Fit Length",
+            ConfigParam::Int, const_cast<int*>(&m_linearFilter.minFitLength), 5, 100, Cat::Filter),
+        ConfigParam("sp.lfEnterResidual", "LF Enter Residual Thr",
+            ConfigParam::Float, const_cast<float*>(&m_linearFilter.enterResidualThreshold), 1.0f, 500.0f, Cat::Filter),
+        ConfigParam("sp.lfExitDeviation", "LF Exit Deviation",
+            ConfigParam::Float, const_cast<float*>(&m_linearFilter.exitDeviation), 10.0f, 1000.0f, Cat::Filter),
+        ConfigParam("sp.lfPerpConstraint", "LF Perp Constraint (0-1)",
+            ConfigParam::Float, const_cast<float*>(&m_linearFilter.perpConstraint), 0.0f, 1.0f, Cat::Filter),
+        ConfigParam("sp.3ptAvgEnabled", "3-Point Average Enabled",
+            ConfigParam::Bool, const_cast<bool*>(&m_postProcessor.enable3PointAvg), Cat::Filter),
+        ConfigParam("sp.jitterEnabled", "Jitter Suppression Enabled",
+            ConfigParam::Bool, const_cast<bool*>(&m_postProcessor.enableJitter), Cat::Filter),
+        ConfigParam("sp.jitterEdgeDim1", "Jitter Edge Param Dim1",
+            ConfigParam::Int, const_cast<int*>(&m_postProcessor.jitterEdgeParamDim1), 0, 20, Cat::Filter),
+        ConfigParam("sp.jitterEdgeDim2", "Jitter Edge Param Dim2",
+            ConfigParam::Int, const_cast<int*>(&m_postProcessor.jitterEdgeParamDim2), 0, 20, Cat::Filter),
+        ConfigParam("sp.jitterCenterDim1", "Jitter Center Param Dim1",
+            ConfigParam::Int, const_cast<int*>(&m_postProcessor.jitterCenterParamDim1), 0, 20, Cat::Filter),
+        ConfigParam("sp.jitterCenterDim2", "Jitter Center Param Dim2",
+            ConfigParam::Int, const_cast<int*>(&m_postProcessor.jitterCenterParamDim2), 0, 20, Cat::Filter),
         ConfigParam("sp.hpp3NoiseEnabled", "Enable HPP3 Noise",
             ConfigParam::Bool, const_cast<bool*>(&m_hpp3NoisePostEnabled), Cat::Filter),
         ConfigParam("sp.hpp3JumpTh", "Jump Threshold",
@@ -1123,7 +1168,7 @@ std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
         ConfigParam("sp.pressPolyEnabled", "Polynomial Mapping",
             ConfigParam::Bool, const_cast<bool*>(&m_pressurePolyEnabled), Cat::Output),
         ConfigParam("sp.pressIirQ8", "IIR Weight (Q8)",
-            ConfigParam::Int, const_cast<int*>(&m_pressureIirWeightQ8), 1, 255, Cat::Output),
+            ConfigParam::Int, const_cast<int*>(&m_pressureIirWeightQ8), 16, 255, Cat::Output),
         ConfigParam("sp.pressSeg1Th", "Seg1 Threshold",
             ConfigParam::Int, const_cast<int*>(&m_pressureMapSeg1Threshold), 0, 50, Cat::Output),
         ConfigParam("sp.pressSeg2Th", "Seg2 Threshold",
@@ -1155,6 +1200,51 @@ std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
             ConfigParam::Int, const_cast<int*>(&m_cmfWindowSize), 1, 8, Cat::Filter),
         ConfigParam("sp.tpPatternEnabled", "TP Pattern Comp Enabled",
             ConfigParam::Bool, const_cast<bool*>(&m_tpPatternCompEnabled), Cat::Solver),
+
+        // === IIR Q8 (TSACore: CoorIIRFilterType, GetIIRCoef) ===
+        ConfigParam("sp.iirStillLo", "IIR Still Low Coef",
+            ConfigParam::Int, const_cast<int*>(&m_postProcessor.stillIirLow), 0, 32, Cat::Filter),
+        ConfigParam("sp.iirStillHi", "IIR Still High Coef",
+            ConfigParam::Int, const_cast<int*>(&m_postProcessor.stillIirHigh), 0, 32, Cat::Filter),
+        ConfigParam("sp.iirMoveLo", "IIR Moving Low Coef",
+            ConfigParam::Int, const_cast<int*>(&m_postProcessor.movingIirLow), 0, 32, Cat::Filter),
+        ConfigParam("sp.iirMoveHi", "IIR Moving High Coef",
+            ConfigParam::Int, const_cast<int*>(&m_postProcessor.movingIirHigh), 0, 32, Cat::Filter),
+        ConfigParam("sp.iirDivisorN", "IIR Divisor N",
+            ConfigParam::Int, const_cast<int*>(&m_postProcessor.iirDivisorN), 1, 256, Cat::Filter),
+        ConfigParam("sp.iirHighSpdThr", "IIR High Speed Threshold",
+            ConfigParam::Int, const_cast<int*>(&m_postProcessor.highSpeedThr), 1, 1000, Cat::Filter),
+        ConfigParam("sp.iirDirHalve", "IIR Directional Halve",
+            ConfigParam::Bool, const_cast<bool*>(&m_postProcessor.enableDirectionalHalve), Cat::Filter),
+        ConfigParam("sp.pitchMapEnabled", "Pitch Map Enabled",
+            ConfigParam::Bool, const_cast<bool*>(&m_pitchMapEnabled), Cat::Solver),
+
+        // === Filter Mode ===
+        ConfigParam("sp.filterMode", "Filter Mode (0=IIR 1=1Euro 2=Off)",
+            ConfigParam::Int, const_cast<int*>(&m_filterMode), 0, 2, Cat::Filter),
+
+        // === IIR Speed Thresholds ===
+        ConfigParam("sp.iirStillLowThr", "IIR Still Low Speed Thr",
+            ConfigParam::Int, const_cast<int*>(&m_postProcessor.stillLowSpeedThr), 0, 200, Cat::Filter),
+        ConfigParam("sp.iirMoveLowThr", "IIR Moving Low Speed Thr",
+            ConfigParam::Int, const_cast<int*>(&m_postProcessor.movingLowSpeedThr), 0, 200, Cat::Filter),
+        ConfigParam("sp.iirMotionFrames", "IIR Motion Detect Frames",
+            ConfigParam::Int, const_cast<int*>(&m_postProcessor.motionDetectFrames), 1, 10, Cat::Filter),
+        ConfigParam("sp.iirSkipFrames", "IIR Skip Frames",
+            ConfigParam::Int, const_cast<int*>(&m_postProcessor.iirSkipFrames), 0, 10, Cat::Filter),
+
+        // === 1-Euro Filter ===
+        ConfigParam("sp.1eur.minCutoff", "1Euro MinCutoff",
+            ConfigParam::Float, const_cast<float*>(&m_oneEuroFilter.minCutoffF),
+            0.01f, 20.0f, Cat::Filter),
+        ConfigParam("sp.1eur.beta", "1Euro Beta",
+            ConfigParam::Float, const_cast<float*>(&m_oneEuroFilter.betaF),
+            0.0001f, 2.0f, Cat::Filter),
+        ConfigParam("sp.1eur.dCutoff", "1Euro DCutoff",
+            ConfigParam::Float, const_cast<float*>(&m_oneEuroFilter.dCutoffF),
+            0.1f, 10.0f, Cat::Filter),
+        ConfigParam("sp.1eur.sampleRate", "1Euro SampleRate",
+            ConfigParam::Int, const_cast<int*>(&m_oneEuroFilter.sampleRate), 60, 480, Cat::Filter),
     };
 }
 
@@ -1174,6 +1264,26 @@ void StylusPipeline::SaveConfig(std::ostream& out) const {
         << m_coordSolver.edgeCompBit3 << "\n";
     out << "sp.lfEnabled="
         << m_linearFilter.enabled << "\n";
+    out << "sp.lfMinFitLen="
+        << m_linearFilter.minFitLength << "\n";
+    out << "sp.lfEnterResidual="
+        << m_linearFilter.enterResidualThreshold << "\n";
+    out << "sp.lfExitDeviation="
+        << m_linearFilter.exitDeviation << "\n";
+    out << "sp.lfPerpConstraint="
+        << m_linearFilter.perpConstraint << "\n";
+    out << "sp.3ptAvgEnabled="
+        << m_postProcessor.enable3PointAvg << "\n";
+    out << "sp.jitterEnabled="
+        << m_postProcessor.enableJitter << "\n";
+    out << "sp.jitterEdgeDim1="
+        << m_postProcessor.jitterEdgeParamDim1 << "\n";
+    out << "sp.jitterEdgeDim2="
+        << m_postProcessor.jitterEdgeParamDim2 << "\n";
+    out << "sp.jitterCenterDim1="
+        << m_postProcessor.jitterCenterParamDim1 << "\n";
+    out << "sp.jitterCenterDim2="
+        << m_postProcessor.jitterCenterParamDim2 << "\n";
     out << "sp.crEnabled="
         << m_coorReviser.enabled << "\n";
     out << "sp.elcEnabled="
@@ -1248,6 +1358,27 @@ void StylusPipeline::SaveConfig(std::ostream& out) const {
     // Calibration
     out << "sp.calibEnabled="
         << m_calibEnabled << "\n";
+    // IIR Q8 params
+    out << "sp.iirStillLo=" << m_postProcessor.stillIirLow << "\n";
+    out << "sp.iirStillHi=" << m_postProcessor.stillIirHigh << "\n";
+    out << "sp.iirMoveLo=" << m_postProcessor.movingIirLow << "\n";
+    out << "sp.iirMoveHi=" << m_postProcessor.movingIirHigh << "\n";
+    out << "sp.iirDivisorN=" << m_postProcessor.iirDivisorN << "\n";
+    out << "sp.iirHighSpdThr=" << m_postProcessor.highSpeedThr << "\n";
+    out << "sp.iirDirHalve=" << m_postProcessor.enableDirectionalHalve << "\n";
+    out << "sp.pitchMapEnabled=" << m_pitchMapEnabled << "\n";
+    // Filter mode
+    out << "sp.filterMode=" << m_filterMode << "\n";
+    // IIR speed thresholds
+    out << "sp.iirStillLowThr=" << m_postProcessor.stillLowSpeedThr << "\n";
+    out << "sp.iirMoveLowThr=" << m_postProcessor.movingLowSpeedThr << "\n";
+    out << "sp.iirMotionFrames=" << m_postProcessor.motionDetectFrames << "\n";
+    out << "sp.iirSkipFrames=" << m_postProcessor.iirSkipFrames << "\n";
+    // 1-Euro params
+    out << "sp.1eur.minCutoff=" << m_oneEuroFilter.minCutoffF << "\n";
+    out << "sp.1eur.beta=" << m_oneEuroFilter.betaF << "\n";
+    out << "sp.1eur.dCutoff=" << m_oneEuroFilter.dCutoffF << "\n";
+    out << "sp.1eur.sampleRate=" << m_oneEuroFilter.sampleRate << "\n";
 }
 
 // ══════════════════════════════════════════════
@@ -1278,6 +1409,26 @@ void StylusPipeline::LoadConfig(
         m_coordSolver.edgeCompBit3 = toBool(value);
     else if (key == "sp.lfEnabled")
         m_linearFilter.enabled = toBool(value);
+    else if (key == "sp.lfMinFitLen")
+        m_linearFilter.minFitLength = toInt(value);
+    else if (key == "sp.lfEnterResidual")
+        m_linearFilter.enterResidualThreshold = toFloat(value);
+    else if (key == "sp.lfExitDeviation")
+        m_linearFilter.exitDeviation = toFloat(value);
+    else if (key == "sp.lfPerpConstraint")
+        m_linearFilter.perpConstraint = toFloat(value);
+    else if (key == "sp.3ptAvgEnabled")
+        m_postProcessor.enable3PointAvg = toBool(value);
+    else if (key == "sp.jitterEnabled")
+        m_postProcessor.enableJitter = toBool(value);
+    else if (key == "sp.jitterEdgeDim1")
+        m_postProcessor.jitterEdgeParamDim1 = toInt(value);
+    else if (key == "sp.jitterEdgeDim2")
+        m_postProcessor.jitterEdgeParamDim2 = toInt(value);
+    else if (key == "sp.jitterCenterDim1")
+        m_postProcessor.jitterCenterParamDim1 = toInt(value);
+    else if (key == "sp.jitterCenterDim2")
+        m_postProcessor.jitterCenterParamDim2 = toInt(value);
     else if (key == "sp.crEnabled")
         m_coorReviser.enabled = toBool(value);
     else if (key == "sp.elcEnabled")
@@ -1317,7 +1468,7 @@ void StylusPipeline::LoadConfig(
     else if (key == "sp.pressPolyEnabled")
         m_pressurePolyEnabled = toBool(value);
     else if (key == "sp.pressIirQ8")
-        m_pressureIirWeightQ8 = toInt(value);
+        m_pressureIirWeightQ8 = std::clamp(toInt(value), 16, 255);
     else if (key == "sp.pressSeg1Th")
         m_pressureMapSeg1Threshold = toInt(value);
     else if (key == "sp.pressSeg2Th")
@@ -1362,6 +1513,44 @@ void StylusPipeline::LoadConfig(
         m_cmfWindowSize = toInt(value);
     else if (key == "sp.tpPatternEnabled")
         m_tpPatternCompEnabled = toBool(value);
+    // IIR Q8 params
+    else if (key == "sp.iirStillLo")
+        m_postProcessor.stillIirLow = toInt(value);
+    else if (key == "sp.iirStillHi")
+        m_postProcessor.stillIirHigh = toInt(value);
+    else if (key == "sp.iirMoveLo")
+        m_postProcessor.movingIirLow = toInt(value);
+    else if (key == "sp.iirMoveHi")
+        m_postProcessor.movingIirHigh = toInt(value);
+    else if (key == "sp.iirDivisorN")
+        m_postProcessor.iirDivisorN = toInt(value);
+    else if (key == "sp.iirHighSpdThr")
+        m_postProcessor.highSpeedThr = toInt(value);
+    else if (key == "sp.iirDirHalve")
+        m_postProcessor.enableDirectionalHalve = toBool(value);
+    else if (key == "sp.pitchMapEnabled")
+        m_pitchMapEnabled = toBool(value);
+    // Filter mode
+    else if (key == "sp.filterMode")
+        m_filterMode = toInt(value);
+    // IIR speed thresholds
+    else if (key == "sp.iirStillLowThr")
+        m_postProcessor.stillLowSpeedThr = toInt(value);
+    else if (key == "sp.iirMoveLowThr")
+        m_postProcessor.movingLowSpeedThr = toInt(value);
+    else if (key == "sp.iirMotionFrames")
+        m_postProcessor.motionDetectFrames = toInt(value);
+    else if (key == "sp.iirSkipFrames")
+        m_postProcessor.iirSkipFrames = toInt(value);
+    // 1-Euro params
+    else if (key == "sp.1eur.minCutoff")
+        m_oneEuroFilter.minCutoffF = toFloat(value);
+    else if (key == "sp.1eur.beta")
+        m_oneEuroFilter.betaF = toFloat(value);
+    else if (key == "sp.1eur.dCutoff")
+        m_oneEuroFilter.dCutoffF = toFloat(value);
+    else if (key == "sp.1eur.sampleRate")
+        m_oneEuroFilter.sampleRate = toInt(value);
 }
 
 void StylusPipeline::SetBtMcuPressure(uint16_t p) {

@@ -7,9 +7,11 @@
 #include "EdgeLiftCorrector.h"
 #include "CoorReviser.h"
 #include "LinearFilter.h"
+#include "OneEuroFilter.h"
 #include "EngineTypes.h"
 #include "ConfigSchema.h"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cstdint>
@@ -58,6 +60,10 @@ public:
     void LoadConfig(const std::string& key,
                     const std::string& value);
 
+    /// Filter mode accessors (0=IIR, 1=1-Euro, 2=None)
+    int  GetFilterMode() const { return m_filterMode; }
+    void SetFilterMode(int mode) { m_filterMode = std::clamp(mode, 0, 2); }
+
     /// 实时坐标分解诊断（每帧 Process() 后更新）
     /// Canonical definition is Engine::StylusFrameData::StylusDiagnostics (EngineTypes.h).
     using DbgCoordBreakdown = Engine::StylusFrameData::StylusDiagnostics;
@@ -93,6 +99,11 @@ private:
     bool                     m_elcEnabled = true; // P1: Edge-lift corrector switch
     Asa::CoorReviser         m_coorReviser;       // P2: TX2 dual-freq revision
     Asa::LinearFilter        m_linearFilter;      // P2: 7-state line filter
+    Asa::OneEuroFilter       m_oneEuroFilter;     // P5: 1-Euro adaptive filter
+
+    // ── Smoothing filter mode selection (mutually exclusive) ──
+    // 0=IIR (TSACore Q8 fixed-point), 1=1-Euro adaptive, 2=None (bypass)
+    int m_filterMode = 0;
 
     // ── Pipeline state ──
     StylusFrameData  m_lastResult{};
@@ -183,6 +194,18 @@ private:
     int m_sensorRows = 40;  // 行数 (Row/垂直/Y方向): anchor 范围 [0, 39]
     int m_sensorCols = 60;  // 列数 (Col/水平/X方向): anchor 范围 [0, 59]
     int m_anchorCenterOffset = 4; // grid center index to subtract (0=anchor is start, 4=anchor is center)
+
+    // ── SensorPitchSizeMap tables (TSACore: DAT_18268aa0 / DAT_18268c60) ──
+    // Non-uniform pitch weights per sensor cell, from factory flash calibration.
+    // pitchTable[0] == 100.0 is sentinel for "uniform pitch" (passthrough).
+    // When loaded from flash, each entry is the pitch weight for that cell boundary.
+    // Table size = sensorDim + 1 (for interpolation at the last cell)
+    bool m_pitchMapEnabled = false;
+    // Initialized to 100.0 sentinel (uniform pitch passthrough)
+    std::array<double, Asa::kMaxSensorDim + 1> m_pitchTableDim1 =
+        []{ std::array<double, Asa::kMaxSensorDim + 1> a; a.fill(100.0); return a; }();
+    std::array<double, Asa::kMaxSensorDim + 1> m_pitchTableDim2 =
+        []{ std::array<double, Asa::kMaxSensorDim + 1> a; a.fill(100.0); return a; }();
 
     // ── HID report logical maximum (from hidinjector.sys descriptor) ──
     // Descriptor: X Logical Max = 0x3E80 = 16000, Y Logical Max = 0x6400 = 25600
