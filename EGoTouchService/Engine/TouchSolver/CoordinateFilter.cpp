@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "CoordinateFilter.h"
 #include <cmath>
 #include <vector>

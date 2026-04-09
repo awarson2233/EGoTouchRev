@@ -10,6 +10,7 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#include "SecurityUtils.h"
 
 namespace Ipc {
 
@@ -24,8 +25,9 @@ public:
 
     // Open or create the shared flag
     bool Open() {
+        Security::ScopedSecurityAttributes secureSa;
         m_mapHandle = CreateFileMappingW(
-            INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE,
+            INVALID_HANDLE_VALUE, secureSa.get(), PAGE_READWRITE,
             0, sizeof(std::atomic<uint32_t>), kConfigDirtyName);
         if (!m_mapHandle) return false;
         m_flag = static_cast<std::atomic<uint32_t>*>(

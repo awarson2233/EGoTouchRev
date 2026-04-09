@@ -174,7 +174,7 @@ target_include_directories(EGoTouchApp PRIVATE
 )
 
 # Link D3D11 for the ImGui DX11 backend
-target_link_libraries(EGoTouchApp PRIVATE Device Engine Host Common ImGuiCommon d3d11 d3dcompiler dwmapi setupapi)
+target_link_libraries(EGoTouchApp PRIVATE Device Engine Host Common ImGuiCommon d3d11 d3dcompiler dwmapi setupapi gdi32)
 
 # --- EGoTouchService (Production Service Shell) ---
 set(SERVICE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/EGoTouchService")
@@ -188,6 +188,7 @@ target_include_directories(EGoTouchService PRIVATE
     "${SERVICE_ROOT}/include"
 )
 target_link_libraries(EGoTouchService PRIVATE Device Host Common advapi32 setupapi hid)
+set_target_properties(EGoTouchService PROPERTIES LINK_FLAGS "-municode")
 
 # EGoTouchService uses wmain (console subsystem) for service/console dual mode
 if(MSVC)
@@ -205,7 +206,7 @@ target_include_directories(BtMcuTestTool PRIVATE
     "${IMGUI_ROOT}"
     "${IMGUI_ROOT}/backends"
 )
-target_link_libraries(BtMcuTestTool PRIVATE Device Common ImGuiCommon d3d11 d3dcompiler dwmapi setupapi)
+target_link_libraries(BtMcuTestTool PRIVATE Device Common ImGuiCommon d3d11 d3dcompiler dwmapi setupapi gdi32 hid)
 
 option(EGO_BUILD_TESTS "Build local test executables" ON)
 if (EGO_BUILD_TESTS)
