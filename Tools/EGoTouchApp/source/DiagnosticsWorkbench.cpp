@@ -610,25 +610,25 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
             ConfigUIRenderer::RenderConfigSchema(schema, "Stylus Solver", Engine::ConfigParam::Solver);
             
             ImGui::Separator();
-            ImGui::TextColored(ImVec4(0.4f,0.85f,1.0f,1.f), "[Coord Breakdown] (Row=Y, Col=X)");
-            ImGui::Text("  anchorRow(Y) = %u   (%u * %.1f = %.1f)",
-                sd.diag.anchorRow, sd.diag.anchorRow,
-                static_cast<float>(Asa::kCoorUnit),
-                static_cast<float>(sd.diag.anchorRow) * Asa::kCoorUnit);
+            ImGui::TextColored(ImVec4(0.4f,0.85f,1.0f,1.f), "[Coord Breakdown] (dim1=Col=X, dim2=Row=Y)");
             ImGui::Text("  anchorCol(X) = %u   (%u * %.1f = %.1f)",
                 sd.diag.anchorCol, sd.diag.anchorCol,
                 static_cast<float>(Asa::kCoorUnit),
                 static_cast<float>(sd.diag.anchorCol) * Asa::kCoorUnit);
-            ImGui::Text("  rawDim1(Y)   = %d", sd.diag.rawDim1);
-            ImGui::Text("  rawDim2(X)   = %d", sd.diag.rawDim2);
-            ImGui::Text("  finalDim1(Y) = %d", sd.diag.finalDim1);
-            ImGui::Text("  finalDim2(X) = %d", sd.diag.finalDim2);
+            ImGui::Text("  anchorRow(Y) = %u   (%u * %.1f = %.1f)",
+                sd.diag.anchorRow, sd.diag.anchorRow,
+                static_cast<float>(Asa::kCoorUnit),
+                static_cast<float>(sd.diag.anchorRow) * Asa::kCoorUnit);
+            ImGui::Text("  rawDim1(X)   = %d", sd.diag.rawDim1);
+            ImGui::Text("  rawDim2(Y)   = %d", sd.diag.rawDim2);
+            ImGui::Text("  finalDim1(X) = %d", sd.diag.finalDim1);
+            ImGui::Text("  finalDim2(Y) = %d", sd.diag.finalDim2);
             ImGui::Text("  centerOff    = %.1f", sd.diag.centerOff);
             if (sd.diag.valid) {
                 ImGui::TextColored(ImVec4(0.2f,0.9f,0.4f,1),
-                    "  point.X = anchorCol*kU + finalDim2 - cOff = %.2f", sd.diag.pointX);
+                    "  point.X = anchorCol*kU + finalDim1 - cOff = %.2f", sd.diag.pointX);
                 ImGui::TextColored(ImVec4(0.4f,0.7f,1.0f,1),
-                    "  point.Y = anchorRow*kU + finalDim1 - cOff = %.2f", sd.diag.pointY);
+                    "  point.Y = anchorRow*kU + finalDim2 - cOff = %.2f", sd.diag.pointY);
             } else {
                 ImGui::TextColored(ImVec4(0.7f,0.7f,0.0f,1), "  [coord invalid this frame]");
             }
@@ -636,6 +636,18 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
         }
 
         if (ImGui::BeginTabItem("Filters (Smoothing)")) {
+            // ── Filter mode dropdown ──
+            auto& pipeline = m_proxy->GetStylusPipeline();
+            {
+                static const char* filterModes[] = { "IIR (TSACore Q8)", "1-Euro Adaptive", "None (Bypass)" };
+                int mode = pipeline.GetFilterMode();
+                if (ImGui::Combo("Smoothing Filter##sp_filter_mode", &mode, filterModes, 3)) {
+                    pipeline.SetFilterMode(mode);
+                }
+            }
+
+            ImGui::Separator();
+            // ── Render all 'Filter' category params (auto-generated) ──
             ConfigUIRenderer::RenderConfigSchema(schema, "Stylus Filters", Engine::ConfigParam::Filter);
 
             ImGui::Separator();

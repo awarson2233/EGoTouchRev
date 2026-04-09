@@ -10,12 +10,14 @@ void CoorPostProcessor::Reset() {
     m_validHistory = 0;
     m_history.fill(AsaCoorResult{});
     m_prev[0] = m_prev[1] = AsaCoorResult{};
-    m_iirDim1 = m_iirDim2 = 0.0f;
+    m_iirDim1Q8 = m_iirDim2Q8 = 0;
     m_anchor = AsaCoorResult{};
     m_offsetDim1 = m_offsetDim2 = 0;
+    m_lockDim1 = m_lockDim2 = false;
     m_jitterActive = false;
     m_speed = SpeedMetrics{};
-    m_lastIirCoef = 0.0f;
+    m_lastIirCoefInt = 0;
+    m_motionFrameCount = 0;
 }
 
 // ══════════════════════════════════════════════
@@ -47,7 +49,7 @@ AsaCoorResult CoorPostProcessor::Step3PointAvg(
 
 // ══════════════════════════════════════════════
 // Step 3: Speed calculation (TSACore: GetCoorSpeed)
-// 3-tier path-accumulated speed
+// 24-frame path-accumulated speed with direction extraction
 // ══════════════════════════════════════════════
 void CoorPostProcessor::StepCalcSpeed() {
     SpeedMetrics out{};
@@ -55,6 +57,9 @@ void CoorPostProcessor::StepCalcSpeed() {
 
     const int segments = m_validHistory - 1;
     float accumPath = 0.0f;
+    // TSACore: accumulate total displacement per axis for directional detection
+    int32_t totalDisplaceDim1 = 0;
+    int32_t totalDisplaceDim2 = 0;
 
     for (int i = 0; i < segments; ++i) {
         const auto& a = m_history[static_cast<size_t>(i)];
@@ -63,105 +68,223 @@ void CoorPostProcessor::StepCalcSpeed() {
 
         const float dx = static_cast<float>(a.dim1 - b.dim1);
         const float dy = static_cast<float>(a.dim2 - b.dim2);
+        // TSACore: sqrt((dx² + dy²) * 100) then /10 for integer precision
+        // We approximate with float sqrt which is equivalent
         const float segDist = std::sqrt(dx * dx + dy * dy);
         accumPath += segDist;
 
         if (i == 0) out.instant = segDist;
         if (i == 2) out.shortAvg = accumPath / 3.0f;
+
+        totalDisplaceDim1 += (a.dim1 - b.dim1);
+        totalDisplaceDim2 += (a.dim2 - b.dim2);
     }
 
     out.fullAvg = accumPath / static_cast<float>(segments);
     if (segments < 3) out.shortAvg = out.fullAvg;
+
+    // TSACore: DAT_1820dc30/dc34 = |total displacement| / frames
+    // Used by GetIIRCoef for directional override
+    if (segments > 0) {
+        out.avgVelDim1 = static_cast<float>(std::abs(totalDisplaceDim1)) /
+                         static_cast<float>(segments);
+        out.avgVelDim2 = static_cast<float>(std::abs(totalDisplaceDim2)) /
+                         static_cast<float>(segments);
+    }
+
+    // Motion state: update consecutive moving frame count
+    // Mirrors TSACore (DAT_18231950 bits 1+2): needs >= motionDetectFrames
+    // of continuous movement to enter "moving" mode
+    if (out.instant > 1.0f) {
+        m_motionFrameCount = std::min(m_motionFrameCount + 1, 100);
+    } else {
+        m_motionFrameCount = 0;
+    }
 
     m_speed = out;
 }
 
 // ══════════════════════════════════════════════
 // Step 4: Dynamic IIR coefficient (TSACore: GetIIRCoef)
-// Speed-driven linear interpolation between lo and hi
+// Uses still/moving state machine + directional override
+// Returns INTEGER coefficient (not normalized)
 // ══════════════════════════════════════════════
-float CoorPostProcessor::StepCalcIIRCoef(bool isHover, bool isEdge) {
-    float lo, hi, thrLo, thrHi;
+int CoorPostProcessor::StepCalcIIRCoef() {
+    int lo, hi, lowThr;
 
-    if (isHover) {
-        lo = hoverIirLow;   hi = hoverIirHigh;
-        thrLo = hoverLowThr; thrHi = hoverHighThr;
+    // TSACore: (DAT_18231950 & 6) == 0 → still mode, else moving mode
+    const bool isMoving = (m_motionFrameCount >= motionDetectFrames);
+
+    if (!isMoving) {
+        // Still mode: stronger smoothing ([0xa5e]/[0xa5f])
+        lo = stillIirLow;
+        hi = stillIirHigh;
+        lowThr = stillLowSpeedThr;
     } else {
-        lo = writeIirLow;   hi = writeIirHigh;
-        thrLo = writeLowThr; thrHi = writeHighThr;
+        // Moving mode: weaker smoothing ([0xa5c]/[0xa5d])
+        lo = movingIirLow;
+        hi = movingIirHigh;
+        lowThr = movingLowSpeedThr;
     }
 
-    // Edge modifier: halve coefficients (reduces lag at edges)
-    if (isEdge && enableEdgeHalve) {
-        lo *= 0.5f;
-        hi *= 0.5f;
+    // TSACore: Directional velocity override
+    // When pen has consistent direction (DAT_18230a84/c34 != 0),
+    // override to still coefficients >> 1 (halved)
+    if (enableDirectionalHalve &&
+        (m_speed.avgVelDim1 > 1.0f || m_speed.avgVelDim2 > 1.0f)) {
+        hi = stillIirHigh >> 1;
+        lo = stillIirLow >> 1;
     }
 
-    // Linear interpolation between low and high speed thresholds
-    float speed = m_speed.instant;
-    float coef;
-    if (speed <= thrLo) {
-        coef = lo;
-    } else if (speed >= thrHi) {
+    // TSACore: Integer speed-to-coefficient interpolation
+    // speed = DAT_1820dc38 (instant speed, already in integer scale)
+    const int speed = static_cast<int>(m_speed.instant);
+    int coef;
+
+    if (speed >= highSpeedThr) {
         coef = hi;
+    } else if (speed < lowThr) {
+        coef = lo;
+    } else if (lowThr == highSpeedThr) {
+        // Edge case: thresholds equal → average
+        coef = (lo + hi) / 2;
     } else {
-        const float t = (speed - thrLo) / (thrHi - thrLo);
-        coef = lo + t * (hi - lo);
+        // Linear interpolation (TSACore exact integer formula)
+        coef = lo + static_cast<int>(
+            (static_cast<int64_t>(hi - lo) * (speed - lowThr)) /
+            (highSpeedThr - lowThr));
     }
 
-    m_lastIirCoef = coef;
+    m_lastIirCoefInt = coef;
     return coef;
 }
 
 // ══════════════════════════════════════════════
-// Step 5: IIR filter (TSACore: CoorFilterProcess)
-// 1st-order IIR low-pass: out = prev*(1-coef) + cur*coef
+// Integer IIR core: (coef * cur + (N - coef) * prev) / N
+// Matches TSACore CoorIIRFilter exactly
+// ══════════════════════════════════════════════
+int32_t CoorPostProcessor::IIRFilterQ8(
+        int32_t prevQ8, int32_t curQ8, int coef, int N) {
+    // TSACore: return (coef * cur + (N - coef) * prev) / N
+    return (coef * curQ8 + (N - coef) * prevQ8) / N;
+}
+
+// ══════════════════════════════════════════════
+// Step 5: IIR filter (TSACore: CoorFilterProcess + CoorIIRFilterType)
+// Q8 fixed-point: coordinate × 256 + fractional remainder
+// Remainder is preserved across frames for sub-LSB precision
 // ══════════════════════════════════════════════
 AsaCoorResult CoorPostProcessor::StepIIR(
-        const AsaCoorResult& cur, float coef) {
-    if (!m_initialized) {
-        m_iirDim1 = static_cast<float>(cur.dim1);
-        m_iirDim2 = static_cast<float>(cur.dim2);
+        const AsaCoorResult& cur, int coefInt) {
+    // TSACore: Skip IIR for first few frames (let coordinates settle)
+    // CoorFilterProcess: if ((DAT_18231c28 & 1)==0 || counters < 2) → zero fractional state
+    if (m_frameCount < iirSkipFrames) {
+        m_iirDim1Q8 = cur.dim1 << 8;
+        m_iirDim2Q8 = cur.dim2 << 8;
         m_initialized = true;
         return cur;
     }
+
+    if (!m_initialized) {
+        m_iirDim1Q8 = cur.dim1 << 8;
+        m_iirDim2Q8 = cur.dim2 << 8;
+        m_initialized = true;
+        return cur;
+    }
+
+    const int N = std::max(1, iirDivisorN);
+
+    // TSACore CoorIIRFilterType:
+    //   prev_q8 = curFrac[idx] + prevCoor[idx] * 256   ← accumulated state
+    //   cur_q8  = curCoor[idx] << 8                     ← new input
+    //   result  = IIRFilter(prev_q8, cur_q8, coef, N)
+    //   output  = result >> 8                           ← integer coordinate
+    //   frac    = result & 0xFF                         ← remainder (kept)
+    //
+    // In our representation, m_iirDim1Q8 already holds
+    // the full Q8 state (integer part × 256 + fractional remainder).
+
+    m_iirDim1Q8 = IIRFilterQ8(m_iirDim1Q8, cur.dim1 << 8, coefInt, N);
+    m_iirDim2Q8 = IIRFilterQ8(m_iirDim2Q8, cur.dim2 << 8, coefInt, N);
+
     AsaCoorResult out = cur;
-    m_iirDim1 = m_iirDim1 * (1.0f - coef) +
-                static_cast<float>(cur.dim1) * coef;
-    m_iirDim2 = m_iirDim2 * (1.0f - coef) +
-                static_cast<float>(cur.dim2) * coef;
-    out.dim1 = static_cast<int32_t>(std::lround(m_iirDim1));
-    out.dim2 = static_cast<int32_t>(std::lround(m_iirDim2));
+    out.dim1 = m_iirDim1Q8 >> 8;  // Integer part (truncate toward zero)
+    out.dim2 = m_iirDim2Q8 >> 8;
     return out;
 }
 
 // ══════════════════════════════════════════════
 // Step 6: Jitter offset compensation (TSACore: AftCoorProcess)
+// Dynamic threshold based on sensor/screen dimensions
+// Independent X/Y axis locking
 // ══════════════════════════════════════════════
 AsaCoorResult CoorPostProcessor::StepJitter(
         const AsaCoorResult& cur, bool isEdge) {
-    const int32_t thr = isEdge ? jitterEdgeThreshold
-                               : jitterCenterThreshold;
+    if (!enableJitter) return cur;
 
+    // TSACore: Dynamic threshold = (param * sensorDim * 0x400) / screenDim
+    int32_t thrDim1, thrDim2;
+    if (isEdge) {
+        thrDim1 = (screenDimDim1 > 0)
+            ? (jitterEdgeParamDim1 * sensorDimDim1 * kCoorUnit) / screenDimDim1
+            : 40;
+        thrDim2 = (screenDimDim2 > 0)
+            ? (jitterEdgeParamDim2 * sensorDimDim2 * kCoorUnit) / screenDimDim2
+            : 40;
+    } else {
+        thrDim1 = (screenDimDim1 > 0)
+            ? (jitterCenterParamDim1 * sensorDimDim1 * kCoorUnit) / screenDimDim1
+            : 20;
+        thrDim2 = (screenDimDim2 > 0)
+            ? (jitterCenterParamDim2 * sensorDimDim2 * kCoorUnit) / screenDimDim2
+            : 20;
+    }
+
+    // TSACore: Lock starts on first valid contact frame
+    // (DAT_18231b18 != 0 && DAT_18231c18 == 0)
     if (!m_jitterActive) {
         m_anchor = cur;
         m_offsetDim1 = 0;
         m_offsetDim2 = 0;
+        m_lockDim1 = true;
+        m_lockDim2 = true;
         m_jitterActive = true;
         return cur;
     }
 
-    const int32_t dx = cur.dim1 - m_anchor.dim1;
-    const int32_t dy = cur.dim2 - m_anchor.dim2;
-
-    if (std::abs(dx) <= thr && std::abs(dy) <= thr) {
-        m_offsetDim1 = m_anchor.dim1 - cur.dim1;
-        m_offsetDim2 = m_anchor.dim2 - cur.dim2;
+    // TSACore: Independent X/Y axis lock check
+    // Each axis unlocks independently when displacement exceeds threshold
+    if (m_lockDim1) {
+        int32_t dx = cur.dim1 - m_anchor.dim1;
+        // TSACore: abs using (v ^ (v>>31)) - (v>>31)
+        if (std::abs(dx) > thrDim1) {
+            m_lockDim1 = false;
+        }
+        if (m_lockDim1) {
+            m_offsetDim1 = cur.dim1 - m_anchor.dim1;
+        }
     }
 
+    if (m_lockDim2) {
+        int32_t dy = cur.dim2 - m_anchor.dim2;
+        if (std::abs(dy) > thrDim2) {
+            m_lockDim2 = false;
+        }
+        if (m_lockDim2) {
+            m_offsetDim2 = cur.dim2 - m_anchor.dim2;
+        }
+    }
+
+    // TSACore: output = coordinate - accumulated offset, clamped to [0, sensorDim*0x400]
     AsaCoorResult out = cur;
-    out.dim1 = cur.dim1 + m_offsetDim1;
-    out.dim2 = cur.dim2 + m_offsetDim2;
+    int32_t resultDim1 = cur.dim1 - m_offsetDim1;
+    int32_t resultDim2 = cur.dim2 - m_offsetDim2;
+
+    // Clamp to valid range
+    const int32_t maxDim1 = sensorDimDim1 * kCoorUnit;
+    const int32_t maxDim2 = sensorDimDim2 * kCoorUnit;
+    out.dim1 = std::clamp(resultDim1, 0, maxDim1);
+    out.dim2 = std::clamp(resultDim2, 0, maxDim2);
     return out;
 }
 
