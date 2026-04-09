@@ -1,5 +1,5 @@
 #pragma once
-#include "AsaTypes.h"
+#include "AsaTypes.hpp"
 #include <cmath>
 
 namespace Asa {
