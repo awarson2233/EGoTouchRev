@@ -128,6 +128,7 @@ bool StylusPipeline::Process(
             m_prevValid = false;
             m_wasInking = false;
             UpdatePenLifecycle(false, false);
+            UpdateAsaStateMachine(false, false);
             m_prevStatus = m_lastResult.status;
             return outPacket.valid;
         }
@@ -141,6 +142,7 @@ bool StylusPipeline::Process(
         m_prevValid = false;
         m_wasInking = false;  // P3: clear inking state
         UpdatePenLifecycle(false, false);
+        UpdateAsaStateMachine(false, false);
         if (m_emitPacketWhenInvalid) BuildStylusPacket(outPacket);
         m_prevStatus = m_lastResult.status;
         return false;
@@ -162,6 +164,7 @@ bool StylusPipeline::Process(
         m_lastResult.pipelineStage = 3; // No peak found
         m_prevValid = false;
         UpdatePenLifecycle(false, false);
+        UpdateAsaStateMachine(false, false);
         if (m_emitPacketWhenInvalid) BuildStylusPacket(outPacket);
         m_prevStatus = m_lastResult.status;
         return false;
@@ -179,37 +182,26 @@ bool StylusPipeline::Process(
         m_lastResult.pipelineStage = 4; // Coord solve failed
         m_prevValid = false;
         UpdatePenLifecycle(false, false);
+        UpdateAsaStateMachine(false, false);
         if (m_emitPacketWhenInvalid) BuildStylusPacket(outPacket);
         m_prevStatus = m_lastResult.status;
         return false;
     }
 
-    // ── 7b. LOCAL → GLOBAL coordinate conversion ──
+    // ── 7b. LOCAL coordinate diagnostics ──
     // rawCoor.dim1/dim2 are local to the 9×9 window (range [0, 9*1024)).
+    // TSACore: Entire post-processing chain works in LOCAL space.
+    //          Anchor offset is added only at the final output stage.
     m_lastResult.point.tx1X = static_cast<float>(rawCoor.dim1) / Asa::kCoorUnit;
     m_lastResult.point.tx1Y = static_cast<float>(rawCoor.dim2) / Asa::kCoorUnit;
 
-    const int32_t centerOff =
-        m_anchorCenterOffset * Asa::kCoorUnit;
-
-    // TSACore: SensorPitchSizeMapDim1/Dim2
-    // Convert local 9×9 coordinate to full-sensor coordinate using pitch table.
-    // First compute the full-sensor local coordinate (anchor-based offset)
-    {
-        int32_t globalDim1 = rawCoor.dim1 +
-            static_cast<int32_t>(m_gridData.tx1.anchorCol) * Asa::kCoorUnit - centerOff;
-        int32_t globalDim2 = rawCoor.dim2 +
-            static_cast<int32_t>(m_gridData.tx1.anchorRow) * Asa::kCoorUnit - centerOff;
-
-        if (m_pitchMapEnabled) {
-            rawCoor.dim1 = Asa::SensorPitchSizeMap(
-                globalDim1, m_pitchTableDim1.data(), Asa::kCoorUnit);
-            rawCoor.dim2 = Asa::SensorPitchSizeMap(
-                globalDim2, m_pitchTableDim2.data(), Asa::kCoorUnit);
-        } else {
-            rawCoor.dim1 = globalDim1;
-            rawCoor.dim2 = globalDim2;
-        }
+    // TSACore: SensorPitchSizeMapDim1/Dim2 operates on LOCAL coordinates.
+    // It only uses pitchTable entries [0..gridDim-1], not the full sensor range.
+    if (m_pitchMapEnabled) {
+        rawCoor.dim1 = Asa::SensorPitchSizeMap(
+            rawCoor.dim1, m_pitchTableDim1.data(), Asa::kCoorUnit);
+        rawCoor.dim2 = Asa::SensorPitchSizeMap(
+            rawCoor.dim2, m_pitchTableDim2.data(), Asa::kCoorUnit);
     }
 
     // 8. HPP3 Noise post-process
@@ -230,6 +222,7 @@ bool StylusPipeline::Process(
         m_lastResult.pipelineStage = 5;
         m_prevValid = false;
         UpdatePenLifecycle(false, false);
+        UpdateAsaStateMachine(false, false);
         if (m_emitPacketWhenInvalid) BuildStylusPacket(outPacket);
         m_prevStatus = m_lastResult.status;
         return false;
@@ -244,9 +237,10 @@ bool StylusPipeline::Process(
     // filterMode: 0=IIR, 1=1-Euro, 2=Bypass (skip ALL smoothing)
     // ═══════════════════════════════════════════════════════════════
 
+    // In LOCAL space, edge region is relative to 9×9 grid boundaries
     const bool isEdge  = m_edgeLiftCorrector.IsInEdgeRegion(
         static_cast<float>(rawCoor.dim1), static_cast<float>(rawCoor.dim2),
-        m_sensorRows, m_sensorCols);
+        Asa::kGridDim, Asa::kGridDim);
 
     // Step 9a. LinearFilter (7-state line detection)
     auto postCoor = m_linearFilter.enabled
@@ -262,6 +256,7 @@ bool StylusPipeline::Process(
     postCoor = m_postProcessor.Step3PointAvg(postCoor);
 
     // Step 9d. CoorReviser (TX2 dual-frequency revision)
+    // TSACore: Both TX1 and TX2 are in LOCAL space during CoorReviseProcess
     if (m_coorReviser.enabled && m_gridData.tx2.valid) {
         auto tx2Peak = m_peakDetector.FindPeak(m_gridData.tx2.grid);
         if (tx2Peak.valid) {
@@ -271,12 +266,7 @@ bool StylusPipeline::Process(
             if (tx2Coor.valid) {
                 m_lastResult.point.tx2X = static_cast<float>(tx2Coor.dim1) / Asa::kCoorUnit;
                 m_lastResult.point.tx2Y = static_cast<float>(tx2Coor.dim2) / Asa::kCoorUnit;
-
-                // Convert TX2 to global
-                tx2Coor.dim1 += static_cast<int32_t>(m_gridData.tx2.anchorCol) *
-                                Asa::kCoorUnit - centerOff;
-                tx2Coor.dim2 += static_cast<int32_t>(m_gridData.tx2.anchorRow) *
-                                Asa::kCoorUnit - centerOff;
+                // TX2 stays in LOCAL space — no anchor offset added here
             }
             postCoor = m_coorReviser.Revise(postCoor, tx2Coor,
                                              m_lastResult.pressure);
@@ -288,13 +278,25 @@ bool StylusPipeline::Process(
     m_postProcessor.StepCalcSpeed();
 
     // Step 9f. Dynamic IIR coefficient (TSACore: GetIIRCoef)
-    //          Always computed for diagnostics
-    const int iirCoefInt = m_postProcessor.StepCalcIIRCoef();
+    //          TSACore switches Still/Moving based on (status & 6):
+    //          Still (hover) = stronger smoothing, Moving (ink) = weaker smoothing
+    const bool isInking = (m_asaStatus & (kStatInk | kStatNoPressInk)) != 0;
+    const int iirCoefInt = m_postProcessor.StepCalcIIRCoef(isInking);
 
     // Step 9g. Coordinate smoothing filter (mode-switched)
     //   0 = IIR (TSACore Q8), 1 = 1-Euro adaptive, 2 = None (bypass)
+    //
+    //   TSACore CoorFilterProcess IIR skip condition:
+    //     Skip when ((prevStatus & 1)==0 || inRangeFrames < 2)
+    //               && inkFrames < 2 && noPressInkFrames < 2
+    //   → IIR is skipped for the first 2 frames of any mode transition
+    const bool shouldSkipIIR =
+        ((m_prevAsaStatus & kStatInRange) == 0 || m_inRangeFrames < 2)
+        && m_inkFrames < 2
+        && m_noPressInkFrames < 2;
+
     if (m_filterMode == 0) {
-        postCoor = m_postProcessor.StepIIR(postCoor, iirCoefInt);
+        postCoor = m_postProcessor.StepIIR(postCoor, iirCoefInt, shouldSkipIIR);
     } else if (m_filterMode == 1) {
         postCoor = m_oneEuroFilter.Filter(postCoor);
     }
@@ -310,8 +312,17 @@ bool StylusPipeline::Process(
     auto finalCoor = m_calibEnabled ? ApplyCalibration(postCoor) : postCoor;
     m_lastResult.pipelineStage = 0; // Success
 
+    // ── 10a. LOCAL → GLOBAL coordinate conversion ──
+    // TSACore: Anchor offset is added only here, AFTER all post-processing.
+    // This ensures IIR/jitter/linear filters never see anchor transition jumps.
+    const int32_t centerOff =
+        m_anchorCenterOffset * Asa::kCoorUnit;
+    finalCoor.dim1 += static_cast<int32_t>(m_gridData.tx1.anchorCol) *
+                      Asa::kCoorUnit - centerOff;
+    finalCoor.dim2 += static_cast<int32_t>(m_gridData.tx1.anchorRow) *
+                      Asa::kCoorUnit - centerOff;
+
     m_lastResult.point.valid = finalCoor.valid;
-    // Coordinates are now GLOBAL — use directly for point.x/y
     m_lastResult.point.x = static_cast<float>(finalCoor.dim1);
     m_lastResult.point.y = static_cast<float>(finalCoor.dim2);
 
@@ -413,10 +424,12 @@ bool StylusPipeline::Process(
                 m_lastResult.point.tx2Y = static_cast<float>(tx2Coor.dim2) / Asa::kCoorUnit;
 
                 // Convert TX2 to global for tilt diff
+                const int32_t tiltCenterOff =
+                    m_anchorCenterOffset * Asa::kCoorUnit;
                 tx2Coor.dim1 += static_cast<int32_t>(m_gridData.tx2.anchorCol) *
-                                Asa::kCoorUnit - centerOff;
+                                Asa::kCoorUnit - tiltCenterOff;
                 tx2Coor.dim2 += static_cast<int32_t>(m_gridData.tx2.anchorRow) *
-                                Asa::kCoorUnit - centerOff;
+                                Asa::kCoorUnit - tiltCenterOff;
                 if (m_tiltEnabled) {
                     SolveTilt(finalCoor, tx2Coor);
                 }
@@ -456,8 +469,10 @@ bool StylusPipeline::Process(
         m_lastResult.status = UpdateButtonState(
             hdr.button, finalCoor.valid);
 
-    // 14. Pen lifecycle
+    // 14. Pen lifecycle + TSACore state machine
     UpdatePenLifecycle(finalCoor.valid, m_lastResult.pressure > 0);
+    // TSACore: DAT_18231b28 = DAT_18231950 (save status at end of ASA_CoorPostProcess)
+    UpdateAsaStateMachine(finalCoor.valid, m_lastResult.pressure > 0);
 
     // 15. Build packet + save state for next frame
     m_prevPointX = m_lastResult.point.x;
@@ -922,6 +937,63 @@ void StylusPipeline::UpdatePenLifecycle(
         break;
     }
     m_lastResult.animState = static_cast<uint8_t>(m_penLifecycle);
+}
+
+// ══════════════════════════════════════════════
+// UpdateAsaStateMachine — TSACore HPP3_ASAStaticStatusPostProcess
+//
+// Maintains 3-bit status word with independent frame counters.
+// Controls IIR skip (first 2 frames after mode transition) and
+// Still/Moving IIR coefficient selection.
+//
+// State bits:
+//   bit0 (0x01) InRange    — pen in detection range (hover)
+//   bit1 (0x02) Ink        — pressure active (writing)
+//   bit2 (0x04) NoPressInk — coord valid, no pressure (near-surface)
+// ══════════════════════════════════════════════
+void StylusPipeline::UpdateAsaStateMachine(
+        bool coordValid, bool hasInk) {
+    // Save previous status for IIR skip logic
+    m_prevAsaStatus = m_asaStatus;
+
+    // Build new status bits (TSACore: HPP3_ASAStaticStatusPostProcess)
+    m_asaStatus = 0;
+    if (coordValid)  m_asaStatus |= kStatInRange;    // bit0
+    if (hasInk)      m_asaStatus |= kStatInk;        // bit1
+    if (coordValid)  m_asaStatus |= kStatNoPressInk;  // bit2 (coord valid = "NoPressInk")
+
+    // ── NoPressInk mode ──
+    // TSACore: EnterNoPressInkMode clears InRange counter
+    if (m_asaStatus & kStatNoPressInk) {
+        m_noPressInkFrames++;
+        m_inRangeFrames = 0;  // TSACore: EnterNoPressInkMode → DAT_1823194c = 0
+    } else {
+        m_noPressInkFrames = 0;  // TSACore: ExitNoPressInkMode
+    }
+
+    // ── Ink mode ──
+    // TSACore: EnterInkMode clears InRange counter
+    if (m_asaStatus & kStatInk) {
+        m_inkFrames++;
+        m_inRangeFrames = 0;  // TSACore: EnterInkMode → DAT_1823194c = 0
+    } else {
+        m_inkFrames = 0;  // TSACore: ExitInkMode
+    }
+
+    // ── InRange mode ──
+    if (m_asaStatus & kStatInRange) {
+        m_inRangeFrames++;
+    }
+
+    // ── Exit range → full reset ──
+    // TSACore: ExitInRangeMode calls CoorInit() + ASAPropertyInit()
+    if (!(m_asaStatus & kStatInRange) && (m_prevAsaStatus & kStatInRange)) {
+        // Pen just left range — reset all coordinate history
+        m_inRangeFrames = 0;
+        m_inkFrames = 0;
+        m_noPressInkFrames = 0;
+        m_postProcessor.Reset();  // TSACore: CoorInit()
+    }
 }
 
 // ══════════════════════════════════════════════

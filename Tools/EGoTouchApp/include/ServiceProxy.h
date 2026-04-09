@@ -79,6 +79,7 @@ public:
 
     // Local DVR export
     void TriggerDVRExport(bool heatmap, bool master, bool slave);
+    bool IsDvrExporting() const { return m_dvrExporting.load(); }
 
     // Global Service config (UI mirrors)
     bool IsSrvModeFull() const { return m_srvModeFull; }
@@ -130,6 +131,8 @@ private:
 
     // DVR ring buffer (local)
     std::unique_ptr<RingBuffer<Engine::HeatmapFrame, 480>> m_dvrBuffer;
+    std::atomic<bool> m_dvrExporting{false};
+    std::thread m_dvrThread;
 
     // Remote state mirrors
     std::atomic<bool> m_vhfEnabled{true};
