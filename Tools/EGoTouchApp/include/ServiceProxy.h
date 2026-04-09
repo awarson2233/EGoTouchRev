@@ -10,6 +10,7 @@
 #include "FramePipeline.h"
 #include "StylusPipeline.h"
 #include "ConcurrentRingBuffer.h"
+#include "DvrFrameSlot.h"
 #include <atomic>
 #include <mutex>
 #include <thread>
@@ -129,8 +130,8 @@ private:
     int m_discoveryIntervalMs = 2000;
     void DiscoveryLoop();
 
-    // DVR ring buffer (local)
-    std::unique_ptr<RingBuffer<Engine::HeatmapFrame, 480>> m_dvrBuffer;
+    // DVR ring buffer (POD slots — zero heap allocation per frame)
+    std::unique_ptr<RingBuffer<Dvr::DvrFrameSlot, 480>> m_dvrBuffer;
     std::atomic<bool> m_dvrExporting{false};
     std::thread m_dvrThread;
 
