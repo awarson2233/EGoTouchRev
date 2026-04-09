@@ -4,13 +4,14 @@
 
 #include <atomic>
 #include <cstdint>
+#include "EngineTypes.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
 
-namespace Engine { struct HeatmapFrame; }
+
 
 namespace Ipc {
 
@@ -163,50 +164,8 @@ struct SharedFrameData {
     bool     stylusNoPressInk = false;
     uint8_t  stylusPipelineStage = 0;  // 0=ok,1=slaveParse,2=tx1,3=peak,4=coord,5=noise
 
-    // ── P2 Pipeline Diagnostic Monitor (populated from DbgCoordBreakdown) ──
-    // Coordinate solver
-    uint16_t dbgAnchorRow  = 0;
-    uint16_t dbgAnchorCol  = 0;
-    int32_t  dbgRawDim1    = 0;
-    int32_t  dbgRawDim2    = 0;
-    int32_t  dbgFinalDim1  = 0;
-    int32_t  dbgFinalDim2  = 0;
-    float    dbgCenterOff  = 0.f;
-    float    dbgPointX     = 0.f;
-    float    dbgPointY     = 0.f;
-    bool     dbgCoordValid = false;
-    // Post-processing metrics
-    float    dbgSpeedInstant  = 0.f;
-    float    dbgSpeedShortAvg = 0.f;
-    float    dbgSpeedFullAvg  = 0.f;
-    float    dbgIirCoef       = 0.f;
-    bool     dbgIsHover       = false;
-    bool     dbgIsEdge        = false;
-    // Tilt
-    float    dbgTiltDiffX  = 0.f;
-    float    dbgTiltDiffY  = 0.f;
-    // Pressure / Signal
-    uint16_t dbgPeakSignal     = 0;
-    uint16_t dbgRawPressure    = 0;
-    uint16_t dbgMappedPressure = 0;
-    // VHF state
-    uint8_t  dbgVhfPenState      = 0;
-    uint8_t  dbgLinearFilterState = 0;
-
-    // P3/P4: Extended pipeline diagnostics
-    uint16_t dbgSignalRatio       = 0;     // TX1/TX2 信号比 (%)
-    bool     dbgFreqShiftFreezing = false; // 频率跳变冻结
-    bool     dbgExitSmoothed      = false; // 抬笔平滑触发
-    bool     dbgCmfEnabled        = false; // CMF 启用
-    bool     dbgCoorRevActive     = false; // TX2 修正启用
-    float    dbgCoorRevDeltaX     = 0.f;   // TX2 修正量 X
-    float    dbgCoorRevDeltaY     = 0.f;   // TX2 修正量 Y
-    bool     dbgTiltAnomalyDamped = false; // 倾斜异常抑制
-    bool     dbgSigSuppressActive = false; // 信号抑制激活
-    uint8_t  dbgPenLifecycle      = 0;     // 笔生命周期
-    bool     dbgWasInking         = false; // 笔书写中
-    int32_t  dbgAvg3PtDim1        = 0;     // 3点均值 X
-    int32_t  dbgAvg3PtDim2        = 0;     // 3点均值 Y
+    // ── Pipeline Diagnostics (same POD struct as StylusFrameData::StylusDiagnostics) ──
+    Engine::StylusFrameData::StylusDiagnostics diag{};
 
     // Raw suffix data for Master/Slave status tables
     uint8_t  masterSuffix[kMasterSuffixBytes]{};

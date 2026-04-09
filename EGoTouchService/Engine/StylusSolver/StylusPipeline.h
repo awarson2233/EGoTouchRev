@@ -59,55 +59,8 @@ public:
                     const std::string& value);
 
     /// 实时坐标分解诊断（每帧 Process() 后更新）
-    struct DbgCoordBreakdown {
-        // ── Stage 1: Coordinate solver ──
-        uint16_t anchorRow = 0;    // 粗定位：行（垂直/Y）
-        uint16_t anchorCol = 0;    // 粗定位：列（水平/X）
-        int32_t  rawDim1   = 0;    // 亚像素偏移：行方向（Y）
-        int32_t  rawDim2   = 0;    // 亚像素偏移：列方向（X）
-        int32_t  finalDim1 = 0;    // 后处理+标定后 dim1
-        int32_t  finalDim2 = 0;    // 后处理+标定后 dim2
-        float    centerOff = 0.f;  // anchorCenterOffset * kCoorUnit
-        float    pointX    = 0.f;  // = anchorCol*kUnit + finalDim2 - centerOff
-        float    pointY    = 0.f;  // = anchorRow*kUnit + finalDim1 - centerOff
-        bool     valid     = false;
-
-        // ── Stage 2: Post-processing metrics (上位机监控) ──
-        float    speedInstant = 0.f;   // 逐帧速度
-        float    speedShortAvg = 0.f;  // 3 段均速
-        float    speedFullAvg = 0.f;   // 全窗口均速
-        float    iirCoef    = 0.f;     // 当前 IIR 系数 (0=强平滑, 1=无滤波)
-        bool     isHover    = false;   // 当前悬浮状态
-        bool     isEdge     = false;   // 当前边缘状态
-
-        // ── Stage 3: Tilt ──
-        float    tiltDiffX  = 0.f;     // TX1-TX2 坐标差（X 方向）
-        float    tiltDiffY  = 0.f;     // TX1-TX2 坐标差（Y 方向）
-
-        // ── Stage 4: Pressure / Signal ──
-        uint16_t peakSignal = 0;       // TX1 峰值信号强度
-        uint16_t rawPressure = 0;      // BT MCU 原始压力
-        uint16_t mappedPressure = 0;   // 映射后压力
-
-        // ── Stage 5: VHF state ──
-        uint8_t  vhfPenState = 0;      // byte[1]: InRange|TipSwitch|Barrel
-        uint8_t  linearFilterState = 0; // 直线滤波状态机当前状态 (0-6)
-
-        // ── Stage 6: P2/P3/P4 Pipeline diagnostics ──
-        uint16_t signalRatio       = 0;     // TX1/TX2 信号强度比 (%)
-        bool     freqShiftFreezing = false; // 频率跳变冻结状态
-        bool     exitSmoothed      = false; // 抬笔平滑触发
-        bool     cmfEnabled        = false; // CMF 是否启用
-        bool     coorReviserActive = false; // TX2 修正已启用
-        float    coorRevDeltaX     = 0.f;   // TX2 修正量 X
-        float    coorRevDeltaY     = 0.f;   // TX2 修正量 Y
-        bool     tiltAnomalyDamped = false; // 倾斜角异常抑制触发
-        bool     sigSuppressActive = false; // 信号抑制激活
-        uint8_t  penLifecycle      = 0;     // 笔生命周期状态
-        bool     wasInking         = false; // 笔是否在书写
-        int32_t  avg3PtDim1        = 0;     // 3点均值中间坐标 X
-        int32_t  avg3PtDim2        = 0;     // 3点均值中间坐标 Y
-    };
+    /// Canonical definition is Engine::StylusFrameData::StylusDiagnostics (EngineTypes.h).
+    using DbgCoordBreakdown = Engine::StylusFrameData::StylusDiagnostics;
     const DbgCoordBreakdown& GetDebugCoord() const { return m_dbg; }
 
 

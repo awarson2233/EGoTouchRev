@@ -13,6 +13,7 @@
 #include <unordered_map>
 #include <vector>
 #include <functional>
+#include "btmcu/PenUsbTypes.h"
 
 #include "Device.h"
 #include "himax/HimaxChip.h"
@@ -130,6 +131,9 @@ public:
     RuntimeSnapshot GetSnapshot() const;
     std::vector<HistoryEntry> GetHistory(std::size_t n = 200) const;
     void ClearHistory();
+
+    /// MCU 事件 → AFE 命令分派（从 ServiceHost 迁移到设备层）
+    void OnPenEvent(const Himax::Pen::PenEvent& ev);
 
 private:
     ThreadResult WorkerMain();

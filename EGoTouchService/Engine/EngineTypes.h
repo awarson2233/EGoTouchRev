@@ -172,45 +172,53 @@ struct StylusFrameData {
     // 0=ok, 1=slaveParseFail, 2=tx1Invalid, 3=noPeak, 4=coordFail, 5=noiseReject
     uint8_t pipelineStage = 0;
 
-    // ── P2 Pipeline Diagnostic (populated from StylusPipeline::DbgCoordBreakdown) ──
-    uint16_t dbgAnchorRow  = 0;
-    uint16_t dbgAnchorCol  = 0;
-    int32_t  dbgRawDim1    = 0;
-    int32_t  dbgRawDim2    = 0;
-    int32_t  dbgFinalDim1  = 0;
-    int32_t  dbgFinalDim2  = 0;
-    float    dbgCenterOff  = 0.f;
-    float    dbgPointX     = 0.f;
-    float    dbgPointY     = 0.f;
-    bool     dbgCoordValid = false;
-    float    dbgSpeedInstant  = 0.f;
-    float    dbgSpeedShortAvg = 0.f;
-    float    dbgSpeedFullAvg  = 0.f;
-    float    dbgIirCoef       = 0.f;
-    bool     dbgIsHover       = false;
-    bool     dbgIsEdge        = false;
-    float    dbgTiltDiffX  = 0.f;
-    float    dbgTiltDiffY  = 0.f;
-    uint16_t dbgPeakSignal     = 0;
-    uint16_t dbgRawPressure    = 0;
-    uint16_t dbgMappedPressure = 0;
-    uint8_t  dbgVhfPenState      = 0;
-    uint8_t  dbgLinearFilterState = 0;
-
-    // ── P3/P4 Extended pipeline diagnostics ──
-    uint16_t dbgSignalRatio       = 0;
-    bool     dbgFreqShiftFreezing = false;
-    bool     dbgExitSmoothed      = false;
-    bool     dbgCmfEnabled        = false;
-    bool     dbgCoorRevActive     = false;
-    float    dbgCoorRevDeltaX     = 0.f;
-    float    dbgCoorRevDeltaY     = 0.f;
-    bool     dbgTiltAnomalyDamped = false;
-    bool     dbgSigSuppressActive = false;
-    uint8_t  dbgPenLifecycle      = 0;
-    bool     dbgWasInking         = false;
-    int32_t  dbgAvg3PtDim1        = 0;
-    int32_t  dbgAvg3PtDim2        = 0;
+    // ── Pipeline Diagnostics (shared POD struct, single-copy from StylusPipeline) ──
+    // Layout matches StylusPipeline::DbgCoordBreakdown exactly.
+    struct StylusDiagnostics {
+        // Stage 1: Coordinate solver
+        uint16_t anchorRow = 0;
+        uint16_t anchorCol = 0;
+        int32_t  rawDim1   = 0;
+        int32_t  rawDim2   = 0;
+        int32_t  finalDim1 = 0;
+        int32_t  finalDim2 = 0;
+        float    centerOff = 0.f;
+        float    pointX    = 0.f;
+        float    pointY    = 0.f;
+        bool     valid     = false;
+        // Stage 2: Post-processing metrics
+        float    speedInstant  = 0.f;
+        float    speedShortAvg = 0.f;
+        float    speedFullAvg  = 0.f;
+        float    iirCoef       = 0.f;
+        bool     isHover       = false;
+        bool     isEdge        = false;
+        // Stage 3: Tilt
+        float    tiltDiffX  = 0.f;
+        float    tiltDiffY  = 0.f;
+        // Stage 4: Pressure / Signal
+        uint16_t peakSignal     = 0;
+        uint16_t rawPressure    = 0;
+        uint16_t mappedPressure = 0;
+        // Stage 5: VHF state
+        uint8_t  vhfPenState      = 0;
+        uint8_t  linearFilterState = 0;
+        // Stage 6: P3/P4 Extended diagnostics
+        uint16_t signalRatio       = 0;
+        bool     freqShiftFreezing = false;
+        bool     exitSmoothed      = false;
+        bool     cmfEnabled        = false;
+        bool     coorReviserActive = false;
+        float    coorRevDeltaX     = 0.f;
+        float    coorRevDeltaY     = 0.f;
+        bool     tiltAnomalyDamped = false;
+        bool     sigSuppressActive = false;
+        uint8_t  penLifecycle      = 0;
+        bool     wasInking         = false;
+        int32_t  avg3PtDim1        = 0;
+        int32_t  avg3PtDim2        = 0;
+    };
+    StylusDiagnostics diag{};
 };
 
 // 整个管线中流转的帧结构体

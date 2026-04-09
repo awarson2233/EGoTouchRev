@@ -50,12 +50,13 @@ private:
 
     void SendRawPacket(const std::vector<uint8_t>& pkt);
     void SendAck(uint8_t ackCode);
-    void SendInitParamEcho(const uint8_t* data, size_t len);
+
     void SendInitProtocolParams();
 
     mutable std::mutex m_cbMutex;
     PenEventCallback m_eventCallback;
     HANDLE m_notifyEvent = nullptr;
+    bool m_initParamSent = false;  // 原厂只发送一次 InitParam
 };
 
 } // namespace Himax::Pen

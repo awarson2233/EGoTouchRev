@@ -188,21 +188,12 @@ void PenEventBridge::SendAck(uint8_t ackCode) {
     LOG_INFO("PenEvent", __func__, "MCU", "ACK sent: 0x{:02X}", ackCode);
 }
 
-void PenEventBridge::SendInitParamEcho(const uint8_t* data, size_t len) {
-    // Header 与 HandleInitParamEvent 相同: cmd_id=0x7D01
-    size_t payloadLen = std::min(len, size_t(0x20));
-    std::vector<uint8_t> pkt(8 + payloadLen, 0);
-    pkt[0] = 0x07; pkt[1] = 0x01; pkt[2] = 0x02; pkt[3] = 0x00;
-    pkt[4] = 0x01; pkt[5] = 0x7D;
-    pkt[6] = 0x11; pkt[7] = 0x20;
-    std::copy(data, data + payloadLen, pkt.begin() + 8);
-    SendRawPacket(pkt);
-    LOG_INFO("PenEvent", __func__, "MCU", "0x7D01 InitParam echo sent ({} bytes payload).", payloadLen);
-}
+
 
 // ── BtHidChannel hooks ────────────────────────────────────────────────────
 void PenEventBridge::OnConnected() {
-    RunHandshake();  // 同步执行握手，避免 detach 的生命周期风险
+    m_initParamSent = false;  // 允许重连后重新发送 InitParam
+    RunHandshake();
 }
 
 void PenEventBridge::OnPacketReceived(const std::vector<uint8_t>& packet) {
@@ -229,25 +220,22 @@ void PenEventBridge::OnPacketReceived(const std::vector<uint8_t>& packet) {
         SendAck(static_cast<uint8_t>(ackCode));
     }
 
-    // 2. PEN_REP_PARAM (0x7B) → 额外发送 0x7D01 InitParam 回显
-    if (eventCode == 0x7B && packet.size() > 8) {
-        SendInitParamEcho(packet.data() + 8, packet.size() - 8);
+    // 2. PEN_REP_PARAM (0x7B) → 发送 0x7D01 InitParam (仅第一次)
+    //    Ghidra 验证: USB_AsynchProcThreadProc 的 case 0x7B 只发 ACK(0x0A)。
+    //    InitParam 由 ApDaemon 通过 ServiceInterface[+0xa8] 回调 GetReportInfo(2)
+    //    触发一次。我们在首次收到 0x7B 时发送。
+    if (eventCode == 0x7B && !m_initParamSent) {
+        m_initParamSent = true;
+        SendInitProtocolParams();
+        LOG_INFO("PenEvent", __func__, "MCU",
+                 "0x7B PEN_REP_PARAM received → sent 0x7D01 InitParam (once).");
+    } else if (eventCode == 0x7B) {
+        LOG_INFO("PenEvent", __func__, "MCU",
+                 "0x7B PEN_REP_PARAM received → InitParam already sent, skipping.");
     }
 
-    // 3. NewPenConnectRequest (0x15) → 发送 0x2E01 确认配对握手
-    // ⚠ 未验证: 0x15 事件和 0x2E01 命令在 THP_Service.dll 中无代码引用。
-    //   此行为基于早期抓包推测。如果 MCU 不识别此命令则无效但无害。
-    if (eventCode == 0x15) {
-        const std::vector<uint8_t> pkt2e01 = {
-            0x07, 0x00, 0x02, 0x00,
-            0x01, 0x2E, 0x11, 0x00
-        };
-        SendRawPacket(pkt2e01);
-        LOG_WARN("PenEvent", __func__, "MCU",
-                 "Sent 0x2E01 pairing confirmation (UNVERIFIED command).");
-    }
-
-    // 4. 触发上层回调
+    // 3. 触发上层回调
+    // NOTE: 0x15/0x2E01 handler removed — Ghidra confirms not in factory event table.
     PenEventCallback cbCopy;
     {
         std::lock_guard<std::mutex> lk(m_cbMutex);
@@ -267,24 +255,45 @@ void PenEventBridge::OnPacketReceived(const std::vector<uint8_t>& packet) {
 }
 
 // ── 握手 ──────────────────────────────────────────────────────────────────
+// API Monitor 抓包验证的原厂初始化序列:
+//   #49  0x7101 CheckPenStatus    (8B, USB HID)
+//   #54  0x7701 CheckMcuStatus    (8B, USB HID)
+//        ← MCU 事件 1+2, 各发 ACK (事件循环处理)
+//   #117 0x7701 CheckMcuStatus    (8B, USB HID, 重发!)
+//        ← MCU 事件 3 (4.7s 等待)
+//   #155 "-connect" → Named Pipe IPC (不是 USB)
+//   #899 0x7D01 InitProtocolParams (40B = 8 header + 32 payload, USB HID)
+//        发送时间: 握手开始后约 2.8 秒
 void PenEventBridge::RunHandshake() {
     if (!IsTransportOpen()) return;
-    LOG_INFO("PenEvent", __func__, "MCU", "Sending 0x7101 + 0x7701 handshake.");
+    LOG_INFO("PenEvent", __func__, "MCU",
+             "Starting factory init sequence: 0x7101 → 0x7701 → 0x7701 → 0x7D01");
 
+    // Step 1: CheckPenStatus (cmd_id=0x7101)
     const std::vector<uint8_t> q1 = {0x07,0x00,0x02,0x00, 0x01,0x71, 0x11,0x00};
     SendRawPacket(q1);
+    LOG_INFO("PenEvent", __func__, "MCU", "Sent 0x7101 CheckPenStatus");
 
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
 
+    // Step 2: CheckMcuStatus (cmd_id=0x7701) — 第1次
     const std::vector<uint8_t> q2 = {0x07,0x00,0x02,0x00, 0x01,0x77, 0x11,0x00};
     SendRawPacket(q2);
+    LOG_INFO("PenEvent", __func__, "MCU", "Sent 0x7701 CheckMcuStatus (1st)");
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    // 等待 MCU 处理前两个事件响应 (~20ms in factory trace)
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-    // ── 发送初始协议参数 (原厂 ReportBluetoothPenInfo → 0x7D01) ──
-    SendInitProtocolParams();
+    // Step 3: CheckMcuStatus (cmd_id=0x7701) — 第2次 (原厂在收到前两个事件 ACK 后重发)
+    SendRawPacket(q2);
+    LOG_INFO("PenEvent", __func__, "MCU", "Sent 0x7701 CheckMcuStatus (2nd)");
 
-    LOG_INFO("PenEvent", __func__, "MCU", "Handshake + InitProtocol complete.");
+    // InitParam (0x7D01) 不在握手阶段发送!
+    // 原厂在收到 MCU 的 0x7B (PEN_REP_PARAM) 事件后才发送 InitParam。
+    // 参见 OnPacketReceived() eventCode==0x7B 处理。
+
+    LOG_INFO("PenEvent", __func__, "MCU",
+             "Handshake complete. Waiting for MCU 0x7B event to send InitParam.");
 }
 
 // ── 初始协议参数 ──────────────────────────────────────────────────────────
@@ -297,65 +306,25 @@ void PenEventBridge::RunHandshake() {
 void PenEventBridge::SendInitProtocolParams() {
     if (!IsTransportOpen()) return;
 
-    // Factory CSV: "3333,3333,2e7,412,258,411a,0f,1,"
-    const char* tokens[] = {
-        "3333", "3333", "2e7", "412", "258", "411a", "0f", "1"
+    // ── 使用 API Monitor 抓包 (row #1022) 的完整 40 字节报文 ──
+    // 原厂 CSV 参数: "3333,3333,2e7,412,258,411a,0f,1,"
+    // 对应二进制 (从 full-dump.apmx64 提取):
+    //   header:  07 01 02 00 01 7D 11 20
+    //   payload: 33 33 33 33 E7 02 12 04 58 02 1A 41 0F 01 01 00
+    //            00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    const std::vector<uint8_t> pkt = {
+        // header (8 bytes)
+        0x07, 0x01, 0x02, 0x00, 0x01, 0x7D, 0x11, 0x20,
+        // payload (32 bytes) – exact factory capture
+        0x33, 0x33, 0x33, 0x33, 0xE7, 0x02, 0x12, 0x04,
+        0x58, 0x02, 0x1A, 0x41, 0x0F, 0x01, 0x01, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     };
-
-    // 使用与 SendScanMode 相同的 Type-3 编码器
-    auto encodeType3Token = [](const char* hex_str, uint8_t* out) -> int {
-        int n = static_cast<int>(strlen(hex_str));
-        if (n <= 1) {
-            char h[4] = {'0', 'x', hex_str[0], '\0'};
-            out[0] = static_cast<uint8_t>(strtol(h, nullptr, 0));
-            return 1;
-        }
-        if (n == 2) {
-            char ha[4] = {'0', 'x', hex_str[1], '\0'};
-            out[0] = static_cast<uint8_t>(strtol(ha, nullptr, 0));
-            char hb[4] = {'0', 'x', hex_str[0], '\0'};
-            out[1] = static_cast<uint8_t>(strtol(hb, nullptr, 0));
-            return 2;
-        }
-        if (n == 3) {
-            char ha[5] = {'0', 'x', hex_str[1], hex_str[2], '\0'};
-            out[0] = static_cast<uint8_t>(strtol(ha, nullptr, 0));
-            char hb[4] = {'0', 'x', hex_str[0], '\0'};
-            out[1] = static_cast<uint8_t>(strtol(hb, nullptr, 0));
-            return 2;
-        }
-        // len=4
-        char ha[5] = {'0', 'x', hex_str[2], hex_str[3], '\0'};
-        out[0] = static_cast<uint8_t>(strtol(ha, nullptr, 0));
-        char hb[5] = {'0', 'x', hex_str[0], hex_str[1], '\0'};
-        out[1] = static_cast<uint8_t>(strtol(hb, nullptr, 0));
-        return 2;
-    };
-
-    uint8_t payload[0x20] = {};
-    int off = 0;
-    for (const char* tok : tokens) {
-        off += encodeType3Token(tok, payload + off);
-    }
-
-    // 构建 0x7D01 InitParam 报文
-    std::vector<uint8_t> pkt(8 + 0x20, 0);
-    pkt[0] = 0x07; pkt[1] = 0x01; pkt[2] = 0x02; pkt[3] = 0x00;
-    pkt[4] = 0x01; pkt[5] = 0x7D;
-    pkt[6] = 0x11; pkt[7] = 0x20;
-    std::copy(payload, payload + 0x20, pkt.begin() + 8);
 
     SendRawPacket(pkt);
-
-    // 日志: dump 前 16 字节 payload
-    std::string hexDump;
-    for (int i = 0; i < off && i < 16; ++i) {
-        char buf[8];
-        snprintf(buf, sizeof(buf), "%02X ", payload[i]);
-        hexDump += buf;
-    }
     LOG_INFO("PenEvent", __func__, "MCU",
-             "0x7D01 InitProtocolParams sent ({} bytes payload): {}", off, hexDump);
+             "0x7D01 InitProtocolParams sent (40B exact factory capture).");
 }
 
 } // namespace Himax::Pen

@@ -612,23 +612,23 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
             ImGui::Separator();
             ImGui::TextColored(ImVec4(0.4f,0.85f,1.0f,1.f), "[Coord Breakdown] (Row=Y, Col=X)");
             ImGui::Text("  anchorRow(Y) = %u   (%u * %.1f = %.1f)",
-                sd.dbgAnchorRow, sd.dbgAnchorRow,
+                sd.diag.anchorRow, sd.diag.anchorRow,
                 static_cast<float>(Asa::kCoorUnit),
-                static_cast<float>(sd.dbgAnchorRow) * Asa::kCoorUnit);
+                static_cast<float>(sd.diag.anchorRow) * Asa::kCoorUnit);
             ImGui::Text("  anchorCol(X) = %u   (%u * %.1f = %.1f)",
-                sd.dbgAnchorCol, sd.dbgAnchorCol,
+                sd.diag.anchorCol, sd.diag.anchorCol,
                 static_cast<float>(Asa::kCoorUnit),
-                static_cast<float>(sd.dbgAnchorCol) * Asa::kCoorUnit);
-            ImGui::Text("  rawDim1(Y)   = %d", sd.dbgRawDim1);
-            ImGui::Text("  rawDim2(X)   = %d", sd.dbgRawDim2);
-            ImGui::Text("  finalDim1(Y) = %d", sd.dbgFinalDim1);
-            ImGui::Text("  finalDim2(X) = %d", sd.dbgFinalDim2);
-            ImGui::Text("  centerOff    = %.1f", sd.dbgCenterOff);
-            if (sd.dbgCoordValid) {
+                static_cast<float>(sd.diag.anchorCol) * Asa::kCoorUnit);
+            ImGui::Text("  rawDim1(Y)   = %d", sd.diag.rawDim1);
+            ImGui::Text("  rawDim2(X)   = %d", sd.diag.rawDim2);
+            ImGui::Text("  finalDim1(Y) = %d", sd.diag.finalDim1);
+            ImGui::Text("  finalDim2(X) = %d", sd.diag.finalDim2);
+            ImGui::Text("  centerOff    = %.1f", sd.diag.centerOff);
+            if (sd.diag.valid) {
                 ImGui::TextColored(ImVec4(0.2f,0.9f,0.4f,1),
-                    "  point.X = anchorCol*kU + finalDim2 - cOff = %.2f", sd.dbgPointX);
+                    "  point.X = anchorCol*kU + finalDim2 - cOff = %.2f", sd.diag.pointX);
                 ImGui::TextColored(ImVec4(0.4f,0.7f,1.0f,1),
-                    "  point.Y = anchorRow*kU + finalDim1 - cOff = %.2f", sd.dbgPointY);
+                    "  point.Y = anchorRow*kU + finalDim1 - cOff = %.2f", sd.diag.pointY);
             } else {
                 ImGui::TextColored(ImVec4(0.7f,0.7f,0.0f,1), "  [coord invalid this frame]");
             }
@@ -641,18 +641,18 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
             ImGui::Separator();
             ImGui::TextColored(ImVec4(1.0f,0.85f,0.4f,1.f), "[Post-Processing]");
             ImGui::Text("  Speed: instant=%.1f  short=%.1f  full=%.1f",
-                sd.dbgSpeedInstant, sd.dbgSpeedShortAvg, sd.dbgSpeedFullAvg);
+                sd.diag.speedInstant, sd.diag.speedShortAvg, sd.diag.speedFullAvg);
             ImGui::Text("  IIR Coef: %.3f  %s",
-                sd.dbgIirCoef,
-                sd.dbgIirCoef < 0.3f ? "(strong smooth)" :
-                (sd.dbgIirCoef > 0.8f ? "(fast track)" : "(moderate)"));
+                sd.diag.iirCoef,
+                sd.diag.iirCoef < 0.3f ? "(strong smooth)" :
+                (sd.diag.iirCoef > 0.8f ? "(fast track)" : "(moderate)"));
             
             ImGui::Separator();
             ImGui::TextColored(ImVec4(0.9f,0.9f,0.5f,1.f), "[Linear Filter]");
             const char* lfStates[] = {
                 "Init","Wait","Collect","CurveLine",
                 "EnterStraight","StraightLine","ExitStraight"};
-            int lfs = std::clamp(static_cast<int>(sd.dbgLinearFilterState), 0, 6);
+            int lfs = std::clamp(static_cast<int>(sd.diag.linearFilterState), 0, 6);
             ImGui::Text("  State: %d (%s)", lfs, lfStates[lfs]);
             ImGui::EndTabItem();
         }
@@ -662,16 +662,16 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
 
             ImGui::Separator();
             ImGui::TextColored(ImVec4(0.8f,0.6f,1.0f,1.f), "[Tilt Diagnostics]");
-            ImGui::Text("  TX1-TX2 Diff: dX=%.1f  dY=%.1f", sd.dbgTiltDiffX, sd.dbgTiltDiffY);
-            if (sd.dbgTiltAnomalyDamped)
+            ImGui::Text("  TX1-TX2 Diff: dX=%.1f  dY=%.1f", sd.diag.tiltDiffX, sd.diag.tiltDiffY);
+            if (sd.diag.tiltAnomalyDamped)
                 ImGui::TextColored(ImVec4(1.0f,0.4f,0.4f,1), "  !! Tilt anomaly damping active");
-            ImGui::Text("  Signal Ratio (TX2/TX1): %u%%", sd.dbgSignalRatio);
+            ImGui::Text("  Signal Ratio (TX2/TX1): %u%%", sd.diag.signalRatio);
             
             ImGui::Separator();
             ImGui::TextColored(ImVec4(1.0f,0.85f,0.4f,1.f), "[Edge/Hover]");
             ImGui::Text("  Mode: %s%s",
-                sd.dbgIsHover ? "Hover" : "Write",
-                sd.dbgIsEdge  ? " + Edge" : "");
+                sd.diag.isHover ? "Hover" : "Write",
+                sd.diag.isEdge  ? " + Edge" : "");
             const char* animLabels[] = {"Leave","Hover","Contact","Lifting"};
             int ai = std::clamp(static_cast<int>(sd.animState), 0, 3);
             ImGui::Text("  Lifecycle: %s", animLabels[ai]);
@@ -680,20 +680,20 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
             ImGui::TextColored(ImVec4(0.5f,0.9f,1.0f,1.f), "[P3/P4 Pipeline State]");
             {
                 const char* lcLabels[] = {"Leave","Hover","Contact","Lifting"};
-                int li = std::clamp(static_cast<int>(sd.dbgPenLifecycle), 0, 3);
+                int li = std::clamp(static_cast<int>(sd.diag.penLifecycle), 0, 3);
                 ImGui::Text("  Pen Lifecycle: %s", lcLabels[li]);
             }
-            ImGui::Text("  Was Inking: %s", sd.dbgWasInking ? "YES" : "no");
-            ImGui::Text("  Exit Smoothed: %s", sd.dbgExitSmoothed ? "YES" : "no");
-            ImGui::Text("  CMF Enabled: %s", sd.dbgCmfEnabled ? "YES" : "no");
-            if (sd.dbgCoorRevActive) {
+            ImGui::Text("  Was Inking: %s", sd.diag.wasInking ? "YES" : "no");
+            ImGui::Text("  Exit Smoothed: %s", sd.diag.exitSmoothed ? "YES" : "no");
+            ImGui::Text("  CMF Enabled: %s", sd.diag.cmfEnabled ? "YES" : "no");
+            if (sd.diag.coorReviserActive) {
                 ImGui::TextColored(ImVec4(0.4f,1.0f,0.6f,1),
                     "  CoorReviser: ON (dX=%.1f dY=%.1f)",
-                    sd.dbgCoorRevDeltaX, sd.dbgCoorRevDeltaY);
+                    sd.diag.coorRevDeltaX, sd.diag.coorRevDeltaY);
             } else {
                 ImGui::Text("  CoorReviser: OFF");
             }
-            ImGui::Text("  3Pt Avg: dim1=%d  dim2=%d", sd.dbgAvg3PtDim1, sd.dbgAvg3PtDim2);
+            ImGui::Text("  3Pt Avg: dim1=%d  dim2=%d", sd.diag.avg3PtDim1, sd.diag.avg3PtDim2);
 
             ImGui::EndTabItem();
         }
@@ -704,13 +704,13 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
 
             ImGui::Separator();
             ImGui::TextColored(ImVec4(1.0f,0.5f,0.3f,1.f), "[Pressure Chain]");
-            ImGui::Text("  Peak Signal: %u", sd.dbgPeakSignal);
-            ImGui::Text("  Raw Pressure (BT MCU): %u", sd.dbgRawPressure);
-            ImGui::Text("  Mapped Pressure: %u", sd.dbgMappedPressure);
+            ImGui::Text("  Peak Signal: %u", sd.diag.peakSignal);
+            ImGui::Text("  Raw Pressure (BT MCU): %u", sd.diag.rawPressure);
+            ImGui::Text("  Mapped Pressure: %u", sd.diag.mappedPressure);
 
             ImGui::Separator();
             ImGui::TextColored(ImVec4(0.3f,1.0f,0.8f,1.f), "[VHF Pen State]");
-            uint8_t ps = sd.dbgVhfPenState;
+            uint8_t ps = sd.diag.vhfPenState;
             bool inRange   = (ps >> 5) & 1;
             bool tipSwitch = (ps >> 0) & 1;
             bool barrel    = (ps >> 1) & 1;

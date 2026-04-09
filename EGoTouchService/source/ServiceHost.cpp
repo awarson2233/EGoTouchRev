@@ -152,77 +152,8 @@ bool ServiceHost::Start() {
         if (m_penEvent) m_penEventBridge->SetNotifyEvent(m_penEvent);
         m_penEventBridge->SetEventCallback(
             [this](const Himax::Pen::PenEvent& ev) {
-                using EC = Himax::Pen::PenUsbEventCode;
-                switch (ev.code) {
-
-                case EC::PenConnStatus: {
-                    const bool connected = !ev.payload.empty() && ev.payload[0] != 0;
-                    LOG_INFO("Service", __func__, "MCU", "PenConnStatus: {}.", connected ? "connected" : "disconnected");
-                    if (m_deviceRuntime) {
-                        command cmd{};
-                        if (connected) {
-                            cmd.type  = AFE_Command::InitStylus;
-                            cmd.param = 0;  // freq pair由0x73 SetStylusId绑定
-                            m_deviceRuntime->SubmitCommand(
-                                cmd, CommandSource::SystemPolicy, "PenConnStatus→Init");
-                        } else {
-                            cmd.type  = AFE_Command::DisconnectStylus;
-                            cmd.param = 0;
-                            m_deviceRuntime->SubmitCommand(
-                                cmd, CommandSource::SystemPolicy, "PenConnStatus→Disconnect");
-                        }
-                    }
-                    break;
-                }
-
-                case EC::PenFreqJump: {
-                    std::string hexDump;
-                    for (size_t i = 0; i < ev.payload.size(); ++i) {
-                        char buf[8];
-                        snprintf(buf, sizeof(buf), "%02X ", ev.payload[i]);
-                        hexDump += buf;
-                    }
-                    LOG_INFO("Service", __func__, "MCU", "PenFreqJump (payload[{}]: {})", ev.payload.size(), hexDump);
-
-                    if (m_deviceRuntime) {
-                        command cmd{};
-                        cmd.type  = AFE_Command::EnableFreqShift;
-                        cmd.param = 0;
-                        m_deviceRuntime->SubmitCommand(
-                            cmd, CommandSource::SystemPolicy, "PenFreqJump");
-                    }
-                    break;
-                }
-
-                case EC::PenTypeInfo: {
-                    // 0x73: 笔类型 → set_stylus_id(pen_type) 频率表绑定
-                    uint8_t penType = ev.payload.empty() ? 0 : ev.payload[0];
-                    LOG_INFO("Service", __func__, "MCU", "PenTypeInfo: pen_type={}.", penType);
-                    if (m_deviceRuntime) {
-                        command cmd{};
-                        cmd.type  = AFE_Command::SetStylusId;
-                        cmd.param = penType;
-                        m_deviceRuntime->SubmitCommand(
-                            cmd, CommandSource::SystemPolicy, "PenTypeInfo→SetStylusId");
-                    }
-                    break;
-                }
-
-                case EC::PenCurStatus: {
-                    // 0x72: 笔工作模式 (1=书写, 2=悬停, 3=橡皮擦)
-                    uint8_t mode = ev.payload.empty() ? 0 : ev.payload[0];
-                    const char* modeStr = "unknown";
-                    if (mode == 1) modeStr = "writing";
-                    else if (mode == 2) modeStr = "hovering";
-                    else if (mode == 3) modeStr = "eraser";
-                    LOG_INFO("Service", __func__, "MCU", "PenCurStatus: mode={} ({}).", mode, modeStr);
-                    break;
-                }
-
-                default:
-                    LOG_INFO("Service", __func__, "MCU", "MCU event 0x{:02X} received.", static_cast<uint8_t>(ev.code));
-                    break;
-                }
+                if (m_deviceRuntime)
+                    m_deviceRuntime->OnPenEvent(ev);
             });
         m_penEventBridge->Start();
         LOG_INFO("Service", __func__, "MCU", "PenEventBridge started (col00 event channel).");
@@ -309,6 +240,42 @@ void ServiceHost::Stop() {
     LOG_INFO("Service", __func__, "Shutdown", "All modules stopped.");
 }
 
+// ── Shared config loader ────────────────────────────────────────────
+static bool LoadPipelineConfig(
+    const std::string& configPath,
+    Engine::FramePipeline& pl,
+    Engine::StylusPipeline* stylusPipe = nullptr)
+{
+    std::ifstream in(configPath);
+    if (!in.is_open()) return false;
+
+    std::string line, section;
+    Engine::IFrameProcessor* cur = nullptr;
+    while (std::getline(in, line)) {
+        if (line.empty() || line[0] == ';') continue;
+        if (line.front() == '[' && line.back() == ']') {
+            section = line.substr(1, line.size() - 2);
+            cur = nullptr;
+            for (auto& p : pl.GetProcessors()) {
+                if (p->GetName() == section) {
+                    cur = p.get(); break;
+                }
+            }
+        } else {
+            auto eq = line.find('=');
+            if (eq == std::string::npos) continue;
+            auto key = line.substr(0, eq);
+            auto val = line.substr(eq + 1);
+            if (cur) {
+                cur->LoadConfig(key, val);
+            } else if (stylusPipe && section == "StylusPipeline") {
+                stylusPipe->LoadConfig(key, val);
+            }
+        }
+    }
+    return true;
+}
+
 // ── Pipeline 构建 ──────────────────────────────
 void ServiceHost::BuildDefaultPipeline(const std::string& configPath) {
     auto& pl = m_deviceRuntime->GetPipeline();
@@ -323,28 +290,7 @@ void ServiceHost::BuildDefaultPipeline(const std::string& configPath) {
     LOG_INFO("Service", __func__, "Boot", "Registered {} pipeline processors.", pl.GetProcessors().size());
 
     // Load saved config
-    std::ifstream cfgIn(configPath);
-    if (cfgIn.is_open()) {
-        std::string line, section;
-        Engine::IFrameProcessor* cur = nullptr;
-        while (std::getline(cfgIn, line)) {
-            if (line.empty() || line[0] == ';') continue;
-            if (line.front() == '[' && line.back() == ']') {
-                section = line.substr(1, line.size() - 2);
-                cur = nullptr;
-                for (auto& p : pl.GetProcessors()) {
-                    if (p->GetName() == section) {
-                        cur = p.get(); break;
-                    }
-                }
-            } else if (cur) {
-                auto eq = line.find('=');
-                if (eq != std::string::npos) {
-                    cur->LoadConfig(line.substr(0, eq),
-                                    line.substr(eq + 1));
-                }
-            }
-        }
+    if (LoadPipelineConfig(configPath, pl)) {
         LOG_INFO("Service", __func__, "Boot", "Loaded config from {}.", configPath);
     } else {
         LOG_WARN("Service", __func__, "Boot", "Config file not found: {}", configPath);
@@ -423,28 +369,7 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(
             m_deviceRuntime->SetStylusVhfEnabled(m_stylusVhfEnabled);
 
             auto& pl = m_deviceRuntime->GetPipeline();
-            std::ifstream in(kConfigPath);
-            if (in.is_open()) {
-                std::string line, section;
-                Engine::IFrameProcessor* cur = nullptr;
-                while (std::getline(in, line)) {
-                    if (line.empty() || line[0] == ';') continue;
-                    if (line.front() == '[' && line.back() == ']') {
-                        section = line.substr(1, line.size() - 2);
-                        cur = nullptr;
-                        for (auto& p : pl.GetProcessors()) {
-                            if (p->GetName() == section) {
-                                cur = p.get(); break;
-                            }
-                        }
-                    } else if (cur) {
-                        auto eq = line.find('=');
-                        if (eq != std::string::npos) {
-                            cur->LoadConfig(line.substr(0, eq),
-                                            line.substr(eq + 1));
-                        }
-                    }
-                }
+            if (LoadPipelineConfig(kConfigPath, pl)) {
                 resp.success = true;
                 LOG_INFO("Service", __func__, "IPC", "Config reloaded from {}.", kConfigPath);
             }

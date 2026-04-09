@@ -321,47 +321,77 @@ void DeviceRuntime::OnStreaming() {
         if (!touchOnly) {
             touchFrame.stylus = m_stylusPipeline.GetLastResult();
             touchFrame.stylus.packet = stylusPacket;
-            // ── Copy P2 pipeline diagnostics for IPC transport ──
-            const auto& dbg = m_stylusPipeline.GetDebugCoord();
-            touchFrame.stylus.dbgAnchorRow  = dbg.anchorRow;
-            touchFrame.stylus.dbgAnchorCol  = dbg.anchorCol;
-            touchFrame.stylus.dbgRawDim1    = dbg.rawDim1;
-            touchFrame.stylus.dbgRawDim2    = dbg.rawDim2;
-            touchFrame.stylus.dbgFinalDim1  = dbg.finalDim1;
-            touchFrame.stylus.dbgFinalDim2  = dbg.finalDim2;
-            touchFrame.stylus.dbgCenterOff  = dbg.centerOff;
-            touchFrame.stylus.dbgPointX     = dbg.pointX;
-            touchFrame.stylus.dbgPointY     = dbg.pointY;
-            touchFrame.stylus.dbgCoordValid = dbg.valid;
-            touchFrame.stylus.dbgSpeedInstant  = dbg.speedInstant;
-            touchFrame.stylus.dbgSpeedShortAvg = dbg.speedShortAvg;
-            touchFrame.stylus.dbgSpeedFullAvg  = dbg.speedFullAvg;
-            touchFrame.stylus.dbgIirCoef       = dbg.iirCoef;
-            touchFrame.stylus.dbgIsHover       = dbg.isHover;
-            touchFrame.stylus.dbgIsEdge        = dbg.isEdge;
-            touchFrame.stylus.dbgTiltDiffX  = dbg.tiltDiffX;
-            touchFrame.stylus.dbgTiltDiffY  = dbg.tiltDiffY;
-            touchFrame.stylus.dbgPeakSignal     = dbg.peakSignal;
-            touchFrame.stylus.dbgRawPressure    = dbg.rawPressure;
-            touchFrame.stylus.dbgMappedPressure = dbg.mappedPressure;
-            touchFrame.stylus.dbgVhfPenState      = dbg.vhfPenState;
-            touchFrame.stylus.dbgLinearFilterState = dbg.linearFilterState;
-            // ── Copy P3/P4 pipeline diagnostics ──
-            touchFrame.stylus.dbgSignalRatio       = dbg.signalRatio;
-            touchFrame.stylus.dbgFreqShiftFreezing = dbg.freqShiftFreezing;
-            touchFrame.stylus.dbgExitSmoothed      = dbg.exitSmoothed;
-            touchFrame.stylus.dbgCmfEnabled        = dbg.cmfEnabled;
-            touchFrame.stylus.dbgCoorRevActive     = dbg.coorReviserActive;
-            touchFrame.stylus.dbgCoorRevDeltaX     = dbg.coorRevDeltaX;
-            touchFrame.stylus.dbgCoorRevDeltaY     = dbg.coorRevDeltaY;
-            touchFrame.stylus.dbgTiltAnomalyDamped = dbg.tiltAnomalyDamped;
-            touchFrame.stylus.dbgSigSuppressActive = dbg.sigSuppressActive;
-            touchFrame.stylus.dbgPenLifecycle      = dbg.penLifecycle;
-            touchFrame.stylus.dbgWasInking         = dbg.wasInking;
-            touchFrame.stylus.dbgAvg3PtDim1        = dbg.avg3PtDim1;
-            touchFrame.stylus.dbgAvg3PtDim2        = dbg.avg3PtDim2;
+            // Single-copy diagnostics (replaces 40-line manual field copy)
+            touchFrame.stylus.diag = m_stylusPipeline.GetDebugCoord();
         }
         m_framePushCb(touchFrame);
+    }
+}
+
+// --------------- MCU 事件路由 ---------------
+
+void DeviceRuntime::OnPenEvent(const Himax::Pen::PenEvent& ev) {
+    using EC = Himax::Pen::PenUsbEventCode;
+    switch (ev.code) {
+
+    case EC::PenConnStatus: {
+        const bool connected = !ev.payload.empty() && ev.payload[0] != 0;
+        LOG_INFO("Runtime", __func__, "MCU", "PenConnStatus: {}.",
+                 connected ? "connected" : "disconnected");
+        command cmd{};
+        if (connected) {
+            cmd.type  = AFE_Command::InitStylus;
+            cmd.param = 0;
+            SubmitCommand(cmd, CommandSource::SystemPolicy, "PenConnStatus->Init");
+        } else {
+            cmd.type  = AFE_Command::DisconnectStylus;
+            cmd.param = 0;
+            SubmitCommand(cmd, CommandSource::SystemPolicy, "PenConnStatus->Disconnect");
+        }
+        break;
+    }
+
+    case EC::PenFreqJump: {
+        std::string hexDump;
+        for (size_t i = 0; i < ev.payload.size(); ++i) {
+            char buf[8];
+            snprintf(buf, sizeof(buf), "%02X ", ev.payload[i]);
+            hexDump += buf;
+        }
+        LOG_INFO("Runtime", __func__, "MCU",
+                 "PenFreqJump (payload[{}]: {})", ev.payload.size(), hexDump);
+        command cmd{};
+        cmd.type  = AFE_Command::EnableFreqShift;
+        cmd.param = 0;
+        SubmitCommand(cmd, CommandSource::SystemPolicy, "PenFreqJump");
+        break;
+    }
+
+    case EC::PenTypeInfo: {
+        uint8_t penType = ev.payload.empty() ? 0 : ev.payload[0];
+        LOG_INFO("Runtime", __func__, "MCU", "PenTypeInfo: pen_type={}.", penType);
+        command cmd{};
+        cmd.type  = AFE_Command::SetStylusId;
+        cmd.param = penType;
+        SubmitCommand(cmd, CommandSource::SystemPolicy, "PenTypeInfo->SetStylusId");
+        break;
+    }
+
+    case EC::PenCurStatus: {
+        uint8_t mode = ev.payload.empty() ? 0 : ev.payload[0];
+        const char* modeStr = "unknown";
+        if (mode == 1) modeStr = "writing";
+        else if (mode == 2) modeStr = "hovering";
+        else if (mode == 3) modeStr = "eraser";
+        LOG_INFO("Runtime", __func__, "MCU",
+                 "PenCurStatus: mode={} ({}).", mode, modeStr);
+        break;
+    }
+
+    default:
+        LOG_INFO("Runtime", __func__, "MCU",
+                 "MCU event 0x{:02X} received.", static_cast<uint8_t>(ev.code));
+        break;
     }
 }
 
