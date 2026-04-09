@@ -174,7 +174,7 @@ target_include_directories(EGoTouchApp PRIVATE
 )
 
 # Link D3D11 for the ImGui DX11 backend
-target_link_libraries(EGoTouchApp PRIVATE Device Engine Host Common ImGuiCommon d3d11 d3dcompiler dwmapi setupapi)
+target_link_libraries(EGoTouchApp PRIVATE Device Engine Host Common ImGuiCommon d3d11 d3dcompiler dwmapi setupapi gdi32)
 
 # --- EGoTouchService (Production Service Shell) ---
 set(SERVICE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/EGoTouchService")
@@ -190,8 +190,10 @@ target_include_directories(EGoTouchService PRIVATE
 target_link_libraries(EGoTouchService PRIVATE Device Host Common advapi32 setupapi hid)
 
 # EGoTouchService uses wmain (console subsystem) for service/console dual mode
-if(MSVC)
-    set_target_properties(EGoTouchService PROPERTIES LINK_FLAGS "/SUBSYSTEM:CONSOLE")
+if(MSVC OR MINGW)
+    set_target_properties(EGoTouchService PROPERTIES LINK_FLAGS "-municode")
+else()
+set_target_properties(EGoTouchService PROPERTIES LINK_FLAGS "-municode")
 endif()
 
 # --- BtMcuTestTool (ImGui BT Protocol Validator) ---
@@ -205,7 +207,7 @@ target_include_directories(BtMcuTestTool PRIVATE
     "${IMGUI_ROOT}"
     "${IMGUI_ROOT}/backends"
 )
-target_link_libraries(BtMcuTestTool PRIVATE Device Common ImGuiCommon d3d11 d3dcompiler dwmapi setupapi)
+target_link_libraries(BtMcuTestTool PRIVATE Device Common ImGuiCommon d3d11 d3dcompiler dwmapi setupapi gdi32)
 
 option(EGO_BUILD_TESTS "Build local test executables" ON)
 if (EGO_BUILD_TESTS)

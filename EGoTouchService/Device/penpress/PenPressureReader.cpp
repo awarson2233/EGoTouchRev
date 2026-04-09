@@ -1,9 +1,12 @@
 #include "penpress/PenPressureReader.h"
 #include "Logger.h"
 
-#include <Windows.h>
-#include <SetupAPI.h>
+#include <windows.h>
+#include <setupapi.h>
+extern "C" {
 #include <hidsdi.h>
+}
+
 #include <algorithm>
 #include <cwctype>
 
