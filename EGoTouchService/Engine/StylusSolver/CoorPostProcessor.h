@@ -63,14 +63,18 @@ public:
 
     /// Step 4: Calculate dynamic IIR coefficient (GetIIRCoef).
     /// Mirrors TSACore: uses still/moving state machine + directional override.
-    /// No external parameters needed — uses internal speed metrics.
+    /// @param isInking true when (status & 6) != 0 (Ink or NoPressInk active)
+    ///                 → uses Moving coefficients (weaker smoothing)
+    ///                 false → uses Still coefficients (stronger smoothing for hover)
     /// Returns the integer coefficient and stores it internally.
-    int StepCalcIIRCoef();
+    int StepCalcIIRCoef(bool isInking);
 
     /// Step 5: Apply IIR filter (CoorFilterProcess / CoorIIRFilterType).
     /// Uses integer Q8 fixed-point matching TSACore exactly.
-    /// @param coefInt integer IIR coefficient from StepCalcIIRCoef()
-    AsaCoorResult StepIIR(const AsaCoorResult& cur, int coefInt);
+    /// @param coefInt   integer IIR coefficient from StepCalcIIRCoef()
+    /// @param skipIIR   true → skip IIR (zero Q8 remainder, passthrough)
+    ///                  TSACore skips IIR for first 2 frames after mode transition.
+    AsaCoorResult StepIIR(const AsaCoorResult& cur, int coefInt, bool skipIIR = false);
 
     /// Step 6: Apply jitter offset compensation (AftCoorProcess).
     /// Mirrors TSACore: dynamic threshold based on sensor/screen dimensions,

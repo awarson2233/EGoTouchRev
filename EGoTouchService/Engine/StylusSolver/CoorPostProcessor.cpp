@@ -109,13 +109,13 @@ void CoorPostProcessor::StepCalcSpeed() {
 // Uses still/moving state machine + directional override
 // Returns INTEGER coefficient (not normalized)
 // ══════════════════════════════════════════════
-int CoorPostProcessor::StepCalcIIRCoef() {
+int CoorPostProcessor::StepCalcIIRCoef(bool isInking) {
     int lo, hi, lowThr;
 
-    // TSACore: (DAT_18231950 & 6) == 0 → still mode, else moving mode
-    const bool isMoving = (m_motionFrameCount >= motionDetectFrames);
-
-    if (!isMoving) {
+    // TSACore GetIIRCoef: (DAT_18231950 & 6) == 0 → Still mode, else Moving
+    // Still = hover/stationary: stronger smoothing (flash[0xa5e]/[0xa5f])
+    // Moving = inking/active:   weaker smoothing  (flash[0xa5c]/[0xa5d])
+    if (!isInking) {
         // Still mode: stronger smoothing ([0xa5e]/[0xa5f])
         lo = stillIirLow;
         hi = stillIirHigh;
@@ -175,7 +175,16 @@ int32_t CoorPostProcessor::IIRFilterQ8(
 // Remainder is preserved across frames for sub-LSB precision
 // ══════════════════════════════════════════════
 AsaCoorResult CoorPostProcessor::StepIIR(
-        const AsaCoorResult& cur, int coefInt) {
+        const AsaCoorResult& cur, int coefInt, bool skipIIR) {
+    // TSACore CoorFilterProcess: skip IIR when mode just transitioned
+    // (clears Q8 fractional remainder and passes through raw coordinate)
+    if (skipIIR) {
+        m_iirDim1Q8 = cur.dim1 << 8;
+        m_iirDim2Q8 = cur.dim2 << 8;
+        m_initialized = true;
+        return cur;
+    }
+
     // TSACore: Skip IIR for first few frames (let coordinates settle)
     // CoorFilterProcess: if ((DAT_18231c28 & 1)==0 || counters < 2) → zero fractional state
     if (m_frameCount < iirSkipFrames) {
@@ -222,21 +231,29 @@ AsaCoorResult CoorPostProcessor::StepJitter(
         const AsaCoorResult& cur, bool isEdge) {
     if (!enableJitter) return cur;
 
-    // TSACore: Dynamic threshold = (param * sensorDim * 0x400) / screenDim
+    // TSACore AftCoorProcess: Edge detection in LOCAL space
+    // Edge = coordinate < 0x401 || coordinate >= (gridDim-1)*0x400
+    const bool isLocalEdge = isEdge ||
+        cur.dim1 < (kCoorUnit + 1) || cur.dim2 < (kCoorUnit + 1) ||
+        cur.dim1 >= (kGridDim - 1) * kCoorUnit ||
+        cur.dim2 >= (kGridDim - 1) * kCoorUnit;
+
+    // TSACore: Dynamic threshold = (param * gridDim * 0x400) / screenDim
+    // Uses DAT_1820d610 (gridDim=9) not the full sensor dimension
     int32_t thrDim1, thrDim2;
-    if (isEdge) {
+    if (isLocalEdge) {
         thrDim1 = (screenDimDim1 > 0)
-            ? (jitterEdgeParamDim1 * sensorDimDim1 * kCoorUnit) / screenDimDim1
+            ? (jitterEdgeParamDim1 * kGridDim * kCoorUnit) / screenDimDim1
             : 40;
         thrDim2 = (screenDimDim2 > 0)
-            ? (jitterEdgeParamDim2 * sensorDimDim2 * kCoorUnit) / screenDimDim2
+            ? (jitterEdgeParamDim2 * kGridDim * kCoorUnit) / screenDimDim2
             : 40;
     } else {
         thrDim1 = (screenDimDim1 > 0)
-            ? (jitterCenterParamDim1 * sensorDimDim1 * kCoorUnit) / screenDimDim1
+            ? (jitterCenterParamDim1 * kGridDim * kCoorUnit) / screenDimDim1
             : 20;
         thrDim2 = (screenDimDim2 > 0)
-            ? (jitterCenterParamDim2 * sensorDimDim2 * kCoorUnit) / screenDimDim2
+            ? (jitterCenterParamDim2 * kGridDim * kCoorUnit) / screenDimDim2
             : 20;
     }
 
@@ -275,14 +292,16 @@ AsaCoorResult CoorPostProcessor::StepJitter(
         }
     }
 
-    // TSACore: output = coordinate - accumulated offset, clamped to [0, sensorDim*0x400]
+    // TSACore: output = coordinate - accumulated offset, clamped to [0, gridDim*0x400]
+    // Post-processing chain works in LOCAL space (range [0, 9*1024)),
+    // matching TSACore AftCoorProcess which clamps to DAT_1820d610 * 0x400.
     AsaCoorResult out = cur;
     int32_t resultDim1 = cur.dim1 - m_offsetDim1;
     int32_t resultDim2 = cur.dim2 - m_offsetDim2;
 
-    // Clamp to valid range
-    const int32_t maxDim1 = sensorDimDim1 * kCoorUnit;
-    const int32_t maxDim2 = sensorDimDim2 * kCoorUnit;
+    // Clamp to LOCAL grid range (TSACore: DAT_1820d610/d611 * 0x400)
+    const int32_t maxDim1 = kGridDim * kCoorUnit;
+    const int32_t maxDim2 = kGridDim * kCoorUnit;
     out.dim1 = std::clamp(resultDim1, 0, maxDim1);
     out.dim2 = std::clamp(resultDim2, 0, maxDim2);
     return out;

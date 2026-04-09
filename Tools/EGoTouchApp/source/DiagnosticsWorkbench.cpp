@@ -472,9 +472,18 @@ void DiagnosticsWorkbench::DrawControlPanel() {
         ExportCurrentFrameToCSV(false); // Manual
     }
     ImGui::SameLine();
-    if (ImGui::Button("Export DVR (Last 480 Frames)")) {
-        if (m_proxy) {
-            m_proxy->TriggerDVRExport(m_exportHeatmap, m_exportMasterStatus, m_exportSlaveStatus);
+    {
+        const bool exporting = m_proxy && m_proxy->IsDvrExporting();
+        if (exporting) ImGui::BeginDisabled();
+        if (ImGui::Button(exporting ? "Exporting DVR..." : "Export DVR (Last 480 Frames)")) {
+            if (m_proxy) {
+                m_proxy->TriggerDVRExport(m_exportHeatmap, m_exportMasterStatus, m_exportSlaveStatus);
+            }
+        }
+        if (exporting) {
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.f), "Exporting...");
         }
     }
     

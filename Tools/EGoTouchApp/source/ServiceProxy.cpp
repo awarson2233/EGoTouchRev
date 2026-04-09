@@ -20,6 +20,7 @@
 #include <iomanip>
 #include <sstream>
 #include <filesystem>
+#include "AsaTypes.h"
 
 namespace App {
 
@@ -42,6 +43,8 @@ ServiceProxy::ServiceProxy()
 }
 
 ServiceProxy::~ServiceProxy() {
+    // Join any in-flight DVR export before tearing down resources
+    if (m_dvrThread.joinable()) m_dvrThread.join();
     StopAutoDiscovery();
     Disconnect();
 }
@@ -303,32 +306,114 @@ void ServiceProxy::SetMasterParserOnlyMode(bool enabled) {
     m_masterParserOnly = enabled;
 }
 
-// ── DVR export (local) ──
+// ── DVR export (async) ──
 void ServiceProxy::TriggerDVRExport(bool heatmap, bool master, bool slave) {
     if (!m_dvrBuffer) return;
-    namespace fs = std::filesystem;
-    auto now = std::chrono::system_clock::now();
-    auto t = std::chrono::system_clock::to_time_t(now);
-    std::tm tm{}; localtime_s(&tm, &t);
-    std::ostringstream ts;
-    ts << std::put_time(&tm, "%Y%m%d_%H%M%S");
-    std::string dir = "dvr_" + ts.str();
-    fs::create_directories(dir);
-    // Snapshot frames from ring buffer
-    auto frames = m_dvrBuffer->GetSnapshot();
-    for (size_t i = 0; i < frames.size(); ++i) {
+    if (m_dvrExporting.load()) return; // Already exporting
+
+    // Join any completed previous export thread
+    if (m_dvrThread.joinable()) m_dvrThread.join();
+
+    m_dvrExporting.store(true);
+    m_dvrThread = std::thread([this, heatmap, master, slave]() {
+        // Snapshot under mutex (brief hold — copies data, then releases)
+        auto frames = m_dvrBuffer->GetSnapshot();
+        if (frames.empty()) {
+            m_dvrExporting.store(false);
+            return;
+        }
+
+        namespace fs = std::filesystem;
+        auto now = std::chrono::system_clock::now();
+        auto t   = std::chrono::system_clock::to_time_t(now);
+        std::tm tm{}; localtime_s(&tm, &t);
+        std::ostringstream ts;
+        ts << std::put_time(&tm, "%Y%m%d_%H%M%S");
+        std::string dir = "exports/dvr/dvr_" + ts.str();
+        fs::create_directories(dir);
+
+        // ── Heatmap: per-frame 40x60 matrix CSV ──
         if (heatmap) {
-            std::ofstream f(dir + "/frame_" + std::to_string(i) + ".csv");
-            for (int r = 0; r < 40; ++r) {
-                for (int c = 0; c < 60; ++c) {
-                    if (c) f << ',';
-                    f << frames[i].heatmapMatrix[r][c];
+            for (size_t i = 0; i < frames.size(); ++i) {
+                std::ofstream f(dir + "/frame_" + std::to_string(i) + ".csv");
+                for (int r = 0; r < 40; ++r) {
+                    for (int c = 0; c < 60; ++c) {
+                        if (c) f << ',';
+                        f << frames[i].heatmapMatrix[r][c];
+                    }
+                    f << '\n';
                 }
-                f << '\n';
             }
         }
-    }
-    LOG_INFO("App", __func__, "IPC", "Exported {} frames to {}/", frames.size(), dir);
+
+        // ── Master status: contacts/peaks summary per frame ──
+        if (master) {
+            std::ofstream mf(dir + "/master_status.csv");
+            mf << "Frame,Timestamp,MasterWasRead,PeakCount,ContactCount,"
+                  "P0_R,P0_C,P0_Z,P1_R,P1_C,P1_Z,"
+                  "C0_ID,C0_X,C0_Y,C0_State,C0_Area,C0_SigSum,"
+                  "C1_ID,C1_X,C1_Y,C1_State,C1_Area,C1_SigSum\n";
+            for (size_t i = 0; i < frames.size(); ++i) {
+                const auto& fr = frames[i];
+                mf << i << ',' << fr.timestamp << ','
+                   << (fr.masterWasRead ? 1 : 0) << ','
+                   << fr.peaks.size() << ',' << fr.contacts.size();
+                // Up to 2 peaks
+                for (int p = 0; p < 2; ++p) {
+                    if (p < static_cast<int>(fr.peaks.size())) {
+                        mf << ',' << fr.peaks[p].r << ',' << fr.peaks[p].c
+                           << ',' << fr.peaks[p].z;
+                    } else {
+                        mf << ",,,";
+                    }
+                }
+                // Up to 2 contacts
+                for (int ci = 0; ci < 2; ++ci) {
+                    if (ci < static_cast<int>(fr.contacts.size())) {
+                        const auto& ct = fr.contacts[ci];
+                        mf << ',' << ct.id << ',' << ct.x << ',' << ct.y
+                           << ',' << ct.state << ',' << ct.area << ',' << ct.signalSum;
+                    } else {
+                        mf << ",,,,,,";
+                    }
+                }
+                mf << '\n';
+            }
+        }
+
+        // ── Slave status: raw 166-word suffix per frame ──
+        if (slave) {
+            std::ofstream wf(dir + "/slave_suffix.csv");
+            wf << "Frame,Timestamp";
+            for (int w = 0; w < 166; ++w) {
+                if (w == 0) wf << ",TX1_Y";
+                else if (w == 1) wf << ",TX1_X";
+                else if (w == 83) wf << ",TX2_Y";
+                else if (w == 84) wf << ",TX2_X";
+                else wf << ",W" << w;
+            }
+            wf << '\n';
+            for (size_t i = 0; i < frames.size(); ++i) {
+                wf << i << ',' << frames[i].timestamp;
+                const auto& raw = frames[i].rawData;
+                if (raw.size() >= 5402) {
+                    const uint8_t* ptr = raw.data() + 5070;
+                    for (int w = 0; w < 166; ++w) {
+                        uint16_t word = static_cast<uint16_t>(ptr[w * 2] | (ptr[w * 2 + 1] << 8));
+                        wf << ',' << word;
+                    }
+                } else {
+                    for (int w = 0; w < 166; ++w) wf << ",0";
+                }
+                wf << '\n';
+            }
+        }
+
+        LOG_INFO("App", "TriggerDVRExport", "IPC",
+                 "Exported {} frames to {}/ (heatmap={}, master={}, slave={})",
+                 frames.size(), dir, heatmap, master, slave);
+        m_dvrExporting.store(false);
+    });
 }
 
 // ── Poll loop with FPS measurement ──

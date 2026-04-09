@@ -272,6 +272,19 @@ private:
     int  m_liftingTimeout = 10;
     void UpdatePenLifecycle(bool penValid, bool penDown);
 
+    // ── TSACore State Machine (mirrors DAT_18231950) ──
+    // 3-bit status word controlling IIR skip and coefficient selection.
+    // Updated each frame in Process() based on pen valid / pressure state.
+    static constexpr uint8_t kStatInRange    = 0x01;  // bit0: pen detected (hover)
+    static constexpr uint8_t kStatInk        = 0x02;  // bit1: pressure active (writing)
+    static constexpr uint8_t kStatNoPressInk = 0x04;  // bit2: coord valid, no pressure
+    uint8_t  m_asaStatus     = 0;   // current frame status bits
+    uint8_t  m_prevAsaStatus = 0;   // previous frame status (for IIR skip check)
+    int      m_inRangeFrames    = 0;  // TSACore DAT_1823194c: EnterInRangeMode counter
+    int      m_inkFrames        = 0;  // TSACore DAT_18231948: EnterInkMode counter
+    int      m_noPressInkFrames = 0;  // TSACore DAT_1823194a: EnterNoPressInkMode counter
+    void UpdateAsaStateMachine(bool coordValid, bool hasInk);
+
     // P3 #21: Pen exit smoothing (TSACore: ReleaseASAReportExitStylus)
     // When pen transitions from valid→invalid while inking, freeze output
     // for 1 frame with edge coordinate snapping if at panel edge.
