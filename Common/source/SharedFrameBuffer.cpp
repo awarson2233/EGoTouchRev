@@ -26,15 +26,16 @@ bool SharedFrameWriter::Open(const wchar_t* name) {
             return false;
         }
     }
-    m_data = static_cast<SharedFrameData*>(
+    m_buf = static_cast<SharedTripleBuffer*>(
         MapViewOfFile(m_mapHandle, FILE_MAP_WRITE, 0, 0,
-                      sizeof(SharedFrameData)));
-    if (!m_data) {
+                      sizeof(SharedTripleBuffer)));
+    if (!m_buf) {
         LOG_ERROR("Common", __func__, "IPC", "MapViewOfFile failed: {}",  GetLastError());
         CloseHandle(m_mapHandle);
         m_mapHandle = nullptr;
         return false;
     }
+    m_writeIdx = 1;  // Start writing to slot 1 (slot 0 is initial readyIdx)
     LOG_INFO("Common", __func__, "IPC", "Shared memory opened for writing.");
 
     // Open frame-ready event (optional)
@@ -57,22 +58,23 @@ bool SharedFrameWriter::Create(const wchar_t* name) {
 
     m_mapHandle = CreateFileMappingW(
         INVALID_HANDLE_VALUE, &sa, PAGE_READWRITE,
-        0, sizeof(SharedFrameData), name);
+        0, sizeof(SharedTripleBuffer), name);
     if (!m_mapHandle) {
         LOG_ERROR("Common", __func__, "IPC", "CreateFileMapping failed: {}",  GetLastError());
         return false;
     }
-    m_data = static_cast<SharedFrameData*>(
+    m_buf = static_cast<SharedTripleBuffer*>(
         MapViewOfFile(m_mapHandle, FILE_MAP_WRITE, 0, 0,
-                      sizeof(SharedFrameData)));
-    if (!m_data) {
+                      sizeof(SharedTripleBuffer)));
+    if (!m_buf) {
         LOG_ERROR("Common", __func__, "IPC", "MapViewOfFile failed: {}",  GetLastError());
         CloseHandle(m_mapHandle);
         m_mapHandle = nullptr;
         return false;
     }
-    std::memset(m_data, 0, sizeof(SharedFrameData));
-    LOG_INFO("Common", __func__, "IPC", "Shared memory created for writing ({} bytes).",  sizeof(SharedFrameData));
+    std::memset(m_buf, 0, sizeof(SharedTripleBuffer));
+    m_writeIdx = 1;
+    LOG_INFO("Common", __func__, "IPC", "Shared memory created for writing ({} bytes, 3 slots).",  sizeof(SharedTripleBuffer));
 
     // Create frame-ready event (auto-reset)
     m_frameEvent = CreateEventW(&sa, FALSE, FALSE, kFrameReadyEventName);
@@ -83,10 +85,11 @@ bool SharedFrameWriter::Create(const wchar_t* name) {
 }
 
 void SharedFrameWriter::Write(const Engine::HeatmapFrame& frame) {
-    if (!m_data) return;
+    if (!m_buf) return;
 
-    // Signal: writing in progress
-    m_data->lockFlag.store(1, std::memory_order_release);
+    // Triple-buffer: write to slots[m_writeIdx] — Reader never touches this slot
+    SharedFrameData* m_data = &m_buf->slots[m_writeIdx];
+
     // Copy heatmap
     std::memcpy(m_data->heatmapMatrix, frame.heatmapMatrix,
                 sizeof(frame.heatmapMatrix));
@@ -170,13 +173,6 @@ void SharedFrameWriter::Write(const Engine::HeatmapFrame& frame) {
     m_data->stylusButtonSource = s.buttonSource;
     m_data->stylusNextTx1Freq = s.nextTx1Freq;
     m_data->stylusNextTx2Freq = s.nextTx2Freq;
-    m_data->stylusMasterMetaValid = s.masterMetaValid;
-    m_data->stylusMasterMetaBase = s.masterMetaBaseWord;
-    m_data->stylusMasterMetaTx1 = s.masterMetaTx1Freq;
-    m_data->stylusMasterMetaTx2 = s.masterMetaTx2Freq;
-    m_data->stylusMasterMetaPress = s.masterMetaPressure;
-    m_data->stylusMasterMetaBtn = s.masterMetaButton;
-    m_data->stylusMasterMetaStat = s.masterMetaStatus;
     m_data->stylusAsaMode = s.asaMode;
     m_data->stylusDataType = s.dataType;
     m_data->stylusProcessResult = s.processResult;
@@ -205,29 +201,30 @@ void SharedFrameWriter::Write(const Engine::HeatmapFrame& frame) {
     // Pipeline diagnostics (single copy)
     m_data->diag = s.diag;
 
-    // Raw suffix data from rawData
-    if (frame.rawData.size() >= 5063) {
-        std::memcpy(m_data->masterSuffix,
-                    frame.rawData.data() + 4807, kMasterSuffixBytes);
-        m_data->masterSuffixValid = true;
-    } else {
-        m_data->masterSuffixValid = false;
-    }
-    if (frame.rawData.size() >= 5402) {
-        std::memcpy(m_data->slaveSuffix,
-                    frame.rawData.data() + 5070, kSlaveSuffixBytes);
-        m_data->slaveSuffixValid = true;
-    } else {
-        m_data->slaveSuffixValid = false;
+    // Structured suffix data — copy from frame (populated by MasterFrameParser)
+    m_data->masterSuffix = frame.masterSuffix;
+    m_data->masterSuffixValid = frame.masterSuffixValid;
+    m_data->slaveSuffix = frame.slaveSuffix;
+    m_data->slaveSuffixValid = frame.slaveSuffixValid;
+
+    // Triple-buffer: publish this slot and advance to next free slot
+    //   readyIdx = m_writeIdx  (Reader sees this slot next)
+    //   m_writeIdx = next slot that is neither ready nor being read
+    const uint32_t justWritten = m_writeIdx;
+    m_buf->readyIdx.store(justWritten, std::memory_order_release);
+    // Pick next write slot: cycle through 0→1→2→0... skipping readyIdx
+    m_writeIdx = (justWritten + 1) % SharedTripleBuffer::kSlotCount;
+    // If we landed on readyIdx, skip to next (Reader might be reading readyIdx)
+    if (m_writeIdx == m_buf->readyIdx.load(std::memory_order_relaxed)) {
+        m_writeIdx = (m_writeIdx + 1) % SharedTripleBuffer::kSlotCount;
     }
 
-    // Increment frame IDs: slave always increments; master only when not skipped by 2:1 interleaving
-    m_data->frameId.fetch_add(1, std::memory_order_relaxed);
-    m_data->slaveFrameId.fetch_add(1, std::memory_order_relaxed);
+    // Increment frame IDs
+    m_buf->frameId.fetch_add(1, std::memory_order_relaxed);
+    m_buf->slaveFrameId.fetch_add(1, std::memory_order_relaxed);
     if (frame.masterWasRead) {
-        m_data->masterFrameId.fetch_add(1, std::memory_order_relaxed);
+        m_buf->masterFrameId.fetch_add(1, std::memory_order_relaxed);
     }
-    m_data->lockFlag.store(0, std::memory_order_release);
 
     if (m_frameEvent) {
         SetEvent(m_frameEvent);
@@ -235,9 +232,9 @@ void SharedFrameWriter::Write(const Engine::HeatmapFrame& frame) {
 }
 
 void SharedFrameWriter::Close() {
-    if (m_data) {
-        UnmapViewOfFile(m_data);
-        m_data = nullptr;
+    if (m_buf) {
+        UnmapViewOfFile(m_buf);
+        m_buf = nullptr;
     }
     if (m_mapHandle) {
         CloseHandle(m_mapHandle);
@@ -263,23 +260,23 @@ bool SharedFrameReader::Create(const wchar_t* name) {
 
     m_mapHandle = CreateFileMappingW(
         INVALID_HANDLE_VALUE, &sa, PAGE_READWRITE,
-        0, sizeof(SharedFrameData), name);
+        0, sizeof(SharedTripleBuffer), name);
     if (!m_mapHandle) {
         LOG_ERROR("Common", __func__, "IPC", "CreateFileMapping failed: {}",  GetLastError());
         return false;
     }
-    m_data = static_cast<SharedFrameData*>(
+    m_buf = static_cast<SharedTripleBuffer*>(
         MapViewOfFile(m_mapHandle, FILE_MAP_ALL_ACCESS, 0, 0,
-                      sizeof(SharedFrameData)));
-    if (!m_data) {
+                      sizeof(SharedTripleBuffer)));
+    if (!m_buf) {
         LOG_ERROR("Common", __func__, "IPC", "MapViewOfFile failed: {}",  GetLastError());
         CloseHandle(m_mapHandle);
         m_mapHandle = nullptr;
         return false;
     }
     // Zero-initialize
-    std::memset(m_data, 0, sizeof(SharedFrameData));
-    LOG_INFO("Common", __func__, "IPC", "Shared memory created ({} bytes).",  sizeof(SharedFrameData));
+    std::memset(m_buf, 0, sizeof(SharedTripleBuffer));
+    LOG_INFO("Common", __func__, "IPC", "Shared memory created ({} bytes, 3 slots).",  sizeof(SharedTripleBuffer));
 
     // Create frame-ready event (auto-reset)
     m_frameEvent = CreateEventW(&sa, FALSE, FALSE, kFrameReadyEventName);
@@ -295,10 +292,10 @@ bool SharedFrameReader::Open(const wchar_t* name) {
         LOG_ERROR("Common", __func__, "IPC", "OpenFileMapping failed: {}",  GetLastError());
         return false;
     }
-    m_data = static_cast<SharedFrameData*>(
+    m_buf = static_cast<SharedTripleBuffer*>(
         MapViewOfFile(m_mapHandle, FILE_MAP_READ, 0, 0,
-                      sizeof(SharedFrameData)));
-    if (!m_data) {
+                      sizeof(SharedTripleBuffer)));
+    if (!m_buf) {
         LOG_ERROR("Common", __func__, "IPC", "MapViewOfFile failed: {}",  GetLastError());
         CloseHandle(m_mapHandle);
         m_mapHandle = nullptr;
@@ -316,17 +313,14 @@ bool SharedFrameReader::Open(const wchar_t* name) {
 }
 
 bool SharedFrameReader::Read(Engine::HeatmapFrame& out) {
-    if (!m_data) return false;
+    if (!m_buf) return false;
 
-    // Spin-wait if writer is active (very brief)
-    int spins = 0;
-    while (m_data->lockFlag.load(std::memory_order_acquire) != 0) {
-        if (++spins > 10000) return false; // timeout
-    }
-
-    const uint64_t currentId = m_data->frameId.load(
-        std::memory_order_acquire);
+    // Triple-buffer: simply read from slots[readyIdx] — no retry needed
+    const uint64_t currentId = m_buf->frameId.load(std::memory_order_acquire);
     if (currentId == m_lastReadId) return false; // no new frame
+
+    const uint32_t idx = m_buf->readyIdx.load(std::memory_order_acquire);
+    const SharedFrameData* m_data = &m_buf->slots[idx];
 
     // Copy heatmap
     std::memcpy(out.heatmapMatrix, m_data->heatmapMatrix,
@@ -365,21 +359,21 @@ bool SharedFrameReader::Read(Engine::HeatmapFrame& out) {
     }
 
     // Stylus point → StylusFrameData.point
-    const auto& sp = m_data->stylusPoint;
-    auto& dp = out.stylus.point;
-    dp.valid = sp.valid; dp.x = sp.x; dp.y = sp.y;
-    dp.reportX = sp.reportX; dp.reportY = sp.reportY;
-    dp.pressure = sp.pressure; dp.rawPressure = sp.rawPressure;
-    dp.mappedPressure = sp.mappedPressure;
-    dp.peakTx1 = sp.peakTx1; dp.peakTx2 = sp.peakTx2;
-    dp.tiltValid = sp.tiltValid;
-    dp.preTiltX = sp.preTiltX; dp.preTiltY = sp.preTiltY;
-    dp.tiltX = sp.tiltX; dp.tiltY = sp.tiltY;
-    dp.tiltMagnitude = sp.tiltMagnitude;
-    dp.tiltAzimuthDeg = sp.tiltAzimuthDeg;
-    dp.tx1X = sp.tx1X; dp.tx1Y = sp.tx1Y;
-    dp.tx2X = sp.tx2X; dp.tx2Y = sp.tx2Y;
-    dp.confidence = sp.confidence;
+    const auto& spt = m_data->stylusPoint;
+    auto& dpt = out.stylus.point;
+    dpt.valid = spt.valid; dpt.x = spt.x; dpt.y = spt.y;
+    dpt.reportX = spt.reportX; dpt.reportY = spt.reportY;
+    dpt.pressure = spt.pressure; dpt.rawPressure = spt.rawPressure;
+    dpt.mappedPressure = spt.mappedPressure;
+    dpt.peakTx1 = spt.peakTx1; dpt.peakTx2 = spt.peakTx2;
+    dpt.tiltValid = spt.tiltValid;
+    dpt.preTiltX = spt.preTiltX; dpt.preTiltY = spt.preTiltY;
+    dpt.tiltX = spt.tiltX; dpt.tiltY = spt.tiltY;
+    dpt.tiltMagnitude = spt.tiltMagnitude;
+    dpt.tiltAzimuthDeg = spt.tiltAzimuthDeg;
+    dpt.tx1X = spt.tx1X; dpt.tx1Y = spt.tx1Y;
+    dpt.tx2X = spt.tx2X; dpt.tx2Y = spt.tx2Y;
+    dpt.confidence = spt.confidence;
 
     // Stylus packet
     out.stylus.packet.valid = m_data->stylusPacket.valid;
@@ -405,13 +399,6 @@ bool SharedFrameReader::Read(Engine::HeatmapFrame& out) {
     os.buttonSource = m_data->stylusButtonSource;
     os.nextTx1Freq = m_data->stylusNextTx1Freq;
     os.nextTx2Freq = m_data->stylusNextTx2Freq;
-    os.masterMetaValid = m_data->stylusMasterMetaValid;
-    os.masterMetaBaseWord = m_data->stylusMasterMetaBase;
-    os.masterMetaTx1Freq = m_data->stylusMasterMetaTx1;
-    os.masterMetaTx2Freq = m_data->stylusMasterMetaTx2;
-    os.masterMetaPressure = m_data->stylusMasterMetaPress;
-    os.masterMetaButton = m_data->stylusMasterMetaBtn;
-    os.masterMetaStatus = m_data->stylusMasterMetaStat;
     os.asaMode = m_data->stylusAsaMode;
     os.dataType = m_data->stylusDataType;
     os.processResult = m_data->stylusProcessResult;
@@ -440,45 +427,35 @@ bool SharedFrameReader::Read(Engine::HeatmapFrame& out) {
     // Pipeline diagnostics (single copy)
     os.diag = m_data->diag;
 
-    // Reconstruct rawData suffix for DrawMasterSuffixTable/DrawSlaveSuffixTable
-    // We need rawData[4807..5062] for master and [5070..5401] for slave
-    if (m_data->masterSuffixValid || m_data->slaveSuffixValid) {
-        // Pre-allocate rawData once (avoid per-frame heap alloc)
-        if (out.rawData.capacity() < 5402) out.rawData.reserve(5402);
-        if (out.rawData.size() < 5402) out.rawData.resize(5402, 0);
-        if (m_data->masterSuffixValid) {
-            std::memcpy(out.rawData.data() + 4807,
-                        m_data->masterSuffix, kMasterSuffixBytes);
-        }
-        if (m_data->slaveSuffixValid) {
-            std::memcpy(out.rawData.data() + 5070,
-                        m_data->slaveSuffix, kSlaveSuffixBytes);
-        }
-    }
+    // Structured suffix — copy typed views directly
+    out.masterSuffix = m_data->masterSuffix;
+    out.masterSuffixValid = m_data->masterSuffixValid;
+    out.slaveSuffix = m_data->slaveSuffix;
+    out.slaveSuffixValid = m_data->slaveSuffixValid;
 
     m_lastReadId = currentId;
     return true;
 }
 
 uint64_t SharedFrameReader::LastFrameId() const {
-    if (!m_data) return 0;
-    return m_data->frameId.load(std::memory_order_acquire);
+    if (!m_buf) return 0;
+    return m_buf->frameId.load(std::memory_order_acquire);
 }
 
 uint64_t SharedFrameReader::LastSlaveFrameId() const {
-    if (!m_data) return 0;
-    return m_data->slaveFrameId.load(std::memory_order_acquire);
+    if (!m_buf) return 0;
+    return m_buf->slaveFrameId.load(std::memory_order_acquire);
 }
 
 uint64_t SharedFrameReader::LastMasterFrameId() const {
-    if (!m_data) return 0;
-    return m_data->masterFrameId.load(std::memory_order_acquire);
+    if (!m_buf) return 0;
+    return m_buf->masterFrameId.load(std::memory_order_acquire);
 }
 
 void SharedFrameReader::Close() {
-    if (m_data) {
-        UnmapViewOfFile(m_data);
-        m_data = nullptr;
+    if (m_buf) {
+        UnmapViewOfFile(m_buf);
+        m_buf = nullptr;
     }
     if (m_mapHandle) {
         CloseHandle(m_mapHandle);

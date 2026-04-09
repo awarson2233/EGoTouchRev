@@ -10,6 +10,7 @@
 #include "himax/HimaxChip.h"
 #include "himax/HimaxProtocol.h"
 #include "Logger.h"
+#include "FrameLayout.h"
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -769,49 +770,25 @@ Chip::~Chip() {
 /**
  * @brief 检测是否有手指触摸
  * 
- * 从 master status 表（back_data[4807..]）的 word[54] 和 word[55] 判断。
+ * 从 master suffix (128-word status table) 的 word[54]/word[55] 判断。
  * 固件在有触点时写入 TX/RX 坐标；无触点时 xy 均为 0xFF。
  */
 bool Chip::isFingerDetected() const {
-    constexpr size_t kStatusOffset = 7 + 4800;  // 4807: master status 表起始
-    constexpr size_t kTouchXWord   = 54;        // 触点 X 坐标 (u16 word index)
-    constexpr size_t kTouchYWord   = 55;        // 触点 Y 坐标 (u16 word index)
-
-    const uint8_t* st = back_data.data() + kStatusOffset;
-
-    auto readU16 = [&](size_t wordIdx) -> uint16_t {
-        size_t byteIdx = wordIdx * 2;
-        return static_cast<uint16_t>(st[byteIdx] | (st[byteIdx + 1] << 8));
-    };
-
-    uint16_t touch_x = readU16(kTouchXWord);
-    uint16_t touch_y = readU16(kTouchYWord);
-
-    bool detected = !((touch_x & 0xFF) == 0xFF && (touch_y & 0xFF) == 0xFF);
-
-    return detected;
+    Frame::MasterSuffixView suffix;
+    suffix.LoadFromBytes(back_data.data() + Frame::kMasterSuffixOffset);
+    return suffix.hasFinger();
 }
 
 /**
  * @brief 检测是否有手写笔输入
  * 
- * Slave 帧起始于 back_data[5063]，共 339 字节。
- * 与 master 帧一样有 7 字节校验头，真正的状态从第 8 字节起。
- * 字段 1-2（byte[7] / byte[8]）用于手写笔存在判定，0xFF=无笔。
+ * 从 slave suffix (166-word pen data) 的 TX1 block anchor 判断。
+ * anchor word[0]==0xFF && word[1]==0xFF 表示无笔接触。
  */
 bool Chip::isStylusDetected() const {
-    constexpr size_t kSlaveOffset = 5063;
-    constexpr size_t kHeaderSize  = 7;    // 与 master 一致的校验头
-
-    const uint8_t* st = back_data.data() + kSlaveOffset + kHeaderSize;
-
-    auto readU16 = [&](size_t wordIdx) -> uint16_t {
-        size_t byteIdx = wordIdx * 2;
-        return static_cast<uint16_t>(st[byteIdx] | (st[byteIdx + 1] << 8));
-    };
-    const uint16_t field1 = readU16(0);  // 字段 1（word index 0）
-    const uint16_t field2 = readU16(1);  // 字段 2（word index 1）
-    return !((field1 & 0xFF) == 0xFF && (field2 & 0xFF) == 0xFF);
+    Frame::SlaveSuffixView suffix;
+    suffix.LoadFromBytes(back_data.data() + Frame::kSlaveSuffixOffset);
+    return suffix.hasStylus();
 }
 
 ChipResult<> Chip::GetFrame(void) {

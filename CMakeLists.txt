@@ -109,13 +109,7 @@ add_library(Engine STATIC
     # Reporting
     EGoTouchService/Engine/Reporting/TouchTracker.cpp
     EGoTouchService/Engine/Reporting/TouchGestureStateMachine.cpp
-    # StylusSolver (official ASA pipeline)
-    EGoTouchService/Engine/StylusSolver/GridPeakDetector.cpp
-    EGoTouchService/Engine/StylusSolver/CoordinateSolver.cpp
-    EGoTouchService/Engine/StylusSolver/CoorPostProcessor.cpp
-    EGoTouchService/Engine/StylusSolver/EdgeLiftCorrector.cpp
-    EGoTouchService/Engine/StylusSolver/CoorReviser.cpp
-    EGoTouchService/Engine/StylusSolver/LinearFilter.cpp
+    # StylusSolver (official ASA pipeline — modules are header-only .hpp)
     EGoTouchService/Engine/StylusSolver/StylusPipeline.cpp
 )
 

@@ -5,6 +5,7 @@
 #include <atomic>
 #include <cstdint>
 #include "EngineTypes.h"
+#include "FrameLayout.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -22,10 +23,6 @@ constexpr const wchar_t* kFrameReadyEventName = L"Global\\EGoTouchFrameReady";
 
 // Maximum contacts in shared memory
 constexpr int kMaxSharedContacts = 10;
-
-// Raw suffix sizes (from hardware frame format)
-constexpr int kMasterSuffixBytes = 256;  // 128 words * 2
-constexpr int kSlaveSuffixBytes  = 332;  // 166 words * 2
 // ───────────────────────────────────────────────────────────
 // Flat contact (no STL, fixed layout)
 struct SharedContact {
@@ -79,12 +76,6 @@ struct SharedStylusPacket {
 // ───────────────────────────────────────────────────────────
 // The actual shared memory layout (all POD, no virtual, no STL)
 struct SharedFrameData {
-    // Synchronization
-    alignas(64) std::atomic<uint64_t> frameId{0};       // write counter (= slave rate, for frame-ready signal)
-    alignas(64) std::atomic<uint64_t> slaveFrameId{0};  // slave frame counter (same as frameId)
-    alignas(64) std::atomic<uint64_t> masterFrameId{0}; // master frame counter (incremented only when master was read)
-    alignas(64) std::atomic<uint32_t> lockFlag{0}; // 0=readable, 1=writing
-
     // RuntimeSnapshot (flat)
     uint8_t  workerState       = 0;
     bool     streaming         = false;
@@ -133,13 +124,7 @@ struct SharedFrameData {
     uint8_t  stylusButtonSource  = 0;
     uint16_t stylusNextTx1Freq   = 0;
     uint16_t stylusNextTx2Freq   = 0;
-    bool     stylusMasterMetaValid = false;
-    uint8_t  stylusMasterMetaBase  = 0xFF;
-    uint16_t stylusMasterMetaTx1   = 0;
-    uint16_t stylusMasterMetaTx2   = 0;
-    uint16_t stylusMasterMetaPress = 0;
-    uint32_t stylusMasterMetaBtn   = 0;
-    uint32_t stylusMasterMetaStat  = 0;
+
     // ASA/HPP fields
     uint8_t  stylusAsaMode      = 0;
     uint8_t  stylusDataType     = 0;
@@ -167,11 +152,32 @@ struct SharedFrameData {
     // ── Pipeline Diagnostics (same POD struct as StylusFrameData::StylusDiagnostics) ──
     Engine::StylusFrameData::StylusDiagnostics diag{};
 
-    // Raw suffix data for Master/Slave status tables
-    uint8_t  masterSuffix[kMasterSuffixBytes]{};
-    uint8_t  slaveSuffix[kSlaveSuffixBytes]{};
+    // Structured suffix data — typed POD views over hardware status tables
+    Frame::MasterSuffixView masterSuffix{};
+    Frame::SlaveSuffixView  slaveSuffix{};
     bool     masterSuffixValid = false;
     bool     slaveSuffixValid  = false;
+};
+
+// ─────────────────────────────────────────────────────────────
+// Triple-buffered shared memory layout
+//
+// Writer writes to slots[writeIdx], then atomically publishes:
+//   readyIdx = writeIdx; writeIdx = next_free_slot;
+// Reader always reads from slots[readyIdx] — never contends with Writer.
+//
+// This eliminates the SeqLock retry loop entirely.
+struct SharedTripleBuffer {
+    static constexpr int kSlotCount = 3;
+
+    // Control block (cache-line aligned atomics)
+    alignas(64) std::atomic<uint32_t> readyIdx{0};    // latest complete slot for Reader
+    alignas(64) std::atomic<uint64_t> frameId{0};      // monotonic frame counter
+    alignas(64) std::atomic<uint64_t> slaveFrameId{0};
+    alignas(64) std::atomic<uint64_t> masterFrameId{0};
+
+    // The three frame slots
+    SharedFrameData slots[kSlotCount]{};
 };
 
 // ───────────────────────────────────────────────────────────
@@ -187,12 +193,13 @@ public:
     bool Create(const wchar_t* name);   // Service creates Global\ mapping
     void Write(const Engine::HeatmapFrame& frame);
     void Close();
-    bool IsOpen() const { return m_data != nullptr; }
+    bool IsOpen() const { return m_buf != nullptr; }
 
 private:
-    HANDLE          m_mapHandle = nullptr;
-    SharedFrameData* m_data     = nullptr;
-    HANDLE          m_frameEvent = nullptr;
+    HANDLE             m_mapHandle = nullptr;
+    SharedTripleBuffer* m_buf      = nullptr;
+    uint32_t           m_writeIdx  = 0;  // slot currently being written to
+    HANDLE             m_frameEvent = nullptr;
 };
 
 // Reader: used by EGoTouchApp to read frame data
@@ -209,16 +216,19 @@ public:
     uint64_t LastFrameId() const;
     uint64_t LastSlaveFrameId() const;
     uint64_t LastMasterFrameId() const;
-    const SharedFrameData* Raw() const { return m_data; }
+    const SharedTripleBuffer* RawBuffer() const { return m_buf; }
+    const SharedFrameData* Raw() const {
+        return m_buf ? &m_buf->slots[m_buf->readyIdx.load(std::memory_order_acquire)] : nullptr;
+    }
     HANDLE FrameReadyEvent() const { return m_frameEvent; }
     void Close();
-    bool IsOpen() const { return m_data != nullptr; }
+    bool IsOpen() const { return m_buf != nullptr; }
 
 private:
-    HANDLE          m_mapHandle = nullptr;
-    SharedFrameData* m_data     = nullptr;
-    uint64_t        m_lastReadId = 0;
-    HANDLE          m_frameEvent = nullptr;
+    HANDLE             m_mapHandle = nullptr;
+    SharedTripleBuffer* m_buf      = nullptr;
+    uint64_t           m_lastReadId = 0;
+    HANDLE             m_frameEvent = nullptr;
 };
 
 } // namespace Ipc
