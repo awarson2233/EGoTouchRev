@@ -77,8 +77,8 @@ public:
         true  // enabled
     };
     PitchCompensation pitchCompDim2 = {
-        {0.0, -1.449572649572650, 0.006942992120726496, -3.739316239316239e-6},
-        true  // enabled
+        {0.0, -1.710915149066293, 0.005959771652221362, -5.113555667385272e-6},
+        true  // enabled — TSACore TX1CoordinateProcess calls unconditionally
     };
 
     // ── P0: Gravity noise floor ──

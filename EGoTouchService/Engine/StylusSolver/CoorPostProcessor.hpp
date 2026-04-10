@@ -216,27 +216,27 @@ public:
     inline AsaCoorResult StepJitter(const AsaCoorResult& cur, bool isEdge) {
         if (!enableJitter) return cur;
 
-        // TSACore AftCoorProcess: Edge detection in LOCAL space
+        // TSACore AftCoorProcess: Edge detection in GLOBAL space
         const bool isLocalEdge = isEdge ||
             cur.dim1 < (kCoorUnit + 1) || cur.dim2 < (kCoorUnit + 1) ||
-            cur.dim1 >= (kGridDim - 1) * kCoorUnit ||
-            cur.dim2 >= (kGridDim - 1) * kCoorUnit;
+            cur.dim1 >= (sensorDimCols - 1) * kCoorUnit ||
+            cur.dim2 >= (sensorDimRows - 1) * kCoorUnit;
 
-        // TSACore: Dynamic threshold = (param * gridDim * 0x400) / screenDim
+        // TSACore: Dynamic threshold = (param * sensorDim * 0x400) / screenDim
         int32_t thrDim1, thrDim2;
         if (isLocalEdge) {
             thrDim1 = (screenDimDim1 > 0)
-                ? (jitterEdgeParamDim1 * kGridDim * kCoorUnit) / screenDimDim1
+                ? (jitterEdgeParamDim1 * sensorDimCols * kCoorUnit) / screenDimDim1
                 : 40;
             thrDim2 = (screenDimDim2 > 0)
-                ? (jitterEdgeParamDim2 * kGridDim * kCoorUnit) / screenDimDim2
+                ? (jitterEdgeParamDim2 * sensorDimRows * kCoorUnit) / screenDimDim2
                 : 40;
         } else {
             thrDim1 = (screenDimDim1 > 0)
-                ? (jitterCenterParamDim1 * kGridDim * kCoorUnit) / screenDimDim1
+                ? (jitterCenterParamDim1 * sensorDimCols * kCoorUnit) / screenDimDim1
                 : 20;
             thrDim2 = (screenDimDim2 > 0)
-                ? (jitterCenterParamDim2 * kGridDim * kCoorUnit) / screenDimDim2
+                ? (jitterCenterParamDim2 * sensorDimRows * kCoorUnit) / screenDimDim2
                 : 20;
         }
 
@@ -277,8 +277,8 @@ public:
         int32_t resultDim1 = cur.dim1 - m_offsetDim1;
         int32_t resultDim2 = cur.dim2 - m_offsetDim2;
 
-        const int32_t maxDim1 = kGridDim * kCoorUnit;
-        const int32_t maxDim2 = kGridDim * kCoorUnit;
+        const int32_t maxDim1 = sensorDimCols * kCoorUnit;
+        const int32_t maxDim2 = sensorDimRows * kCoorUnit;
         out.dim1 = std::clamp(resultDim1, 0, maxDim1);
         out.dim2 = std::clamp(resultDim2, 0, maxDim2);
         return out;
@@ -313,6 +313,10 @@ public:
     int  jitterCenterParamDim2 = 2;   // TSACore: flash[0xa65]
     int  screenDimDim1 = 16000;       // HID X resolution
     int  screenDimDim2 = 25600;       // HID Y resolution
+
+    // Sensor grid dimensions (for clamp/edge in global space)
+    int  sensorDimCols = 60;          // Total sensor columns (dim1/X)
+    int  sensorDimRows = 40;          // Total sensor rows (dim2/Y)
 
     // IIR Q8 coefficients (TSACore: GetIIRCoef / CoorIIRFilterType)
     int  stillIirLow    = 4;     // flash[0xa5e]: still mode low-speed coef

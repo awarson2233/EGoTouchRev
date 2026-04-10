@@ -226,11 +226,11 @@ bool StylusPipeline::Process(
         return false;
     }
 
-    // 7b. LOCAL coordinate diagnostics
+    // 7b. LOCAL coordinate diagnostics (before global conversion)
     m_lastResult.point.tx1X = static_cast<float>(rawCoor.dim1) / Asa::kCoorUnit;
     m_lastResult.point.tx1Y = static_cast<float>(rawCoor.dim2) / Asa::kCoorUnit;
 
-    // Pitch map
+    // Pitch map (periodic, works in local space)
     if (m_pitchMapEnabled) {
         rawCoor.dim1 = Asa::SensorPitchSizeMap(
             rawCoor.dim1, m_pitchTableDim1.data(), Asa::kCoorUnit);
@@ -238,7 +238,18 @@ bool StylusPipeline::Process(
             rawCoor.dim2, m_pitchTableDim2.data(), Asa::kCoorUnit);
     }
 
-    // 8. HPP3 Noise post-process
+    // ── LOCAL → GLOBAL conversion ──
+    // Must happen BEFORE any history-based filter (3PtAvg, IIR, Jitter,
+    // CoorRevise, Speed, 1Euro) to prevent jumps on anchor transitions.
+    // TSACore operates entirely in global space (60×40 grid) so this is
+    // how we match that behavior with our 9×9 sub-window input.
+    const int32_t centerOff = m_anchorCenterOffset * Asa::kCoorUnit;
+    rawCoor.dim1 += static_cast<int32_t>(m_gridData.tx1.anchorCol) *
+                    Asa::kCoorUnit - centerOff;
+    rawCoor.dim2 += static_cast<int32_t>(m_gridData.tx1.anchorRow) *
+                    Asa::kCoorUnit - centerOff;
+
+    // 8. HPP3 Noise post-process (now in global space)
     if (m_noiseGate.DetectNoiseJump(rawCoor)) {
         if (m_hasLastGoodFrame) {
             m_lastResult = m_lastGoodFrame;
@@ -262,11 +273,11 @@ bool StylusPipeline::Process(
         return false;
     }
 
-    // ── Phase 3: Post-Processing Chain ──
+    // ── Phase 3: Post-Processing Chain (all in GLOBAL space) ──
 
     const bool isEdge = m_edgeLiftCorrector.IsInEdgeRegion(
         static_cast<float>(rawCoor.dim1), static_cast<float>(rawCoor.dim2),
-        Asa::kGridDim, Asa::kGridDim);
+        m_sensorCols, m_sensorRows);
 
     // 9a. LinearFilter (7-state line detection)
     auto postCoor = m_linearFilter.enabled
@@ -279,19 +290,49 @@ bool StylusPipeline::Process(
     // 9c. 3-point average
     postCoor = m_postProcessor.Step3PointAvg(postCoor);
 
-    // 9d. CoorReviser (TX2 dual-frequency revision)
+    // 9d. CoorReviser (TSACore: TiltProcess + CoorReviseCalculation + CoorReviseWork)
+    //     Computes tilt from TX1-TX2 difference, then subtracts tilt-weighted
+    //     correction from TX1 coordinate. This replaces the old α-blend method.
     if (m_coorReviser.enabled && m_gridData.tx2.valid) {
         auto tx2Peak = m_peakDetector.FindPeak(m_gridData.tx2.grid);
         if (tx2Peak.valid) {
+            // Signal ratio tracking
+            m_signalRatioTracker.Push(
+                static_cast<int16_t>(std::clamp(
+                    m_gridData.tx1.grid[peak.peakRow][peak.peakCol],
+                    static_cast<int16_t>(0), static_cast<int16_t>(0x7FFF))),
+                static_cast<int16_t>(std::clamp(
+                    m_gridData.tx2.grid[tx2Peak.peakRow][tx2Peak.peakCol],
+                    static_cast<int16_t>(0), static_cast<int16_t>(0x7FFF))));
+
             auto tx2Proj = m_peakDetector.ProjectTo1D(
                 m_gridData.tx2.grid, tx2Peak);
             auto tx2Coor = m_coordSolver.Solve(tx2Proj);
             if (tx2Coor.valid) {
                 m_lastResult.point.tx2X = static_cast<float>(tx2Coor.dim1) / Asa::kCoorUnit;
                 m_lastResult.point.tx2Y = static_cast<float>(tx2Coor.dim2) / Asa::kCoorUnit;
+
+                // TX2: PitchMap (local, periodic)
+                if (m_pitchMapEnabled) {
+                    tx2Coor.dim1 = Asa::SensorPitchSizeMap(
+                        tx2Coor.dim1, m_pitchTableDim1.data(), Asa::kCoorUnit);
+                    tx2Coor.dim2 = Asa::SensorPitchSizeMap(
+                        tx2Coor.dim2, m_pitchTableDim2.data(), Asa::kCoorUnit);
+                }
+
+                // TX2: LOCAL → GLOBAL (same conversion as TX1)
+                tx2Coor.dim1 += static_cast<int32_t>(m_gridData.tx2.anchorCol) *
+                                Asa::kCoorUnit - centerOff;
+                tx2Coor.dim2 += static_cast<int32_t>(m_gridData.tx2.anchorRow) *
+                                Asa::kCoorUnit - centerOff;
+
+                // CoorReviser: tilt + coordinate revision in one step
+                int16_t tiltX = 0, tiltY = 0;
+                postCoor = m_coorReviser.Revise(postCoor, tx2Coor,
+                    m_lastResult.pressure, tiltX, tiltY);
+                m_lastResult.point.tiltX = tiltX;
+                m_lastResult.point.tiltY = tiltY;
             }
-            postCoor = m_coorReviser.Revise(postCoor, tx2Coor,
-                                             m_lastResult.pressure);
         }
     }
 
@@ -320,13 +361,7 @@ bool StylusPipeline::Process(
     auto finalCoor = m_calibration.Apply(postCoor);
     m_lastResult.pipelineStage = 0; // Success
 
-    // ── Phase 4: LOCAL → GLOBAL conversion ──
-    const int32_t centerOff = m_anchorCenterOffset * Asa::kCoorUnit;
-    finalCoor.dim1 += static_cast<int32_t>(m_gridData.tx1.anchorCol) *
-                      Asa::kCoorUnit - centerOff;
-    finalCoor.dim2 += static_cast<int32_t>(m_gridData.tx1.anchorRow) *
-                      Asa::kCoorUnit - centerOff;
-
+    // Coordinates are already in GLOBAL space (converted after Solve).
     m_lastResult.point.valid = finalCoor.valid;
     m_lastResult.point.x = static_cast<float>(finalCoor.dim1);
     m_lastResult.point.y = static_cast<float>(finalCoor.dim2);
@@ -351,8 +386,8 @@ bool StylusPipeline::Process(
     m_dbg.iirCoef   = m_postProcessor.GetLastIIRCoef();
     m_dbg.isHover   = (m_lastResult.pressure == 0);
     m_dbg.isEdge    = isEdge;
-    m_dbg.tiltDiffX = m_tiltSolver.GetPrevDiffX();
-    m_dbg.tiltDiffY = m_tiltSolver.GetPrevDiffY();
+    m_dbg.tiltDiffX = static_cast<float>(m_coorReviser.GetLastTiltX());
+    m_dbg.tiltDiffY = static_cast<float>(m_coorReviser.GetLastTiltY());
     m_dbg.peakSignal = m_lastResult.signalX;
 
     m_dbg.signalRatio       = m_signalRatioTracker.GetAvgRatio();
@@ -360,9 +395,9 @@ bool StylusPipeline::Process(
     m_dbg.exitSmoothed      = (m_lastResult.pipelineStage == 7);
     m_dbg.cmfEnabled        = m_cmfFilter.enabled;
     m_dbg.coorReviserActive = m_coorReviser.enabled;
-    m_dbg.coorRevDeltaX     = m_coorReviser.GetLastDeltaX();
-    m_dbg.coorRevDeltaY     = m_coorReviser.GetLastDeltaY();
-    m_dbg.tiltAnomalyDamped = m_tiltSolver.anomalyDamped;
+    m_dbg.coorRevDeltaX     = static_cast<float>(m_coorReviser.GetLastReviseX());
+    m_dbg.coorRevDeltaY     = static_cast<float>(m_coorReviser.GetLastReviseY());
+    m_dbg.tiltAnomalyDamped = false;
     m_dbg.sigSuppressActive = false;
     m_dbg.penLifecycle      = static_cast<uint8_t>(m_penStateMachine.GetLifecycle());
     m_dbg.wasInking         = m_wasInking;
@@ -385,39 +420,9 @@ bool StylusPipeline::Process(
 
     // ── Phase 5: Supplementary Features ──
 
-    // 11. TX2 → Tilt + signal ratio
-    if (m_gridData.tx2.valid) {
-        auto tx2Peak = m_peakDetector.FindPeak(m_gridData.tx2.grid);
-        if (tx2Peak.valid) {
-            // Signal ratio tracking
-            m_signalRatioTracker.Push(
-                static_cast<int16_t>(std::clamp(
-                    m_gridData.tx1.grid[peak.peakRow][peak.peakCol],
-                    static_cast<int16_t>(0), static_cast<int16_t>(0x7FFF))),
-                static_cast<int16_t>(std::clamp(
-                    m_gridData.tx2.grid[tx2Peak.peakRow][tx2Peak.peakCol],
-                    static_cast<int16_t>(0), static_cast<int16_t>(0x7FFF))));
-
-            auto tx2Proj = m_peakDetector.ProjectTo1D(
-                m_gridData.tx2.grid, tx2Peak);
-            auto tx2Coor = m_coordSolver.Solve(tx2Proj);
-            if (tx2Coor.valid) {
-                m_lastResult.point.tx2X = static_cast<float>(tx2Coor.dim1) / Asa::kCoorUnit;
-                m_lastResult.point.tx2Y = static_cast<float>(tx2Coor.dim2) / Asa::kCoorUnit;
-
-                // Convert TX2 to global for tilt
-                const int32_t tiltCenterOff = m_anchorCenterOffset * Asa::kCoorUnit;
-                tx2Coor.dim1 += static_cast<int32_t>(m_gridData.tx2.anchorCol) *
-                                Asa::kCoorUnit - tiltCenterOff;
-                tx2Coor.dim2 += static_cast<int32_t>(m_gridData.tx2.anchorRow) *
-                                Asa::kCoorUnit - tiltCenterOff;
-                if (m_tiltSolver.enabled) {
-                    m_tiltSolver.Solve(finalCoor, tx2Coor,
-                        m_lastResult.point.tiltX, m_lastResult.point.tiltY);
-                }
-            }
-        }
-    }
+    // 11. TX2 tilt is now computed in step 9d (CoorReviser).
+    //     Signal ratio tracking is also done there.
+    //     Nothing to do here.
 
     // 12. Pressure (BT MCU)
     m_lastResult.signalX = static_cast<uint16_t>(
@@ -545,26 +550,28 @@ std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
             ConfigParam::Bool, const_cast<bool*>(&m_elcEnabled), Cat::Behavior),
         ConfigParam("sp.crEnabled", "Enable TX2 Coor Reviser",
             ConfigParam::Bool, const_cast<bool*>(&m_coorReviser.enabled), Cat::Behavior),
-        ConfigParam("sp.tiltEnabled", "Enable Tilt",
-            ConfigParam::Bool, const_cast<bool*>(&m_tiltSolver.enabled), Cat::Behavior),
-        ConfigParam("sp.tiltKeepLast", "Keep Last On Invalid",
-            ConfigParam::Bool, const_cast<bool*>(&m_tiltSolver.keepLastOnInvalid), Cat::Behavior),
-        ConfigParam("sp.tiltDiffAvgWin", "Diff Average Window",
-            ConfigParam::Int, const_cast<int*>(&m_tiltSolver.diffAverageWindow), 1, 10, Cat::Behavior),
-        ConfigParam("sp.tiltDegCellX", "Degree/Cell X",
-            ConfigParam::Float, const_cast<float*>(&m_tiltSolver.degreePerCellX), 1.0f, 30.0f, Cat::Behavior),
-        ConfigParam("sp.tiltDegCellY", "Degree/Cell Y",
-            ConfigParam::Float, const_cast<float*>(&m_tiltSolver.degreePerCellY), 1.0f, 30.0f, Cat::Behavior),
-        ConfigParam("sp.tiltNormLenX", "Norm Len X",
-            ConfigParam::Float, const_cast<float*>(&m_tiltSolver.normLenX), 0.5f, 20.0f, Cat::Behavior),
-        ConfigParam("sp.tiltNormLenY", "Norm Len Y",
-            ConfigParam::Float, const_cast<float*>(&m_tiltSolver.normLenY), 0.5f, 20.0f, Cat::Behavior),
-        ConfigParam("sp.tiltMaxDeg", "Max Degree",
-            ConfigParam::Int, const_cast<int*>(&m_tiltSolver.maxDegree), 10, 89, Cat::Behavior),
-        ConfigParam("sp.tiltJitterDeg", "Jitter Threshold",
-            ConfigParam::Int, const_cast<int*>(&m_tiltSolver.jitterThresholdDeg), 0, 10, Cat::Behavior),
-        ConfigParam("sp.tiltIirOldW", "IIR Old Weight",
-            ConfigParam::Float, const_cast<float*>(&m_tiltSolver.iirOldWeight), 0.0f, 0.99f, Cat::Behavior),
+        ConfigParam("sp.crTiltMultX", "CoorRevise Tilt Mult X",
+            ConfigParam::Int, const_cast<int*>(&m_coorReviser.tiltMultiplierX), 0, 20, Cat::Behavior),
+        ConfigParam("sp.crTiltMultY", "CoorRevise Tilt Mult Y",
+            ConfigParam::Int, const_cast<int*>(&m_coorReviser.tiltMultiplierY), 0, 20, Cat::Behavior),
+        ConfigParam("sp.crDiffAvgWin", "CoorRevise Diff Avg Window",
+            ConfigParam::Int, const_cast<int*>(&m_coorReviser.diffAverageWindow), 1, 10, Cat::Behavior),
+        ConfigParam("sp.crTiltAvgWin", "CoorRevise Tilt Avg Window",
+            ConfigParam::Int, const_cast<int*>(&m_coorReviser.tiltAverageWindow), 1, 10, Cat::Behavior),
+        ConfigParam("sp.crRevAvgWin", "CoorRevise Revise Avg Window",
+            ConfigParam::Int, const_cast<int*>(&m_coorReviser.reviseAverageWindow), 1, 10, Cat::Behavior),
+        ConfigParam("sp.crLimitStep", "CoorRevise Limit Step",
+            ConfigParam::Int, const_cast<int*>(&m_coorReviser.reviseLimitStep), 1, 100, Cat::Behavior),
+        ConfigParam("sp.crNormLenDim1", "CoorRevise NormLen Dim1",
+            ConfigParam::Int, const_cast<int*>(&m_coorReviser.normLenDim1), 100, 10000, Cat::Behavior),
+        ConfigParam("sp.crNormLenDim2", "CoorRevise NormLen Dim2",
+            ConfigParam::Int, const_cast<int*>(&m_coorReviser.normLenDim2), 100, 10000, Cat::Behavior),
+        ConfigParam("sp.crMaxTiltDeg", "CoorRevise Max Tilt Deg",
+            ConfigParam::Int, const_cast<int*>(&m_coorReviser.maxTiltDeg), 10, 89, Cat::Behavior),
+        ConfigParam("sp.crTiltJitterDeg", "CoorRevise Tilt Jitter Deg",
+            ConfigParam::Int, const_cast<int*>(&m_coorReviser.tiltJitterDeg), 0, 10, Cat::Behavior),
+        ConfigParam("sp.crKeepLast", "CoorRevise Keep Last On Invalid",
+            ConfigParam::Bool, const_cast<bool*>(&m_coorReviser.keepLastOnInvalid), Cat::Behavior),
 
         // === Output ===
         ConfigParam("sp.pressPolyEnabled", "Polynomial Mapping",
@@ -670,21 +677,22 @@ void StylusPipeline::SaveConfig(std::ostream& out) const {
     out << "sp.jitterCenterDim1=" << m_postProcessor.jitterCenterParamDim1 << "\n";
     out << "sp.jitterCenterDim2=" << m_postProcessor.jitterCenterParamDim2 << "\n";
     out << "sp.crEnabled=" << m_coorReviser.enabled << "\n";
+    out << "sp.crTiltMultX=" << m_coorReviser.tiltMultiplierX << "\n";
+    out << "sp.crTiltMultY=" << m_coorReviser.tiltMultiplierY << "\n";
+    out << "sp.crDiffAvgWin=" << m_coorReviser.diffAverageWindow << "\n";
+    out << "sp.crTiltAvgWin=" << m_coorReviser.tiltAverageWindow << "\n";
+    out << "sp.crRevAvgWin=" << m_coorReviser.reviseAverageWindow << "\n";
+    out << "sp.crLimitStep=" << m_coorReviser.reviseLimitStep << "\n";
+    out << "sp.crNormLenDim1=" << m_coorReviser.normLenDim1 << "\n";
+    out << "sp.crNormLenDim2=" << m_coorReviser.normLenDim2 << "\n";
+    out << "sp.crMaxTiltDeg=" << m_coorReviser.maxTiltDeg << "\n";
+    out << "sp.crTiltJitterDeg=" << m_coorReviser.tiltJitterDeg << "\n";
+    out << "sp.crKeepLast=" << m_coorReviser.keepLastOnInvalid << "\n";
     out << "sp.elcEnabled=" << m_elcEnabled << "\n";
     out << "sp.pitchCompDim1Enabled=" << m_coordSolver.pitchCompDim1.enabled << "\n";
     out << "sp.pitchCompDim2Enabled=" << m_coordSolver.pitchCompDim2.enabled << "\n";
     out << "sp.gravityNoiseFloor=" << m_coordSolver.gravityNoiseFloor << "\n";
     out << "sp.gravityFictEdge=" << m_coordSolver.gravityFictitiousEdge << "\n";
-    out << "sp.tiltEnabled=" << m_tiltSolver.enabled << "\n";
-    out << "sp.tiltKeepLast=" << m_tiltSolver.keepLastOnInvalid << "\n";
-    out << "sp.tiltDiffAvgWin=" << m_tiltSolver.diffAverageWindow << "\n";
-    out << "sp.tiltDegCellX=" << m_tiltSolver.degreePerCellX << "\n";
-    out << "sp.tiltDegCellY=" << m_tiltSolver.degreePerCellY << "\n";
-    out << "sp.tiltNormLenX=" << m_tiltSolver.normLenX << "\n";
-    out << "sp.tiltNormLenY=" << m_tiltSolver.normLenY << "\n";
-    out << "sp.tiltMaxDeg=" << m_tiltSolver.maxDegree << "\n";
-    out << "sp.tiltJitterDeg=" << m_tiltSolver.jitterThresholdDeg << "\n";
-    out << "sp.tiltIirOldW=" << m_tiltSolver.iirOldWeight << "\n";
     out << "sp.pressPolyEnabled=" << m_pressureSolver.polyEnabled << "\n";
     out << "sp.pressIirQ8=" << m_pressureSolver.iirWeightQ8 << "\n";
     out << "sp.pressSeg1Th=" << m_pressureSolver.seg1Threshold << "\n";
@@ -756,21 +764,22 @@ void StylusPipeline::LoadConfig(
     else if (key == "sp.jitterCenterDim1") m_postProcessor.jitterCenterParamDim1 = toInt(value);
     else if (key == "sp.jitterCenterDim2") m_postProcessor.jitterCenterParamDim2 = toInt(value);
     else if (key == "sp.crEnabled") m_coorReviser.enabled = toBool(value);
+    else if (key == "sp.crTiltMultX") m_coorReviser.tiltMultiplierX = toInt(value);
+    else if (key == "sp.crTiltMultY") m_coorReviser.tiltMultiplierY = toInt(value);
+    else if (key == "sp.crDiffAvgWin") m_coorReviser.diffAverageWindow = toInt(value);
+    else if (key == "sp.crTiltAvgWin") m_coorReviser.tiltAverageWindow = toInt(value);
+    else if (key == "sp.crRevAvgWin") m_coorReviser.reviseAverageWindow = toInt(value);
+    else if (key == "sp.crLimitStep") m_coorReviser.reviseLimitStep = toInt(value);
+    else if (key == "sp.crNormLenDim1") m_coorReviser.normLenDim1 = toInt(value);
+    else if (key == "sp.crNormLenDim2") m_coorReviser.normLenDim2 = toInt(value);
+    else if (key == "sp.crMaxTiltDeg") m_coorReviser.maxTiltDeg = toInt(value);
+    else if (key == "sp.crTiltJitterDeg") m_coorReviser.tiltJitterDeg = toInt(value);
+    else if (key == "sp.crKeepLast") m_coorReviser.keepLastOnInvalid = toBool(value);
     else if (key == "sp.elcEnabled") m_elcEnabled = toBool(value);
     else if (key == "sp.pitchCompDim1Enabled") m_coordSolver.pitchCompDim1.enabled = toBool(value);
     else if (key == "sp.pitchCompDim2Enabled") m_coordSolver.pitchCompDim2.enabled = toBool(value);
     else if (key == "sp.gravityNoiseFloor") m_coordSolver.gravityNoiseFloor = toInt(value);
     else if (key == "sp.gravityFictEdge") m_coordSolver.gravityFictitiousEdge = toBool(value);
-    else if (key == "sp.tiltEnabled") m_tiltSolver.enabled = toBool(value);
-    else if (key == "sp.tiltKeepLast") m_tiltSolver.keepLastOnInvalid = toBool(value);
-    else if (key == "sp.tiltDiffAvgWin") m_tiltSolver.diffAverageWindow = toInt(value);
-    else if (key == "sp.tiltDegCellX") m_tiltSolver.degreePerCellX = toFloat(value);
-    else if (key == "sp.tiltDegCellY") m_tiltSolver.degreePerCellY = toFloat(value);
-    else if (key == "sp.tiltNormLenX") m_tiltSolver.normLenX = toFloat(value);
-    else if (key == "sp.tiltNormLenY") m_tiltSolver.normLenY = toFloat(value);
-    else if (key == "sp.tiltMaxDeg") m_tiltSolver.maxDegree = toInt(value);
-    else if (key == "sp.tiltJitterDeg") m_tiltSolver.jitterThresholdDeg = toInt(value);
-    else if (key == "sp.tiltIirOldW") m_tiltSolver.iirOldWeight = toFloat(value);
     else if (key == "sp.pressPolyEnabled") m_pressureSolver.polyEnabled = toBool(value);
     else if (key == "sp.pressIirQ8") m_pressureSolver.iirWeightQ8 = std::clamp(toInt(value), 16, 255);
     else if (key == "sp.pressSeg1Th") m_pressureSolver.seg1Threshold = toInt(value);
