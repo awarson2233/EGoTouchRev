@@ -110,157 +110,169 @@ std::array<uint8_t, 2400> TouchPipeline::GetZoneEdge() const {
 std::vector<ConfigParam> TouchPipeline::GetConfigSchema() const {
     std::vector<ConfigParam> s;
 
-    // Phase 1: Frame Parser
+    // ── Frame Parser ──
     s.emplace_back("FrameParserEnabled", "Frame Parser Enabled",
-                   ConfigParam::Bool, const_cast<bool*>(&m_frameParser.m_enabled));
+                   ConfigParam::Bool, const_cast<bool*>(&m_frameParser.m_enabled)).Module("Frame Parser");
 
-    // Phase 2: Baseline
+    // ── Signal Conditioning: Baseline ──
     s.emplace_back("BaselineEnabled", "Baseline Enabled",
-                   ConfigParam::Bool, const_cast<bool*>(&m_baseline.m_enabled));
+                   ConfigParam::Bool, const_cast<bool*>(&m_baseline.m_enabled)).Module("Signal Conditioning");
     s.emplace_back("BaselineValue", "Baseline Value",
-                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_baseline), 0, 65535);
+                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_baseline), 0, 65535).Module("Signal Conditioning");
 
-    // Phase 2: CMF
+    // ── Signal Conditioning: CMF ──
     s.emplace_back("CMFEnabled", "CMF Enabled",
-                   ConfigParam::Bool, const_cast<bool*>(&m_cmf.m_enabled));
+                   ConfigParam::Bool, const_cast<bool*>(&m_cmf.m_enabled)).Module("Signal Conditioning");
     s.emplace_back("CMFExclusionThreshold", "CMF Exclusion Threshold",
-                   ConfigParam::Int, const_cast<int*>(&m_cmf.m_exclusionThreshold), 50, 2000);
+                   ConfigParam::Int, const_cast<int*>(&m_cmf.m_exclusionThreshold), 50, 2000).Module("Signal Conditioning");
     s.emplace_back("CMFMaxCorrection", "CMF Max Correction",
-                   ConfigParam::Int, const_cast<int*>(&m_cmf.m_maxCorrection), 10, 2000);
+                   ConfigParam::Int, const_cast<int*>(&m_cmf.m_maxCorrection), 10, 2000).Module("Signal Conditioning");
 
-    // Phase 2: GridIIR
+    // ── Signal Conditioning: GridIIR ──
     s.emplace_back("GridIIREnabled", "Grid IIR Enabled",
-                   ConfigParam::Bool, const_cast<bool*>(&m_gridIIR.m_enabled));
+                   ConfigParam::Bool, const_cast<bool*>(&m_gridIIR.m_enabled)).Module("Signal Conditioning");
     s.emplace_back("GateRatio", "Gate Ratio",
-                   ConfigParam::Float, const_cast<float*>(&m_gridIIR.m_gateRatio), 0.02f, 0.30f);
+                   ConfigParam::Float, const_cast<float*>(&m_gridIIR.m_gateRatio), 0.02f, 0.30f).Module("Signal Conditioning");
     s.emplace_back("GateStaticFloor", "Gate Static Floor",
-                   ConfigParam::Int, const_cast<int*>(&m_gridIIR.m_gateStaticFloor), 50, 500);
+                   ConfigParam::Int, const_cast<int*>(&m_gridIIR.m_gateStaticFloor), 50, 500).Module("Signal Conditioning");
     s.emplace_back("DecayWeight", "Decay Weight",
-                   ConfigParam::Int, const_cast<int*>(&m_gridIIR.m_decayWeight), 1, 256);
+                   ConfigParam::Int, const_cast<int*>(&m_gridIIR.m_decayWeight), 1, 256).Module("Signal Conditioning");
     s.emplace_back("DecayStep", "Decay Step",
-                   ConfigParam::Int, const_cast<int*>(&m_gridIIR.m_decayStep), 0, 200);
+                   ConfigParam::Int, const_cast<int*>(&m_gridIIR.m_decayStep), 0, 200).Module("Signal Conditioning");
 
-    // Phase 3: PeakDetector
+    // ── Peak Detection ──
     s.emplace_back("PeakThreshold", "Peak Threshold",
-                   ConfigParam::Int, const_cast<int*>(&m_peakDet.m_threshold), 1, 1000);
+                   ConfigParam::Int, const_cast<int*>(&m_peakDet.m_threshold), 1, 1000).Module("Peak Detection");
     s.emplace_back("SigTholdLimit", "Sig Thold Limit",
-                   ConfigParam::Int, const_cast<int*>(&m_peakDet.m_sigTholdLimit), 1, 1000);
+                   ConfigParam::Int, const_cast<int*>(&m_peakDet.m_sigTholdLimit), 1, 1000).Module("Peak Detection");
     s.emplace_back("Z8FilterEnabled", "Z8 Filter Enabled",
-                   ConfigParam::Bool, const_cast<bool*>(&m_peakDet.m_z8Filter));
+                   ConfigParam::Bool, const_cast<bool*>(&m_peakDet.m_z8Filter)).Module("Peak Detection");
     s.emplace_back("Z1FilterEnabled", "Z1 Filter Enabled",
-                   ConfigParam::Bool, const_cast<bool*>(&m_peakDet.m_z1Filter));
+                   ConfigParam::Bool, const_cast<bool*>(&m_peakDet.m_z1Filter)).Module("Peak Detection");
     s.emplace_back("PressureDriftFilter", "Pressure Drift Filter",
-                   ConfigParam::Bool, const_cast<bool*>(&m_peakDet.m_pressureDriftFilter));
+                   ConfigParam::Bool, const_cast<bool*>(&m_peakDet.m_pressureDriftFilter)).Module("Peak Detection");
     s.emplace_back("EdgePeakFilter", "Edge Peak Filter",
-                   ConfigParam::Bool, const_cast<bool*>(&m_peakDet.m_edgePeakFilter));
+                   ConfigParam::Bool, const_cast<bool*>(&m_peakDet.m_edgePeakFilter)).Module("Peak Detection");
     s.emplace_back("EdgeThresholdEnabled", "Edge Threshold Enabled",
-                   ConfigParam::Bool, const_cast<bool*>(&m_peakDet.m_edgeThresholdEnabled));
+                   ConfigParam::Bool, const_cast<bool*>(&m_peakDet.m_edgeThresholdEnabled)).Module("Peak Detection");
     s.emplace_back("EdgeThreshold", "Edge Threshold",
-                   ConfigParam::Int, const_cast<int*>(&m_peakDet.m_edgeThreshold), 1, 1000);
+                   ConfigParam::Int, const_cast<int*>(&m_peakDet.m_edgeThreshold), 1, 1000).Module("Peak Detection");
     s.emplace_back("Z8Radius", "Z8 Max Search Radius",
-                   ConfigParam::Int, const_cast<int*>(&m_peakDet.m_z8Radius), 1, 5);
+                   ConfigParam::Int, const_cast<int*>(&m_peakDet.m_z8Radius), 1, 5).Module("Peak Detection");
     s.emplace_back("MaxPeaks", "Peak Limit Cap",
-                   ConfigParam::Int, const_cast<int*>(&m_peakDet.m_maxPeaks), 5, 100);
+                   ConfigParam::Int, const_cast<int*>(&m_peakDet.m_maxPeaks), 5, 100).Module("Peak Detection");
     s.emplace_back("PressureDriftDebounce", "Pressure Debounce Limit",
-                   ConfigParam::Int, const_cast<int*>(&m_peakDet.m_pressureDriftDebounceLimit), 0, 10);
+                   ConfigParam::Int, const_cast<int*>(&m_peakDet.m_pressureDriftDebounceLimit), 0, 10).Module("Peak Detection");
     s.emplace_back("MacroZoneMinArea", "MacroZone Min Area",
-                   ConfigParam::Int, const_cast<int*>(&m_peakDet.m_macroZoneMinArea), 1, 20);
+                   ConfigParam::Int, const_cast<int*>(&m_peakDet.m_macroZoneMinArea), 1, 20).Module("Peak Detection");
 
-    // Phase 4: ZoneExpander
+    // ── Zone & Contact ──
     s.emplace_back("DilateErode", "Dilate Erode Enabled",
-                   ConfigParam::Bool, const_cast<bool*>(&m_zoneExp.m_dilateErode));
+                   ConfigParam::Bool, const_cast<bool*>(&m_zoneExp.m_dilateErode)).Module("Zone & Contact");
     s.emplace_back("ZoneTholdScale", "Zone Thold Numer",
-                   ConfigParam::Int, const_cast<int*>(&m_zoneExp.m_tholdScaleNumer), 0, 255);
+                   ConfigParam::Int, const_cast<int*>(&m_zoneExp.m_tholdScaleNumer), 0, 255).Module("Zone & Contact");
     s.emplace_back("ZoneTholdShift", "Zone Thold Shift",
-                   ConfigParam::Int, const_cast<int*>(&m_zoneExp.m_tholdScaleShift), 0, 15);
+                   ConfigParam::Int, const_cast<int*>(&m_zoneExp.m_tholdScaleShift), 0, 15).Module("Zone & Contact");
     s.emplace_back("MaxTouches", "Max Contact Outputs",
-                   ConfigParam::Int, const_cast<int*>(&m_zoneExp.m_maxTouches), 1, 50);
-
-    // Phase 4: EdgeCompensation
+                   ConfigParam::Int, const_cast<int*>(&m_zoneExp.m_maxTouches), 1, 50).Module("Zone & Contact");
     s.emplace_back("ECEnabled", "Edge Compensation Enabled",
-                   ConfigParam::Bool, const_cast<bool*>(&m_edgeComp.m_enabled));
+                   ConfigParam::Bool, const_cast<bool*>(&m_edgeComp.m_enabled)).Module("Zone & Contact");
     s.emplace_back("ECBlendRange", "EC Blend Range",
-                   ConfigParam::Float, const_cast<float*>(&m_edgeComp.m_ecBlendRange), 0.0f, 5.0f);
+                   ConfigParam::Float, const_cast<float*>(&m_edgeComp.m_ecBlendRange), 0.0f, 5.0f).Module("Zone & Contact");
 
-    // Phase 3: PalmRejector
+    // ── Palm Rejection ──
     s.emplace_back("PalmEnabled", "Palm Rejection Enabled",
-                   ConfigParam::Bool, const_cast<bool*>(&m_palmReject.m_enabled));
+                   ConfigParam::Bool, const_cast<bool*>(&m_palmReject.m_enabled)).Module("Palm Rejection");
     s.emplace_back("PalmAreaThreshold", "Palm Area Threshold",
-                   ConfigParam::Int, const_cast<int*>(&m_palmReject.m_areaThreshold), 5, 300);
+                   ConfigParam::Int, const_cast<int*>(&m_palmReject.m_areaThreshold), 5, 300).Module("Palm Rejection");
     s.emplace_back("PalmSignalSumThreshold", "Palm SignalSum Threshold",
-                   ConfigParam::Int, const_cast<int*>(&m_palmReject.m_signalSumThreshold), 1000, 500000);
+                   ConfigParam::Int, const_cast<int*>(&m_palmReject.m_signalSumThreshold), 1000, 500000).Module("Palm Rejection");
     s.emplace_back("PalmDensityThresholdLow", "Palm Density Low Threshold",
-                   ConfigParam::Float, const_cast<float*>(&m_palmReject.m_densityThresholdLow), 50.0f, 2000.0f);
+                   ConfigParam::Float, const_cast<float*>(&m_palmReject.m_densityThresholdLow), 50.0f, 2000.0f).Module("Palm Rejection");
     s.emplace_back("PalmAreaMinForDensity", "Palm Density Min Area",
-                   ConfigParam::Int, const_cast<int*>(&m_palmReject.m_areaMinForDensity), 3, 100);
+                   ConfigParam::Int, const_cast<int*>(&m_palmReject.m_areaMinForDensity), 3, 100).Module("Palm Rejection");
     s.emplace_back("PalmElongatedEnabled", "Elongated Press Reject",
-                   ConfigParam::Bool, const_cast<bool*>(&m_palmReject.m_elongatedEnabled));
+                   ConfigParam::Bool, const_cast<bool*>(&m_palmReject.m_elongatedEnabled)).Module("Palm Rejection");
     s.emplace_back("PalmElongatedMinArea", "Elongated Min Area",
-                   ConfigParam::Int, const_cast<int*>(&m_palmReject.m_elongatedMinArea), 3, 100);
+                   ConfigParam::Int, const_cast<int*>(&m_palmReject.m_elongatedMinArea), 3, 100).Module("Palm Rejection");
     s.emplace_back("PalmElongatedAspectRatio", "Elongated Aspect Ratio",
-                   ConfigParam::Float, const_cast<float*>(&m_palmReject.m_elongatedAspectRatio), 1.5f, 10.0f);
+                   ConfigParam::Float, const_cast<float*>(&m_palmReject.m_elongatedAspectRatio), 1.5f, 10.0f).Module("Palm Rejection");
 
-    // Phase 5: TouchTracker
+    // ── Tracking ──
     s.emplace_back("TrackerEnabled", "Tracker Enabled",
-                   ConfigParam::Bool, const_cast<bool*>(&m_tracker.m_enabled));
+                   ConfigParam::Bool, const_cast<bool*>(&m_tracker.m_enabled)).Module("Tracking");
     s.emplace_back("UseHungarian", "Use Hungarian",
-                   ConfigParam::Bool, const_cast<bool*>(&m_tracker.m_useHungarian));
+                   ConfigParam::Bool, const_cast<bool*>(&m_tracker.m_useHungarian)).Module("Tracking");
     s.emplace_back("MaxTrackDistance", "Max Track Dist",
-                   ConfigParam::Float, const_cast<float*>(&m_tracker.m_maxTrackDistance), 1.0f, 20.0f);
+                   ConfigParam::Float, const_cast<float*>(&m_tracker.m_maxTrackDistance), 1.0f, 20.0f).Module("Tracking");
     s.emplace_back("AlwaysMatchDistance", "Always Match Dist",
-                   ConfigParam::Float, const_cast<float*>(&m_tracker.m_alwaysMatchDistance), 0.5f, 6.0f);
+                   ConfigParam::Float, const_cast<float*>(&m_tracker.m_alwaysMatchDistance), 0.5f, 6.0f).Module("Tracking");
     s.emplace_back("PredictionScale", "Prediction Scale",
-                   ConfigParam::Float, const_cast<float*>(&m_tracker.m_predictionScale), 0.0f, 2.0f);
+                   ConfigParam::Float, const_cast<float*>(&m_tracker.m_predictionScale), 0.0f, 2.0f).Module("Tracking");
     s.emplace_back("LiftOffHoldEnabled", "LiftOff Hold Enable",
-                   ConfigParam::Bool, const_cast<bool*>(&m_tracker.m_liftOffHoldEnabled));
+                   ConfigParam::Bool, const_cast<bool*>(&m_tracker.m_liftOffHoldEnabled)).Module("Tracking");
     s.emplace_back("LiftOffHoldFrames", "LiftOff Hold",
-                   ConfigParam::Int, const_cast<int*>(&m_tracker.m_liftOffHoldFrames), 0, 10);
+                   ConfigParam::Int, const_cast<int*>(&m_tracker.m_liftOffHoldFrames), 0, 10).Module("Tracking");
     s.emplace_back("LiftOffPredictEnabled", "LiftOff Predict",
-                   ConfigParam::Bool, const_cast<bool*>(&m_tracker.m_liftOffPredictEnabled));
+                   ConfigParam::Bool, const_cast<bool*>(&m_tracker.m_liftOffPredictEnabled)).Module("Tracking");
     s.emplace_back("LiftOffVelocityDecay", "LiftOff Vel Decay",
-                   ConfigParam::Float, const_cast<float*>(&m_tracker.m_liftOffVelocityDecay), 0.0f, 1.0f);
+                   ConfigParam::Float, const_cast<float*>(&m_tracker.m_liftOffVelocityDecay), 0.0f, 1.0f).Module("Tracking");
     s.emplace_back("TouchDownDebounceFrames", "Down Debounce",
-                   ConfigParam::Int, const_cast<int*>(&m_tracker.m_touchDownDebounceFrames), 0, 10);
+                   ConfigParam::Int, const_cast<int*>(&m_tracker.m_touchDownDebounceFrames), 0, 10).Module("Tracking");
     s.emplace_back("TouchDownRejectEnabled", "Enable Reject",
-                   ConfigParam::Bool, const_cast<bool*>(&m_tracker.m_touchDownRejectEnabled));
+                   ConfigParam::Bool, const_cast<bool*>(&m_tracker.m_touchDownRejectEnabled)).Module("Tracking");
     s.emplace_back("TouchDownRejectMinSignal", "Reject Signal Th",
-                   ConfigParam::Int, const_cast<int*>(&m_tracker.m_touchDownRejectMinSignal), 0, 500);
+                   ConfigParam::Int, const_cast<int*>(&m_tracker.m_touchDownRejectMinSignal), 0, 500).Module("Tracking");
+
+    // ── Stylus Suppress ──
     s.emplace_back("StylusSuppressGlobalEnabled", "Pen Global Suppress",
-                   ConfigParam::Bool, const_cast<bool*>(&m_tracker.m_stylusSuppressGlobalEnabled));
+                   ConfigParam::Bool, const_cast<bool*>(&m_tracker.m_stylusSuppressGlobalEnabled)).Module("Stylus Suppress");
     s.emplace_back("StylusSuppressLocalEnabled", "Pen Local Suppress",
-                   ConfigParam::Bool, const_cast<bool*>(&m_tracker.m_stylusSuppressLocalEnabled));
-    s.emplace_back("StylusSuppressLocalDistance", "Suppress radius",
-                   ConfigParam::Float, const_cast<float*>(&m_tracker.m_stylusSuppressLocalDistance), 0.5f, 10.0f);
+                   ConfigParam::Bool, const_cast<bool*>(&m_tracker.m_stylusSuppressLocalEnabled)).Module("Stylus Suppress");
+    s.emplace_back("StylusSuppressLocalDistance", "Suppress Radius",
+                   ConfigParam::Float, const_cast<float*>(&m_tracker.m_stylusSuppressLocalDistance), 0.5f, 10.0f).Module("Stylus Suppress");
+    s.emplace_back("StylusSuppressPenPeakThreshold", "Pen Peak Threshold",
+                   ConfigParam::Int, const_cast<int*>(&m_tracker.m_stylusSuppressPenPeakThreshold), 0, 10000).Module("Stylus Suppress");
+    s.emplace_back("StylusSuppressTouchSignalKeep", "Touch Signal Keep",
+                   ConfigParam::Int, const_cast<int*>(&m_tracker.m_stylusSuppressTouchSignalKeep), 0, 30000).Module("Stylus Suppress");
+    s.emplace_back("StylusSuppressTouchAreaKeep", "Touch Area Keep",
+                   ConfigParam::Int, const_cast<int*>(&m_tracker.m_stylusSuppressTouchAreaKeep), 0, 100).Module("Stylus Suppress");
     s.emplace_back("StylusAftEnabled", "Enable AFT (Anti-Falsing)",
-                   ConfigParam::Bool, const_cast<bool*>(&m_tracker.m_stylusAftEnabled));
+                   ConfigParam::Bool, const_cast<bool*>(&m_tracker.m_stylusAftEnabled)).Module("Stylus Suppress");
+    s.emplace_back("StylusAftRecentFrames", "AFT Recent Frames",
+                   ConfigParam::Int, const_cast<int*>(&m_tracker.m_stylusAftRecentFrames), 0, 200).Module("Stylus Suppress");
     s.emplace_back("StylusAftRadius", "AFT Radius",
-                   ConfigParam::Float, const_cast<float*>(&m_tracker.m_stylusAftRadius), 0.5f, 10.0f);
+                   ConfigParam::Float, const_cast<float*>(&m_tracker.m_stylusAftRadius), 0.5f, 10.0f).Module("Stylus Suppress");
+    s.emplace_back("StylusAftDebounceFrames", "AFT Debounce Frames",
+                   ConfigParam::Int, const_cast<int*>(&m_tracker.m_stylusAftDebounceFrames), 0, 30).Module("Stylus Suppress");
     s.emplace_back("StylusAftSuppressFrames", "AFT Suppress Frames",
-                   ConfigParam::Int, const_cast<int*>(&m_tracker.m_stylusAftSuppressFrames), 0, 200);
+                   ConfigParam::Int, const_cast<int*>(&m_tracker.m_stylusAftSuppressFrames), 0, 200).Module("Stylus Suppress");
+    s.emplace_back("StylusAftPalmSuppressFrames", "AFT Palm Suppress Frames",
+                   ConfigParam::Int, const_cast<int*>(&m_tracker.m_stylusAftPalmSuppressFrames), 0, 300).Module("Stylus Suppress");
 
-    // Phase 5: CoordinateFilter
+    // ── Coordinate Filter ──
     s.emplace_back("CoordFilterEnabled", "Coord Filter Enabled",
-                   ConfigParam::Bool, const_cast<bool*>(&m_coordFilter.m_enabled));
-    s.emplace_back("OneEuroMinCutoff", "1 Euro Min Cutoff",
-                   ConfigParam::Float, const_cast<float*>(&m_coordFilter.m_minCutoff), 0.1f, 20.0f);
-    s.emplace_back("OneEuroBeta", "1 Euro Beta",
-                   ConfigParam::Float, const_cast<float*>(&m_coordFilter.m_beta), 0.0f, 0.5f);
-    s.emplace_back("OneEuroDCutoff", "1 Euro Deriv Cutoff",
-                   ConfigParam::Float, const_cast<float*>(&m_coordFilter.m_dCutoff), 0.1f, 10.0f);
+                   ConfigParam::Bool, const_cast<bool*>(&m_coordFilter.m_enabled)).Module("Coordinate Filter");
+    s.emplace_back("OneEuroMinCutoff", "1€ Min Cutoff",
+                   ConfigParam::Float, const_cast<float*>(&m_coordFilter.m_minCutoff), 0.1f, 20.0f).Module("Coordinate Filter");
+    s.emplace_back("OneEuroBeta", "1€ Beta",
+                   ConfigParam::Float, const_cast<float*>(&m_coordFilter.m_beta), 0.0f, 0.5f).Module("Coordinate Filter");
+    s.emplace_back("OneEuroDCutoff", "1€ Deriv Cutoff",
+                   ConfigParam::Float, const_cast<float*>(&m_coordFilter.m_dCutoff), 0.1f, 10.0f).Module("Coordinate Filter");
 
-    // Phase 6: GestureStateMachine
+    // ── Gesture ──
     s.emplace_back("GestureEnabled", "Gesture SM Enabled",
-                   ConfigParam::Bool, const_cast<bool*>(&m_gesture.m_enabled));
+                   ConfigParam::Bool, const_cast<bool*>(&m_gesture.m_enabled)).Module("Gesture");
     s.emplace_back("PressCandidateFrames", "Press Candidate Frames",
-                   ConfigParam::Int, const_cast<int*>(&m_gesture.m_pressCandidateFrames), 1, 10);
+                   ConfigParam::Int, const_cast<int*>(&m_gesture.m_pressCandidateFrames), 1, 10).Module("Gesture");
     s.emplace_back("DragThreshold", "Drag Threshold",
-                   ConfigParam::Float, const_cast<float*>(&m_gesture.m_dragThreshold), 0.1f, 5.0f);
+                   ConfigParam::Float, const_cast<float*>(&m_gesture.m_dragThreshold), 0.1f, 5.0f).Module("Gesture");
     s.emplace_back("LongPressFrames", "LongPress Frames",
-                   ConfigParam::Int, const_cast<int*>(&m_gesture.m_longPressFrames), 10, 120);
+                   ConfigParam::Int, const_cast<int*>(&m_gesture.m_longPressFrames), 10, 120).Module("Gesture");
     s.emplace_back("ReleasePendingFrames", "Release Pending Frames",
-                   ConfigParam::Int, const_cast<int*>(&m_gesture.m_releasePendingFrames), 0, 10);
+                   ConfigParam::Int, const_cast<int*>(&m_gesture.m_releasePendingFrames), 0, 10).Module("Gesture");
     s.emplace_back("BypassStateMachine", "Bypass State Machine",
-                   ConfigParam::Bool, const_cast<bool*>(&m_gesture.m_bypassStateMachine));
+                   ConfigParam::Bool, const_cast<bool*>(&m_gesture.m_bypassStateMachine)).Module("Gesture");
 
     return s;
 }

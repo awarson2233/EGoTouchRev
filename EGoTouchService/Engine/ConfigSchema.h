@@ -17,12 +17,15 @@ struct ConfigParam {
     float minVal = 0.0f;
     float maxVal = 0.0f;
     Category category = General;
+    std::string moduleTag;   // UI sub-tab filter (e.g. "Signal Conditioning")
 
     ConfigParam(const std::string& k, const std::string& name, Type t, void* ptr, Category cat = General)
         : key(k), displayName(name), type(t), valuePtr(ptr), category(cat) {}
 
     ConfigParam(const std::string& k, const std::string& name, Type t, void* ptr, float min, float max, Category cat = General)
         : key(k), displayName(name), type(t), valuePtr(ptr), minVal(min), maxVal(max), category(cat) {}
+
+    ConfigParam& Module(const std::string& tag) { moduleTag = tag; return *this; }
 };
 
 // 配置提供者接口（替代 DrawConfigUI）

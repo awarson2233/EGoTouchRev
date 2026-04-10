@@ -86,9 +86,7 @@ target_link_libraries(Device PUBLIC Common Host Engine setupapi hid)
 set(ENGINE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/EGoTouchService/Engine")
 
 add_library(Engine STATIC
-    # Root (Infrastructure — retained for backward compat)
-    EGoTouchService/Engine/FramePipeline.cpp
-    # TouchSolver (new linear orchestrator — replaces old Preprocessing/TouchSolver/Reporting .cpp files)
+    # TouchSolver (linear orchestrator — all algorithm modules are header-only .hpp)
     EGoTouchService/Engine/TouchSolver/TouchPipeline.cpp
     # StylusSolver (official ASA pipeline — modules are header-only .hpp)
     EGoTouchService/Engine/StylusSolver/StylusPipeline.cpp
@@ -101,9 +99,7 @@ target_compile_definitions(Engine PUBLIC
 
 target_include_directories(Engine PUBLIC
     "${ENGINE_ROOT}"
-    "${ENGINE_ROOT}/Preprocessing"
     "${ENGINE_ROOT}/TouchSolver"
-    "${ENGINE_ROOT}/Reporting"
     "${ENGINE_ROOT}/StylusSolver"
 )
 target_link_libraries(Engine PUBLIC Common)

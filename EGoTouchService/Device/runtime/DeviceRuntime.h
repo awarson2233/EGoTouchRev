@@ -18,7 +18,6 @@
 #include "Device.h"
 #include "himax/HimaxChip.h"
 #include "SystemStateEvent.h"
-#include "FramePipeline.h"
 #include "TouchSolver/TouchPipeline.h"
 #include "vhf/VhfReporter.h"
 #include "StylusSolver/StylusPipeline.h"

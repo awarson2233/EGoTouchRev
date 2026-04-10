@@ -185,33 +185,45 @@ void DiagnosticsWorkbench::DrawInspectorPanel() {
     bool masterParserOnly = (m_proxy != nullptr) && m_proxy->IsMasterParserOnlyMode();
     // Level 1: category tabs
     if (ImGui::BeginTabBar("CategoryTabs")) {
-        if (ImGui::BeginTabItem("Preprocessing")) {
+        if (ImGui::BeginTabItem("Touch")) {
             if (m_proxy) {
                 if (masterParserOnly) ImGui::BeginDisabled();
                 auto schema = m_proxy->GetPipeline().GetConfigSchema();
-                ConfigUIRenderer::RenderConfigSchema(schema, "Preprocessing");
+
+                // Level 2: per-module sub-tabs
+                if (ImGui::BeginTabBar("TouchModuleTabs")) {
+                    static const char* moduleTabs[] = {
+                        "Frame Parser",
+                        "Signal Conditioning",
+                        "Peak Detection",
+                        "Zone & Contact",
+                        "Palm Rejection",
+                        "Tracking",
+                        "Stylus Suppress",
+                        "Coordinate Filter",
+                        "Gesture",
+                    };
+                    for (const char* mod : moduleTabs) {
+                        if (ImGui::BeginTabItem(mod)) {
+                            ConfigUIRenderer::RenderConfigSchemaByModule(schema, mod);
+                            // Show save button per tab
+                            ImGui::Separator();
+                            if (ImGui::Button("Save & Apply")) {
+                                m_proxy->SaveConfig();
+                            }
+                            ImGui::EndTabItem();
+                        }
+                    }
+                    // Coordinates table (diagnostic, not config)
+                    if (ImGui::BeginTabItem("Coordinates")) {
+                        DrawCoordinateTable();
+                        ImGui::EndTabItem();
+                    }
+                    ImGui::EndTabBar();
+                }
                 if (masterParserOnly) ImGui::EndDisabled();
             } else {
                 ImGui::TextUnformatted("ServiceProxy unavailable.");
-            }
-            ImGui::EndTabItem();
-        }
-        if (ImGui::BeginTabItem("Touch")) {
-            // Level 2: sub-module tabs for touch
-            if (ImGui::BeginTabBar("TouchSubTabs")) {
-                if (ImGui::BeginTabItem("Solver (Feature Extraction)")) {
-                    DrawTouchSolverPanel();
-                    ImGui::EndTabItem();
-                }
-                if (ImGui::BeginTabItem("Tracking & Report")) {
-                    DrawTouchTrackingPanel();
-                    ImGui::EndTabItem();
-                }
-                if (ImGui::BeginTabItem("Coordinates")) {
-                    DrawCoordinateTable();
-                    ImGui::EndTabItem();
-                }
-                ImGui::EndTabBar();
             }
             ImGui::EndTabItem();
         }

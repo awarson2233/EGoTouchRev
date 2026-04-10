@@ -13,6 +13,11 @@ public:
         const std::vector<Engine::ConfigParam>& schema,
         const std::string& sectionName,
         std::optional<Engine::ConfigParam::Category> filterCategory = std::nullopt);
+
+    /// Render only params whose moduleTag matches the given tag.
+    static void RenderConfigSchemaByModule(
+        const std::vector<Engine::ConfigParam>& schema,
+        const std::string& moduleTag);
 };
 
 } // namespace App

@@ -2,7 +2,6 @@
 #include "GuiLogSink.h"
 #include "Logger.h"
 #include "IpcProtocol.h"
-#include "IFrameProcessor.h"
 #include <fstream>
 #include <string>
 #include <algorithm>
