@@ -1,139 +1,286 @@
 #pragma once
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 
 namespace Asa {
 
-/// PenStateMachine — Pen lifecycle tracker + TSACore 3-bit ASA status word.
+/// MotionProfile — per-frame parameter set output by PenStateMachine.
+/// Drives IIR strength, jitter, LinearFilter enable, etc.
+struct MotionProfile {
+    // IIR control
+    int   iirCoef       = 8;      // Numerator of IIR weight (coef/divisorN)
+    int   iirDivisorN   = 16;     // IIR denominator
+    bool  skipIIR       = false;  // true → bypass IIR this frame (direct pass)
+    bool  freezeOutput  = false;  // true → output last known-good coordinate
+
+    // Jitter control (0=off, 1=weak, 2=medium, 3=strong)
+    int   jitterStrength = 2;
+
+    // Module enables
+    bool  enableLinearFilter = false;
+    bool  enableCoorReviser  = true;
+
+    // Pressure control
+    float pressureAlpha  = 0.25f;  // Pressure IIR weight (0=frozen, 1=direct)
+    bool  pressureDecay  = false;  // true → tail decay mode
+
+    // Flags (informational, for app layer)
+    bool  isLongPress    = false;
+    bool  isTap          = false;
+};
+
+/// PenStateMachine v2 — 4-state pen lifecycle with speed-continuous MotionProfile.
 ///
-/// Combines two closely related state machines:
-///   1. PenLifecycle: Leave → Hover → Contact → Lifting → Leave
-///   2. ASA Status:   3-bit word {InRange, Ink, NoPressInk} with frame counters
+/// States: Leave → Hover → Moving → Lifting → Leave
 ///
-/// The ASA status controls IIR skip logic and Still/Moving coefficient selection.
+/// The state machine runs AFTER coordinate solve + pressure, BEFORE all post-processing.
+/// It outputs a MotionProfile that drives the entire post-processing chain.
 class PenStateMachine {
 public:
-    enum class Lifecycle : uint8_t {
-        Leave = 0,    // Pen out of detection range
-        Hover,        // Position valid, no pressure
-        Contact,      // Position valid + pressure active
-        Lifting,      // Transition: pressure just released (debounce hold)
+    enum class State : uint8_t {
+        Leave   = 0,
+        Hover   = 1,
+        Moving  = 2,
+        Lifting = 3,
     };
 
-    // Status bit constants (mirrors TSACore DAT_18231950)
-    static constexpr uint8_t kStatInRange    = 0x01;  // bit0: pen detected (hover)
-    static constexpr uint8_t kStatInk        = 0x02;  // bit1: pressure active (writing)
-    static constexpr uint8_t kStatNoPressInk = 0x04;  // bit2: coord valid, no pressure
+    /// Update state machine for current frame.
+    /// Call AFTER coordinate solve and pressure solve.
+    /// @param coordValid   Whether coordinate solve succeeded
+    /// @param pressure     Current frame pressure (0 = no pressure)
+    /// @param curDim1      Current GLOBAL coordinate dim1
+    /// @param curDim2      Current GLOBAL coordinate dim2
+    /// @return MotionProfile for this frame's post-processing
+    inline MotionProfile Update(bool coordValid, uint16_t pressure,
+                                 int32_t curDim1, int32_t curDim2) {
+        // Compute instant speed from previous frame
+        if (coordValid && m_hasPrevCoor) {
+            float dx = static_cast<float>(curDim1 - m_prevDim1);
+            float dy = static_cast<float>(curDim2 - m_prevDim2);
+            m_instantSpeed = std::sqrt(dx * dx + dy * dy);
+        } else {
+            m_instantSpeed = 0.0f;
+        }
 
-    /// Update both state machines for the current frame.
-    /// @param coordValid  Whether coordinate solve succeeded
-    /// @param hasInk      Whether pressure > 0
-    /// @param[out] animState  Output lifecycle byte for diagnostics
-    inline void Update(bool coordValid, bool hasInk, uint8_t& animState) {
-        UpdateLifecycle(coordValid, hasInk);
-        UpdateAsaStatus(coordValid, hasInk);
-        animState = static_cast<uint8_t>(m_lifecycle);
+        // Save for next frame
+        if (coordValid) {
+            m_prevDim1 = curDim1;
+            m_prevDim2 = curDim2;
+            m_hasPrevCoor = true;
+        }
+
+        // State transitions
+        State prevState = m_state;
+        m_stateFrameCount++;
+        m_totalContactFrames = (pressure > 0) ?
+            m_totalContactFrames + 1 : m_totalContactFrames;
+
+        switch (m_state) {
+        case State::Leave:
+            if (coordValid) {
+                m_state = (pressure > 0) ? State::Moving : State::Hover;
+                m_stateFrameCount = 0;
+                m_totalContactFrames = 0;
+                m_lowSpeedFrames = 0;
+            }
+            break;
+
+        case State::Hover:
+            if (!coordValid) {
+                EnterLeave();
+            } else if (pressure > 0) {
+                m_state = State::Moving;
+                m_stateFrameCount = 0;
+                m_totalContactFrames = 1;
+                m_lowSpeedFrames = 0;
+            }
+            break;
+
+        case State::Moving:
+            if (!coordValid) {
+                EnterLeave();
+            } else if (pressure == 0) {
+                m_state = State::Lifting;
+                m_stateFrameCount = 0;
+            }
+            break;
+
+        case State::Lifting:
+            if (!coordValid || m_stateFrameCount > liftTimeout) {
+                // Check for tap before leaving
+                m_wasTap = (m_totalContactFrames <= tapMaxFrames);
+                EnterLeave();
+            } else if (pressure > 0) {
+                m_state = State::Moving;
+                m_stateFrameCount = 0;
+            }
+            break;
+        }
+
+        // Track low-speed frames for long-press detection (only in Moving)
+        if (m_state == State::Moving) {
+            if (m_instantSpeed < stillSpeedThreshold) {
+                m_lowSpeedFrames++;
+            } else {
+                m_lowSpeedFrames = 0;
+            }
+        }
+
+        // Check if we just left range (for external reset triggers)
+        m_justLeftRange = (prevState != State::Leave && m_state == State::Leave);
+
+        // Build profile
+        return BuildProfile();
     }
 
-    /// Check if pen just left range (for triggering resets in pipeline)
-    inline bool JustLeftRange() const {
-        return !(m_asaStatus & kStatInRange) && (m_prevAsaStatus & kStatInRange);
-    }
+    // ── Accessors ──
 
-    /// Check if IIR should be skipped this frame (first 2 frames of mode transition)
-    inline bool ShouldSkipIIR() const {
-        return ((m_prevAsaStatus & kStatInRange) == 0 || m_inRangeFrames < 2)
-            && m_inkFrames < 2
-            && m_noPressInkFrames < 2;
-    }
+    State GetState() const { return m_state; }
+    float GetInstantSpeed() const { return m_instantSpeed; }
+    int   GetStateFrameCount() const { return m_stateFrameCount; }
+    int   GetTotalContactFrames() const { return m_totalContactFrames; }
+    int   GetLowSpeedFrames() const { return m_lowSpeedFrames; }
+    bool  JustLeftRange() const { return m_justLeftRange; }
+    bool  WasTap() const { return m_wasTap; }
 
-    /// Check if currently inking (for IIR coefficient selection)
-    inline bool IsInking() const {
-        return (m_asaStatus & (kStatInk | kStatNoPressInk)) != 0;
+    /// Reset everything (call on catastrophic error)
+    inline void Reset() {
+        m_state = State::Leave;
+        m_stateFrameCount = 0;
+        m_totalContactFrames = 0;
+        m_lowSpeedFrames = 0;
+        m_instantSpeed = 0.0f;
+        m_hasPrevCoor = false;
+        m_justLeftRange = false;
+        m_wasTap = false;
     }
-
-    // Diagnostic accessors
-    Lifecycle GetLifecycle() const { return m_lifecycle; }
-    uint8_t   GetAsaStatus() const { return m_asaStatus; }
-    uint8_t   GetPrevAsaStatus() const { return m_prevAsaStatus; }
-    int       GetInRangeFrames() const { return m_inRangeFrames; }
-    int       GetInkFrames() const { return m_inkFrames; }
-    int       GetNoPressInkFrames() const { return m_noPressInkFrames; }
 
     // ── Configuration ──
-    int liftingTimeout = 10;
+
+    // Speed thresholds (GLOBAL space, 0x400 units/frame)
+    float stillSpeedThreshold = 3.0f;     // Long-press detection
+    float speedLow            = 5.0f;     // IIR interpolation low reference
+    float speedHigh           = 300.0f;   // IIR interpolation high reference
+
+    // Frame counts
+    int   longPressFrames     = 120;      // @240Hz ≈ 0.5s
+    int   liftTimeout         = 10;
+    int   tapMaxFrames        = 5;
+
+    // Moving IIR range (divisor = iirDivisorN)
+    int   movingIirLow        = 3;        // Very slow → strong smoothing
+    int   movingIirHigh       = 14;       // Fast → near pass-through
+    int   iirDivisorN         = 16;
+
+    // Hover IIR
+    int   hoverIirCoef        = 4;
+
+    // Jitter maximum strength at low speed
+    int   jitterMax           = 3;
 
 private:
-    Lifecycle m_lifecycle = Lifecycle::Leave;
-    int m_liftingFrameCount = 0;
+    State m_state = State::Leave;
+    int   m_stateFrameCount = 0;
+    int   m_totalContactFrames = 0;
+    int   m_lowSpeedFrames = 0;
+    float m_instantSpeed = 0.0f;
 
-    uint8_t m_asaStatus = 0;
-    uint8_t m_prevAsaStatus = 0;
-    int     m_inRangeFrames = 0;
-    int     m_inkFrames = 0;
-    int     m_noPressInkFrames = 0;
+    // Previous frame coordinates for speed calculation
+    int32_t m_prevDim1 = 0;
+    int32_t m_prevDim2 = 0;
+    bool    m_hasPrevCoor = false;
 
-    inline void UpdateLifecycle(bool penValid, bool penDown) {
-        switch (m_lifecycle) {
-        case Lifecycle::Leave:
-            if (penValid) m_lifecycle = Lifecycle::Hover;
-            break;
-        case Lifecycle::Hover:
-            if (!penValid) {
-                m_lifecycle = Lifecycle::Leave;
-            } else if (penDown) {
-                m_lifecycle = Lifecycle::Contact;
-                m_liftingFrameCount = 0;
-            }
-            break;
-        case Lifecycle::Contact:
-            if (!penDown) {
-                m_lifecycle = Lifecycle::Lifting;
-                m_liftingFrameCount = 0;
-            }
-            break;
-        case Lifecycle::Lifting:
-            m_liftingFrameCount++;
-            if (penDown) {
-                m_lifecycle = Lifecycle::Contact;
-                m_liftingFrameCount = 0;
-            } else if (!penValid || m_liftingFrameCount > liftingTimeout) {
-                m_lifecycle = Lifecycle::Leave;
-            }
-            break;
-        }
+    bool  m_justLeftRange = false;
+    bool  m_wasTap = false;
+
+    inline void EnterLeave() {
+        m_state = State::Leave;
+        m_stateFrameCount = 0;
+        m_hasPrevCoor = false;
+        m_instantSpeed = 0.0f;
+        m_lowSpeedFrames = 0;
     }
 
-    inline void UpdateAsaStatus(bool coordValid, bool hasInk) {
-        m_prevAsaStatus = m_asaStatus;
-        m_asaStatus = 0;
-        if (coordValid) m_asaStatus |= kStatInRange;
-        if (hasInk)     m_asaStatus |= kStatInk;
-        if (coordValid) m_asaStatus |= kStatNoPressInk;
+    inline MotionProfile BuildProfile() const {
+        MotionProfile p;
+        p.iirDivisorN = iirDivisorN;
 
-        // NoPressInk mode
-        if (m_asaStatus & kStatNoPressInk) {
-            m_noPressInkFrames++;
-            m_inRangeFrames = 0;
-        } else {
-            m_noPressInkFrames = 0;
+        switch (m_state) {
+        case State::Leave:
+            // Everything off / reset
+            p.iirCoef = movingIirLow;
+            p.skipIIR = true;
+            p.jitterStrength = 0;
+            p.enableLinearFilter = false;
+            p.enableCoorReviser = false;
+            p.pressureAlpha = 1.0f;
+            p.pressureDecay = false;
+            break;
+
+        case State::Hover:
+            // Strong smoothing for cursor indicator
+            p.iirCoef = hoverIirCoef;
+            p.skipIIR = false;
+            p.jitterStrength = jitterMax;
+            p.enableLinearFilter = false;
+            p.enableCoorReviser = true;
+            p.pressureAlpha = 1.0f;
+            p.pressureDecay = false;
+            break;
+
+        case State::Moving:
+            CalcMovingProfile(p);
+            break;
+
+        case State::Lifting:
+            // Freeze output, pressure tail decay
+            p.iirCoef = movingIirLow;
+            p.skipIIR = false;
+            p.freezeOutput = true;
+            p.jitterStrength = 0;
+            p.enableLinearFilter = false;
+            p.enableCoorReviser = false;
+            p.pressureAlpha = 0.0f;
+            p.pressureDecay = true;
+            p.isTap = (m_totalContactFrames <= tapMaxFrames);
+            break;
         }
 
-        // Ink mode
-        if (m_asaStatus & kStatInk) {
-            m_inkFrames++;
-            m_inRangeFrames = 0;
-        } else {
-            m_inkFrames = 0;
-        }
+        return p;
+    }
 
-        // InRange mode
-        if (m_asaStatus & kStatInRange) {
-            m_inRangeFrames++;
-        }
+    inline void CalcMovingProfile(MotionProfile& p) const {
+        // Continuous speed interpolation
+        const float range = speedHigh - speedLow;
+        const float t = (range > 0.0f)
+            ? std::clamp((m_instantSpeed - speedLow) / range, 0.0f, 1.0f)
+            : 0.0f;
 
-        // Exit range → full reset (TSACore: ExitInRangeMode → CoorInit)
-        // Note: actual reset is triggered by caller via JustLeftRange()
+        // IIR: lerp [movingIirLow .. movingIirHigh]
+        p.iirCoef = static_cast<int>(
+            static_cast<float>(movingIirLow) +
+            t * static_cast<float>(movingIirHigh - movingIirLow) + 0.5f);
+        p.skipIIR = false;
+        p.freezeOutput = false;
+
+        // Jitter: lerp [jitterMax .. 0]
+        p.jitterStrength = static_cast<int>(
+            static_cast<float>(jitterMax) * (1.0f - t) + 0.5f);
+
+        // LinearFilter always active in Moving
+        p.enableLinearFilter = true;
+
+        // CoorReviser always on
+        p.enableCoorReviser = true;
+
+        // Pressure IIR: faster response at high speed
+        p.pressureAlpha = 0.25f + 0.25f * t;  // [0.25 .. 0.5]
+        p.pressureDecay = false;
+
+        // Long-press detection
+        p.isLongPress = (m_lowSpeedFrames > longPressFrames);
+        p.isTap = false;
     }
 };
 

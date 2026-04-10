@@ -29,11 +29,14 @@
 
 namespace Engine {
 
-/// StylusPipeline — Independent stylus processing entry point.
-/// Replaces the old StylusProcessor (IFrameProcessor).
-/// Complete pipeline: rawData → Parse → 9×9 Grid → Peak → Coord →
-///     PostProcess → Tilt/Pressure → Recheck → Animation →
-///     Calibration → StylusPacket.
+/// StylusPipeline — Linear orchestrator for stylus processing.
+///
+/// v2 architecture:
+///   Phase 1: Input parsing
+///   Phase 2: TX1/TX2 coordinate solve → GLOBAL
+///   Phase 2.5: Pressure + State Machine → MotionProfile
+///   Phase 3: Post-processing (LinearFilter → CoorReviser → IIR → Jitter)
+///   Phase 4: Edge compensation + output
 class StylusPipeline {
 public:
     bool Process(std::span<const uint8_t> rawData,
@@ -101,7 +104,6 @@ private:
     Asa::CommonModeFilter    m_cmfFilter;
     Asa::PenStateMachine     m_penStateMachine;
     Asa::NoiseGate           m_noiseGate;
-    Asa::CalibrationAvg      m_calibration;
     Asa::EdgeCoorPost        m_edgeCoorPost;
     Asa::SignalRatioTracker  m_signalRatioTracker;
     PacketBuilder            m_packetBuilder;
