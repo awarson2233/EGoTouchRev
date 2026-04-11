@@ -12,26 +12,45 @@ struct PitchCompensation {
     bool   enabled = false;
 };
 
+/// TriangleEdgeParams — Factory-style edge compensation parameters for one axis.
+///
+/// ratio:                virtual outer-neighbor synthesis ratio
+/// sumThresholdIdxLast:  threshold used when the peak is on the local valid end
+/// sumThresholdIdx0:     threshold used when the peak is on the local valid begin
+struct TriangleEdgeParams {
+    int ratio = 50;
+    int sumThresholdIdxLast = 5000;
+    int sumThresholdIdx0 = 5000;
+};
+
 /// CoordinateSolver — Triangle/Gravity interpolation on 1D projections
 /// Mirrors TX1CoordinateProcess + GetCoordinateByTriangleOf
 class CoordinateSolver {
 public:
     /// Solve coordinates from 1D projection signals
     /// @param proj  1D projections from GridPeakDetector::ProjectTo1D
-    /// @param gridDimRow  Number of grid rows for clamping (default 9)
-    /// @param gridDimCol  Number of grid cols for clamping (default 9)
+    /// @param anchorRow  Window center anchor on the physical row axis
+    /// @param anchorCol  Window center anchor on the physical col axis
+    /// @param sensorRows Total physical sensor rows
+    /// @param sensorCols Total physical sensor cols
+    /// @param centerIndex Local window center index (defaults to 4 for 9x9)
     /// @return Coordinate in 0x400 units
     inline AsaCoorResult Solve(const AsaProjection& proj,
-                               int gridDimRow = kGridDim,
-                               int gridDimCol = kGridDim) {
+                               int anchorRow,
+                               int anchorCol,
+                               int sensorRows,
+                               int sensorCols,
+                               int centerIndex = kGridDim / 2) {
         AsaCoorResult result{};
 
         int32_t coorDim1, coorDim2;
         if (useTriangle) {
             coorDim1 = SolveByTriangle(
-                proj.dim1, proj.peakIdxDim1, kGridDim, triParamDim1);
+                proj.dim1, proj.peakIdxDim1, kGridDim,
+                triEdgeDim1, anchorCol, sensorCols, centerIndex);
             coorDim2 = SolveByTriangle(
-                proj.dim2, proj.peakIdxDim2, kGridDim, triParamDim2);
+                proj.dim2, proj.peakIdxDim2, kGridDim,
+                triEdgeDim2, anchorRow, sensorRows, centerIndex);
         } else {
             coorDim1 = SolveByGravity(proj.dim1, kGridDim, proj.peakIdxDim1);
             coorDim2 = SolveByGravity(proj.dim2, kGridDim, proj.peakIdxDim2);
@@ -45,9 +64,9 @@ public:
         coorDim1 = ApplyPitchCompensation(coorDim1, pitchCompDim1);
         coorDim2 = ApplyPitchCompensation(coorDim2, pitchCompDim2);
 
-        // Clamp to valid range [0, dim*kCoorUnit - 1]
-        const int32_t maxDim1 = gridDimCol * kCoorUnit - 1;
-        const int32_t maxDim2 = gridDimRow * kCoorUnit - 1;
+        // Clamp to the local 9x9 window range [0, 9*0x400 - 1]
+        const int32_t maxDim1 = kGridDim * kCoorUnit - 1;
+        const int32_t maxDim2 = kGridDim * kCoorUnit - 1;
         result.dim1 = std::clamp(coorDim1, 0, maxDim1);
         result.dim2 = std::clamp(coorDim2, 0, maxDim2);
         result.valid = true;
@@ -61,13 +80,11 @@ public:
 
     // DAT_1820d630 bit3: edge compensation secondary logic enable
     // Gaokun flash: 0x0E & 8 = 8 → enabled
-    bool edgeCompBit3 = true;
+    bool triEdgeSecondaryBlend = true;
 
-    // Triangle interpolation edge parameters (from g_asaPrmt flash)
-    // Gaokun: Dim1=[50, 5000, 5000], Dim2=[50, 4500, 3700]
-    // [0]=param1 (edge ratio factor), [1]=sumThreshold_L, [2]=sumThreshold_R
-    uint16_t triParamDim1[3] = {50, 5000, 5000};
-    uint16_t triParamDim2[3] = {50, 4500, 3700};
+    // Triangle interpolation edge parameters (factory defaults from TSACore flash)
+    TriangleEdgeParams triEdgeDim1 = {50, 5000, 5000};
+    TriangleEdgeParams triEdgeDim2 = {50, 4500, 3700};
 
     // ── P0: Pitch-periodic polynomial compensation ──
     // Mirrors CoorMultiOrderFitCompensate from TSACore.
@@ -92,6 +109,12 @@ public:
     bool gravityFictitiousEdge = true;
 
 private:
+    struct ValidRange {
+        int begin = 0;
+        int end = -1;
+        int count = 0;
+    };
+
     /// Triangle interpolation using 3 points (mid-grid)
     /// Params are int to match TSACore calling convention
     static inline int32_t TriangleAlgUsing3Point(int left, int center, int right) {
@@ -117,19 +140,19 @@ private:
     /// Edge compensation: creates virtual neighbor for edge interpolation
     /// Mirrors TSACore EdgeCompensating exactly
     inline int32_t EdgeCompensating(int peak, int n1, int n2,
-                                    uint16_t param1, uint16_t param5) {
-        int edgeParam = (param1 == 0) ? 1 : static_cast<int>(param1);
+                                    int param1, int param5) {
+        int edgeParam = (param1 == 0) ? 1 : param1;
 
         int virtualNeighbor = ((peak - n1) * 10) / edgeParam;
         int comp2 = peak - ((n1 - n2) * edgeParam) / 10;
 
         if (virtualNeighbor < comp2) {
             virtualNeighbor = comp2;
-            if (edgeCompBit3) {  // DAT_1820d630 & 8 secondary logic
+            if (triEdgeSecondaryBlend) {  // DAT_1820d630 & 8 secondary logic
                 int threshold = comp2;
                 int sum = peak + n1 + comp2;
-                if (sum < static_cast<int>(param5)) {
-                    threshold = static_cast<int>(param5) - peak - n1;
+                if (sum < param5) {
+                    threshold = param5 - peak - n1;
                 }
                 if (comp2 < threshold) {
                     virtualNeighbor = (comp2 + threshold) / 2;
@@ -146,21 +169,37 @@ private:
 
     /// Triangle interpolation at grid edge
     inline int32_t TriangleAlgEdge(int peak, int n1, int n2,
-                                   uint16_t param1, uint16_t param2) {
+                                   int param1, int param2) {
         int virtualNeighbor = EdgeCompensating(peak, n1, n2, param1, param2);
         int result = TriangleAlgUsing3Point(virtualNeighbor, peak, n1);
 
         // Sum threshold check using integer division simulating magic multiply
-        if (peak + n1 + n2 < (static_cast<int>(param2) * 2) / 5) {
+        if (peak + n1 + n2 < (param2 * 2) / 5) {
             result = 0;
         }
         return result;
     }
 
+    static inline ValidRange ComputeValidRange(
+            int anchor, int sensorDim, int len, int centerIndex) {
+        ValidRange range{};
+        if (len <= 0 || sensorDim <= 0) {
+            return range;
+        }
+
+        range.begin = std::max(0, centerIndex - anchor);
+        range.end = std::min(len - 1, centerIndex + (sensorDim - 1 - anchor));
+        if (range.end >= range.begin) {
+            range.count = range.end - range.begin + 1;
+        }
+        return range;
+    }
+
     /// Solve one dimension using triangle interpolation
     inline int32_t SolveByTriangle(
             const int32_t* signal, int peakIdx, int len,
-            const uint16_t* edgeParam) {
+            const TriangleEdgeParams& edgeParam,
+            int anchor, int sensorDim, int centerIndex) {
         if (peakIdx < 0 || peakIdx >= len) return 0x7FFFFFFF;
 
         // TSACore uses MOVZX word ptr [RAX], meaning signals are treated as uint16
@@ -168,12 +207,40 @@ private:
             return static_cast<int>(std::clamp(signal[i], 0, 65535));
         };
 
+        const ValidRange validRange = ComputeValidRange(anchor, sensorDim, len, centerIndex);
+        // Physical edge repair only applies when the 9x9 window is actually clipped
+        // by the sensor boundary and the peak lands on that clipped-side valid edge.
+        const bool hasInvalidLowSide = validRange.begin > 0;
+        const bool hasInvalidHighSide = validRange.end >= 0 && validRange.end < (len - 1);
+        if (validRange.count >= 3) {
+            if (hasInvalidLowSide && peakIdx == validRange.begin) {
+                const int peak = s(validRange.begin);
+                const int n1 = s(validRange.begin + 1);
+                const int n2 = s(validRange.begin + 2);
+                return validRange.begin * kCoorUnit +
+                       TriangleAlgEdge(peak, n1, n2,
+                                       edgeParam.ratio,
+                                       edgeParam.sumThresholdIdx0);
+            }
+            if (hasInvalidHighSide && peakIdx == validRange.end) {
+                const int peak = s(validRange.end);
+                const int n1 = s(validRange.end - 1);
+                const int n2 = s(validRange.end - 2);
+                const int edge = TriangleAlgEdge(peak, n1, n2,
+                                                 edgeParam.ratio,
+                                                 edgeParam.sumThresholdIdxLast);
+                return (validRange.end + 1) * kCoorUnit - edge;
+            }
+        }
+
         if (peakIdx == 0) {
-            // Left edge: param index 2
-            return TriangleAlgEdge(s(0), s(1), s(2), edgeParam[0], edgeParam[2]);
+            return TriangleAlgEdge(s(0), s(1), s(2),
+                                   edgeParam.ratio,
+                                   edgeParam.sumThresholdIdx0);
         } else if (peakIdx == len - 1) {
-            // Right edge: param index 1, inverted
-            int edge = TriangleAlgEdge(s(len-1), s(len-2), s(len-3), edgeParam[0], edgeParam[1]);
+            int edge = TriangleAlgEdge(s(len - 1), s(len - 2), s(len - 3),
+                                       edgeParam.ratio,
+                                       edgeParam.sumThresholdIdxLast);
             return len * kCoorUnit - edge;
         } else {
             // Middle: standard 3-point

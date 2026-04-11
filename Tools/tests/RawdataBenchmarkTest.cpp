@@ -133,6 +133,57 @@ std::vector<std::string> SplitCsvLine(const std::string& line) {
     return parts;
 }
 
+bool IsLegacyTouchConfigSection(const std::string& section) {
+    return section == "Master Frame Parser" ||
+           section == "Baseline Subtraction" ||
+           section == "CMF Processor" ||
+           section == "Grid IIR Processor" ||
+           section == "Feature Extractor (4.1/4.2)" ||
+           section == "Touch Tracker (IDT)" ||
+           section == "Coordinate Filter (1 Euro)" ||
+           section == "TouchGestureStateMachine";
+}
+
+std::optional<std::string> MapLegacyTouchConfigKey(const std::string& section,
+                                                   const std::string& key) {
+    if (section == "Master Frame Parser") {
+        if (key == "Enabled") return std::string("FrameParserEnabled");
+        return std::nullopt;
+    }
+    if (section == "Baseline Subtraction") {
+        if (key == "Enabled") return std::string("BaselineEnabled");
+        return key;
+    }
+    if (section == "CMF Processor") {
+        if (key == "Enabled") return std::string("CMFEnabled");
+        if (key == "DimensionMode") return std::string("CMFDimensionMode");
+        if (key == "ExclusionThreshold") return std::string("CMFExclusionThreshold");
+        if (key == "MaxCorrection") return std::string("CMFMaxCorrection");
+        return key;
+    }
+    if (section == "Grid IIR Processor") {
+        if (key == "Enabled") return std::string("GridIIREnabled");
+        return key;
+    }
+    if (section == "Feature Extractor (4.1/4.2)") {
+        if (key == "Enabled") return std::nullopt;
+        return key;
+    }
+    if (section == "Touch Tracker (IDT)") {
+        if (key == "Enabled") return std::string("TrackerEnabled");
+        return key;
+    }
+    if (section == "Coordinate Filter (1 Euro)") {
+        if (key == "Enabled") return std::string("CoordFilterEnabled");
+        return key;
+    }
+    if (section == "TouchGestureStateMachine") {
+        if (key == "Enabled") return std::string("GestureEnabled");
+        return key;
+    }
+    return std::nullopt;
+}
+
 bool ParseCsvRow60(const std::string& line, std::array<int16_t, kCols>& rowOut) {
     const auto cells = SplitCsvLine(line);
     if (static_cast<int>(cells.size()) != kCols) {
@@ -288,6 +339,11 @@ void LoadConfigFromFile(Engine::TouchPipeline& touchPipeline,
             touchPipeline.LoadConfig(key, value);
         } else if (section == "StylusPipeline") {
             stylusPipeline.LoadConfig(key, value);
+        } else if (IsLegacyTouchConfigSection(section)) {
+            const auto mappedKey = MapLegacyTouchConfigKey(section, key);
+            if (mappedKey.has_value()) {
+                touchPipeline.LoadConfig(*mappedKey, value);
+            }
         }
     }
 }

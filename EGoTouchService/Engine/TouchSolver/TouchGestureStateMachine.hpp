@@ -98,6 +98,11 @@ public:
             const int idx = c.id - 1;
             if (idx < 0 || idx >= kMaxSlots) continue;
             if (c.state == TouchStateUp) { c.isReported = false; continue; }
+            if ((c.lifeFlags & TouchLifeSilentGap) != 0) {
+                c.isReported = false;
+                c.reportEvent = TouchReportIdle;
+                continue;
+            }
             const auto& slot = m_slots[idx];
             switch (slot.phase) {
             case GesturePhase::Idle:

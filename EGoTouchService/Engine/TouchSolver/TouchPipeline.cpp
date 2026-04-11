@@ -234,6 +234,12 @@ std::vector<ConfigParam> TouchPipeline::GetConfigSchema() const {
                    ConfigParam::Float, const_cast<float*>(&m_tracker.m_maxTrackDistance), 1.0f, 20.0f).Module("Tracking");
     s.emplace_back("AlwaysMatchDistance", "Always Match Dist",
                    ConfigParam::Float, const_cast<float*>(&m_tracker.m_alwaysMatchDistance), 0.5f, 6.0f).Module("Tracking");
+    s.emplace_back("EdgeTrackBoost", "Edge Track Boost",
+                   ConfigParam::Float, const_cast<float*>(&m_tracker.m_edgeTrackBoost), 1.0f, 5.0f).Module("Tracking");
+    s.emplace_back("AccThresholdBoost", "Accel Gate Boost",
+                   ConfigParam::Float, const_cast<float*>(&m_tracker.m_accThresholdBoost), 1.0f, 8.0f).Module("Tracking");
+    s.emplace_back("AccBoostSizeMm", "Accel Boost Size",
+                   ConfigParam::Float, const_cast<float*>(&m_tracker.m_accBoostSizeMm), 0.1f, 5.0f).Module("Tracking");
     s.emplace_back("PredictionScale", "Prediction Scale",
                    ConfigParam::Float, const_cast<float*>(&m_tracker.m_predictionScale), 0.0f, 2.0f).Module("Tracking");
     s.emplace_back("LiftOffHoldEnabled", "LiftOff Hold Enable",
@@ -244,12 +250,44 @@ std::vector<ConfigParam> TouchPipeline::GetConfigSchema() const {
                    ConfigParam::Bool, const_cast<bool*>(&m_tracker.m_liftOffPredictEnabled)).Module("Tracking");
     s.emplace_back("LiftOffVelocityDecay", "LiftOff Vel Decay",
                    ConfigParam::Float, const_cast<float*>(&m_tracker.m_liftOffVelocityDecay), 0.0f, 1.0f).Module("Tracking");
+    s.emplace_back("LiftOffHoldSpeedThreshold", "LiftOff Hold Speed",
+                   ConfigParam::Float, const_cast<float*>(&m_tracker.m_liftOffHoldSpeedThreshold), 0.0f, 5.0f).Module("Tracking");
+    s.emplace_back("GapRelinkEnabled", "Gap Relink Enable",
+                   ConfigParam::Bool, const_cast<bool*>(&m_tracker.m_gapRelinkEnabled)).Module("Tracking");
+    s.emplace_back("GapRelinkWindowFrames", "Gap Relink Window",
+                   ConfigParam::Int, const_cast<int*>(&m_tracker.m_gapRelinkWindowFrames), 0, 5).Module("Tracking");
     s.emplace_back("TouchDownDebounceFrames", "Down Debounce",
                    ConfigParam::Int, const_cast<int*>(&m_tracker.m_touchDownDebounceFrames), 0, 10).Module("Tracking");
+    s.emplace_back("DynamicDebounceEnabled", "Dynamic Debounce",
+                   ConfigParam::Bool, const_cast<bool*>(&m_tracker.m_dynamicDebounceEnabled)).Module("Tracking");
+    s.emplace_back("TouchDownDebounceMaxExtra", "Debounce Extra Cap",
+                   ConfigParam::Int, const_cast<int*>(&m_tracker.m_touchDownDebounceMaxExtra), 0, 10).Module("Tracking");
+    s.emplace_back("TouchDownWeakSignalThreshold", "Weak Signal Threshold",
+                   ConfigParam::Int, const_cast<int*>(&m_tracker.m_touchDownWeakSignalThreshold), 0, 2000).Module("Tracking");
+    s.emplace_back("TouchDownSmallSizeThresholdMm", "Small Size Threshold",
+                   ConfigParam::Float, const_cast<float*>(&m_tracker.m_touchDownSmallSizeThresholdMm), 0.1f, 5.0f).Module("Tracking");
     s.emplace_back("TouchDownRejectEnabled", "Enable Reject",
                    ConfigParam::Bool, const_cast<bool*>(&m_tracker.m_touchDownRejectEnabled)).Module("Tracking");
     s.emplace_back("TouchDownRejectMinSignal", "Reject Signal Th",
                    ConfigParam::Int, const_cast<int*>(&m_tracker.m_touchDownRejectMinSignal), 0, 500).Module("Tracking");
+    s.emplace_back("TouchDownRejectMinSizeMm", "Reject Size Th",
+                   ConfigParam::Float, const_cast<float*>(&m_tracker.m_touchDownRejectMinSizeMm), 0.1f, 5.0f).Module("Tracking");
+    s.emplace_back("TouchDownEdgeRejectMinSignal", "Edge Reject Signal",
+                   ConfigParam::Int, const_cast<int*>(&m_tracker.m_touchDownEdgeRejectMinSignal), 0, 2000).Module("Tracking");
+    s.emplace_back("FallbackSizeMm", "Fallback Size",
+                   ConfigParam::Float, const_cast<float*>(&m_tracker.m_fallbackSizeMm), 0.1f, 10.0f).Module("Tracking");
+    s.emplace_back("SizeAreaScale", "Size Area Scale",
+                   ConfigParam::Float, const_cast<float*>(&m_tracker.m_sizeAreaScale), 0.0f, 5.0f).Module("Tracking");
+    s.emplace_back("SizeSignalScale", "Size Signal Scale",
+                   ConfigParam::Float, const_cast<float*>(&m_tracker.m_sizeSignalScale), 0.0f, 5.0f).Module("Tracking");
+    s.emplace_back("RxGhostFilterEnabled", "RX Ghost Filter",
+                   ConfigParam::Bool, const_cast<bool*>(&m_tracker.m_rxGhostFilterEnabled)).Module("Tracking");
+    s.emplace_back("RxGhostLineDelta", "RX Ghost Delta",
+                   ConfigParam::Int, const_cast<int*>(&m_tracker.m_rxGhostLineDelta), 0, 10).Module("Tracking");
+    s.emplace_back("RxGhostWeakRatio", "RX Ghost Weak Ratio",
+                   ConfigParam::Float, const_cast<float*>(&m_tracker.m_rxGhostWeakRatio), 0.0f, 1.0f).Module("Tracking");
+    s.emplace_back("RxGhostOnlyNew", "RX Ghost Only New",
+                   ConfigParam::Bool, const_cast<bool*>(&m_tracker.m_rxGhostOnlyNew)).Module("Tracking");
 
     // ── Stylus Suppress ──
     s.emplace_back("StylusSuppressGlobalEnabled", "Pen Global Suppress",
@@ -272,10 +310,18 @@ std::vector<ConfigParam> TouchPipeline::GetConfigSchema() const {
                    ConfigParam::Float, const_cast<float*>(&m_tracker.m_stylusAftRadius), 0.5f, 10.0f).Module("Stylus Suppress");
     s.emplace_back("StylusAftDebounceFrames", "AFT Debounce Frames",
                    ConfigParam::Int, const_cast<int*>(&m_tracker.m_stylusAftDebounceFrames), 0, 30).Module("Stylus Suppress");
+    s.emplace_back("StylusAftWeakSignalThreshold", "AFT Weak Signal",
+                   ConfigParam::Int, const_cast<int*>(&m_tracker.m_stylusAftWeakSignalThreshold), 0, 5000).Module("Stylus Suppress");
+    s.emplace_back("StylusAftWeakSizeThresholdMm", "AFT Weak Size",
+                   ConfigParam::Float, const_cast<float*>(&m_tracker.m_stylusAftWeakSizeThresholdMm), 0.1f, 10.0f).Module("Stylus Suppress");
     s.emplace_back("StylusAftSuppressFrames", "AFT Suppress Frames",
                    ConfigParam::Int, const_cast<int*>(&m_tracker.m_stylusAftSuppressFrames), 0, 200).Module("Stylus Suppress");
     s.emplace_back("StylusAftPalmSuppressFrames", "AFT Palm Suppress Frames",
                    ConfigParam::Int, const_cast<int*>(&m_tracker.m_stylusAftPalmSuppressFrames), 0, 300).Module("Stylus Suppress");
+    s.emplace_back("StylusAftPalmAreaThreshold", "AFT Palm Area",
+                   ConfigParam::Int, const_cast<int*>(&m_tracker.m_stylusAftPalmAreaThreshold), 0, 500).Module("Stylus Suppress");
+    s.emplace_back("StylusAftPalmSizeThresholdMm", "AFT Palm Size",
+                   ConfigParam::Float, const_cast<float*>(&m_tracker.m_stylusAftPalmSizeThresholdMm), 0.1f, 20.0f).Module("Stylus Suppress");
 
     // ── Coordinate Filter ──
     s.emplace_back("CoordFilterEnabled", "Coord Filter Enabled",
@@ -371,17 +417,40 @@ void TouchPipeline::SaveConfig(std::ostream& out) const {
     out << "LiftOffPredictEnabled=" << (m_tracker.m_liftOffPredictEnabled?"1":"0") << "\n";
     out << "LiftOffVelocityDecay=" << m_tracker.m_liftOffVelocityDecay << "\n";
     out << "LiftOffHoldSpeedThreshold=" << m_tracker.m_liftOffHoldSpeedThreshold << "\n";
+    out << "GapRelinkEnabled=" << (m_tracker.m_gapRelinkEnabled?"1":"0") << "\n";
+    out << "GapRelinkWindowFrames=" << m_tracker.m_gapRelinkWindowFrames << "\n";
     out << "TouchDownDebounceFrames=" << m_tracker.m_touchDownDebounceFrames << "\n";
     out << "DynamicDebounceEnabled=" << (m_tracker.m_dynamicDebounceEnabled?"1":"0") << "\n";
+    out << "TouchDownDebounceMaxExtra=" << m_tracker.m_touchDownDebounceMaxExtra << "\n";
+    out << "TouchDownWeakSignalThreshold=" << m_tracker.m_touchDownWeakSignalThreshold << "\n";
+    out << "TouchDownSmallSizeThresholdMm=" << m_tracker.m_touchDownSmallSizeThresholdMm << "\n";
     out << "TouchDownRejectEnabled=" << (m_tracker.m_touchDownRejectEnabled?"1":"0") << "\n";
     out << "TouchDownRejectMinSignal=" << m_tracker.m_touchDownRejectMinSignal << "\n";
+    out << "TouchDownRejectMinSizeMm=" << m_tracker.m_touchDownRejectMinSizeMm << "\n";
+    out << "TouchDownEdgeRejectMinSignal=" << m_tracker.m_touchDownEdgeRejectMinSignal << "\n";
+    out << "FallbackSizeMm=" << m_tracker.m_fallbackSizeMm << "\n";
+    out << "SizeAreaScale=" << m_tracker.m_sizeAreaScale << "\n";
+    out << "SizeSignalScale=" << m_tracker.m_sizeSignalScale << "\n";
+    out << "RxGhostFilterEnabled=" << (m_tracker.m_rxGhostFilterEnabled?"1":"0") << "\n";
+    out << "RxGhostLineDelta=" << m_tracker.m_rxGhostLineDelta << "\n";
+    out << "RxGhostWeakRatio=" << m_tracker.m_rxGhostWeakRatio << "\n";
+    out << "RxGhostOnlyNew=" << (m_tracker.m_rxGhostOnlyNew?"1":"0") << "\n";
     out << "StylusSuppressGlobalEnabled=" << (m_tracker.m_stylusSuppressGlobalEnabled?"1":"0") << "\n";
     out << "StylusSuppressLocalEnabled=" << (m_tracker.m_stylusSuppressLocalEnabled?"1":"0") << "\n";
     out << "StylusSuppressLocalDistance=" << m_tracker.m_stylusSuppressLocalDistance << "\n";
+    out << "StylusSuppressPenPeakThreshold=" << m_tracker.m_stylusSuppressPenPeakThreshold << "\n";
+    out << "StylusSuppressTouchSignalKeep=" << m_tracker.m_stylusSuppressTouchSignalKeep << "\n";
+    out << "StylusSuppressTouchAreaKeep=" << m_tracker.m_stylusSuppressTouchAreaKeep << "\n";
     out << "StylusAftEnabled=" << (m_tracker.m_stylusAftEnabled?"1":"0") << "\n";
     out << "StylusAftRecentFrames=" << m_tracker.m_stylusAftRecentFrames << "\n";
     out << "StylusAftRadius=" << m_tracker.m_stylusAftRadius << "\n";
+    out << "StylusAftDebounceFrames=" << m_tracker.m_stylusAftDebounceFrames << "\n";
+    out << "StylusAftWeakSignalThreshold=" << m_tracker.m_stylusAftWeakSignalThreshold << "\n";
+    out << "StylusAftWeakSizeThresholdMm=" << m_tracker.m_stylusAftWeakSizeThresholdMm << "\n";
     out << "StylusAftSuppressFrames=" << m_tracker.m_stylusAftSuppressFrames << "\n";
+    out << "StylusAftPalmSuppressFrames=" << m_tracker.m_stylusAftPalmSuppressFrames << "\n";
+    out << "StylusAftPalmAreaThreshold=" << m_tracker.m_stylusAftPalmAreaThreshold << "\n";
+    out << "StylusAftPalmSizeThresholdMm=" << m_tracker.m_stylusAftPalmSizeThresholdMm << "\n";
     // Phase 5: CoordinateFilter
     out << "CoordFilterEnabled=" << (m_coordFilter.m_enabled?"1":"0") << "\n";
     out << "OneEuroMinCutoff=" << m_coordFilter.m_minCutoff << "\n";
@@ -468,17 +537,40 @@ void TouchPipeline::LoadConfig(const std::string& key,
     else if (key=="LiftOffPredictEnabled")   m_tracker.m_liftOffPredictEnabled = toBool(value);
     else if (key=="LiftOffVelocityDecay")    m_tracker.m_liftOffVelocityDecay = std::stof(value);
     else if (key=="LiftOffHoldSpeedThreshold")m_tracker.m_liftOffHoldSpeedThreshold = std::stof(value);
+    else if (key=="GapRelinkEnabled")        m_tracker.m_gapRelinkEnabled = toBool(value);
+    else if (key=="GapRelinkWindowFrames")   m_tracker.m_gapRelinkWindowFrames = std::stoi(value);
     else if (key=="TouchDownDebounceFrames") m_tracker.m_touchDownDebounceFrames = std::stoi(value);
     else if (key=="DynamicDebounceEnabled")  m_tracker.m_dynamicDebounceEnabled = toBool(value);
+    else if (key=="TouchDownDebounceMaxExtra") m_tracker.m_touchDownDebounceMaxExtra = std::stoi(value);
+    else if (key=="TouchDownWeakSignalThreshold") m_tracker.m_touchDownWeakSignalThreshold = std::stoi(value);
+    else if (key=="TouchDownSmallSizeThresholdMm") m_tracker.m_touchDownSmallSizeThresholdMm = std::stof(value);
     else if (key=="TouchDownRejectEnabled")  m_tracker.m_touchDownRejectEnabled = toBool(value);
     else if (key=="TouchDownRejectMinSignal")m_tracker.m_touchDownRejectMinSignal = std::stoi(value);
+    else if (key=="TouchDownRejectMinSizeMm") m_tracker.m_touchDownRejectMinSizeMm = std::stof(value);
+    else if (key=="TouchDownEdgeRejectMinSignal") m_tracker.m_touchDownEdgeRejectMinSignal = std::stoi(value);
+    else if (key=="FallbackSizeMm")          m_tracker.m_fallbackSizeMm = std::stof(value);
+    else if (key=="SizeAreaScale")           m_tracker.m_sizeAreaScale = std::stof(value);
+    else if (key=="SizeSignalScale")         m_tracker.m_sizeSignalScale = std::stof(value);
+    else if (key=="RxGhostFilterEnabled")    m_tracker.m_rxGhostFilterEnabled = toBool(value);
+    else if (key=="RxGhostLineDelta")        m_tracker.m_rxGhostLineDelta = std::stoi(value);
+    else if (key=="RxGhostWeakRatio")        m_tracker.m_rxGhostWeakRatio = std::stof(value);
+    else if (key=="RxGhostOnlyNew")          m_tracker.m_rxGhostOnlyNew = toBool(value);
     else if (key=="StylusSuppressGlobalEnabled")  m_tracker.m_stylusSuppressGlobalEnabled = toBool(value);
     else if (key=="StylusSuppressLocalEnabled")   m_tracker.m_stylusSuppressLocalEnabled = toBool(value);
     else if (key=="StylusSuppressLocalDistance")  m_tracker.m_stylusSuppressLocalDistance = std::stof(value);
+    else if (key=="StylusSuppressPenPeakThreshold") m_tracker.m_stylusSuppressPenPeakThreshold = std::stoi(value);
+    else if (key=="StylusSuppressTouchSignalKeep") m_tracker.m_stylusSuppressTouchSignalKeep = std::stoi(value);
+    else if (key=="StylusSuppressTouchAreaKeep")   m_tracker.m_stylusSuppressTouchAreaKeep = std::stoi(value);
     else if (key=="StylusAftEnabled")        m_tracker.m_stylusAftEnabled = toBool(value);
     else if (key=="StylusAftRecentFrames")   m_tracker.m_stylusAftRecentFrames = std::stoi(value);
     else if (key=="StylusAftRadius")         m_tracker.m_stylusAftRadius = std::stof(value);
+    else if (key=="StylusAftDebounceFrames") m_tracker.m_stylusAftDebounceFrames = std::stoi(value);
+    else if (key=="StylusAftWeakSignalThreshold") m_tracker.m_stylusAftWeakSignalThreshold = std::stoi(value);
+    else if (key=="StylusAftWeakSizeThresholdMm") m_tracker.m_stylusAftWeakSizeThresholdMm = std::stof(value);
     else if (key=="StylusAftSuppressFrames") m_tracker.m_stylusAftSuppressFrames = std::stoi(value);
+    else if (key=="StylusAftPalmSuppressFrames") m_tracker.m_stylusAftPalmSuppressFrames = std::stoi(value);
+    else if (key=="StylusAftPalmAreaThreshold") m_tracker.m_stylusAftPalmAreaThreshold = std::stoi(value);
+    else if (key=="StylusAftPalmSizeThresholdMm") m_tracker.m_stylusAftPalmSizeThresholdMm = std::stof(value);
     // Phase 5: CoordinateFilter
     else if (key=="CoordFilterEnabled")      m_coordFilter.m_enabled = toBool(value);
     else if (key=="OneEuroMinCutoff")        m_coordFilter.m_minCutoff = std::stof(value);

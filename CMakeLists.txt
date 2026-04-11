@@ -199,7 +199,25 @@ if (EGO_BUILD_TESTS)
     target_include_directories(CommonLoggerTest PRIVATE "${COMMON_ROOT}/include")
     target_link_libraries(CommonLoggerTest PRIVATE Common)
 
+    add_executable(TouchTrackerSilentGapTest
+        Tools/tests/TouchTrackerSilentGapTest.cpp
+    )
+    target_link_libraries(TouchTrackerSilentGapTest PRIVATE Engine Common)
+
+    add_executable(TouchTrackerStylusSuppressTest
+        Tools/tests/TouchTrackerStylusSuppressTest.cpp
+    )
+    target_link_libraries(TouchTrackerStylusSuppressTest PRIVATE Engine Common)
+
+    add_executable(TouchPipelineConfigRoundTripTest
+        Tools/tests/TouchPipelineConfigRoundTripTest.cpp
+    )
+    target_link_libraries(TouchPipelineConfigRoundTripTest PRIVATE Engine Common)
+
     add_test(NAME CommonLoggerTest COMMAND CommonLoggerTest)
+    add_test(NAME TouchTrackerSilentGapTest COMMAND TouchTrackerSilentGapTest)
+    add_test(NAME TouchTrackerStylusSuppressTest COMMAND TouchTrackerStylusSuppressTest)
+    add_test(NAME TouchPipelineConfigRoundTripTest COMMAND TouchPipelineConfigRoundTripTest)
 endif()
 
 

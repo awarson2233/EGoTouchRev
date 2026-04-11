@@ -213,7 +213,12 @@ bool StylusPipeline::Process(
     auto proj = m_peakDetector.ProjectTo1D(m_gridData.tx1.grid, peak);
 
     // 7. Coordinate interpolation
-    auto rawCoor = m_coordSolver.Solve(proj);
+    auto rawCoor = m_coordSolver.Solve(
+        proj,
+        static_cast<int>(m_gridData.tx1.anchorRow),
+        static_cast<int>(m_gridData.tx1.anchorCol),
+        m_sensorRows, m_sensorCols,
+        m_anchorCenterOffset);
     if (!rawCoor.valid) {
         m_lastResult.point.valid = false;
         m_lastResult.pipelineStage = 4;
@@ -276,10 +281,29 @@ bool StylusPipeline::Process(
         static_cast<float>(rawCoor.dim1), static_cast<float>(rawCoor.dim2),
         m_sensorCols, m_sensorRows);
 
-    // Pressure (BT MCU) — solve BEFORE state machine
-    m_lastResult.signalX = static_cast<uint16_t>(
+    const uint16_t tx1PeakSignal = static_cast<uint16_t>(
         std::clamp(m_gridData.tx1.grid[peak.peakRow][peak.peakCol],
                    static_cast<int16_t>(0), static_cast<int16_t>(0x7FFF)));
+    uint16_t tx2PeakSignal = 0;
+    Asa::GridPeakUnit tx2Peak{};
+    const bool tx2PeakValid = m_gridData.tx2.valid;
+    if (tx2PeakValid) {
+        tx2Peak = m_peakDetector.FindPeak(m_gridData.tx2.grid);
+        if (tx2Peak.valid) {
+            tx2PeakSignal = static_cast<uint16_t>(
+                std::clamp(m_gridData.tx2.grid[tx2Peak.peakRow][tx2Peak.peakCol],
+                           static_cast<int16_t>(0), static_cast<int16_t>(0x7FFF)));
+        }
+    }
+
+    // Pressure (BT MCU) — solve BEFORE state machine
+    m_lastResult.tx1BlockValid = m_gridData.tx1.valid;
+    m_lastResult.tx2BlockValid = m_gridData.tx2.valid;
+    m_lastResult.signalX = tx1PeakSignal;
+    m_lastResult.signalY = tx2PeakSignal;
+    m_lastResult.maxRawPeak = std::max(m_lastResult.signalX, m_lastResult.signalY);
+    m_lastResult.hpp3Dim1SignalValid = (m_lastResult.signalX > 0);
+    m_lastResult.hpp3Dim2SignalValid = (m_lastResult.signalY > 0);
     {
         uint16_t btPress = m_pressureSolver.GetLatestBtPressure();
         m_lastResult.point.rawPressure = btPress;
@@ -311,20 +335,20 @@ bool StylusPipeline::Process(
 
     // 9b. CoorReviser (TX2 solve + tilt + coordinate revision)
     if (profile.enableCoorReviser && m_coorReviser.enabled && m_gridData.tx2.valid) {
-        auto tx2Peak = m_peakDetector.FindPeak(m_gridData.tx2.grid);
         if (tx2Peak.valid) {
             // Signal ratio tracking
             m_signalRatioTracker.Push(
-                static_cast<int16_t>(std::clamp(
-                    m_gridData.tx1.grid[peak.peakRow][peak.peakCol],
-                    static_cast<int16_t>(0), static_cast<int16_t>(0x7FFF))),
-                static_cast<int16_t>(std::clamp(
-                    m_gridData.tx2.grid[tx2Peak.peakRow][tx2Peak.peakCol],
-                    static_cast<int16_t>(0), static_cast<int16_t>(0x7FFF))));
+                static_cast<int16_t>(tx1PeakSignal),
+                static_cast<int16_t>(tx2PeakSignal));
 
             auto tx2Proj = m_peakDetector.ProjectTo1D(
                 m_gridData.tx2.grid, tx2Peak);
-            auto tx2Coor = m_coordSolver.Solve(tx2Proj);
+            auto tx2Coor = m_coordSolver.Solve(
+                tx2Proj,
+                static_cast<int>(m_gridData.tx2.anchorRow),
+                static_cast<int>(m_gridData.tx2.anchorCol),
+                m_sensorRows, m_sensorCols,
+                m_anchorCenterOffset);
             if (tx2Coor.valid) {
                 m_lastResult.point.tx2X = static_cast<float>(tx2Coor.dim1) / Asa::kCoorUnit;
                 m_lastResult.point.tx2Y = static_cast<float>(tx2Coor.dim2) / Asa::kCoorUnit;
@@ -392,9 +416,9 @@ bool StylusPipeline::Process(
     m_dbg.isEdge    = isEdge;
     m_dbg.tiltDiffX = static_cast<float>(m_coorReviser.GetLastTiltX());
     m_dbg.tiltDiffY = static_cast<float>(m_coorReviser.GetLastTiltY());
-    m_dbg.peakSignal = m_lastResult.signalX;
+    m_dbg.peakSignal = m_lastResult.maxRawPeak;
     m_dbg.signalRatio       = m_signalRatioTracker.GetAvgRatio();
-    m_dbg.freqShiftFreezing = false;
+    m_dbg.freqShiftFreezing = m_freqShiftFreezing;
     m_dbg.exitSmoothed      = (m_lastResult.pipelineStage == 7);
     m_dbg.cmfEnabled        = m_cmfFilter.enabled;
     m_dbg.coorReviserActive = m_coorReviser.enabled;
@@ -471,8 +495,20 @@ std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
         // === Solver ===
         ConfigParam("sp.coordUseTriangle", "Use Triangle Mode",
             ConfigParam::Bool, const_cast<bool*>(&m_coordSolver.useTriangle), Cat::Solver),
-        ConfigParam("sp.coordEdgeCompBit3", "Triangle Edge Compensation",
-            ConfigParam::Bool, const_cast<bool*>(&m_coordSolver.edgeCompBit3), Cat::Solver),
+        ConfigParam("sp.triEdgeSecondaryBlend", "Tri Edge Secondary Blend",
+            ConfigParam::Bool, const_cast<bool*>(&m_coordSolver.triEdgeSecondaryBlend), Cat::Solver),
+        ConfigParam("sp.triEdgeDim1Ratio", "Tri Edge Dim1 Ratio",
+            ConfigParam::Int, const_cast<int*>(&m_coordSolver.triEdgeDim1.ratio), 0, 1000, Cat::Solver),
+        ConfigParam("sp.triEdgeDim1ThLast", "Tri Edge Dim1 ThLast",
+            ConfigParam::Int, const_cast<int*>(&m_coordSolver.triEdgeDim1.sumThresholdIdxLast), 0, 20000, Cat::Solver),
+        ConfigParam("sp.triEdgeDim1Th0", "Tri Edge Dim1 Th0",
+            ConfigParam::Int, const_cast<int*>(&m_coordSolver.triEdgeDim1.sumThresholdIdx0), 0, 20000, Cat::Solver),
+        ConfigParam("sp.triEdgeDim2Ratio", "Tri Edge Dim2 Ratio",
+            ConfigParam::Int, const_cast<int*>(&m_coordSolver.triEdgeDim2.ratio), 0, 1000, Cat::Solver),
+        ConfigParam("sp.triEdgeDim2ThLast", "Tri Edge Dim2 ThLast",
+            ConfigParam::Int, const_cast<int*>(&m_coordSolver.triEdgeDim2.sumThresholdIdxLast), 0, 20000, Cat::Solver),
+        ConfigParam("sp.triEdgeDim2Th0", "Tri Edge Dim2 Th0",
+            ConfigParam::Int, const_cast<int*>(&m_coordSolver.triEdgeDim2.sumThresholdIdx0), 0, 20000, Cat::Solver),
         ConfigParam("sp.sensorRows", "Sensor Rows (Y)",
             ConfigParam::Int, const_cast<int*>(&m_sensorRows), 9, 80, Cat::Solver),
         ConfigParam("sp.sensorCols", "Sensor Cols (X)",
@@ -561,6 +597,10 @@ std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
             ConfigParam::Bool, const_cast<bool*>(&m_edgeCoorPost.enabled), Cat::Behavior),
         ConfigParam("sp.elcEnabled", "Enable Edge Lift Corrector",
             ConfigParam::Bool, const_cast<bool*>(&m_elcEnabled), Cat::Behavior),
+        ConfigParam("sp.elcEdgeMarginCells", "Edge Lift Margin Cells",
+            ConfigParam::Float, const_cast<float*>(&m_edgeLiftCorrector.edgeMarginCells), 0.0f, 4.0f, Cat::Behavior),
+        ConfigParam("sp.elcJumpThreshold", "Edge Lift Jump Threshold",
+            ConfigParam::Float, const_cast<float*>(&m_edgeLiftCorrector.jumpThreshold), 0.0f, 4096.0f, Cat::Behavior),
         ConfigParam("sp.crEnabled", "Enable TX2 Coor Reviser",
             ConfigParam::Bool, const_cast<bool*>(&m_coorReviser.enabled), Cat::Behavior),
         ConfigParam("sp.crTiltMultX", "CoorRevise Tilt Mult X",
@@ -641,7 +681,13 @@ void StylusPipeline::SaveConfig(std::ostream& out) const {
     out << "sp.emitPacketWhenInvalid=" << m_emitPacketWhenInvalid << "\n";
     out << "sp.buttonReleaseHold=" << m_buttonReleaseHoldFrames << "\n";
     out << "sp.coordUseTriangle=" << m_coordSolver.useTriangle << "\n";
-    out << "sp.coordEdgeCompBit3=" << m_coordSolver.edgeCompBit3 << "\n";
+    out << "sp.triEdgeSecondaryBlend=" << m_coordSolver.triEdgeSecondaryBlend << "\n";
+    out << "sp.triEdgeDim1Ratio=" << m_coordSolver.triEdgeDim1.ratio << "\n";
+    out << "sp.triEdgeDim1ThLast=" << m_coordSolver.triEdgeDim1.sumThresholdIdxLast << "\n";
+    out << "sp.triEdgeDim1Th0=" << m_coordSolver.triEdgeDim1.sumThresholdIdx0 << "\n";
+    out << "sp.triEdgeDim2Ratio=" << m_coordSolver.triEdgeDim2.ratio << "\n";
+    out << "sp.triEdgeDim2ThLast=" << m_coordSolver.triEdgeDim2.sumThresholdIdxLast << "\n";
+    out << "sp.triEdgeDim2Th0=" << m_coordSolver.triEdgeDim2.sumThresholdIdx0 << "\n";
     out << "sp.sensorRows=" << m_sensorRows << "\n";
     out << "sp.sensorCols=" << m_sensorCols << "\n";
     out << "sp.anchorCenterOffset=" << m_anchorCenterOffset << "\n";
@@ -691,6 +737,8 @@ void StylusPipeline::SaveConfig(std::ostream& out) const {
     // Edge
     out << "sp.edgeCoorPostEnabled=" << m_edgeCoorPost.enabled << "\n";
     out << "sp.elcEnabled=" << m_elcEnabled << "\n";
+    out << "sp.elcEdgeMarginCells=" << m_edgeLiftCorrector.edgeMarginCells << "\n";
+    out << "sp.elcJumpThreshold=" << m_edgeLiftCorrector.jumpThreshold << "\n";
     // Noise
     out << "sp.hpp3NoiseEnabled=" << m_noiseGate.noisePostEnabled << "\n";
     out << "sp.hpp3JumpTh=" << m_noiseGate.coorJumpThreshold << "\n";
@@ -739,7 +787,13 @@ void StylusPipeline::LoadConfig(
     else if (key == "sp.emitPacketWhenInvalid") m_emitPacketWhenInvalid = toBool(value);
     else if (key == "sp.buttonReleaseHold") m_buttonReleaseHoldFrames = toInt(value);
     else if (key == "sp.coordUseTriangle") m_coordSolver.useTriangle = toBool(value);
-    else if (key == "sp.coordEdgeCompBit3") m_coordSolver.edgeCompBit3 = toBool(value);
+    else if (key == "sp.triEdgeSecondaryBlend" || key == "sp.coordEdgeCompBit3") m_coordSolver.triEdgeSecondaryBlend = toBool(value);
+    else if (key == "sp.triEdgeDim1Ratio") m_coordSolver.triEdgeDim1.ratio = std::clamp(toInt(value), 0, 1000);
+    else if (key == "sp.triEdgeDim1ThLast") m_coordSolver.triEdgeDim1.sumThresholdIdxLast = std::clamp(toInt(value), 0, 20000);
+    else if (key == "sp.triEdgeDim1Th0") m_coordSolver.triEdgeDim1.sumThresholdIdx0 = std::clamp(toInt(value), 0, 20000);
+    else if (key == "sp.triEdgeDim2Ratio") m_coordSolver.triEdgeDim2.ratio = std::clamp(toInt(value), 0, 1000);
+    else if (key == "sp.triEdgeDim2ThLast") m_coordSolver.triEdgeDim2.sumThresholdIdxLast = std::clamp(toInt(value), 0, 20000);
+    else if (key == "sp.triEdgeDim2Th0") m_coordSolver.triEdgeDim2.sumThresholdIdx0 = std::clamp(toInt(value), 0, 20000);
     else if (key == "sp.sensorRows") m_sensorRows = toInt(value);
     else if (key == "sp.sensorCols") m_sensorCols = toInt(value);
     else if (key == "sp.anchorCenterOffset") m_anchorCenterOffset = toInt(value);
@@ -789,6 +843,8 @@ void StylusPipeline::LoadConfig(
     // Edge
     else if (key == "sp.edgeCoorPostEnabled") m_edgeCoorPost.enabled = toBool(value);
     else if (key == "sp.elcEnabled") m_elcEnabled = toBool(value);
+    else if (key == "sp.elcEdgeMarginCells") m_edgeLiftCorrector.edgeMarginCells = std::clamp(toFloat(value), 0.0f, 4.0f);
+    else if (key == "sp.elcJumpThreshold") m_edgeLiftCorrector.jumpThreshold = std::clamp(toFloat(value), 0.0f, 4096.0f);
     // Noise
     else if (key == "sp.hpp3NoiseEnabled") m_noiseGate.noisePostEnabled = toBool(value);
     else if (key == "sp.hpp3JumpTh") m_noiseGate.coorJumpThreshold = toFloat(value);

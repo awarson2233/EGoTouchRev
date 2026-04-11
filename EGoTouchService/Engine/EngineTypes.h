@@ -28,6 +28,7 @@ enum TouchLifeFlagBits : uint32_t {
     TouchLifeEdge = 1u << 3,
     TouchLifeDebounced = 1u << 4,
     TouchLifeAlwaysMatch = 1u << 5,
+    TouchLifeSilentGap = 1u << 6,
 };
 
 enum TouchReportEventCode : int {
