@@ -1,0 +1,16 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
+  
+  <Bundle Name="EGoTouchRev Installer (Test)" Version="1.0.0" Manufacturer="EGoTouch Team" UpgradeCode="BB51BBD9-0010-482F-810A-38DE87FF1366">
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication Theme="hyperlinkLicense" LicenseUrl="" />
+    </BootstrapperApplication>
+
+    <Chain>
+      <!-- Execute Chinese MSI if User locale is Chinese (2052) -->
+      <MsiPackage SourceFile="build\EGoTouchTestSetup_zh-CN.msi" InstallCondition="UserUILanguageID = 2052" bal:DisplayInternalUICondition="yes" />
+      <!-- Default to English MSI otherwise -->
+      <MsiPackage SourceFile="build\EGoTouchTestSetup_en-US.msi" InstallCondition="NOT (UserUILanguageID = 2052)" bal:DisplayInternalUICondition="yes" />
+    </Chain>
+  </Bundle>
+</Wix>

@@ -5,9 +5,11 @@
   <String Id="ProductNameTest" Value="EGoTouch Controller Software (Test Version)" />
   <String Id="Manufacturer" Value="EGoTouch Team" />
   <String Id="DowngradeError" Value="已经安装了更高版本的 [ProductName]。" />
-  <String Id="LicenseRtf" Value="scripts\EULA_zh-CN.rtf" />
+  <String Id="LicenseRtf" Value="scripts\wix\EULA_zh-CN.rtf" />
   <String Id="ServiceDisplayName" Value="EGoTouch Capacitive Touch Driver" />
   <String Id="ServiceDescription" Value="EGoTouch 电容触控控制器驱动服务 — 管理触摸屏帧采集、算法处理与 HID 注入。" />
   <String Id="ServiceDisplayNameTest" Value="EGoTouch Capacitive Touch Driver (Test)" />
   <String Id="ServiceDescriptionTest" Value="EGoTouch 电容触控控制器驱动服务 — 测试版本。" />
+  <String Id="VCRedistMessage" Value="此程序需要 Visual C++ Redistributable for Visual Studio 2015-2022 (x64) 运行库。请安装后再运行本安装程序。" />
+  <String Id="VerifyReadyDlgInstallText" Value="1. 该驱动与华为的原版驱动HuaweiThpService以及华为电脑管家存在冲突，请在安装和运行本驱动前停止这两个进程，否则可能导致触摸失效或蓝屏。&#13;&#10;2. 如遇问题，请在GitHub项目中反馈: https://github.com/EGoTouchRev/EGoTouchRev/issues&#13;&#10;&#13;&#10;点击“安装”开始安装。如果想查看或更改设置，请点击“上一步”。" />
 </WixLocalization>
