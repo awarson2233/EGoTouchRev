@@ -3,6 +3,7 @@ project(EGoTouchRev VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(CTest)
 enable_testing()
@@ -14,6 +15,9 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 # Suppress MSVC CRT deprecation warnings (e.g. localtime -> localtime_s)
 if (WIN32)
     add_compile_definitions(NOMINMAX _CRT_SECURE_NO_WARNINGS)
+    if(MSVC AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        add_compile_options(/Zc:preprocessor)
+    endif()
 endif()
 
 # --- SIMD options ---
@@ -49,8 +53,8 @@ add_library(Common STATIC
 target_include_directories(Common PUBLIC
     "${COMMON_ROOT}/include"
 )
-# Common links Engine for SharedFrameBuffer (EngineTypes.h)
-# Forward-declare include path; Engine target linked below after Engine is defined
+# Common links Solvers for SharedFrameBuffer (EngineTypes.h)
+# Forward-declare include path; Solvers target linked below after Solvers is defined
 target_link_libraries(Common PUBLIC spdlog::spdlog)
 
 # ImGuiCommon library: UI framework (only for diagnostic tools)
@@ -80,35 +84,31 @@ target_compile_definitions(Device PUBLIC
 target_include_directories(Device PUBLIC
     "${DEVICE_ROOT}"
 )
-target_link_libraries(Device PUBLIC Common Host Engine setupapi hid)
+target_link_libraries(Device PUBLIC Common Host Solvers setupapi hid)
 
-# --- Engine Module (Touch Algorithm) ---
-set(ENGINE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/EGoTouchService/Engine")
+# --- Solvers Module (Touch Algorithm) ---
+set(SOLVERS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/EGoTouchService/Solvers")
 
-add_library(Engine STATIC
-    # Root (Infrastructure — retained for backward compat)
-    EGoTouchService/Engine/FramePipeline.cpp
-    # TouchSolver (new linear orchestrator — replaces old Preprocessing/TouchSolver/Reporting .cpp files)
-    EGoTouchService/Engine/TouchSolver/TouchPipeline.cpp
+add_library(Solvers STATIC
+    # TouchSolver (linear orchestrator — all algorithm modules are header-only .hpp)
+    EGoTouchService/Solvers/TouchSolver/TouchPipeline.cpp
     # StylusSolver (official ASA pipeline — modules are header-only .hpp)
-    EGoTouchService/Engine/StylusSolver/StylusPipeline.cpp
+    EGoTouchService/Solvers/StylusSolver/StylusPipeline.cpp
 )
 
-target_compile_definitions(Engine PUBLIC
+target_compile_definitions(Solvers PUBLIC
     $<$<BOOL:${HIMAX_ENABLE_NEON}>:HIMAX_ENABLE_NEON=1>
     $<$<NOT:$<BOOL:${HIMAX_ENABLE_NEON}>>:HIMAX_ENABLE_NEON=0>
 )
 
-target_include_directories(Engine PUBLIC
-    "${ENGINE_ROOT}"
-    "${ENGINE_ROOT}/Preprocessing"
-    "${ENGINE_ROOT}/TouchSolver"
-    "${ENGINE_ROOT}/Reporting"
-    "${ENGINE_ROOT}/StylusSolver"
+target_include_directories(Solvers PUBLIC
+    "${SOLVERS_ROOT}"
+    "${SOLVERS_ROOT}/TouchSolver"
+    "${SOLVERS_ROOT}/StylusSolver"
 )
-target_link_libraries(Engine PUBLIC Common)
-# Let Common see Engine headers for SharedFrameBuffer
-target_include_directories(Common PUBLIC "${ENGINE_ROOT}")
+target_link_libraries(Solvers PUBLIC Common)
+# Let Common see Solvers headers for SharedFrameBuffer
+target_include_directories(Common PUBLIC "${SOLVERS_ROOT}")
 
 # --- Host Module (System Integration) ---
 set(HOST_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/EGoTouchService/Host")
@@ -149,7 +149,8 @@ target_include_directories(EGoTouchApp PRIVATE
 )
 
 # Link D3D11 for the ImGui DX11 backend
-target_link_libraries(EGoTouchApp PRIVATE Device Engine Host Common ImGuiCommon d3d11 d3dcompiler dwmapi setupapi)
+target_compile_definitions(EGoTouchApp PRIVATE EGOTOUCH_DIAGNOSTICS)
+target_link_libraries(EGoTouchApp PRIVATE Device Solvers Host Common ImGuiCommon d3d11 d3dcompiler dwmapi setupapi)
 
 # --- EGoTouchService (Production Service Shell) ---
 set(SERVICE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/EGoTouchService")
@@ -190,10 +191,10 @@ if (EGO_BUILD_TESTS)
     target_include_directories(HostSystemStateMonitorTest PRIVATE "${HOST_ROOT}/include")
     target_link_libraries(HostSystemStateMonitorTest PRIVATE Host Common)
 
-    add_executable(EngineRawdataBenchmarkTest
+    add_executable(SolversRawdataBenchmarkTest
         Tools/tests/RawdataBenchmarkTest.cpp
     )
-    target_link_libraries(EngineRawdataBenchmarkTest PRIVATE Engine Common)
+    target_link_libraries(SolversRawdataBenchmarkTest PRIVATE Solvers Common)
 
     add_executable(CommonLoggerTest
         Tools/tests/LoggerTest.cpp
@@ -201,7 +202,31 @@ if (EGO_BUILD_TESTS)
     target_include_directories(CommonLoggerTest PRIVATE "${COMMON_ROOT}/include")
     target_link_libraries(CommonLoggerTest PRIVATE Common)
 
+    add_executable(TouchTrackerSilentGapTest
+        Tools/tests/TouchTrackerSilentGapTest.cpp
+    )
+    target_link_libraries(TouchTrackerSilentGapTest PRIVATE Solvers Common)
+
+    add_executable(TouchTrackerStylusSuppressTest
+        Tools/tests/TouchTrackerStylusSuppressTest.cpp
+    )
+    target_link_libraries(TouchTrackerStylusSuppressTest PRIVATE Solvers Common)
+
+    add_executable(TouchPipelineConfigRoundTripTest
+        Tools/tests/TouchPipelineConfigRoundTripTest.cpp
+    )
+    target_link_libraries(TouchPipelineConfigRoundTripTest PRIVATE Solvers Common)
+
+    add_executable(StylusPipelineFastInkTest
+        Tools/tests/StylusPipelineFastInkTest.cpp
+    )
+    target_link_libraries(StylusPipelineFastInkTest PRIVATE Solvers Common)
+
     add_test(NAME CommonLoggerTest COMMAND CommonLoggerTest)
+    add_test(NAME TouchTrackerSilentGapTest COMMAND TouchTrackerSilentGapTest)
+    add_test(NAME TouchTrackerStylusSuppressTest COMMAND TouchTrackerStylusSuppressTest)
+    add_test(NAME TouchPipelineConfigRoundTripTest COMMAND TouchPipelineConfigRoundTripTest)
+    add_test(NAME StylusPipelineFastInkTest COMMAND StylusPipelineFastInkTest)
 endif()
 
 

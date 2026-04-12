@@ -28,8 +28,8 @@ static inline uint16_t ToVhf(float gridValue, float gridMax,
 }
 
 static inline uint8_t EncodeContactState(
-        const Engine::TouchContact& c) {
-    if (c.reportEvent == Engine::TouchReportUp)
+        const Solvers::TouchContact& c) {
+    if (c.reportEvent == Solvers::TouchReportUp)
         return 0x02; // TipSwitch=0, Confidence=1
     return 0x03;     // TipSwitch=1, Confidence=1
 }
@@ -50,7 +50,7 @@ bool VhfReporter::IsDeviceOpen() const {
 
 // ── 主入口 (legacy) ──
 
-void VhfReporter::Dispatch(Engine::HeatmapFrame& frame) {
+void VhfReporter::Dispatch(Solvers::HeatmapFrame& frame) {
     if (!m_enabled.load()) return;
 
     BuildTouchReports(frame);
@@ -63,7 +63,7 @@ void VhfReporter::Dispatch(Engine::HeatmapFrame& frame) {
         if (m_hadTouchLastFrame.exchange(false)) {
             std::lock_guard<std::mutex> lk(m_mu);
             if (EnsureDeviceOpen()) {
-                Engine::TouchPacket allUp{};
+                Solvers::TouchPacket allUp{};
                 allUp.bytes.fill(0);
                 allUp.bytes[0] = 0x01;
                 WritePacket(allUp.bytes.data(), allUp.length,
@@ -92,7 +92,7 @@ void VhfReporter::Dispatch(Engine::HeatmapFrame& frame) {
 
 // ── 独立手写笔写入 ──
 
-void VhfReporter::DispatchStylus(const Engine::StylusPacket& packet) {
+void VhfReporter::DispatchStylus(const Solvers::StylusPacket& packet) {
     if (!m_enabled.load()) return;
     if (!packet.valid) return;
 
@@ -107,7 +107,7 @@ void VhfReporter::DispatchStylus(const Engine::StylusPacket& packet) {
 
 // ── 独立手指写入 ──
 
-void VhfReporter::DispatchTouch(Engine::HeatmapFrame& frame) {
+void VhfReporter::DispatchTouch(Solvers::HeatmapFrame& frame) {
     if (!m_enabled.load()) return;
 
     BuildTouchReports(frame);
@@ -119,7 +119,7 @@ void VhfReporter::DispatchTouch(Engine::HeatmapFrame& frame) {
         if (m_hadTouchLastFrame.exchange(false)) {
             std::lock_guard<std::mutex> lk(m_mu);
             if (EnsureDeviceOpen()) {
-                Engine::TouchPacket allUp{};
+                Solvers::TouchPacket allUp{};
                 allUp.bytes.fill(0);
                 allUp.bytes[0] = 0x01;
                 WritePacket(allUp.bytes.data(), allUp.length,
@@ -143,15 +143,15 @@ void VhfReporter::DispatchTouch(Engine::HeatmapFrame& frame) {
 
 // ── Touch 报告构建 ──
 
-void VhfReporter::BuildTouchReports(Engine::HeatmapFrame& frame) {
-    frame.touchPackets[0] = Engine::TouchPacket{};
-    frame.touchPackets[1] = Engine::TouchPacket{};
+void VhfReporter::BuildTouchReports(Solvers::HeatmapFrame& frame) {
+    frame.touchPackets[0] = Solvers::TouchPacket{};
+    frame.touchPackets[1] = Solvers::TouchPacket{};
     frame.touchPackets[0].bytes.fill(0);
     frame.touchPackets[1].bytes.fill(0);
     frame.touchPackets[0].bytes[0] = 0x01;
     frame.touchPackets[1].bytes[0] = 0x01;
 
-    std::vector<const Engine::TouchContact*> reportable;
+    std::vector<const Solvers::TouchContact*> reportable;
     reportable.reserve(frame.contacts.size());
     for (const auto& c : frame.contacts) {
         if (c.id <= 0 || !c.isReported) continue;

@@ -873,12 +873,6 @@ ChipResult<> Chip::GetFrame(void) {
             m_zeroFrameCount = 0;
         }
     }
-
-    // 调试：每 600 帧打计数日志
-    if ((m_frameCount % 600) == 0) {
-        LOG_DEBUG("HimaxChip", __func__, GetStateStr(), "[IDLE-DIAG] m_frameCount={} m_zeroFrameCount={} afe_mode={}",  m_frameCount, m_zeroFrameCount, afe_mode.load() == THP_AFE_MODE::Idle ? "Idle" : "Normal");
-    }
-
     return {};
 }
 

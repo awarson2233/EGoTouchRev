@@ -42,7 +42,7 @@
 **偏移**: `back_data[7..4806]`  
 **大小**: 4800 字节 = 40 (TX) × 60 (RX) × 2 (int16_t LE)  
 **排列**: 行主序, `matrix[tx][rx]`, 每个元素 `int16_t` little-endian  
-**解析代码**: [MasterFrameParser.cpp:15-24](file:///d:/source/repos/EGoTouchRev-algo-A/EGoTouchService/Engine/Preprocessing/MasterFrameParser.cpp#L15-L24)
+**解析代码**: [MasterFrameParser.cpp:15-24](file:///d:/source/repos/EGoTouchRev-algo-A/EGoTouchService/Solvers/Preprocessing/MasterFrameParser.cpp#L15-L24)
 
 ```cpp
 const uint8_t* raw_ptr = frame.rawData.data() + 7;
@@ -125,7 +125,7 @@ Word 位置            状态表字段
 ## 五、Slave 笔数据 (`SlaveSuffix`, 332 字节 = 166 × u16)
 
 **偏移**: `back_data[5070..5401]` (= slave 帧起始 5063 + 7字节协议头)  
-**解析代码**: [AsaTypes.h:71-99](file:///d:/source/repos/EGoTouchRev-algo-A/EGoTouchService/Engine/StylusSolver/AsaTypes.h#L71-L99)
+**解析代码**: [AsaTypes.h:71-99](file:///d:/source/repos/EGoTouchRev-algo-A/EGoTouchService/Solvers/StylusSolver/AsaTypes.h#L71-L99)
 
 ### 5.1 总体结构
 
@@ -210,7 +210,7 @@ Word 位置            TX2 Block
 > [!CAUTION]
 > 以下字段存在于代码中但**从未被实际赋值**，显示在 GUI 中始终为默认值。应在重构时清理。
 
-### 7.1 `StylusFrameData` 中未使用字段 ([EngineTypes.h:104-222](file:///d:/source/repos/EGoTouchRev-algo-A/EGoTouchService/Engine/EngineTypes.h#L104-L222))
+### 7.1 `StylusFrameData` 中未使用字段 ([EngineTypes.h:104-222](file:///d:/source/repos/EGoTouchRev-algo-A/EGoTouchService/Solvers/EngineTypes.h#L104-L222))
 
 | 字段名 | 类型 | 默认值 | 问题 |
 |--------|------|--------|------|

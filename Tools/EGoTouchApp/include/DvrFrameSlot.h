@@ -11,7 +11,7 @@
 #include <cstdint>
 #include <cstring>
 #include "FrameLayout.h"
-#include "EngineTypes.h"
+#include "SolverTypes.h"
 
 namespace Dvr {
 
@@ -19,7 +19,7 @@ namespace Dvr {
 constexpr int kMaxContacts = 10;
 constexpr int kMaxPeaks    = 30;
 
-// ── DvrContact — flat POD mirror of Engine::TouchContact ──
+// ── DvrContact — flat POD mirror of Solvers::TouchContact ──
 struct DvrContact {
     int id = 0;
     float x = 0.0f;
@@ -30,7 +30,7 @@ struct DvrContact {
 };
 static_assert(sizeof(DvrContact) == 24, "DvrContact must be exactly 24 bytes");
 
-// ── DvrPeak — flat POD mirror of Engine::TouchPeak ──
+// ── DvrPeak — flat POD mirror of Solvers::TouchPeak ──
 struct DvrPeak {
     int r = 0;
     int c = 0;
@@ -63,7 +63,7 @@ struct DvrFrameSlot {
     uint8_t    peakCount = 0;
 
     // ── Populate from HeatmapFrame ──
-    void CopyFrom(const Engine::HeatmapFrame& src) {
+    void CopyFrom(const Solvers::HeatmapFrame& src) {
         timestamp = src.timestamp;
         masterWasRead = src.masterWasRead;
 

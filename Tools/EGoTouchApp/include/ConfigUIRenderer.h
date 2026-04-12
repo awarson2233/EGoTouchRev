@@ -10,9 +10,14 @@ namespace App {
 class ConfigUIRenderer {
 public:
     static void RenderConfigSchema(
-        const std::vector<Engine::ConfigParam>& schema,
+        const std::vector<Solvers::ConfigParam>& schema,
         const std::string& sectionName,
-        std::optional<Engine::ConfigParam::Category> filterCategory = std::nullopt);
+        std::optional<Solvers::ConfigParam::Category> filterCategory = std::nullopt);
+
+    /// Render only params whose moduleTag matches the given tag.
+    static void RenderConfigSchemaByModule(
+        const std::vector<Solvers::ConfigParam>& schema,
+        const std::string& moduleTag);
 };
 
 } // namespace App

@@ -4,7 +4,7 @@
 
 #include <atomic>
 #include <cstdint>
-#include "EngineTypes.h"
+#include "SolverTypes.h"
 #include "FrameLayout.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -150,7 +150,7 @@ struct SharedFrameData {
     uint8_t  stylusPipelineStage = 0;  // 0=ok,1=slaveParse,2=tx1,3=peak,4=coord,5=noise
 
     // ── Pipeline Diagnostics (same POD struct as StylusFrameData::StylusDiagnostics) ──
-    Engine::StylusFrameData::StylusDiagnostics diag{};
+    Solvers::StylusFrameData::StylusDiagnostics diag{};
 
     // Structured suffix data — typed POD views over hardware status tables
     Frame::MasterSuffixView masterSuffix{};
@@ -191,7 +191,7 @@ public:
 
     bool Open(const wchar_t* name);
     bool Create(const wchar_t* name);   // Service creates Global\ mapping
-    void Write(const Engine::HeatmapFrame& frame);
+    void Write(const Solvers::HeatmapFrame& frame);
     void Close();
     bool IsOpen() const { return m_buf != nullptr; }
 
@@ -212,7 +212,7 @@ public:
 
     bool Create(const wchar_t* name);
     bool Open(const wchar_t* name);     // App opens existing mapping
-    bool Read(Engine::HeatmapFrame& out);
+    bool Read(Solvers::HeatmapFrame& out);
     uint64_t LastFrameId() const;
     uint64_t LastSlaveFrameId() const;
     uint64_t LastMasterFrameId() const;

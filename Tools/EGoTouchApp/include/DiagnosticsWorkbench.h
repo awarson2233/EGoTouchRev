@@ -47,7 +47,7 @@ private:
 
 private:
     ServiceProxy* m_proxy;
-    Engine::HeatmapFrame m_currentFrame;
+    Solvers::HeatmapFrame m_currentFrame;
 
     // GUI state
     bool m_autoRefresh = true;

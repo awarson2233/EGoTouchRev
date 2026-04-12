@@ -7,13 +7,85 @@
 #include <fstream>
 #include <string>
 #include <iomanip>
+#include <optional>
 #include <sstream>
+#include <string_view>
 #include <filesystem>
 #include "AsaTypes.hpp"
 
 namespace App {
 
 static const std::string kConfigPath = "C:/ProgramData/EGoTouchRev/config.ini";
+
+namespace {
+
+std::string TrimCopy(std::string_view input) {
+    const size_t start = input.find_first_not_of(" \t\r\n");
+    if (start == std::string_view::npos) return {};
+    const size_t end = input.find_last_not_of(" \t\r\n");
+    return std::string(input.substr(start, end - start + 1));
+}
+
+bool ParseIniKeyValue(std::string_view line, std::string& key, std::string& value) {
+    const size_t eq = line.find('=');
+    if (eq == std::string_view::npos) return false;
+    key = TrimCopy(line.substr(0, eq));
+    value = TrimCopy(line.substr(eq + 1));
+    return !key.empty();
+}
+
+bool IsLegacyTouchSection(const std::string& section) {
+    return section == "Master Frame Parser" ||
+           section == "Baseline Subtraction" ||
+           section == "CMF Processor" ||
+           section == "Grid IIR Processor" ||
+           section == "Feature Extractor (4.1/4.2)" ||
+           section == "Touch Tracker (IDT)" ||
+           section == "Coordinate Filter (1 Euro)" ||
+           section == "TouchGestureStateMachine";
+}
+
+std::optional<std::string> MapLegacyTouchKey(const std::string& section,
+                                             const std::string& key) {
+    if (section == "Master Frame Parser") {
+        if (key == "Enabled") return std::string("FrameParserEnabled");
+        return std::nullopt;
+    }
+    if (section == "Baseline Subtraction") {
+        if (key == "Enabled") return std::string("BaselineEnabled");
+        return key;
+    }
+    if (section == "CMF Processor") {
+        if (key == "Enabled") return std::string("CMFEnabled");
+        if (key == "DimensionMode") return std::string("CMFDimensionMode");
+        if (key == "ExclusionThreshold") return std::string("CMFExclusionThreshold");
+        if (key == "MaxCorrection") return std::string("CMFMaxCorrection");
+        return key;
+    }
+    if (section == "Grid IIR Processor") {
+        if (key == "Enabled") return std::string("GridIIREnabled");
+        return key;
+    }
+    if (section == "Feature Extractor (4.1/4.2)") {
+        if (key == "Enabled") return std::nullopt;
+        return key;
+    }
+    if (section == "Touch Tracker (IDT)") {
+        if (key == "Enabled") return std::string("TrackerEnabled");
+        return key;
+    }
+    if (section == "Coordinate Filter (1 Euro)") {
+        if (key == "Enabled") return std::string("CoordFilterEnabled");
+        return key;
+    }
+    if (section == "TouchGestureStateMachine") {
+        if (key == "Enabled") return std::string("GestureEnabled");
+        return key;
+    }
+    return std::nullopt;
+}
+
+} // namespace
 
 ServiceProxy::ServiceProxy()
     : m_dvrBuffer(std::make_unique<RingBuffer<Dvr::DvrFrameSlot, 480>>()) {
@@ -146,7 +218,7 @@ bool ServiceProxy::IsConnected() const {
     return m_client.IsConnected();
 }
 
-bool ServiceProxy::GetLatestFrame(Engine::HeatmapFrame& out) {
+bool ServiceProxy::GetLatestFrame(Solvers::HeatmapFrame& out) {
     if (!m_hasNewFrame.load()) return false;
     std::lock_guard<std::mutex> lk(m_frameMutex);
     out = m_latestFrame;
@@ -199,29 +271,29 @@ void ServiceProxy::LoadConfig() {
     if (!in.is_open()) return;
     std::string line, section;
     while (std::getline(in, line)) {
-        if (line.empty() || line[0] == ';') continue;
-        if (line.front() == '[' && line.back() == ']') {
-            section = line.substr(1, line.size() - 2);
-        } else if (section == "Service") {
-            auto eq = line.find('=');
-            if (eq != std::string::npos) {
-                std::string k = line.substr(0, eq);
-                std::string v = line.substr(eq + 1);
-                if (k == "mode") m_srvModeFull = (v == "full");
-                else if (k == "auto_mode") m_srvAutoMode = (v == "1" || v == "true");
-                else if (k == "stylus_vhf_enabled") m_srvStylusVhfEnabled = (v == "1" || v == "true");
-            }
+        const std::string trimmed = TrimCopy(line);
+        if (trimmed.empty() || trimmed[0] == ';' || trimmed[0] == '#') continue;
+        if (trimmed.front() == '[' && trimmed.back() == ']') {
+            section = TrimCopy(std::string_view(trimmed).substr(1, trimmed.size() - 2));
+            continue;
+        }
+
+        std::string key;
+        std::string value;
+        if (!ParseIniKeyValue(trimmed, key, value)) continue;
+
+        if (section == "Service") {
+            if (key == "mode") m_srvModeFull = (value == "full");
+            else if (key == "auto_mode") m_srvAutoMode = (value == "1" || value == "true");
+            else if (key == "stylus_vhf_enabled") m_srvStylusVhfEnabled = (value == "1" || value == "true");
         } else if (section == "TouchPipeline") {
-            auto eq = line.find('=');
-            if (eq != std::string::npos) {
-                m_pipeline.LoadConfig(
-                    line.substr(0, eq), line.substr(eq + 1));
-            }
+            m_pipeline.LoadConfig(key, value);
         } else if (section == "StylusPipeline") {
-            auto eq = line.find('=');
-            if (eq != std::string::npos) {
-                m_stylusPipeline.LoadConfig(
-                    line.substr(0, eq), line.substr(eq + 1));
+            m_stylusPipeline.LoadConfig(key, value);
+        } else if (IsLegacyTouchSection(section)) {
+            const auto mappedKey = MapLegacyTouchKey(section, key);
+            if (mappedKey.has_value()) {
+                m_pipeline.LoadConfig(*mappedKey, value);
             }
         }
     }

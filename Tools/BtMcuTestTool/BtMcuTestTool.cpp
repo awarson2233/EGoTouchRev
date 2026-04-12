@@ -122,8 +122,15 @@ void AddLog(const std::string& channel, const std::string& dir, const std::vecto
 
 // Live pressure decode
 static std::atomic<uint16_t> g_pressLive[4] = {0,0,0,0};
+static std::atomic<uint16_t> g_pressLiveMax{0};
 static std::atomic<uint8_t> g_pressFreq1{0}, g_pressFreq2{0};
 static std::atomic<uint8_t> g_pressReportType{0};
+static std::atomic<uint64_t> g_evtRxCount{0};
+static std::atomic<uint64_t> g_pressRxCount{0};
+static std::atomic<uint64_t> g_pressValidReportCount{0};
+static std::atomic<int> g_evtRxFps{0};
+static std::atomic<int> g_pressRxFps{0};
+static std::atomic<int> g_pressValidReportFps{0};
 
 #include <setupapi.h>
 extern "C" {
@@ -302,6 +309,20 @@ static void RunHandshake() {
     g_handshakeComplete.store(true);
 }
 
+static void ResetFrameRateCounters() {
+    g_evtRxCount.store(0);
+    g_pressRxCount.store(0);
+    g_pressValidReportCount.store(0);
+    g_evtRxFps.store(0);
+    g_pressRxFps.store(0);
+    g_pressValidReportFps.store(0);
+    g_pressLiveMax.store(0);
+    g_pressReportType.store(0);
+    g_pressFreq1.store(0);
+    g_pressFreq2.store(0);
+    for (auto& pressure : g_pressLive) pressure.store(0);
+}
+
 // ---- Read Threads ----
 void EventReadThread() {
     while (g_evtKeepReading.load()) {
@@ -312,6 +333,7 @@ void EventReadThread() {
         std::vector<uint8_t> rxBuf;
         auto res = g_evtTransport->ReadPacket(rxBuf, 1000);
         if (res.has_value() && !rxBuf.empty()) {
+            g_evtRxCount.fetch_add(1, std::memory_order_relaxed);
             // Decode event name for log
             std::string label = "Rx";
             if (rxBuf.size() >= 7) {
@@ -346,17 +368,22 @@ void PressureReadThread() {
         std::vector<uint8_t> rxBuf;
         auto res = g_pressTransport->ReadPacket(rxBuf, 1000);
         if (res.has_value() && !rxBuf.empty()) {
+            g_pressRxCount.fetch_add(1, std::memory_order_relaxed);
             AddLog("Press", "Rx", rxBuf);
             // Decode pressure report
             if (rxBuf.size() >= 11 && rxBuf[0] == 0x55) {
+                g_pressValidReportCount.fetch_add(1, std::memory_order_relaxed);
                 g_pressReportType.store(rxBuf[0]);
                 g_pressFreq1.store(rxBuf[1]);
                 g_pressFreq2.store(rxBuf[2]);
+                uint16_t maxPress = 0;
                 for (int k = 0; k < 4; ++k) {
                     uint16_t p = static_cast<uint16_t>(rxBuf[3 + k*2]) |
                                 (static_cast<uint16_t>(rxBuf[4 + k*2]) << 8);
                     g_pressLive[k].store(p);
+                    if (p > maxPress) maxPress = p;
                 }
+                g_pressLiveMax.store(maxPress);
             }
         }
     }
@@ -469,6 +496,10 @@ int main(int, char**)
     char customCmdBuf[16] = "7101";
     char customPayloadBuf[128] = "";
     char ackBuf[16] = "00";
+    auto lastFpsTick = std::chrono::steady_clock::now();
+    uint64_t lastEvtRxCount = 0;
+    uint64_t lastPressRxCount = 0;
+    uint64_t lastPressValidReportCount = 0;
 
     while (!done)
     {
@@ -494,6 +525,33 @@ int main(int, char**)
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
 
+        auto now = std::chrono::steady_clock::now();
+        auto fpsElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now - lastFpsTick);
+        if (fpsElapsed.count() >= 1000) {
+            const uint64_t currentEvtRxCount =
+                g_evtRxCount.load(std::memory_order_relaxed);
+            const uint64_t currentPressRxCount =
+                g_pressRxCount.load(std::memory_order_relaxed);
+            const uint64_t currentPressValidReportCount =
+                g_pressValidReportCount.load(std::memory_order_relaxed);
+
+            g_evtRxFps.store(
+                static_cast<int>(currentEvtRxCount - lastEvtRxCount),
+                std::memory_order_relaxed);
+            g_pressRxFps.store(
+                static_cast<int>(currentPressRxCount - lastPressRxCount),
+                std::memory_order_relaxed);
+            g_pressValidReportFps.store(
+                static_cast<int>(currentPressValidReportCount - lastPressValidReportCount),
+                std::memory_order_relaxed);
+
+            lastEvtRxCount = currentEvtRxCount;
+            lastPressRxCount = currentPressRxCount;
+            lastPressValidReportCount = currentPressValidReportCount;
+            lastFpsTick = now;
+        }
+
         // Main UI
         ImGui::SetNextWindowPos(ImVec2(100, 100), ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
@@ -514,6 +572,11 @@ int main(int, char**)
         }
 
         if (ImGui::Button("Connect Both")) {
+            ResetFrameRateCounters();
+            lastFpsTick = std::chrono::steady_clock::now();
+            lastEvtRxCount = 0;
+            lastPressRxCount = 0;
+            lastPressValidReportCount = 0;
             // Event channel
             auto evtPath = FindEventDevicePath();
             if (evtPath.has_value()) {
@@ -548,6 +611,11 @@ int main(int, char**)
             if (g_evtTransport) g_evtTransport->Close();
             if (g_pressTransport) g_pressTransport->Close();
             g_handshakeComplete.store(false);
+            ResetFrameRateCounters();
+            lastFpsTick = std::chrono::steady_clock::now();
+            lastEvtRxCount = 0;
+            lastPressRxCount = 0;
+            lastPressValidReportCount = 0;
         }
         ImGui::SameLine();
         if (g_handshakeComplete.load()) {
@@ -628,6 +696,14 @@ int main(int, char**)
         ImGui::Text("Pressure: [%5d] [%5d] [%5d] [%5d]",
                     g_pressLive[0].load(), g_pressLive[1].load(),
                     g_pressLive[2].load(), g_pressLive[3].load());
+        ImGui::Text("4ch Max: %5d", g_pressLiveMax.load());
+        ImGui::Text("Rx FPS: Event %d Hz | Pressure %d Hz | Valid 0x55 %d Hz",
+                    g_evtRxFps.load(), g_pressRxFps.load(),
+                    g_pressValidReportFps.load());
+        ImGui::Text("Rx Total: Event %llu | Pressure %llu | Valid 0x55 %llu",
+                    static_cast<unsigned long long>(g_evtRxCount.load()),
+                    static_cast<unsigned long long>(g_pressRxCount.load()),
+                    static_cast<unsigned long long>(g_pressValidReportCount.load()));
 
         ImGui::Separator();
 
