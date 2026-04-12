@@ -17,10 +17,6 @@
 
 #include "himax/HimaxChip.h"
 #include "SystemStateEvent.h"
-<<<<<<< HEAD
-#include "FramePipeline.h"
-=======
->>>>>>> origin/pr/03-hardware-diagnostics
 #include "TouchSolver/TouchPipeline.h"
 #include "vhf/VhfReporter.h"
 #include "StylusSolver/StylusPipeline.h"
@@ -100,17 +96,10 @@ public:
     bool IsStylusVhfEnabled() const { return m_stylusVhfEnabled.load(); }
 
     // Pipeline / VHF 配置 — 仅在 Start() 前调用
-<<<<<<< HEAD
-    Engine::TouchPipeline& GetTouchPipeline() { return m_touchPipeline; }
-    // Legacy alias
-    Engine::TouchPipeline& GetPipeline() { return m_touchPipeline; }
-    Engine::StylusPipeline& GetStylusPipeline() { return m_stylusPipeline; }
-=======
     Solvers::TouchPipeline& GetTouchPipeline() { return m_touchPipeline; }
     // Legacy alias
     Solvers::TouchPipeline& GetPipeline() { return m_touchPipeline; }
     Solvers::StylusPipeline& GetStylusPipeline() { return m_stylusPipeline; }
->>>>>>> origin/pr/03-hardware-diagnostics
     VhfReporter& GetVhfReporter() { return m_vhfReporter; }
 
     /// 注入 BT MCU 压感值（由 PenBridge 线程写入，StylusPipeline 帧内读取）
@@ -172,13 +161,8 @@ private:
     std::atomic<bool> m_autoMode{false};
     std::atomic<bool> m_stylusVhfEnabled{true};
     Himax::Chip m_chip;
-<<<<<<< HEAD
-    Engine::TouchPipeline m_touchPipeline;
-    Engine::StylusPipeline m_stylusPipeline;
-=======
     Solvers::TouchPipeline m_touchPipeline;
     Solvers::StylusPipeline m_stylusPipeline;
->>>>>>> origin/pr/03-hardware-diagnostics
     VhfReporter m_vhfReporter;
     uint8_t m_recoverCount = 0;
     bool m_needSuspendDeinit = false;  // suspend 首次进入时执行 Deinit

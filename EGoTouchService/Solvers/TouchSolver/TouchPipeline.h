@@ -7,11 +7,7 @@
 //   - Config schema/save/load unified in this class.
 // ══════════════════════════════════════════════════════════════════════
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/TouchPipeline.h
-#include "EngineTypes.h"
-=======
 #include "SolverTypes.h"
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/TouchPipeline.h
 #include "ConfigSchema.h"
 
 // ── Phase 1: Frame Parsing ──
@@ -42,21 +38,11 @@
 #include "TouchGestureStateMachine.hpp"
 
 #include <mutex>
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/TouchPipeline.h
-=======
 #include <atomic>
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/TouchPipeline.h
 #include <string>
 #include <vector>
 #include <iostream>
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/TouchPipeline.h
-namespace Engine {
-
-class TouchPipeline {
-public:
-    TouchPipeline() = default;
-=======
 namespace Solvers {
 
 class TouchPipeline {
@@ -66,7 +52,6 @@ public:
         m_diagPeaks.reserve(Touch::PeakDetector::kMaxStoredPeaks);
 #endif
     }
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/TouchPipeline.h
 
     /// Main entry: processes one frame through all 6 phases.
     bool Process(HeatmapFrame& frame);
@@ -84,15 +69,9 @@ public:
     std::array<uint8_t, 2400> GetTouchZones() const;
     std::array<uint8_t, 2400> GetZoneEdge() const;
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/TouchPipeline.h
-    int GetCachedPeakCount() const { return m_cachedPeakCount; }
-    int GetCachedZoneCount() const { return m_cachedZoneCount; }
-    int GetCachedContactCount() const { return m_cachedContactCount; }
-=======
     int GetCachedPeakCount() const { return m_cachedPeakCount.load(std::memory_order_relaxed); }
     int GetCachedZoneCount() const { return m_cachedZoneCount.load(std::memory_order_relaxed); }
     int GetCachedContactCount() const { return m_cachedContactCount.load(std::memory_order_relaxed); }
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/TouchPipeline.h
 
     // ── Public module access (for direct parameter tuning from UI thread) ──
     // NOTE: Write access must be done when pipeline is idle or via config reload.
@@ -113,17 +92,6 @@ public:
     Touch::TouchGestureStateMachine  m_gesture;
 
 private:
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/TouchPipeline.h
-    mutable std::mutex m_mtx;
-
-    // UI-thread-safe cache
-    int m_cachedPeakCount = 0;
-    int m_cachedZoneCount = 0;
-    int m_cachedContactCount = 0;
-};
-
-} // namespace Engine
-=======
     void ResetIdleOutputs(HeatmapFrame& frame);
 
 #if EGOTOUCH_DIAG
@@ -140,4 +108,3 @@ private:
 };
 
 } // namespace Solvers
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/TouchPipeline.h

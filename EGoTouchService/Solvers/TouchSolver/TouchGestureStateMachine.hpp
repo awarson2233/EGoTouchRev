@@ -3,21 +3,13 @@
 // Header-only. Converted from Reporting/TouchGestureStateMachine.{h,cpp}.
 // 5-Phase gesture lifecycle per slot.
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/TouchGestureStateMachine.hpp
-#include "EngineTypes.h"
-=======
 #include "SolverTypes.h"
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/TouchGestureStateMachine.hpp
 #include <array>
 #include <cstdint>
 #include <algorithm>
 #include <cmath>
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/TouchGestureStateMachine.hpp
-namespace Engine { namespace Touch {
-=======
 namespace Solvers { namespace Touch {
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/TouchGestureStateMachine.hpp
 
 enum class GesturePhase : uint8_t {
     Idle = 0, PressCandidate, Dragging, LongPressHold, ReleasePending,
@@ -55,8 +47,6 @@ public:
     bool  m_bypassStateMachine = false;
 
     TouchGestureStateMachine() { for (auto& s : m_slots) s.Reset(); }
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/TouchGestureStateMachine.hpp
-=======
     inline bool HasLiveState() const {
         for (const auto& slot : m_slots) {
             if (slot.phase != GesturePhase::Idle || slot.upEmitted) {
@@ -65,7 +55,6 @@ public:
         }
         return false;
     }
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/TouchGestureStateMachine.hpp
 
     inline bool Process(HeatmapFrame& frame) {
         if (!m_enabled) return true;
@@ -117,14 +106,11 @@ public:
             const int idx = c.id - 1;
             if (idx < 0 || idx >= kMaxSlots) continue;
             if (c.state == TouchStateUp) { c.isReported = false; continue; }
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/TouchGestureStateMachine.hpp
-=======
             if ((c.lifeFlags & TouchLifeSilentGap) != 0) {
                 c.isReported = false;
                 c.reportEvent = TouchReportIdle;
                 continue;
             }
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/TouchGestureStateMachine.hpp
             const auto& slot = m_slots[idx];
             switch (slot.phase) {
             case GesturePhase::Idle:
@@ -255,8 +241,4 @@ private:
     }
 };
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/TouchGestureStateMachine.hpp
-}} // namespace Engine::Touch
-=======
 }} // namespace Solvers::Touch
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/TouchGestureStateMachine.hpp

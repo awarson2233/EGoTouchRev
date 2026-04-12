@@ -304,14 +304,7 @@ void DeviceRuntime::OnStreaming() {
         m_vhfReporter.DispatchStylus(touchFrame.stylus.packet);
     }
 
-<<<<<<< HEAD
-    // 3. Touch pipeline (always active)
-    Engine::HeatmapFrame touchFrame;
-    touchFrame.rawData.assign(rawData.begin(), rawData.end());
-    touchFrame.masterWasRead = m_chip.m_lastMasterWasRead;  // 传递 master 读取状态给帧写入器
-=======
     // 4. Touch pipeline — reads frame, writes contacts/packets
->>>>>>> origin/pr/03-hardware-diagnostics
     m_touchPipeline.Process(touchFrame);
     m_vhfReporter.DispatchTouch(touchFrame);
 

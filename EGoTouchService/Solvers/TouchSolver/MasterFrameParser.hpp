@@ -3,19 +3,11 @@
 // Header-only. Converted from Preprocessing/MasterFrameParser.{h,cpp}.
 // Parses raw frame bytes → heatmapMatrix + structured suffix views.
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/MasterFrameParser.hpp
-#include "EngineTypes.h"
-#include "FrameLayout.h"
-#include <cstring>
-
-namespace Engine { namespace Touch {
-=======
 #include "SolverTypes.h"
 #include "FrameLayout.h"
 #include <cstring>
 
 namespace Solvers { namespace Touch {
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/MasterFrameParser.hpp
 
 class MasterFrameParser {
 public:
@@ -25,19 +17,11 @@ public:
         if (!m_enabled) return true;
 
         // Master 帧: 7B header + 4800B matrix + 256B suffix = 5063B
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/MasterFrameParser.hpp
-        if (frame.rawData.size() < Frame::kMasterFrameSize) {
-            return true;
-        }
-
-        const uint8_t* raw_ptr = frame.rawData.data() + Frame::kHeaderBytes;
-=======
         if (frame.rawLen < Frame::kMasterFrameSize) {
             return true;
         }
 
         const uint8_t* raw_ptr = frame.rawPtr + Frame::kHeaderBytes;
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/MasterFrameParser.hpp
         int16_t* heat_ptr = reinterpret_cast<int16_t*>(frame.heatmapMatrix);
 
         // 使用标准 C++ 循环处理，避免在 ARM64 和未对齐地址导致的硬件异常
@@ -49,16 +33,6 @@ public:
             heat_ptr[i] = static_cast<int16_t>(val);
         }
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/MasterFrameParser.hpp
-        // Populate structured suffix views from rawData
-        frame.masterSuffix.LoadFromBytes(
-            frame.rawData.data() + Frame::kMasterSuffixOffset);
-        frame.masterSuffixValid = true;
-
-        if (frame.rawData.size() >= Frame::kTotalFrameSize) {
-            frame.slaveSuffix.LoadFromBytes(
-                frame.rawData.data() + Frame::kSlaveSuffixOffset);
-=======
         // Populate structured suffix views from rawPtr
         frame.masterSuffix.LoadFromBytes(
             frame.rawPtr + Frame::kMasterSuffixOffset);
@@ -67,7 +41,6 @@ public:
         if (frame.rawLen >= Frame::kTotalFrameSize) {
             frame.slaveSuffix.LoadFromBytes(
                 frame.rawPtr + Frame::kSlaveSuffixOffset);
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/MasterFrameParser.hpp
             frame.slaveSuffixValid = true;
         }
 
@@ -75,8 +48,4 @@ public:
     }
 };
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/MasterFrameParser.hpp
-}} // namespace Engine::Touch
-=======
 }} // namespace Solvers::Touch
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/MasterFrameParser.hpp

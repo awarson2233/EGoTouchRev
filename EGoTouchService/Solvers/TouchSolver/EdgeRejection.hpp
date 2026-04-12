@@ -3,20 +3,12 @@
 // Header-only. Converted from TouchSolver/EdgeRejection.{h,cpp}.
 // Suppresses touch-down events at sensor boundaries.
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/EdgeRejection.hpp
-#include "EngineTypes.h"
-=======
 #include "SolverTypes.h"
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/EdgeRejection.hpp
 #include "EdgeCompensation.h"
 #include <vector>
 #include <cstdint>
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/EdgeRejection.hpp
-namespace Engine { namespace Touch {
-=======
 namespace Solvers { namespace Touch {
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/EdgeRejection.hpp
 
 class EdgeRejector {
 public:
@@ -52,8 +44,4 @@ public:
     }
 };
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/EdgeRejection.hpp
-}} // namespace Engine::Touch
-=======
 }} // namespace Solvers::Touch
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/EdgeRejection.hpp
