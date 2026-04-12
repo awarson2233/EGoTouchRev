@@ -7,7 +7,7 @@
 #include "ConfigSync.h"
 #include "EngineTypes.h"
 #include "IpcProtocol.h"
-#include "FramePipeline.h"
+#include "TouchSolver/TouchPipeline.h"
 #include "StylusPipeline.h"
 #include "ConcurrentRingBuffer.h"
 #include "DvrFrameSlot.h"
@@ -51,7 +51,7 @@ public:
     bool GetLatestFrame(Engine::HeatmapFrame& out);
 
     // Pipeline for GUI config UI (local copy)
-    Engine::FramePipeline& GetPipeline() { return m_pipeline; }
+    Engine::TouchPipeline& GetPipeline() { return m_pipeline; }
     Engine::StylusPipeline& GetStylusPipeline() { return m_stylusPipeline; }
 
     // Remote commands
@@ -108,7 +108,7 @@ private:
     Ipc::IpcPipeClient    m_client;
     Ipc::SharedFrameReader m_frameReader;
     Ipc::ConfigDirtyFlag  m_configDirty;
-    Engine::FramePipeline m_pipeline;
+    Engine::TouchPipeline m_pipeline;
     Engine::StylusPipeline m_stylusPipeline;
 
     // Latest frame snapshot for GUI
@@ -142,7 +142,7 @@ private:
 
     // MasterParser-only mode
     bool m_masterParserOnly = false;
-    std::vector<bool> m_savedProcessorStates;
+    bool m_savedMasterOnly = false;
 
     // PenBridge status (polled alongside logs)
     mutable std::mutex m_penMutex;

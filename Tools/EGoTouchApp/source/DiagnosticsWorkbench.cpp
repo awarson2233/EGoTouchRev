@@ -2,15 +2,9 @@
 #include "ConfigUIRenderer.h"
 #include "imgui_internal.h"
 #include "Device.h"
-#include "MasterFrameParser.h"
-#include "BaselineSubtraction.h"
-#include "CMFProcessor.h"
-#include "GridIIRProcessor.h"
-#include "FeatureExtractor.h"
+#include "TouchSolver/TouchPipeline.h"
 #include "StylusPipeline.h"
 #include "StylusSolver/AsaTypes.hpp"
-#include "TouchTracker.h"
-#include "CoordinateFilter.h"
 #include "imgui.h"
 #include "Logger.h"
 #include <fstream>
@@ -25,25 +19,6 @@
 namespace App {
 
 namespace {
-
-void DrawProcessorConfigBlock(Engine::IFrameProcessor* processor, int idBase) {
-    if (processor == nullptr) {
-        return;
-    }
-    ImGui::PushID(idBase);
-    bool enabled = processor->IsEnabled();
-    if (ImGui::Checkbox(processor->GetName().c_str(), &enabled)) {
-        processor->SetEnabled(enabled);
-    }
-    if (enabled) {
-        ImGui::Indent();
-        auto schema = processor->GetConfigSchema();
-        ConfigUIRenderer::RenderConfigSchema(schema, processor->GetName());
-        ImGui::Unindent();
-    }
-    ImGui::PopID();
-}
-
 } // namespace
 
 DiagnosticsWorkbench::DiagnosticsWorkbench(ServiceProxy* proxy) : m_proxy(proxy) {
@@ -211,18 +186,10 @@ void DiagnosticsWorkbench::DrawInspectorPanel() {
     // Level 1: category tabs
     if (ImGui::BeginTabBar("CategoryTabs")) {
         if (ImGui::BeginTabItem("Preprocessing")) {
-            // Render preprocessing pipeline processors directly
             if (m_proxy) {
                 if (masterParserOnly) ImGui::BeginDisabled();
-                int id = 2000;
-                for (const auto& p : m_proxy->GetPipeline().GetProcessors()) {
-                    if (dynamic_cast<Engine::MasterFrameParser*>(p.get()) ||
-                        dynamic_cast<Engine::BaselineSubtraction*>(p.get()) ||
-                        dynamic_cast<Engine::CMFProcessor*>(p.get()) ||
-                        dynamic_cast<Engine::GridIIRProcessor*>(p.get())) {
-                        DrawProcessorConfigBlock(p.get(), id++);
-                    }
-                }
+                auto schema = m_proxy->GetPipeline().GetConfigSchema();
+                ConfigUIRenderer::RenderConfigSchema(schema, "Preprocessing");
                 if (masterParserOnly) ImGui::EndDisabled();
             } else {
                 ImGui::TextUnformatted("ServiceProxy unavailable.");
@@ -524,23 +491,13 @@ void DiagnosticsWorkbench::DrawTouchSolverPanel() {
         ImGui::BeginDisabled();
     }
 
-    bool foundAny = false;
-    int id = 2000;
-    for (const auto& p : m_proxy->GetPipeline().GetProcessors()) {
-        if (dynamic_cast<Engine::FeatureExtractor*>(p.get())) {
-            DrawProcessorConfigBlock(p.get(), id++);
-            foundAny = true;
-        }
-    }
-    if (!foundAny) {
-        ImGui::TextUnformatted("No FeatureExtractor found.");
-    }
+    // Unified config schema from TouchPipeline
+    auto schema = m_proxy->GetPipeline().GetConfigSchema();
+    ConfigUIRenderer::RenderConfigSchema(schema, "Touch Solver (Feature Extraction)");
 
     if (masterParserOnly) {
         ImGui::EndDisabled();
     }
-
-
 }
 
 void DiagnosticsWorkbench::DrawTouchTrackingPanel() {
@@ -555,18 +512,9 @@ void DiagnosticsWorkbench::DrawTouchTrackingPanel() {
         ImGui::BeginDisabled();
     }
 
-    bool foundAny = false;
-    int id = 2500;
-    for (const auto& p : m_proxy->GetPipeline().GetProcessors()) {
-        if (dynamic_cast<Engine::TouchTracker*>(p.get()) ||
-            dynamic_cast<Engine::CoordinateFilter*>(p.get())) {
-            DrawProcessorConfigBlock(p.get(), id++);
-            foundAny = true;
-        }
-    }
-    if (!foundAny) {
-        ImGui::TextUnformatted("No TouchTracker found.");
-    }
+    // Unified config schema from TouchPipeline
+    auto schema = m_proxy->GetPipeline().GetConfigSchema();
+    ConfigUIRenderer::RenderConfigSchema(schema, "Tracking & Report");
 
     if (masterParserOnly) {
         ImGui::EndDisabled();
@@ -586,8 +534,6 @@ void DiagnosticsWorkbench::DrawTouchTrackingPanel() {
         ImGui::TextColored(fpsColor(fps),       "Master Frame Rate: %d Hz", fps);
         ImGui::TextColored(fpsColor(slaveFps),   "Slave  Frame Rate: %d Hz", slaveFps);
     }
-
-
 }
 
 void DiagnosticsWorkbench::DrawStylusControlPanel() {
@@ -1481,14 +1427,10 @@ void DiagnosticsWorkbench::ExportCurrentFrameToCSV(bool isAutoCapture) {
     // Config parameters snapshot
     if (m_proxy) {
         out << "--- Config Parameters ---\n";
-        for (const auto& p : m_proxy->GetPipeline().GetProcessors()) {
-            auto schema = p->GetConfigSchema();
-            if (schema.empty()) continue;
-            out << "[" << p->GetName() << "]\n";
-            std::ostringstream cfgStream;
-            p->SaveConfig(cfgStream);
-            out << cfgStream.str();
-        }
+        out << "[TouchPipeline]\n";
+        std::ostringstream cfgStream;
+        m_proxy->GetPipeline().SaveConfig(cfgStream);
+        out << cfgStream.str();
         out << "\n";
     }
     // Peaks summary

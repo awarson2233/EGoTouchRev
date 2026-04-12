@@ -1,10 +1,4 @@
-#include "BaselineSubtraction.h"
-#include "CMFProcessor.h"
-#include "FeatureExtractor.h"
-#include "FramePipeline.h"
-#include "GridIIRProcessor.h"
-#include "MasterFrameParser.h"
-#include "TouchTracker.h"
+#include "TouchSolver/TouchPipeline.h"
 
 #include <algorithm>
 #include <array>
@@ -138,23 +132,14 @@ std::vector<std::filesystem::path> CollectCandidateFiles(const std::filesystem::
     return files;
 }
 
-void BuildDefaultPipeline(Engine::FramePipeline& pipeline) {
-    pipeline.AddProcessor(std::make_unique<Engine::MasterFrameParser>());
-    pipeline.AddProcessor(std::make_unique<Engine::BaselineSubtraction>());
-    pipeline.AddProcessor(std::make_unique<Engine::CMFProcessor>());
-    pipeline.AddProcessor(std::make_unique<Engine::GridIIRProcessor>());
-    pipeline.AddProcessor(std::make_unique<Engine::FeatureExtractor>());
-    pipeline.AddProcessor(std::make_unique<Engine::TouchTracker>());
-}
-
-bool LoadConfigFromFile(Engine::FramePipeline& pipeline, const std::filesystem::path& configPath) {
+bool LoadConfigFromFile(Engine::TouchPipeline& pipeline, const std::filesystem::path& configPath) {
     std::ifstream in(configPath);
     if (!in.is_open()) {
         return false;
     }
 
     std::string line;
-    Engine::IFrameProcessor* currentProcessor = nullptr;
+    std::string section;
     while (std::getline(in, line)) {
         if (!line.empty() && line.back() == '\r') {
             line.pop_back();
@@ -169,33 +154,19 @@ bool LoadConfigFromFile(Engine::FramePipeline& pipeline, const std::filesystem::
             if (endBracket == std::string::npos) {
                 continue;
             }
-
-            std::string section = line.substr(1, endBracket - 1);
-            if (section == "Touch Tracker (IDT/TE-lite)") {
-                section = "Touch Tracker (IDT/TS/TE-lite)";
-            }
-
-            currentProcessor = nullptr;
-            for (const auto& p : pipeline.GetProcessors()) {
-                if (p->GetName() == section) {
-                    currentProcessor = p.get();
-                    break;
-                }
-            }
+            section = line.substr(1, endBracket - 1);
             continue;
         }
 
         const size_t pos = line.find('=');
-        if (pos == std::string::npos || currentProcessor == nullptr) {
+        if (pos == std::string::npos) {
             continue;
         }
 
         const std::string key = line.substr(0, pos);
         const std::string val = line.substr(pos + 1);
-        if (key == "Enabled") {
-            currentProcessor->SetEnabled(val == "1" || val == "true");
-        } else {
-            currentProcessor->LoadConfig(key, val);
+        if (section == "TouchPipeline") {
+            pipeline.LoadConfig(key, val);
         }
     }
 
@@ -285,8 +256,7 @@ int main(int argc, char** argv) {
         return 4;
     }
 
-    Engine::FramePipeline pipeline;
-    BuildDefaultPipeline(pipeline);
+    Engine::TouchPipeline pipeline;
     if (!LoadConfigFromFile(pipeline, configPath)) {
         std::cerr << "[RawdataBenchmarkTest] Failed to open config: " << configPath.string() << "\n";
         return 5;
@@ -296,7 +266,7 @@ int main(int argc, char** argv) {
     const auto begin = std::chrono::steady_clock::now();
     for (int i = 0; i < kBenchmarkFrames; ++i) {
         Engine::HeatmapFrame frame = inputFrames[static_cast<size_t>(i) % inputFrames.size()];
-        if (!pipeline.Execute(frame)) {
+        if (!pipeline.Process(frame)) {
             ++droppedFrames;
         }
     }

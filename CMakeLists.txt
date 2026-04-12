@@ -86,29 +86,10 @@ target_link_libraries(Device PUBLIC Common Host Engine setupapi hid)
 set(ENGINE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/EGoTouchService/Engine")
 
 add_library(Engine STATIC
-    # Root (Infrastructure)
+    # Root (Infrastructure — retained for backward compat)
     EGoTouchService/Engine/FramePipeline.cpp
-    # Preprocessing
-    EGoTouchService/Engine/Preprocessing/MasterFrameParser.cpp
-    EGoTouchService/Engine/Preprocessing/BaselineSubtraction.cpp
-    EGoTouchService/Engine/Preprocessing/CMFProcessor.cpp
-    EGoTouchService/Engine/Preprocessing/GridIIRProcessor.cpp
-    EGoTouchService/Engine/Preprocessing/SignalConditioningFilter.cpp
-    EGoTouchService/Engine/Preprocessing/GaussianFilter.cpp
-    # TouchSolver
-    EGoTouchService/Engine/TouchSolver/MacroZoneDetector.cpp
-    EGoTouchService/Engine/TouchSolver/MicroZoneSegmenter.cpp
-    EGoTouchService/Engine/TouchSolver/PeakDetector.cpp
-    EGoTouchService/Engine/TouchSolver/ZoneExpander.cpp
-    EGoTouchService/Engine/TouchSolver/EdgeCompensation.cpp
-    EGoTouchService/Engine/TouchSolver/TouchSize.cpp
-    EGoTouchService/Engine/TouchSolver/EdgeRejection.cpp
-    EGoTouchService/Engine/TouchSolver/PalmRejector.cpp
-    EGoTouchService/Engine/TouchSolver/CoordinateFilter.cpp
-    EGoTouchService/Engine/TouchSolver/FeatureExtractor.cpp
-    # Reporting
-    EGoTouchService/Engine/Reporting/TouchTracker.cpp
-    EGoTouchService/Engine/Reporting/TouchGestureStateMachine.cpp
+    # TouchSolver (new linear orchestrator — replaces old Preprocessing/TouchSolver/Reporting .cpp files)
+    EGoTouchService/Engine/TouchSolver/TouchPipeline.cpp
     # StylusSolver (official ASA pipeline — modules are header-only .hpp)
     EGoTouchService/Engine/StylusSolver/StylusPipeline.cpp
 )

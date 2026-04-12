@@ -19,6 +19,7 @@
 #include "himax/HimaxChip.h"
 #include "SystemStateEvent.h"
 #include "FramePipeline.h"
+#include "TouchSolver/TouchPipeline.h"
 #include "vhf/VhfReporter.h"
 #include "StylusSolver/StylusPipeline.h"
 
@@ -100,9 +101,9 @@ public:
     bool IsStylusVhfEnabled() const { return m_stylusVhfEnabled.load(); }
 
     // Pipeline / VHF 配置 — 仅在 Start() 前调用
-    Engine::FramePipeline& GetTouchPipeline() { return m_touchPipeline; }
+    Engine::TouchPipeline& GetTouchPipeline() { return m_touchPipeline; }
     // Legacy alias
-    Engine::FramePipeline& GetPipeline() { return m_touchPipeline; }
+    Engine::TouchPipeline& GetPipeline() { return m_touchPipeline; }
     Engine::StylusPipeline& GetStylusPipeline() { return m_stylusPipeline; }
     VhfReporter& GetVhfReporter() { return m_vhfReporter; }
 
@@ -164,7 +165,7 @@ private:
     std::atomic<bool> m_touchOnly{false};
     std::atomic<bool> m_stylusVhfEnabled{true};
     Himax::Chip m_chip;
-    Engine::FramePipeline m_touchPipeline;
+    Engine::TouchPipeline m_touchPipeline;
     Engine::StylusPipeline m_stylusPipeline;
     VhfReporter m_vhfReporter;
     uint8_t m_recoverCount = 0;

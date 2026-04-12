@@ -6,114 +6,88 @@
 
 namespace Asa {
 
-/// LinearFilter — 7-state FSM for straight-line detection and constraint.
+/// LinearFilter — Straight-line detection with gradual perpendicular constraint.
 ///
-/// Mirrors TSACore StraightLinePaintFun / UpdateStraightLinePrmt.
+/// Redesigned from TSACore 7-state FSM into 2-state (Curve/Straight) + smooth transition.
 ///
 /// Purpose: When a user draws a straight line, natural hand tremor causes
 /// perpendicular jitter. This module detects straight-line motion by
 /// least-squares fitting a line to the coordinate history, then constrains
-/// coordinates to lie on that line.
+/// coordinates to lie on that line with a gradual alpha transition.
 ///
-/// State machine:
-///   Init → Wait → Collect → CurveLine ⇄ EnterStraight ⇄ StraightLine → ExitStraight → CurveLine
+/// Key improvement over TSACore:
+///   - No 3-frame startup delay (Init/Wait/Collect removed)
+///   - Gradual constraint transition (no hard-cut coordinate jump)
+///   - Self-contained 400-frame buffer (shared across speed changes, only cleared on Leave)
 class LinearFilter {
 public:
-    enum class State {
-        Init = 0,
-        Wait = 1,
-        Collect = 2,
-        CurveLine = 3,
-        EnterStraight = 4,
-        StraightLine = 5,
-        ExitStraight = 6,
-    };
+    enum class Mode { Curve, Straight };
 
-    /// Reset state machine (call on pen-up)
+    /// Reset state and clear buffer (call on pen Leave only)
     inline void Reset() {
-        m_state = State::Init;
+        m_mode = Mode::Curve;
         m_bufCount = 0;
-        m_shortDisBufCount = 0;
-        m_fitGlobal = LineFit{};
-        m_fitCurrent = LineFit{};
+        m_constraintAlpha = 0.0f;
+        m_fit = LineFit{};
         m_output = AsaCoorResult{};
     }
 
-    /// Get current FSM state (for diagnostics)
-    inline int GetState() const { return static_cast<int>(m_state); }
+    /// Get current mode (for diagnostics)
+    inline Mode GetMode() const { return m_mode; }
+    inline float GetConstraintAlpha() const { return m_constraintAlpha; }
+    inline int GetBufferCount() const { return m_bufCount; }
 
     /// Main entry point — process one coordinate frame.
-    /// @param coor      Raw coordinate (LOCAL space)
-    /// @param pressure  Current pressure (0 = no-ink mode)
+    /// @param coor      Coordinate (GLOBAL space)
+    /// @param enabled   Whether LinearFilter is allowed to run (from MotionProfile)
     /// @return Filtered coordinate (constrained to line if detected)
-    inline AsaCoorResult Process(const AsaCoorResult& coor, uint16_t pressure) {
-        if (!enabled) return coor;
-
-        // Pen up or invalid → reset state machine
-        if (pressure == 0 || !coor.valid) {
-            Reset();
+    inline AsaCoorResult Process(const AsaCoorResult& coor, bool enabled) {
+        if (!enabled) {
+            // Module disabled (Hover/Landing/Lifting) — don't clear buffer,
+            // just pass through. Buffer persists for when we re-enter Moving.
+            m_constraintAlpha = 0.0f;
+            m_mode = Mode::Curve;
             return coor;
         }
 
-        m_output = coor;
-
-        // P2: Update dual fits when we have enough points (>= 20)
-        if (m_bufCount > static_cast<int>(minFitLength)) {
-            int agingWeight = kMaxBufLen - m_bufCount;
-            if (agingWeight < 3) agingWeight = m_bufCount;
-            m_fitCurrent = FitLine(true, agingWeight);
-            m_fitGlobal = FitLine(false, agingWeight);
-        }
-
-        // P2: Per-frame state transitions (TSACore: case 0→1, 1→2, 2→3)
-        switch (m_state) {
-        case State::Init:
-            m_state = State::Wait;
-            break;
-        case State::Wait:
-            m_state = State::Collect;
-            break;
-        case State::Collect:
-            m_state = State::CurveLine;
-            break;
-        case State::CurveLine:
-            ProcessCurveLine(coor);
-            break;
-        case State::EnterStraight:
-            ProcessEnterStraight(coor);
-            break;
-        case State::StraightLine:
-            ProcessStraightLine(coor);
-            break;
-        case State::ExitStraight:
-            ProcessExitStraight(coor);
-            break;
-        default:
-            m_state = State::CurveLine;
-            break;
-        }
-
-        // Push to buffers AFTER state machine (TSACore order)
+        // 1. Push point to buffer
         PushPoint(coor);
-        PushShortDisPoint(coor);
 
-        // Output clamping (TSACore: clamp to [0, sensorDim * 0x400])
-        if (m_output.dim1 < 0) m_output.dim1 = 0;
-        if (m_output.dim2 < 0) m_output.dim2 = 0;
+        // 2. Fit line if enough data
+        if (m_bufCount >= minFitLength) {
+            m_fit = FitLine();
+        }
 
-        return m_output;
+        // 3. State transitions
+        if (m_fit.valid) {
+            if (m_mode == Mode::Curve) {
+                if (m_fit.totalDist < enterResidualThreshold) {
+                    m_mode = Mode::Straight;
+                }
+            } else { // Straight
+                if (m_fit.maxDist > exitDeviation) {
+                    m_mode = Mode::Curve;
+                }
+            }
+        }
+
+        // 4. Gradual constraint transition (smooth alpha ramp)
+        float targetAlpha = (m_mode == Mode::Straight) ? perpConstraint : 0.0f;
+        m_constraintAlpha += (targetAlpha - m_constraintAlpha) * transitionRate;
+
+        // 5. Apply constraint
+        if (m_constraintAlpha > 0.01f && m_fit.valid) {
+            return ConstrainToLine(coor, m_fit, m_constraintAlpha);
+        }
+        return coor;
     }
 
     // ── Configuration ──
-
-    /// Enable/disable the linear filter
-    bool enabled = false;
 
     /// Minimum buffer length before line fitting starts
     int minFitLength = 20;
 
     /// Residual threshold to enter straight-line mode
-    /// (summed squared distance from fitted line)
     float enterResidualThreshold = 30.0f;
 
     /// Maximum deviation to stay in straight-line mode
@@ -122,9 +96,11 @@ public:
     /// Perpendicular constraint strength (0.0 = none, 1.0 = full)
     float perpConstraint = 0.7f;
 
+    /// Transition rate for alpha ramp (higher = faster transition)
+    float transitionRate = 0.3f;
+
 private:
     static constexpr int kMaxBufLen = 400;
-    static constexpr int kShortDisBufLen = 30;
 
     struct Point { int32_t x = 0, y = 0; };
 
@@ -134,18 +110,15 @@ private:
         float normFactor = 1.0f;
         float totalDist = 0;
         float maxDist = 0;
-        float lastDist = 0;
         bool  useYasX = false;
         bool  valid = false;
     };
 
-    State m_state = State::Init;
+    Mode m_mode = Mode::Curve;
+    float m_constraintAlpha = 0.0f;
     int m_bufCount = 0;
-    int m_shortDisBufCount = 0;
     std::array<Point, kMaxBufLen> m_buf{};
-    std::array<Point, kShortDisBufLen> m_shortDisBuf{};
-    LineFit m_fitGlobal{};
-    LineFit m_fitCurrent{};
+    LineFit m_fit{};
     AsaCoorResult m_output{};
 
     inline void PushPoint(const AsaCoorResult& c) {
@@ -153,6 +126,7 @@ private:
             m_buf[static_cast<size_t>(m_bufCount)] = {c.dim1, c.dim2};
             m_bufCount++;
         } else {
+            // Shift left by 1 (drop oldest)
             for (int i = 0; i < kMaxBufLen - 1; ++i) {
                 m_buf[static_cast<size_t>(i)] =
                     m_buf[static_cast<size_t>(i + 1)];
@@ -161,62 +135,33 @@ private:
         }
     }
 
-    inline void PushShortDisPoint(const AsaCoorResult& c) {
-        if (m_shortDisBufCount < kShortDisBufLen) {
-            m_shortDisBuf[static_cast<size_t>(m_shortDisBufCount)] = {c.dim1, c.dim2};
-            m_shortDisBufCount++;
-        } else {
-            for (int i = 0; i < kShortDisBufLen - 1; ++i) {
-                m_shortDisBuf[static_cast<size_t>(i)] =
-                    m_shortDisBuf[static_cast<size_t>(i + 1)];
-            }
-            m_shortDisBuf[kShortDisBufLen - 1] = {c.dim1, c.dim2};
-        }
-    }
-
-    /// Least-squares line fit (TSACore: UpdateStraightLinePrmt)
-    inline LineFit FitLine(bool includeCurrent, int agingWeight) const {
+    /// Least-squares line fit over all buffered points
+    inline LineFit FitLine() const {
         LineFit result{};
-        const int startIdx = std::max(0, kMaxBufLen - m_bufCount);
-        const int endIdx = kMaxBufLen;
-        int effectiveN = agingWeight;
-        if (effectiveN < 3) effectiveN = m_bufCount;
-        if (effectiveN < 3) return result;
+        if (m_bufCount < 3) return result;
 
         // Reference point for numerical stability
-        const double refX = (m_bufCount > 0) ?
-            static_cast<double>(m_buf[static_cast<size_t>(startIdx)].x) : 0.0;
-        const double refY = (m_bufCount > 0) ?
-            static_cast<double>(m_buf[static_cast<size_t>(startIdx)].y) : 0.0;
+        const double refX = static_cast<double>(m_buf[0].x);
+        const double refY = static_cast<double>(m_buf[0].y);
 
-        // Accumulate sums
         double sumX = 0, sumY = 0, sumXX = 0, sumXY = 0, sumYY = 0;
+        const int n = m_bufCount;
 
-        // If includeCurrent, add the newest point first (TSACore param_2==1)
-        if (includeCurrent && m_bufCount > 0) {
-            const int lastIdx = std::min(m_bufCount - 1, kMaxBufLen - 1);
-            double dx = static_cast<double>(m_buf[static_cast<size_t>(lastIdx)].x) - refX;
-            double dy = static_cast<double>(m_buf[static_cast<size_t>(lastIdx)].y) - refY;
-            sumX += dx; sumY += dy;
-            sumXX += dx * dx; sumXY += dx * dy; sumYY += dy * dy;
-        }
-
-        // Iterate over buffered points
-        for (int i = startIdx; i < endIdx && i < m_bufCount; ++i) {
+        for (int i = 0; i < n; ++i) {
             double dx = static_cast<double>(m_buf[static_cast<size_t>(i)].x) - refX;
             double dy = static_cast<double>(m_buf[static_cast<size_t>(i)].y) - refY;
             sumX += dx; sumY += dy;
             sumXX += dx * dx; sumXY += dx * dy; sumYY += dy * dy;
         }
 
-        const double dn = static_cast<double>(effectiveN);
+        const double dn = static_cast<double>(n);
 
-        // TSACore: subtract mean products for centering
+        // Centered covariances
         double cXY = sumXY - (sumX * sumY) / dn;
         double cXX = sumXX - (sumX * sumX) / dn;
         double cYY = sumYY - (sumY * sumY) / dn;
 
-        // Choose orientation with larger variance
+        // Choice orientation with larger variance
         if (cXX <= cYY) {
             // x = A*y + B (steep line)
             if (std::abs(cYY) < 1e-10) return result;
@@ -237,10 +182,9 @@ private:
             std::sqrt(static_cast<double>(result.slope) *
                       static_cast<double>(result.slope) + 1.0));
 
-        // Compute squared distances
+        // Compute distance statistics
         result.totalDist = 0;
         result.maxDist = 0;
-        result.lastDist = 0;
 
         auto calcDist2 = [&](int32_t px, int32_t py) -> float {
             float d;
@@ -254,34 +198,24 @@ private:
             return d * d;
         };
 
-        for (int i = startIdx; i < endIdx && i < m_bufCount; ++i) {
+        for (int i = 0; i < n; ++i) {
             float d2 = calcDist2(m_buf[static_cast<size_t>(i)].x,
                                  m_buf[static_cast<size_t>(i)].y);
             result.totalDist += d2;
             if (d2 > result.maxDist) result.maxDist = d2;
-            if (i == m_bufCount - 1) result.lastDist = d2;
-        }
-
-        // If includeCurrent, also check current (last) point distance
-        if (includeCurrent && m_bufCount > 0) {
-            const int lastIdx = std::min(m_bufCount - 1, kMaxBufLen - 1);
-            float d2 = calcDist2(m_buf[static_cast<size_t>(lastIdx)].x,
-                                 m_buf[static_cast<size_t>(lastIdx)].y);
-            if (d2 > result.maxDist) result.maxDist = d2;
-            result.lastDist = d2;
         }
 
         result.valid = true;
         return result;
     }
 
-    /// Constrain coordinate to the fitted line
-    inline AsaCoorResult ConstrainToLine(const AsaCoorResult& c,
-                                          const LineFit& fit) const {
+    /// Constrain coordinate to the fitted line with given alpha
+    static inline AsaCoorResult ConstrainToLine(const AsaCoorResult& c,
+                                                 const LineFit& fit,
+                                                 float alpha) {
         if (!fit.valid) return c;
-
         AsaCoorResult out = c;
-        const float strength = std::clamp(perpConstraint, 0.0f, 1.0f);
+        const float strength = std::clamp(alpha, 0.0f, 1.0f);
 
         if (!fit.useYasX) {
             float predicted = fit.slope * static_cast<float>(c.dim1) +
@@ -297,43 +231,6 @@ private:
             out.dim1 = static_cast<int32_t>(std::lround(filtered));
         }
         return out;
-    }
-
-    inline void ProcessCurveLine(const AsaCoorResult& c) {
-        if (m_bufCount < minFitLength) return;
-
-        int agingWeight = kMaxBufLen - m_bufCount;
-        if (agingWeight < 3) agingWeight = m_bufCount;
-        m_fitGlobal = FitLine(false, agingWeight);
-
-        if (m_fitGlobal.valid && m_fitGlobal.totalDist < enterResidualThreshold) {
-            m_state = State::EnterStraight;
-        }
-    }
-
-    inline void ProcessEnterStraight(const AsaCoorResult& c) {
-        m_fitCurrent = FitLine(true, kMaxBufLen - m_bufCount);
-        m_output = ConstrainToLine(c, m_fitCurrent);
-        m_state = State::StraightLine;
-    }
-
-    inline void ProcessStraightLine(const AsaCoorResult& c) {
-        int agingWeight = kMaxBufLen - m_bufCount;
-        if (agingWeight < 3) agingWeight = m_bufCount;
-        m_fitGlobal = FitLine(false, agingWeight);
-        m_fitCurrent = FitLine(true, agingWeight);
-
-        if (!m_fitCurrent.valid || m_fitCurrent.maxDist > exitDeviation) {
-            m_state = State::ExitStraight;
-            return;
-        }
-
-        m_output = ConstrainToLine(c, m_fitCurrent);
-    }
-
-    inline void ProcessExitStraight(const AsaCoorResult& /*c*/) {
-        m_state = State::CurveLine;
-        // m_output already set to coor in Process()
     }
 };
 

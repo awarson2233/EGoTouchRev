@@ -1,19 +1,8 @@
 #include "ServiceProxy.h"
 #include "Logger.h"
 #include "GuiLogSink.h"
-#include "IFrameProcessor.h"
 #include "IpcProtocol.h"
 #include <sstream>
-
-// Pipeline Processors (local copy for GUI parameter editing)
-#include "MasterFrameParser.h"
-#include "BaselineSubtraction.h"
-#include "CMFProcessor.h"
-#include "GridIIRProcessor.h"
-#include "FeatureExtractor.h"
-#include "TouchTracker.h"
-#include "CoordinateFilter.h"
-#include "TouchGestureStateMachine.h"
 #include <chrono>
 #include <fstream>
 #include <string>
@@ -28,17 +17,7 @@ static const std::string kConfigPath = "C:/ProgramData/EGoTouchRev/config.ini";
 
 ServiceProxy::ServiceProxy()
     : m_dvrBuffer(std::make_unique<RingBuffer<Dvr::DvrFrameSlot, 480>>()) {
-    // Build local pipeline (mirrors Service pipeline for GUI config editing)
-    m_pipeline.AddProcessor(std::make_unique<Engine::MasterFrameParser>());
-    m_pipeline.AddProcessor(std::make_unique<Engine::BaselineSubtraction>());
-    m_pipeline.AddProcessor(std::make_unique<Engine::CMFProcessor>());
-    m_pipeline.AddProcessor(std::make_unique<Engine::GridIIRProcessor>());
-    m_pipeline.AddProcessor(std::make_unique<Engine::FeatureExtractor>());
-    // NOTE: StylusProcessor removed — stylus is now handled by
-    // independent StylusPipeline in DeviceRuntime.
-    m_pipeline.AddProcessor(std::make_unique<Engine::TouchTracker>());
-    m_pipeline.AddProcessor(std::make_unique<Engine::CoordinateFilter>());
-    m_pipeline.AddProcessor(std::make_unique<Engine::TouchGestureStateMachine>());
+    // TouchPipeline is self-contained — no processor registration needed.
     LoadConfig();
 }
 
@@ -200,11 +179,10 @@ void ServiceProxy::SaveConfig() {
     if (!out.is_open()) return;
 
     out << serviceBlock << "\n";
-    for (auto& p : m_pipeline.GetProcessors()) {
-        out << "[" << p->GetName() << "]\n";
-        p->SaveConfig(out);
-        out << "\n";
-    }
+    // TouchPipeline (unified section)
+    out << "[TouchPipeline]\n";
+    m_pipeline.SaveConfig(out);
+    out << "\n";
     // Write stylus pipeline config
     out << "[StylusPipeline]\n";
     m_stylusPipeline.SaveConfig(out);
@@ -220,17 +198,10 @@ void ServiceProxy::LoadConfig() {
     std::ifstream in(kConfigPath);
     if (!in.is_open()) return;
     std::string line, section;
-    Engine::IFrameProcessor* cur = nullptr;
     while (std::getline(in, line)) {
         if (line.empty() || line[0] == ';') continue;
         if (line.front() == '[' && line.back() == ']') {
             section = line.substr(1, line.size() - 2);
-            cur = nullptr;
-            for (auto& p : m_pipeline.GetProcessors()) {
-                if (p->GetName() == section) {
-                    cur = p.get(); break;
-                }
-            }
         } else if (section == "Service") {
             auto eq = line.find('=');
             if (eq != std::string::npos) {
@@ -240,17 +211,17 @@ void ServiceProxy::LoadConfig() {
                 else if (k == "auto_mode") m_srvAutoMode = (v == "1" || v == "true");
                 else if (k == "stylus_vhf_enabled") m_srvStylusVhfEnabled = (v == "1" || v == "true");
             }
+        } else if (section == "TouchPipeline") {
+            auto eq = line.find('=');
+            if (eq != std::string::npos) {
+                m_pipeline.LoadConfig(
+                    line.substr(0, eq), line.substr(eq + 1));
+            }
         } else if (section == "StylusPipeline") {
             auto eq = line.find('=');
             if (eq != std::string::npos) {
                 m_stylusPipeline.LoadConfig(
                     line.substr(0, eq), line.substr(eq + 1));
-            }
-        } else if (cur) {
-            auto eq = line.find('=');
-            if (eq != std::string::npos) {
-                cur->LoadConfig(line.substr(0, eq),
-                                line.substr(eq + 1));
             }
         }
     }
@@ -290,18 +261,24 @@ bool ServiceProxy::SetAutoAfeSync(bool enabled) {
 
 // ── MasterParser-only mode (local) ──
 void ServiceProxy::SetMasterParserOnlyMode(bool enabled) {
-    auto& procs = m_pipeline.GetProcessors();
+    // With new TouchPipeline, toggle individual module enables
     if (enabled && !m_masterParserOnly) {
-        m_savedProcessorStates.clear();
-        for (size_t i = 0; i < procs.size(); ++i) {
-            m_savedProcessorStates.push_back(procs[i]->IsEnabled());
-            if (i > 0) procs[i]->SetEnabled(false);
-        }
+        m_savedMasterOnly = true;
+        // Disable all signal conditioning + processing beyond frame parse
+        m_pipeline.m_baseline.m_enabled = false;
+        m_pipeline.m_cmf.m_enabled = false;
+        m_pipeline.m_gridIIR.m_enabled = false;
+        m_pipeline.m_tracker.m_enabled = false;
+        m_pipeline.m_coordFilter.m_enabled = false;
+        m_pipeline.m_gesture.m_enabled = false;
     } else if (!enabled && m_masterParserOnly) {
-        for (size_t i = 0; i < procs.size() &&
-             i < m_savedProcessorStates.size(); ++i) {
-            procs[i]->SetEnabled(m_savedProcessorStates[i]);
-        }
+        // Restore defaults
+        m_pipeline.m_baseline.m_enabled = true;
+        m_pipeline.m_cmf.m_enabled = true;
+        m_pipeline.m_gridIIR.m_enabled = true;
+        m_pipeline.m_tracker.m_enabled = true;
+        m_pipeline.m_coordFilter.m_enabled = true;
+        m_pipeline.m_gesture.m_enabled = true;
     }
     m_masterParserOnly = enabled;
 }

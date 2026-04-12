@@ -8,14 +8,7 @@
 #include <algorithm>
 
 // Engine Pipeline Processors
-#include "MasterFrameParser.h"
-#include "BaselineSubtraction.h"
-#include "CMFProcessor.h"
-#include "GridIIRProcessor.h"
-#include "FeatureExtractor.h"
-#include "TouchTracker.h"
-#include "CoordinateFilter.h"
-#include "TouchGestureStateMachine.h"
+#include "TouchSolver/TouchPipeline.h"
 
 namespace Service {
 
@@ -243,31 +236,24 @@ void ServiceHost::Stop() {
 // ── Shared config loader ────────────────────────────────────────────
 static bool LoadPipelineConfig(
     const std::string& configPath,
-    Engine::FramePipeline& pl,
+    Engine::TouchPipeline& touchPipe,
     Engine::StylusPipeline* stylusPipe = nullptr)
 {
     std::ifstream in(configPath);
     if (!in.is_open()) return false;
 
     std::string line, section;
-    Engine::IFrameProcessor* cur = nullptr;
     while (std::getline(in, line)) {
         if (line.empty() || line[0] == ';') continue;
         if (line.front() == '[' && line.back() == ']') {
             section = line.substr(1, line.size() - 2);
-            cur = nullptr;
-            for (auto& p : pl.GetProcessors()) {
-                if (p->GetName() == section) {
-                    cur = p.get(); break;
-                }
-            }
         } else {
             auto eq = line.find('=');
             if (eq == std::string::npos) continue;
             auto key = line.substr(0, eq);
             auto val = line.substr(eq + 1);
-            if (cur) {
-                cur->LoadConfig(key, val);
+            if (section == "TouchPipeline") {
+                touchPipe.LoadConfig(key, val);
             } else if (stylusPipe && section == "StylusPipeline") {
                 stylusPipe->LoadConfig(key, val);
             }
@@ -278,19 +264,13 @@ static bool LoadPipelineConfig(
 
 // ── Pipeline 构建 ──────────────────────────────
 void ServiceHost::BuildDefaultPipeline(const std::string& configPath) {
-    auto& pl = m_deviceRuntime->GetPipeline();
-    pl.AddProcessor(std::make_unique<Engine::MasterFrameParser>());
-    pl.AddProcessor(std::make_unique<Engine::BaselineSubtraction>());
-    pl.AddProcessor(std::make_unique<Engine::CMFProcessor>());
-    pl.AddProcessor(std::make_unique<Engine::GridIIRProcessor>());
-    pl.AddProcessor(std::make_unique<Engine::FeatureExtractor>());
-    pl.AddProcessor(std::make_unique<Engine::TouchTracker>());
-    pl.AddProcessor(std::make_unique<Engine::CoordinateFilter>());
-    pl.AddProcessor(std::make_unique<Engine::TouchGestureStateMachine>());
-    LOG_INFO("Service", __func__, "Boot", "Registered {} pipeline processors.", pl.GetProcessors().size());
+    // TouchPipeline is self-contained: no processor registration needed.
+    // Just load config.
+    auto& tp = m_deviceRuntime->GetPipeline();
+    LOG_INFO("Service", __func__, "Boot", "TouchPipeline initialized (linear orchestrator).");
 
     // Load saved config
-    if (LoadPipelineConfig(configPath, pl,
+    if (LoadPipelineConfig(configPath, tp,
                            &m_deviceRuntime->GetStylusPipeline())) {
         LOG_INFO("Service", __func__, "Boot", "Loaded config from {}.", configPath);
     } else {
@@ -369,8 +349,8 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(
             m_deviceRuntime->SetTouchOnlyMode(m_mode == ServiceMode::TouchOnly);
             m_deviceRuntime->SetStylusVhfEnabled(m_stylusVhfEnabled);
 
-            auto& pl = m_deviceRuntime->GetPipeline();
-            if (LoadPipelineConfig(kConfigPath, pl,
+            auto& tp = m_deviceRuntime->GetPipeline();
+            if (LoadPipelineConfig(kConfigPath, tp,
                                    &m_deviceRuntime->GetStylusPipeline())) {
                 resp.success = true;
                 LOG_INFO("Service", __func__, "IPC", "Config reloaded from {}.", kConfigPath);
@@ -380,7 +360,7 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(
 
     case Ipc::IpcCommand::SaveConfig:
         if (m_deviceRuntime) {
-            auto& pl = m_deviceRuntime->GetPipeline();
+            auto& tp = m_deviceRuntime->GetPipeline();
             std::ofstream out(kConfigPath);
             if (out.is_open()) {
                 // Preserve [Service] section
@@ -388,11 +368,14 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(
                 out << "mode=" << (m_mode == ServiceMode::Full ? "full" : "touch_only") << "\n";
                 out << "auto_mode=" << (m_autoMode ? "1" : "0") << "\n";
                 out << "stylus_vhf_enabled=" << (m_stylusVhfEnabled ? "1" : "0") << "\n\n";
-                for (auto& p : pl.GetProcessors()) {
-                    out << "[" << p->GetName() << "]\n";
-                    p->SaveConfig(out);
-                    out << "\n";
-                }
+                // TouchPipeline (single unified section)
+                out << "[TouchPipeline]\n";
+                tp.SaveConfig(out);
+                out << "\n";
+                // StylusPipeline
+                out << "[StylusPipeline]\n";
+                m_deviceRuntime->GetStylusPipeline().SaveConfig(out);
+                out << "\n";
                 resp.success = true;
                 LOG_INFO("Service", __func__, "IPC", "Config saved to {}.", kConfigPath);
             }
