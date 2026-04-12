@@ -207,11 +207,7 @@ public:
     int   tailDecay = 110;
 
     // Signal suppression hysteresis
-<<<<<<< HEAD
-    bool  signalSuppressEnabled = false;
-=======
     bool  signalSuppressEnabled = true;
->>>>>>> 29173d3c1b03f35b9a1eebf911b0159c63b32529
     int   signalSuppressEnter = 582;
     int   signalSuppressExit = 1488;
 
