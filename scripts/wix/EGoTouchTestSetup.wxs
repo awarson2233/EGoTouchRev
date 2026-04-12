@@ -52,7 +52,7 @@
 
       <!-- 配置文件 -->
       <Component Id="ConfigFileComp" Guid="F9D704CD-80EE-4AE2-9BE7-1BBDA7AB7421">
-        <File Id="ConfigFile" Source="build\config.ini" KeyPath="yes" />
+        <File Id="ConfigFile" Source="scripts\config.ini" KeyPath="yes" />
       </Component>
 
       <!-- 测试版本增加内容：上位机 EGoTouchApp 和 测试工具 BtMcuTestTool -->

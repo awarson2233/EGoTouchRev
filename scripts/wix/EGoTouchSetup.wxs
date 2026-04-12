@@ -59,7 +59,7 @@
 
       <!-- 2. 发行 config.ini (如果有的话) -->
       <Component Id="ConfigFileComp" Guid="F9D704CD-80EE-4AE2-9BE7-1BBDA7AB7421">
-        <File Id="ConfigFile" Source="build\config.ini" KeyPath="yes" />
+        <File Id="ConfigFile" Source="scripts\config.ini" KeyPath="yes" />
       </Component>
 
     </ComponentGroup>
