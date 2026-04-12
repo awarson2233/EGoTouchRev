@@ -12,7 +12,11 @@
     <!-- 支持自动覆盖升级 -->
     <MajorUpgrade DowngradeErrorMessage="!(loc.DowngradeError)" AllowSameVersionUpgrades="yes" />
 
-    <ui:WixUI Id="WixUI_Minimal" />
+    <UI>
+      <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+      <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg" Order="3" Condition="1" />
+      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg" Order="3" Condition="NOT Installed" />
+    </UI>
     <WixVariable Id="WixUILicenseRtf" Value="!(loc.LicenseRtf)" />
 
     <MediaTemplate EmbedCab="yes" />
@@ -23,6 +27,9 @@
 
     <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
       
+      <!-- 自动打包 VC++ ARM64 运行库进行 App-Local 部署 -->
+      <Files Include="..\..\build\vcredist_arm64\*.dll" />
+
       <!-- 核心服务 -->
       <Component Id="EGoTouchServiceComp" Guid="FCF77309-64AC-4F98-8424-B1D6144D9757">
         <File Id="EGoTouchServiceEXE" Source="build\EGoTouchService.exe" KeyPath="yes" />
@@ -45,7 +52,7 @@
 
       <!-- 配置文件 -->
       <Component Id="ConfigFileComp" Guid="F9D704CD-80EE-4AE2-9BE7-1BBDA7AB7421">
-        <File Id="ConfigFile" Source="build\config.ini" KeyPath="yes" />
+        <File Id="ConfigFile" Source="scripts\config.ini" KeyPath="yes" />
       </Component>
 
       <!-- 测试版本增加内容：上位机 EGoTouchApp 和 测试工具 BtMcuTestTool -->
