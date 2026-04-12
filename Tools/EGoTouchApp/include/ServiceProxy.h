@@ -5,7 +5,7 @@
 #include "IpcPipeClient.h"
 #include "SharedFrameBuffer.h"
 #include "ConfigSync.h"
-#include "EngineTypes.h"
+#include "SolverTypes.h"
 #include "IpcProtocol.h"
 #include "TouchSolver/TouchPipeline.h"
 #include "StylusPipeline.h"
@@ -48,11 +48,11 @@ public:
     bool TryConnect();
 
     // Frame access (reads shared memory)
-    bool GetLatestFrame(Engine::HeatmapFrame& out);
+    bool GetLatestFrame(Solvers::HeatmapFrame& out);
 
     // Pipeline for GUI config UI (local copy)
-    Engine::TouchPipeline& GetPipeline() { return m_pipeline; }
-    Engine::StylusPipeline& GetStylusPipeline() { return m_stylusPipeline; }
+    Solvers::TouchPipeline& GetPipeline() { return m_pipeline; }
+    Solvers::StylusPipeline& GetStylusPipeline() { return m_stylusPipeline; }
 
     // Remote commands
     bool SwitchAfeMode(uint8_t afeCmd, uint8_t param = 0);
@@ -108,12 +108,12 @@ private:
     Ipc::IpcPipeClient    m_client;
     Ipc::SharedFrameReader m_frameReader;
     Ipc::ConfigDirtyFlag  m_configDirty;
-    Engine::TouchPipeline m_pipeline;
-    Engine::StylusPipeline m_stylusPipeline;
+    Solvers::TouchPipeline m_pipeline;
+    Solvers::StylusPipeline m_stylusPipeline;
 
     // Latest frame snapshot for GUI
     std::mutex m_frameMutex;
-    Engine::HeatmapFrame m_latestFrame;
+    Solvers::HeatmapFrame m_latestFrame;
     std::atomic<bool> m_hasNewFrame{false};
 
     // Polling thread reads shared memory

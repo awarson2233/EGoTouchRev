@@ -81,10 +81,12 @@ void PenPressureReader::OnPacketReceived(const std::vector<uint8_t>& packet) {
             std::lock_guard<std::mutex> lk(m_statsMutex);
             m_stats = s;
         }
-        // 压感回调
+        const uint16_t maxPress = *std::max_element(s.press, s.press + 4);
+
+        // 压感回调（四通道取最大值）
         {
             std::lock_guard<std::mutex> lk(m_cbMutex);
-            if (m_pressureCallback) m_pressureCallback(s.press[0]);
+            if (m_pressureCallback) m_pressureCallback(maxPress);
         }
         if (m_notifyEvent) {
             SetEvent(m_notifyEvent);

@@ -2,10 +2,16 @@
 #include "GuiLogSink.h"
 #include "Logger.h"
 #include "IpcProtocol.h"
-#include "IFrameProcessor.h"
 #include <fstream>
 #include <string>
 #include <algorithm>
+#include <cctype>
+#include <ctime>
+#include <filesystem>
+#include <iomanip>
+#include <optional>
+#include <sstream>
+#include <string_view>
 
 // Engine Pipeline Processors
 #include "TouchSolver/TouchPipeline.h"
@@ -19,6 +25,150 @@ static const std::string kConfigPath  = "C:/ProgramData/EGoTouchRev/config.ini";
 static const std::wstring kDevicePathMaster    = L"\\\\.\\Global\\SPBTESTTOOL_MASTER";
 static const std::wstring kDevicePathSlave     = L"\\\\.\\Global\\SPBTESTTOOL_SLAVE";
 static const std::wstring kDevicePathInterrupt = L"\\\\.\\Global\\SPBTESTTOOL_MASTER";
+
+namespace {
+
+struct LoadPipelineConfigResult {
+    bool fileOpened = false;
+    bool migrated = false;
+    bool touchLoaded = false;
+    bool stylusLoaded = false;
+};
+
+std::string TrimCopy(std::string_view input) {
+    const size_t start = input.find_first_not_of(" \t\r\n");
+    if (start == std::string_view::npos) return {};
+    const size_t end = input.find_last_not_of(" \t\r\n");
+    return std::string(input.substr(start, end - start + 1));
+}
+
+std::string ToLowerCopy(std::string_view input) {
+    std::string out;
+    out.reserve(input.size());
+    for (char ch : input) {
+        out.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+    }
+    return out;
+}
+
+bool ParseBoolValue(std::string_view value) {
+    const std::string lowered = ToLowerCopy(TrimCopy(value));
+    return lowered == "1" || lowered == "true" || lowered == "yes" || lowered == "on";
+}
+
+bool ParseIniKeyValue(std::string_view line, std::string& key, std::string& value) {
+    const size_t eq = line.find('=');
+    if (eq == std::string_view::npos) return false;
+    key = TrimCopy(line.substr(0, eq));
+    value = TrimCopy(line.substr(eq + 1));
+    return !key.empty();
+}
+
+bool IsLegacyTouchSection(const std::string& section) {
+    return section == "Master Frame Parser" ||
+           section == "Baseline Subtraction" ||
+           section == "CMF Processor" ||
+           section == "Grid IIR Processor" ||
+           section == "Feature Extractor (4.1/4.2)" ||
+           section == "Touch Tracker (IDT)" ||
+           section == "Coordinate Filter (1 Euro)" ||
+           section == "TouchGestureStateMachine";
+}
+
+std::optional<std::string> MapLegacyTouchKey(const std::string& section,
+                                             const std::string& key) {
+    if (section == "Master Frame Parser") {
+        if (key == "Enabled") return std::string("FrameParserEnabled");
+        return std::nullopt;
+    }
+    if (section == "Baseline Subtraction") {
+        if (key == "Enabled") return std::string("BaselineEnabled");
+        return key;
+    }
+    if (section == "CMF Processor") {
+        if (key == "Enabled") return std::string("CMFEnabled");
+        if (key == "DimensionMode") return std::string("CMFDimensionMode");
+        if (key == "ExclusionThreshold") return std::string("CMFExclusionThreshold");
+        if (key == "MaxCorrection") return std::string("CMFMaxCorrection");
+        return key;
+    }
+    if (section == "Grid IIR Processor") {
+        if (key == "Enabled") return std::string("GridIIREnabled");
+        return key;
+    }
+    if (section == "Feature Extractor (4.1/4.2)") {
+        if (key == "Enabled") return std::nullopt;
+        return key;
+    }
+    if (section == "Touch Tracker (IDT)") {
+        if (key == "Enabled") return std::string("TrackerEnabled");
+        return key;
+    }
+    if (section == "Coordinate Filter (1 Euro)") {
+        if (key == "Enabled") return std::string("CoordFilterEnabled");
+        return key;
+    }
+    if (section == "TouchGestureStateMachine") {
+        if (key == "Enabled") return std::string("GestureEnabled");
+        return key;
+    }
+    return std::nullopt;
+}
+
+const char* ServiceModeToConfig(ServiceMode mode) {
+    return mode == ServiceMode::Full ? "full" : "touch_only";
+}
+
+std::string BuildBackupPath(const std::string& configPath) {
+    namespace fs = std::filesystem;
+    const fs::path source(configPath);
+    std::time_t now = std::time(nullptr);
+    std::tm localTm{};
+    localtime_s(&localTm, &now);
+
+    std::ostringstream stamp;
+    stamp << std::put_time(&localTm, "%Y%m%d-%H%M%S");
+
+    const std::string backupName =
+        source.stem().string() + ".legacy-" + stamp.str() + source.extension().string() + ".bak";
+    return (source.parent_path() / backupName).string();
+}
+
+bool BackupConfigFile(const std::string& configPath, std::string& outBackupPath) {
+    namespace fs = std::filesystem;
+    const std::string backupPath = BuildBackupPath(configPath);
+    std::error_code ec;
+    fs::copy_file(configPath, backupPath, fs::copy_options::overwrite_existing, ec);
+    if (ec) return false;
+    outBackupPath = backupPath;
+    return true;
+}
+
+bool WriteCanonicalConfig(const std::string& configPath,
+                          ServiceMode mode,
+                          bool autoMode,
+                          bool stylusVhfEnabled,
+                          const Solvers::TouchPipeline& touchPipe,
+                          const Solvers::StylusPipeline& stylusPipe) {
+    std::ofstream out(configPath, std::ios::trunc);
+    if (!out.is_open()) return false;
+
+    out << "[Service]\n";
+    out << "mode=" << ServiceModeToConfig(mode) << "\n";
+    out << "auto_mode=" << (autoMode ? "1" : "0") << "\n";
+    out << "stylus_vhf_enabled=" << (stylusVhfEnabled ? "1" : "0") << "\n\n";
+
+    out << "[TouchPipeline]\n";
+    touchPipe.SaveConfig(out);
+    out << "\n";
+
+    out << "[StylusPipeline]\n";
+    stylusPipe.SaveConfig(out);
+    out << "\n";
+    return true;
+}
+
+} // namespace
 
 ServiceHost::~ServiceHost() {
     Stop();
@@ -37,29 +187,24 @@ void ServiceHost::ParseServiceConfig(const std::string& configPath) {
     std::string line;
     bool inServiceSection = false;
     while (std::getline(cfg, line)) {
-        if (line.empty() || line[0] == ';') continue;
-        if (line.front() == '[' && line.back() == ']') {
-            inServiceSection = (line == "[Service]");
+        const std::string trimmed = TrimCopy(line);
+        if (trimmed.empty() || trimmed[0] == ';' || trimmed[0] == '#') continue;
+        if (trimmed.front() == '[' && trimmed.back() == ']') {
+            inServiceSection = (trimmed == "[Service]");
             continue;
         }
-        if (inServiceSection) {
-            auto eq = line.find('=');
-            if (eq != std::string::npos) {
-                std::string key = line.substr(0, eq);
-                std::string val = line.substr(eq + 1);
-                // trim whitespace
-                val.erase(0, val.find_first_not_of(" \t\r\n"));
-                val.erase(val.find_last_not_of(" \t\r\n") + 1);
+        if (!inServiceSection) continue;
 
-                if (key == "mode") {
-                    if (val == "touch_only") m_mode = ServiceMode::TouchOnly;
-                    else m_mode = ServiceMode::Full;
-                } else if (key == "auto_mode") {
-                    m_autoMode = (val != "0" && val != "false");
-                } else if (key == "stylus_vhf_enabled") {
-                    m_stylusVhfEnabled = (val != "0" && val != "false");
-                }
-            }
+        std::string key;
+        std::string val;
+        if (!ParseIniKeyValue(trimmed, key, val)) continue;
+
+        if (key == "mode") {
+            m_mode = (val == "touch_only") ? ServiceMode::TouchOnly : ServiceMode::Full;
+        } else if (key == "auto_mode") {
+            m_autoMode = ParseBoolValue(val);
+        } else if (key == "stylus_vhf_enabled") {
+            m_stylusVhfEnabled = ParseBoolValue(val);
         }
     }
 }
@@ -74,7 +219,6 @@ bool ServiceHost::Start() {
         kDevicePathMaster, kDevicePathSlave, kDevicePathInterrupt);
     m_deviceRuntime->SetAutoMode(m_autoMode);
     m_deviceRuntime->SetStylusVhfEnabled(m_stylusVhfEnabled);
-    m_deviceRuntime->SetTouchOnlyMode(m_mode == ServiceMode::TouchOnly);
     BuildDefaultPipeline(kConfigPath);
 
     if (!m_deviceRuntime->Start()) {
@@ -234,32 +378,48 @@ void ServiceHost::Stop() {
 }
 
 // ── Shared config loader ────────────────────────────────────────────
-static bool LoadPipelineConfig(
+static LoadPipelineConfigResult LoadPipelineConfig(
     const std::string& configPath,
-    Engine::TouchPipeline& touchPipe,
-    Engine::StylusPipeline* stylusPipe = nullptr)
+    Solvers::TouchPipeline& touchPipe,
+    Solvers::StylusPipeline* stylusPipe = nullptr)
 {
+    LoadPipelineConfigResult result;
     std::ifstream in(configPath);
-    if (!in.is_open()) return false;
+    if (!in.is_open()) return result;
+    result.fileOpened = true;
 
     std::string line, section;
     while (std::getline(in, line)) {
-        if (line.empty() || line[0] == ';') continue;
-        if (line.front() == '[' && line.back() == ']') {
-            section = line.substr(1, line.size() - 2);
-        } else {
-            auto eq = line.find('=');
-            if (eq == std::string::npos) continue;
-            auto key = line.substr(0, eq);
-            auto val = line.substr(eq + 1);
-            if (section == "TouchPipeline") {
-                touchPipe.LoadConfig(key, val);
-            } else if (stylusPipe && section == "StylusPipeline") {
-                stylusPipe->LoadConfig(key, val);
-            }
+        const std::string trimmed = TrimCopy(line);
+        if (trimmed.empty() || trimmed[0] == ';' || trimmed[0] == '#') continue;
+        if (trimmed.front() == '[' && trimmed.back() == ']') {
+            section = TrimCopy(std::string_view(trimmed).substr(1, trimmed.size() - 2));
+            continue;
+        }
+
+        std::string key;
+        std::string val;
+        if (!ParseIniKeyValue(trimmed, key, val)) continue;
+
+        if (section == "TouchPipeline") {
+            touchPipe.LoadConfig(key, val);
+            result.touchLoaded = true;
+            continue;
+        }
+        if (stylusPipe && section == "StylusPipeline") {
+            stylusPipe->LoadConfig(key, val);
+            result.stylusLoaded = true;
+            continue;
+        }
+        if (IsLegacyTouchSection(section)) {
+            const auto mappedKey = MapLegacyTouchKey(section, key);
+            if (!mappedKey.has_value()) continue;
+            touchPipe.LoadConfig(*mappedKey, val);
+            result.touchLoaded = true;
+            result.migrated = true;
         }
     }
-    return true;
+    return result;
 }
 
 // ── Pipeline 构建 ──────────────────────────────
@@ -267,14 +427,41 @@ void ServiceHost::BuildDefaultPipeline(const std::string& configPath) {
     // TouchPipeline is self-contained: no processor registration needed.
     // Just load config.
     auto& tp = m_deviceRuntime->GetPipeline();
+    auto& sp = m_deviceRuntime->GetStylusPipeline();
     LOG_INFO("Service", __func__, "Boot", "TouchPipeline initialized (linear orchestrator).");
 
     // Load saved config
-    if (LoadPipelineConfig(configPath, tp,
-                           &m_deviceRuntime->GetStylusPipeline())) {
-        LOG_INFO("Service", __func__, "Boot", "Loaded config from {}.", configPath);
-    } else {
+    const auto loadResult = LoadPipelineConfig(configPath, tp, &sp);
+    if (!loadResult.fileOpened) {
         LOG_WARN("Service", __func__, "Boot", "Config file not found: {}", configPath);
+        return;
+    }
+
+    if (loadResult.migrated) {
+        std::string backupPath;
+        if (BackupConfigFile(configPath, backupPath)) {
+            if (WriteCanonicalConfig(configPath, m_mode, m_autoMode, m_stylusVhfEnabled, tp, sp)) {
+                LOG_INFO("Service", __func__, "Boot",
+                         "Migrated legacy pipeline config from {} and rewrote canonical sections. Backup: {}",
+                         configPath, backupPath);
+            } else {
+                LOG_WARN("Service", __func__, "Boot",
+                         "Loaded legacy pipeline config from {} but failed to rewrite canonical config.",
+                         configPath);
+            }
+        } else {
+            LOG_WARN("Service", __func__, "Boot",
+                     "Loaded legacy pipeline config from {} but failed to create backup before migration.",
+                     configPath);
+        }
+    } else {
+        LOG_INFO("Service", __func__, "Boot", "Loaded canonical config from {}.", configPath);
+    }
+
+    if (!loadResult.touchLoaded && !loadResult.stylusLoaded) {
+        LOG_WARN("Service", __func__, "Boot",
+                 "Config file {} opened, but no pipeline sections were applied; keeping defaults.",
+                 configPath);
     }
 }
 
@@ -293,7 +480,7 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(
         // Just activate the frame push callback.
         if (m_frameWriter.IsOpen()) {
             m_deviceRuntime->SetFramePushCallback(
-                [this](const Engine::HeatmapFrame& f) {
+                [this](const Solvers::HeatmapFrame& f) {
                     m_frameWriter.Write(f);
                 });
             m_debugMode = true;
@@ -345,15 +532,33 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(
         if (m_deviceRuntime) {
             // First, re-read [Service] global configs
             ParseServiceConfig(kConfigPath);
-            // Apply touchonly mode and VHF stylus config dynamically to the runtime
-            m_deviceRuntime->SetTouchOnlyMode(m_mode == ServiceMode::TouchOnly);
             m_deviceRuntime->SetStylusVhfEnabled(m_stylusVhfEnabled);
 
             auto& tp = m_deviceRuntime->GetPipeline();
-            if (LoadPipelineConfig(kConfigPath, tp,
-                                   &m_deviceRuntime->GetStylusPipeline())) {
+            auto& sp = m_deviceRuntime->GetStylusPipeline();
+            const auto loadResult = LoadPipelineConfig(kConfigPath, tp, &sp);
+            if (loadResult.fileOpened) {
+                if (loadResult.migrated) {
+                    std::string backupPath;
+                    if (BackupConfigFile(kConfigPath, backupPath)) {
+                        if (WriteCanonicalConfig(kConfigPath, m_mode, m_autoMode, m_stylusVhfEnabled, tp, sp)) {
+                            LOG_INFO("Service", __func__, "IPC",
+                                     "Reloaded legacy config from {} and rewrote canonical sections. Backup: {}",
+                                     kConfigPath, backupPath);
+                        } else {
+                            LOG_WARN("Service", __func__, "IPC",
+                                     "Reloaded legacy config from {} but failed to rewrite canonical config.",
+                                     kConfigPath);
+                        }
+                    } else {
+                        LOG_WARN("Service", __func__, "IPC",
+                                 "Reloaded legacy config from {} but failed to create backup before migration.",
+                                 kConfigPath);
+                    }
+                } else {
+                    LOG_INFO("Service", __func__, "IPC", "Config reloaded from {}.", kConfigPath);
+                }
                 resp.success = true;
-                LOG_INFO("Service", __func__, "IPC", "Config reloaded from {}.", kConfigPath);
             }
         }
         break;
@@ -361,21 +566,8 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(
     case Ipc::IpcCommand::SaveConfig:
         if (m_deviceRuntime) {
             auto& tp = m_deviceRuntime->GetPipeline();
-            std::ofstream out(kConfigPath);
-            if (out.is_open()) {
-                // Preserve [Service] section
-                out << "[Service]\n";
-                out << "mode=" << (m_mode == ServiceMode::Full ? "full" : "touch_only") << "\n";
-                out << "auto_mode=" << (m_autoMode ? "1" : "0") << "\n";
-                out << "stylus_vhf_enabled=" << (m_stylusVhfEnabled ? "1" : "0") << "\n\n";
-                // TouchPipeline (single unified section)
-                out << "[TouchPipeline]\n";
-                tp.SaveConfig(out);
-                out << "\n";
-                // StylusPipeline
-                out << "[StylusPipeline]\n";
-                m_deviceRuntime->GetStylusPipeline().SaveConfig(out);
-                out << "\n";
+            auto& sp = m_deviceRuntime->GetStylusPipeline();
+            if (WriteCanonicalConfig(kConfigPath, m_mode, m_autoMode, m_stylusVhfEnabled, tp, sp)) {
                 resp.success = true;
                 LOG_INFO("Service", __func__, "IPC", "Config saved to {}.", kConfigPath);
             }

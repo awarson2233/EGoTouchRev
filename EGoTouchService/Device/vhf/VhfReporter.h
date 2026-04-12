@@ -6,7 +6,7 @@
 #include <mutex>
 #include <vector>
 
-#include "EngineTypes.h"
+#include "SolverTypes.h"
 
 #ifndef _WINDOWS_
 #include <Windows.h>
@@ -24,13 +24,13 @@ public:
     VhfReporter& operator=(const VhfReporter&) = delete;
 
     /// 主入口 (legacy, 后向兼容)
-    void Dispatch(Engine::HeatmapFrame& frame);
+    void Dispatch(Solvers::HeatmapFrame& frame);
 
     /// 独立手写笔写入
-    void DispatchStylus(const Engine::StylusPacket& packet);
+    void DispatchStylus(const Solvers::StylusPacket& packet);
 
     /// 独立手指写入 (含 BuildTouchReports)
-    void DispatchTouch(Engine::HeatmapFrame& frame);
+    void DispatchTouch(Solvers::HeatmapFrame& frame);
 
     // 开关
     void SetEnabled(bool v) { m_enabled.store(v); }
@@ -45,7 +45,7 @@ public:
     void Close();
 
 private:
-    void BuildTouchReports(Engine::HeatmapFrame& frame);
+    void BuildTouchReports(Solvers::HeatmapFrame& frame);
     void ApplyStylusPostTransform(std::array<uint8_t, 17>& bytes);
     bool EnsureDeviceOpen();
     void CloseDevice();

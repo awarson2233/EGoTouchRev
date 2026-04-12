@@ -1,5 +1,5 @@
 #include "runtime/DeviceRuntime.h"
-#include "EngineTypes.h"
+#include "SolverTypes.h"
 #include "Logger.h"
 
 
@@ -262,70 +262,65 @@ void DeviceRuntime::OnStreaming() {
     }
     m_consecutiveFrameErrors = 0;  // 成功读帧重置计数
 
-    const bool touchOnly = m_touchOnly.load(std::memory_order_relaxed);
-
     // 0. BT MCU 心跳注入（每帧，原厂 ASA_SetBluetoothFreq 等价）
-    if (!touchOnly && m_btFreqProvider) {
+    if (m_btFreqProvider) {
         auto [f1, f2] = m_btFreqProvider();
         m_chip.m_afe.UpdateBtHeartbeat(f1, f2);
     }
 
-    // 1. 手写笔频率跟踪（仅 Full 模式）
-    if (!touchOnly) {
-        if (m_chip.m_afe.ProcessStylusStatus()) {
-            auto targetIdx = m_chip.m_afe.GetStylusState().switchTargetIdx;
+    // 1. 手写笔频率跟踪
+    if (m_chip.m_afe.ProcessStylusStatus()) {
+        auto targetIdx = m_chip.m_afe.GetStylusState().switchTargetIdx;
 
-            // 1a. TPIC 侧切频
-            SubmitCommand({AFE_Command::ForceToFreqPoint, targetIdx},
-                          CommandSource::SystemPolicy, "Stylus Freq Sync (TP)");
+        // 1a. TPIC 侧切频
+        SubmitCommand({AFE_Command::ForceToFreqPoint, targetIdx},
+                      CommandSource::SystemPolicy, "Stylus Freq Sync (TP)");
 
-            // 1b. BT 笔侧切频 —— 通过 col00 通知 MCU
-            if (m_btScanModeSender) {
-                uint8_t newFreq = m_chip.m_afe.GetTpicFreq(targetIdx);
-                bool ok = m_btScanModeSender(newFreq, newFreq);
-                LOG_INFO("Runtime", __func__, "FreqSync",
-                         "BT ScanMode sent: freqIdx={}, tpicFreq=0x{:02X}, ok={}",
-                         targetIdx, newFreq, ok);
-            }
+        // 1b. BT 笔侧切频 —— 通过 col00 通知 MCU
+        if (m_btScanModeSender) {
+            uint8_t newFreq = m_chip.m_afe.GetTpicFreq(targetIdx);
+            bool ok = m_btScanModeSender(newFreq, newFreq);
+            LOG_INFO("Runtime", __func__, "FreqSync",
+                     "BT ScanMode sent: freqIdx={}, tpicFreq=0x{:02X}, ok={}",
+                     targetIdx, newFreq, ok);
         }
     }
 
     const auto& rawData = m_chip.back_data;
 
-    // 2. Stylus pipeline（仅 Full 模式）
-    // rawData 为 master+slave 复合帧；pipeline 只需 slave frame（339字节，偏移 5063）
-    Engine::StylusPacket stylusPacket{};
-    if (!touchOnly) {
-        static constexpr size_t kMasterBytes = 5063;
-        static constexpr size_t kSlaveBytes  = 339;
-        if (rawData.size() >= kMasterBytes + kSlaveBytes) {
-            m_stylusPipeline.Process(
-                std::span<const uint8_t>(
-                    rawData.data() + kMasterBytes, kSlaveBytes),
-                stylusPacket);
-        }
-        if (m_stylusVhfEnabled.load(std::memory_order_relaxed)) {
-            m_vhfReporter.DispatchStylus(stylusPacket);
-        }
+    // 2. Build frame (zero-copy from Chip)
+    Solvers::HeatmapFrame touchFrame;
+    touchFrame.rawPtr = rawData.data();
+    touchFrame.rawLen = rawData.size();
+#if EGOTOUCH_DIAG
+    // Debug/App 模式: 拷贝完整帧数据供 IPC 帧推送
+    touchFrame.rawData.assign(rawData.begin(), rawData.end());
+#endif
+    touchFrame.masterWasRead = m_chip.m_lastMasterWasRead;
+
+    // 3. Stylus pipeline — reads rawPtr, writes frame.stylus
+    m_stylusPipeline.Process(touchFrame);
+    if (m_stylusVhfEnabled.load(std::memory_order_relaxed)) {
+        m_vhfReporter.DispatchStylus(touchFrame.stylus.packet);
     }
 
+<<<<<<< HEAD
     // 3. Touch pipeline (always active)
     Engine::HeatmapFrame touchFrame;
     touchFrame.rawData.assign(rawData.begin(), rawData.end());
     touchFrame.masterWasRead = m_chip.m_lastMasterWasRead;  // 传递 master 读取状态给帧写入器
+=======
+    // 4. Touch pipeline — reads frame, writes contacts/packets
+>>>>>>> origin/pr/03-hardware-diagnostics
     m_touchPipeline.Process(touchFrame);
     m_vhfReporter.DispatchTouch(touchFrame);
 
-    // 4. Merge results for UI push
+#ifdef _DEBUG
+    // 5. Debug frame push (IPC visualization)
     if (m_framePushCb) {
-        if (!touchOnly) {
-            touchFrame.stylus = m_stylusPipeline.GetLastResult();
-            touchFrame.stylus.packet = stylusPacket;
-            // Single-copy diagnostics (replaces 40-line manual field copy)
-            touchFrame.stylus.diag = m_stylusPipeline.GetDebugCoord();
-        }
         m_framePushCb(touchFrame);
     }
+#endif
 }
 
 // --------------- MCU 事件路由 ---------------
