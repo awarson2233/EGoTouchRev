@@ -115,6 +115,7 @@ bool TouchPipeline::Process(HeatmapFrame& frame) {
 void TouchPipeline::ResetIdleOutputs(HeatmapFrame& frame) {
     frame.contacts.clear();
     frame.touchPackets = {};
+    m_palmReject.ResetTemporalState();
 
     m_cachedPeakCount.store(0, std::memory_order_relaxed);
     m_cachedZoneCount.store(0, std::memory_order_relaxed);
