@@ -1,12 +1,12 @@
 @echo off
 echo ==============================================
-echo EGoTouchRev - Build ^& Pack Test Version
+echo EGoTouchRev - Build ^& Pack Release Version
 echo ==============================================
 
 cd /d "%~dp0\.."
 
 echo.
-echo [1/5] Building all CMake targets (Service, App, Tools)...
+echo [1/5] Building all CMake targets ...
 cmake --build build --config Release
 if %errorlevel% neq 0 (
     echo [ERROR] CMake build failed.
@@ -23,30 +23,30 @@ if defined VCToolsRedistDir (
 )
 
 echo.
-echo [3/5] Packing Test Installers (English and Chinese)...
+echo [3/5] Packing Release Installers (English and Chinese)...
 :: WiX v4 build command requires wix.exe
 :: Make sure wix is installed on the user system.
-wix build -ext WixToolset.UI.wixext -arch arm64 -culture en-US scripts\wix\EGoTouchTestSetup.wxs -loc scripts\wix\en-US.wxl -out build\EGoTouchTestSetup_en-US.msi
+wix build -ext WixToolset.UI.wixext -arch arm64 -culture en-US scripts\wix\EGoTouchSetup.wxs -loc scripts\wix\en-US.wxl -out build\EGoTouchSetup_en-US.msi
 if %errorlevel% neq 0 (
     echo [ERROR] WiX build en-US failed.
     exit /b %errorlevel%
 )
 
-wix build -ext WixToolset.UI.wixext -arch arm64 -culture zh-CN scripts\wix\EGoTouchTestSetup.wxs -loc scripts\wix\zh-CN.wxl -out build\EGoTouchTestSetup_zh-CN.msi
+wix build -ext WixToolset.UI.wixext -arch arm64 -culture zh-CN scripts\wix\EGoTouchSetup.wxs -loc scripts\wix\zh-CN.wxl -out build\EGoTouchSetup_zh-CN.msi
 if %errorlevel% neq 0 (
     echo [ERROR] WiX build zh-CN failed.
     exit /b %errorlevel%
 )
 
 echo [4/5] Packing Native ARM64 Bootstrapper (Multi-Language Setup.exe)...
-wix build -ext WixToolset.BootstrapperApplications.wixext -arch arm64 scripts\wix\EGoTouchTestSetupBundle.wxs -out build\EGoTouchTestSetup_ARM64.exe
+wix build -ext WixToolset.BootstrapperApplications.wixext -arch arm64 scripts\wix\EGoTouchSetupBundle.wxs -out build\EGoTouchSetup_ARM64.exe
 if %errorlevel% neq 0 (
     echo [ERROR] WiX Bundle build failed.
     exit /b %errorlevel%
 )
 
 echo [5/5] Build Successful! 
-echo Test installers and Setup.exe have been generated at: build\
+echo Release installers and Setup.exe have been generated at: build\
 echo ==============================================
 
 exit /b 0

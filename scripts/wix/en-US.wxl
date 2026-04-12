@@ -5,9 +5,11 @@
   <String Id="ProductNameTest" Value="EGoTouch Controller Software (Test Version)" />
   <String Id="Manufacturer" Value="EGoTouch Team" />
   <String Id="DowngradeError" Value="A newer version of [ProductName] is already installed." />
-  <String Id="LicenseRtf" Value="scripts\EULA.rtf" />
+  <String Id="LicenseRtf" Value="scripts\wix\EULA.rtf" />
   <String Id="ServiceDisplayName" Value="EGoTouch Capacitive Touch Driver" />
   <String Id="ServiceDescription" Value="EGoTouch Capacitive Touch Driver Service - Manages touch frame acquisition, algorithm processing, and HID injection." />
   <String Id="ServiceDisplayNameTest" Value="EGoTouch Capacitive Touch Driver (Test)" />
   <String Id="ServiceDescriptionTest" Value="EGoTouch Capacitive Touch Driver Service - Test Version." />
+  <String Id="VCRedistMessage" Value="This application requires the Visual C++ Redistributable for Visual Studio 2015-2022 (x64). Please install it and run the setup again." />
+  <String Id="VerifyReadyDlgInstallText" Value="1. This driver conflicts with Huawei's original driver (HuaweiThpService) and Huawei PC Manager. Please stop these two processes before installing or running this driver, otherwise it may cause touch failure or BSOD.&#13;&#10;2. If you encounter any issues, please provide feedback on GitHub: https://github.com/EGoTouchRev/EGoTouchRev/issues&#13;&#10;&#13;&#10;Click Install to begin the installation. Click Back to review or change any of your installation settings." />
 </WixLocalization>

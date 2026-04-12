@@ -39,6 +39,14 @@ jobs:
       - name: CMake Build
         run: cmake --build build --config Release --parallel
 
+      - name: Install WiX Toolset
+        run: dotnet tool install --global wix --version 6.0.2
+
+      - name: Install WiX UI and Bootstrapper Extensions
+        run: |
+          wix extension add -g WixToolset.UI.wixext/6.0.2
+          wix extension add -g WixToolset.BootstrapperApplications.wixext/6.0.2
+
       - name: Run Unit Tests (Native)
         # Since we are on an ARM64 host, we can now actually RUN the tests!
         working-directory: build
@@ -47,3 +55,21 @@ jobs:
           if (Test-Path "HostSystemStateMonitorTest.exe") {
             .\HostSystemStateMonitorTest.exe
           }
+
+      - name: Pack Test Version Installers
+        run: .\scripts\pack_test_version.bat
+
+      - name: Pack Release Version Installers
+        run: .\scripts\pack_release_version.bat
+
+      - name: Upload Installer Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: EGoTouchRev-ARM64-Installers
+          path: |
+            build/*.msi
+            build/*.exe
+            !build/*Test*.exe
+            build/EGoTouchTestSetup_ARM64.exe
+          retention-days: 7
+
