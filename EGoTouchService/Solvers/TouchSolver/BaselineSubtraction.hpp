@@ -2,12 +2,6 @@
 // ── TouchPipeline Module: BaselineSubtraction ──
 // Header-only. Converted from Preprocessing/BaselineSubtraction.{h,cpp}.
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/BaselineSubtraction.hpp
-#include "EngineTypes.h"
-#include <cstdint>
-
-namespace Engine { namespace Touch {
-=======
 #include "SolverTypes.h"
 #include "NeonCompat.h"
 #include <cstddef>
@@ -18,7 +12,6 @@ namespace Engine { namespace Touch {
 #endif
 
 namespace Solvers { namespace Touch {
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/BaselineSubtraction.hpp
 
 class BaselineSubtraction {
 public:
@@ -29,12 +22,6 @@ public:
         if (!m_enabled) return true;
 
         int16_t* ptr = reinterpret_cast<int16_t*>(frame.heatmapMatrix);
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/BaselineSubtraction.hpp
-        int16_t base = static_cast<int16_t>(m_baseline);
-
-        for (int i = 0; i < 2400; ++i) {
-            ptr[i] = ptr[i] - base;
-=======
         const int16_t base = static_cast<int16_t>(m_baseline);
         constexpr size_t kCellCount = 40u * 60u;
         size_t i = 0;
@@ -56,14 +43,9 @@ public:
 
         for (; i < kCellCount; ++i) {
             ptr[i] = static_cast<int16_t>(ptr[i] - base);
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/BaselineSubtraction.hpp
         }
         return true;
     }
 };
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/BaselineSubtraction.hpp
-}} // namespace Engine::Touch
-=======
 }} // namespace Solvers::Touch
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/BaselineSubtraction.hpp

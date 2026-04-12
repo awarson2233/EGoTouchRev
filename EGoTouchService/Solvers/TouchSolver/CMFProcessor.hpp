@@ -3,20 +3,12 @@
 // Header-only. Converted from Preprocessing/CMFProcessor.{h,cpp}.
 // Common Mode Filter: removes global row/column shift noise.
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/CMFProcessor.hpp
-#include "EngineTypes.h"
-#include <algorithm>
-#include <cstdint>
-
-namespace Engine { namespace Touch {
-=======
 #include "SolverTypes.h"
 #include "NeonCompat.h"
 #include <algorithm>
 #include <cstdint>
 
 namespace Solvers { namespace Touch {
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/CMFProcessor.hpp
 
 class CMFProcessor {
 public:
@@ -40,14 +32,6 @@ public:
 
 private:
     inline void ProcessRowWise(HeatmapFrame& frame) {
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/CMFProcessor.hpp
-        for (int y = 0; y < 40; ++y) {
-            int64_t rowSum = 0;
-            int validCount = 0;
-            for (int x = 0; x < 60; ++x) {
-                int16_t val = frame.heatmapMatrix[y][x];
-                if (val < m_exclusionThreshold && val > -m_exclusionThreshold) {
-=======
         const int16_t exclusionThreshold = static_cast<int16_t>(
             std::clamp(m_exclusionThreshold, 0, 0x7FFF));
         const int16_t negativeThreshold = static_cast<int16_t>(-exclusionThreshold);
@@ -88,20 +72,10 @@ private:
             for (; x < 60; ++x) {
                 const int16_t val = row[x];
                 if (val < exclusionThreshold && val > negativeThreshold) {
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/CMFProcessor.hpp
                     rowSum += val;
                     validCount++;
                 }
             }
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/CMFProcessor.hpp
-            if (validCount > 0) {
-                int16_t rowOffset = static_cast<int16_t>(rowSum / validCount);
-                rowOffset = std::clamp<int16_t>(rowOffset,
-                    static_cast<int16_t>(-m_maxCorrection),
-                    static_cast<int16_t>(m_maxCorrection));
-                for (int x = 0; x < 60; ++x)
-                    frame.heatmapMatrix[y][x] -= rowOffset;
-=======
 #else
             for (int x = 0; x < 60; ++x) {
                 const int16_t val = row[x];
@@ -132,30 +106,22 @@ private:
                 for (int x = 0; x < 60; ++x)
                     row[x] = static_cast<int16_t>(row[x] - rowOffset);
 #endif
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/CMFProcessor.hpp
             }
         }
     }
 
     inline void ProcessColumnWise(HeatmapFrame& frame) {
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/CMFProcessor.hpp
-=======
         const int16_t exclusionThreshold = static_cast<int16_t>(
             std::clamp(m_exclusionThreshold, 0, 0x7FFF));
         const int16_t negativeThreshold = static_cast<int16_t>(-exclusionThreshold);
         const int16_t maxCorrection = static_cast<int16_t>(
             std::clamp(m_maxCorrection, 0, 0x7FFF));
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/CMFProcessor.hpp
         for (int x = 0; x < 60; ++x) {
             int64_t colSum = 0;
             int validCount = 0;
             for (int y = 0; y < 40; ++y) {
                 int16_t val = frame.heatmapMatrix[y][x];
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/CMFProcessor.hpp
-                if (val < m_exclusionThreshold && val > -m_exclusionThreshold) {
-=======
                 if (val < exclusionThreshold && val > negativeThreshold) {
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/CMFProcessor.hpp
                     colSum += val;
                     validCount++;
                 }
@@ -163,18 +129,6 @@ private:
             if (validCount > 0) {
                 int16_t colOffset = static_cast<int16_t>(colSum / validCount);
                 colOffset = std::clamp<int16_t>(colOffset,
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/CMFProcessor.hpp
-                    static_cast<int16_t>(-m_maxCorrection),
-                    static_cast<int16_t>(m_maxCorrection));
-                for (int y = 0; y < 40; ++y)
-                    frame.heatmapMatrix[y][x] -= colOffset;
-            }
-        }
-    }
-};
-
-}} // namespace Engine::Touch
-=======
                     static_cast<int16_t>(-maxCorrection),
                     maxCorrection);
                 if (colOffset == 0) continue;
@@ -203,4 +157,3 @@ private:
 };
 
 }} // namespace Solvers::Touch
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/CMFProcessor.hpp

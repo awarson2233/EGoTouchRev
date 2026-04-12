@@ -3,30 +3,19 @@
 // Header-only. Converted from Preprocessing/GridIIRProcessor.{h,cpp}.
 // Dynamic threshold gated IIR with aggressive noise floor decay.
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/GridIIRProcessor.hpp
-#include "EngineTypes.h"
-=======
 #include "SolverTypes.h"
 #include "NeonCompat.h"
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/GridIIRProcessor.hpp
 #include <algorithm>
 #include <cstring>
 #include <cmath>
 #include <cstdint>
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/GridIIRProcessor.hpp
-namespace Engine { namespace Touch {
-
-class GridIIRProcessor {
-public:
-=======
 namespace Solvers { namespace Touch {
 
 class GridIIRProcessor {
 public:
     static constexpr int kGridCellCount = 40 * 60;
 
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/GridIIRProcessor.hpp
     bool m_enabled = true;
 
     // Dynamic Touch Gate
@@ -56,14 +45,6 @@ public:
             return true;
         }
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/GridIIRProcessor.hpp
-        // Compute per-frame dynamic threshold
-        int16_t frameMax = 0;
-        for (int y = 0; y < 40; ++y)
-            for (int x = 0; x < 60; ++x)
-                if (frame.heatmapMatrix[y][x] > frameMax)
-                    frameMax = frame.heatmapMatrix[y][x];
-=======
         // Compute per-frame dynamic threshold (merged scan: find max while iterating)
         // We still need a two-pass approach because dynThreshold depends on frameMax
         // which requires the full frame. Optimize by using pointer arithmetic instead of 2D indexing.
@@ -84,31 +65,11 @@ public:
             if (matPtr[i] > frameMax) frameMax = matPtr[i];
         }
 #endif
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/GridIIRProcessor.hpp
 
         const int16_t dynThreshold = static_cast<int16_t>(std::max(
             static_cast<int>(std::lround(frameMax * m_gateRatio)),
             m_gateStaticFloor));
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/GridIIRProcessor.hpp
-        // Apply per-pixel
-        for (int y = 0; y < 40; ++y) {
-            for (int x = 0; x < 60; ++x) {
-                int16_t current = frame.heatmapMatrix[y][x];
-                int16_t history = m_historyBuffer[y][x];
-
-                // Residual correction
-                if (m_residualEnabled && history > current) {
-                    int16_t residual = static_cast<int16_t>(
-                        (history - current) * m_residualAlpha);
-                    current = std::max<int16_t>(0, current - residual);
-                }
-
-                int16_t filtered = ApplyIIR(current, history, dynThreshold);
-                frame.heatmapMatrix[y][x] = filtered;
-                m_historyBuffer[y][x] = filtered;
-            }
-=======
         int16_t* framePixel = &frame.heatmapMatrix[0][0];
         int16_t* histPixel  = &m_historyBuffer[0][0];
         const int32_t decayWeight = static_cast<int32_t>(m_decayWeight);
@@ -197,7 +158,6 @@ public:
             const int16_t filtered = applyDecay(current, history);
             framePixel[i] = filtered;
             histPixel[i] = filtered;
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/GridIIRProcessor.hpp
         }
         return true;
     }
@@ -206,22 +166,6 @@ private:
     bool m_historyInitialized = false;
     int16_t m_historyBuffer[40][60];
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/GridIIRProcessor.hpp
-    inline int16_t ApplyIIR(int16_t current, int16_t history,
-                            int16_t dynThreshold) {
-        if (current >= dynThreshold) return current;
-
-        int32_t val = (static_cast<int32_t>(m_decayWeight) * current
-                     + (256 - static_cast<int32_t>(m_decayWeight)) * history) / 256;
-        val = std::max(static_cast<int32_t>(0), val - m_decayStep);
-
-        if (val < m_noiseFloorCutoff) return 0;
-        return static_cast<int16_t>(val);
-    }
-};
-
-}} // namespace Engine::Touch
-=======
 #if defined(_M_ARM64)
     static inline int16_t HorizontalMax(int16x8_t values) {
         alignas(16) int16_t lanes[8];
@@ -241,4 +185,3 @@ private:
 };
 
 }} // namespace Solvers::Touch
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/GridIIRProcessor.hpp

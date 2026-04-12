@@ -3,19 +3,11 @@
 // Header-only. Converted from TouchSolver/TouchSize.{h,cpp}.
 // Converts zone signalSum → approximate radius in mm.
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/TouchSize.hpp
-#include "EngineTypes.h"
-#include <vector>
-#include <cstdint>
-
-namespace Engine { namespace Touch {
-=======
 #include "SolverTypes.h"
 #include <vector>
 #include <cstdint>
 
 namespace Solvers { namespace Touch {
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/TouchSize.hpp
 
 class TouchSizeCalculator {
 public:
@@ -45,8 +37,4 @@ private:
     }
 };
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/TouchSize.hpp
-}} // namespace Engine::Touch
-=======
 }} // namespace Solvers::Touch
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/TouchSize.hpp

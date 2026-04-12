@@ -3,25 +3,15 @@
 // Header-only. Faithful replica of TouchSolver/PeakDetector.{h,cpp}.
 // TSACore Peak_Process: detect local maxima, filter, sort, track IDs.
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/PeakDetector.hpp
-#include "EngineTypes.h"
-#include <vector>
-=======
 #include "SolverTypes.h"
 #include <array>
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/PeakDetector.hpp
 #include <algorithm>
 #include <cstdint>
 #include <cmath>
 #include <cstdlib>
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/PeakDetector.hpp
-
-namespace Engine { namespace Touch {
-=======
 #include <span>
 
 namespace Solvers { namespace Touch {
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/PeakDetector.hpp
 
 struct Peak {
     int r = 0, c = 0;
@@ -34,11 +24,8 @@ struct Peak {
 
 class PeakDetector {
 public:
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/PeakDetector.hpp
-=======
     static constexpr int kMaxStoredPeaks = 100;
 
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/PeakDetector.hpp
     int  m_threshold = 130;
     int  m_sigTholdLimit = 300;
     bool m_z8Filter = true;
@@ -68,15 +55,9 @@ public:
 
         // Step 3.5: MacroZone min area filter — remove peaks from tiny zones
         if (m_macroZoneMinArea > 1) {
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/PeakDetector.hpp
-            m_peaks.erase(std::remove_if(m_peaks.begin(), m_peaks.end(),
-                [this](const Peak& p) { return p.macroZoneArea < m_macroZoneMinArea; }),
-                m_peaks.end());
-=======
             CompactPeaks([this](const Peak& p) {
                 return p.macroZoneArea < m_macroZoneMinArea;
             });
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/PeakDetector.hpp
         }
 
         // Step 4: Edge peak filter — weak edge peaks < maxSig*5/8
@@ -86,36 +67,21 @@ public:
         SortPeaks();
 
         // Step 6: Cap to max
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/PeakDetector.hpp
-        if (static_cast<int>(m_peaks.size()) > m_maxPeaks)
-            m_peaks.resize(m_maxPeaks);
-=======
         m_peakCount = std::min(m_peakCount, EffectiveMaxPeaks());
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/PeakDetector.hpp
 
         // Step 7: Peak_IDTracking — assign persistent IDs
         TrackPeakIDs();
     }
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/PeakDetector.hpp
-    const std::vector<Peak>& GetPeaks() const { return m_peaks; }
-=======
     std::span<const Peak> GetPeaks() const {
         return std::span<const Peak>(m_peaks.data(),
                                      static_cast<size_t>(m_peakCount));
     }
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/PeakDetector.hpp
 
 private:
     static constexpr int kRows = 40;
     static constexpr int kCols = 60;
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/PeakDetector.hpp
-    std::vector<Peak> m_peaks;
-    std::vector<Peak> m_prevPeaks;
-    uint8_t m_nextPeakId = 1;
-
-=======
     std::array<Peak, kMaxStoredPeaks> m_peaks{};
     std::array<Peak, kMaxStoredPeaks> m_prevPeaks{};
     int m_peakCount = 0;
@@ -142,7 +108,6 @@ private:
         m_peakCount = writeIdx;
     }
 
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/PeakDetector.hpp
     // ────────────────────────────────────────────────────────
     // Peak_DetectInRange — TSACore asymmetric 8-neighbor
     // Down neighbors: signal[n] <= peak  (allows equal)
@@ -150,13 +115,8 @@ private:
     // ────────────────────────────────────────────────────────
     inline void DetectInRange(const HeatmapFrame& frame,
                               const std::vector<MacroZone>& macroZones) {
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/PeakDetector.hpp
-        m_peaks.clear();
-        m_peaks.reserve(m_maxPeaks + 4);
-=======
         m_peakCount = 0;
         const int maxPeaks = EffectiveMaxPeaks();
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/PeakDetector.hpp
 
         const int colEnd = kCols - 1;
 
@@ -179,26 +139,17 @@ private:
                 }
                 if (v < thold) continue;
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/PeakDetector.hpp
-                // --- Asymmetric Local-Max Test (scales with m_z8Radius) ---
-                bool isPeak = true;
-                for (int dr = -m_z8Radius; dr <= m_z8Radius; ++dr) {
-=======
                 // --- Combined Local-Max + Neighbor Sum (single pass) ---
                 bool isPeak = true;
                 int nbrSigSum = 0;
                 for (int dr = -m_z8Radius; dr <= m_z8Radius && isPeak; ++dr) {
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/PeakDetector.hpp
                     for (int dc = -m_z8Radius; dc <= m_z8Radius; ++dc) {
                         if (dr == 0 && dc == 0) continue;
                         int nr = r + dr;
                         int nc = c + dc;
                         if (nr >= 0 && nr < kRows && nc >= 0 && nc < kCols) {
                             int16_t nv = val(nr, nc);
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/PeakDetector.hpp
-=======
                             nbrSigSum += nv;
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/PeakDetector.hpp
                             bool after = (dr > 0) || (dr == 0 && dc > 0);
                             if (after) {
                                 if (nv > v) { isPeak = false; break; }
@@ -207,10 +158,6 @@ private:
                             }
                         }
                     }
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/PeakDetector.hpp
-                    if (!isPeak) break;
-=======
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/PeakDetector.hpp
                 }
                 if (!isPeak) continue;
 
@@ -220,30 +167,6 @@ private:
                     continue;
                 }
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/PeakDetector.hpp
-                // Peak_CalcZn: sum neighbors up to m_z8Radius
-                int nbrSigSum = 0;
-                for (int dr = -m_z8Radius; dr <= m_z8Radius; ++dr)
-                    for (int dc = -m_z8Radius; dc <= m_z8Radius; ++dc) {
-                        if (dr == 0 && dc == 0) continue;
-                        int nr = r + dr, nc = c + dc;
-                        if (nr >= 0 && nr < kRows &&
-                            nc >= 0 && nc < kCols)
-                            nbrSigSum += val(nr, nc);
-                    }
-
-                // TSACore Peak_Insert: cap at m_maxPeaks, replace weakest
-                if (static_cast<int>(m_peaks.size()) < m_maxPeaks) {
-                    m_peaks.push_back({r, c, v, nbrSigSum, 0, 0, zone.area});
-                } else {
-                    // Buffer full — find weakest peak and replace
-                    int weakIdx = 0;
-                    for (int k = 1; k < m_maxPeaks; ++k)
-                        if (m_peaks[k].z < m_peaks[weakIdx].z)
-                            weakIdx = k;
-                    if (m_peaks[weakIdx].z < v)
-                        m_peaks[weakIdx] = {r, c, v, nbrSigSum, 0, 0, zone.area};
-=======
                 // TSACore Peak_Insert: cap at m_maxPeaks, replace weakest
                 if (m_peakCount < maxPeaks) {
                     m_peaks[static_cast<size_t>(m_peakCount++)] =
@@ -259,7 +182,6 @@ private:
                         m_peaks[static_cast<size_t>(weakIdx)] =
                             {r, c, v, nbrSigSum, 0, 0, zone.area};
                     }
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/PeakDetector.hpp
                 }
             }
         }
@@ -302,32 +224,16 @@ private:
     // Isolated spikes: strong peak but neighbors sum is small
     // ────────────────────────────────────────────────────────
     inline void ApplyZ8Filter() {
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/PeakDetector.hpp
-        m_peaks.erase(
-            std::remove_if(m_peaks.begin(), m_peaks.end(),
-                [](const Peak& p) {
-                    return (p.z >> 5) > p.neighborSignalSum;
-                }),
-            m_peaks.end());
-=======
         CompactPeaks([](const Peak& p) {
             return (p.z >> 5) > p.neighborSignalSum;
         });
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/PeakDetector.hpp
     }
 
     // ────────────────────────────────────────────────────────
     // Peak_Z1Filter — remove peaks with signal < threshold
     // ────────────────────────────────────────────────────────
     inline void ApplyZ1Filter(int16_t thold) {
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/PeakDetector.hpp
-        m_peaks.erase(
-            std::remove_if(m_peaks.begin(), m_peaks.end(),
-                [thold](const Peak& p) { return p.z < thold; }),
-            m_peaks.end());
-=======
         CompactPeaks([thold](const Peak& p) { return p.z < thold; });
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/PeakDetector.hpp
     }
 
     // ────────────────────────────────────────────────────────
@@ -338,19 +244,6 @@ private:
         auto filterEdgeLine = [this](auto predicate) {
             // Find max signal among edge peaks
             int16_t maxSig = 0;
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/PeakDetector.hpp
-            for (auto& p : m_peaks)
-                if (predicate(p) && p.z > maxSig) maxSig = p.z;
-            if (maxSig == 0) return;
-            const int16_t cutoff =
-                static_cast<int16_t>((maxSig >> 3) * 5);  // 5/8
-            m_peaks.erase(
-                std::remove_if(m_peaks.begin(), m_peaks.end(),
-                    [&](const Peak& p) {
-                        return predicate(p) && p.z < cutoff;
-                    }),
-                m_peaks.end());
-=======
             for (int i = 0; i < m_peakCount; ++i) {
                 const auto& p = m_peaks[static_cast<size_t>(i)];
                 if (predicate(p) && p.z > maxSig) {
@@ -363,7 +256,6 @@ private:
             CompactPeaks([&](const Peak& p) {
                 return predicate(p) && p.z < cutoff;
             });
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/PeakDetector.hpp
         };
 
         // Row 0 (top edge)
@@ -380,11 +272,7 @@ private:
     // Peak sort — ascending by signal (TSACore default)
     // ────────────────────────────────────────────────────────
     inline void SortPeaks() {
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/PeakDetector.hpp
-        std::sort(m_peaks.begin(), m_peaks.end(),
-=======
         std::sort(m_peaks.begin(), m_peaks.begin() + m_peakCount,
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/PeakDetector.hpp
             [](const Peak& a, const Peak& b) { return a.z < b.z; });
     }
 
@@ -394,35 +282,16 @@ private:
     // nearest-neighbor which is sufficient for peak-level tracking.
     // ────────────────────────────────────────────────────────
     inline void TrackPeakIDs() {
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/PeakDetector.hpp
-        if (m_prevPeaks.empty()) {
-            // First frame: assign fresh IDs
-            for (auto& pk : m_peaks)
-                pk.id = m_nextPeakId++;
-            m_prevPeaks = m_peaks;
-=======
         if (m_prevPeakCount == 0) {
             // First frame: assign fresh IDs
             for (int i = 0; i < m_peakCount; ++i)
                 m_peaks[static_cast<size_t>(i)].id = m_nextPeakId++;
             std::copy_n(m_peaks.begin(), m_peakCount, m_prevPeaks.begin());
             m_prevPeakCount = m_peakCount;
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/PeakDetector.hpp
             return;
         }
 
         // Mark which prev peaks have been matched
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/PeakDetector.hpp
-        std::vector<bool> prevUsed(m_prevPeaks.size(), false);
-
-        for (auto& pk : m_peaks) {
-            int bestDist = 9999;
-            int bestIdx = -1;
-            for (int j = 0; j < (int)m_prevPeaks.size(); ++j) {
-                if (prevUsed[j]) continue;
-                int dist = std::abs(pk.r - m_prevPeaks[j].r)
-                         + std::abs(pk.c - m_prevPeaks[j].c);
-=======
         std::array<bool, kMaxStoredPeaks> prevUsed{};
         prevUsed.fill(false);
 
@@ -435,7 +304,6 @@ private:
                 const auto& prevPk = m_prevPeaks[static_cast<size_t>(j)];
                 int dist = std::abs(pk.r - prevPk.r)
                          + std::abs(pk.c - prevPk.c);
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/PeakDetector.hpp
                 if (dist < bestDist) {
                     bestDist = dist;
                     bestIdx = j;
@@ -443,32 +311,18 @@ private:
             }
             // Match if within 3 cells Manhattan distance
             if (bestIdx >= 0 && bestDist <= 3) {
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/PeakDetector.hpp
-                pk.id = m_prevPeaks[bestIdx].id;
-                pk.tzAge = m_prevPeaks[bestIdx].tzAge + 1; // TZ_UpdatePeakTzAge
-                prevUsed[bestIdx] = true;
-=======
                 const auto& prevPk = m_prevPeaks[static_cast<size_t>(bestIdx)];
                 pk.id = prevPk.id;
                 pk.tzAge = prevPk.tzAge + 1; // TZ_UpdatePeakTzAge
                 prevUsed[static_cast<size_t>(bestIdx)] = true;
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/PeakDetector.hpp
             } else {
                 pk.id = m_nextPeakId++;
                 pk.tzAge = 0;
             }
         }
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/PeakDetector.hpp
-        m_prevPeaks = m_peaks;
-    }
-};
-
-}} // namespace Engine::Touch
-=======
         std::copy_n(m_peaks.begin(), m_peakCount, m_prevPeaks.begin());
         m_prevPeakCount = m_peakCount;
     }
 };
 
 }} // namespace Solvers::Touch
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/PeakDetector.hpp

@@ -8,11 +8,7 @@
 #include <algorithm>
 #include <cstdint>
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/EdgeCompensation.hpp
-namespace Engine { namespace Touch {
-=======
 namespace Solvers { namespace Touch {
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/EdgeCompensation.hpp
 
 // ── g_ctd256Ln[256]: official LUT from firmware ──
 static const uint16_t g_ctd256Ln[256] = {
@@ -142,8 +138,4 @@ private:
     }
 };
 
-<<<<<<< HEAD:EGoTouchService/Engine/TouchSolver/EdgeCompensation.hpp
-}} // namespace Engine::Touch
-=======
 }} // namespace Solvers::Touch
->>>>>>> origin/pr/03-hardware-diagnostics:EGoTouchService/Solvers/TouchSolver/EdgeCompensation.hpp
