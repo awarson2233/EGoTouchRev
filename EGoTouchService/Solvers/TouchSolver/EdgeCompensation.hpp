@@ -79,7 +79,7 @@ class EdgeCompensator {
 public:
     bool m_enabled = true;
     EdgeBounds m_bounds;
-    float m_ecBlendRange = 2.0f;
+    float m_ecBlendRange = 2;
 
     inline void Process(std::vector<TouchContact>& contacts,
                         const std::vector<ZoneEdgeInfo>& edgeInfos,

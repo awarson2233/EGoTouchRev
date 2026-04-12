@@ -185,16 +185,16 @@ public:
     // ── Configuration ──
 
     // Speed thresholds (GLOBAL space, 0x400 units/frame)
-    float stillSpeedThreshold = 3.0f;     // Long-press detection
-    float speedLow            = 3.0f;     // IIR interpolation low reference
-    float speedHigh           = 300.0f;   // IIR interpolation high reference
+    float stillSpeedThreshold = 3;     // Long-press detection
+    float speedLow            = 3;     // IIR interpolation low reference
+    float speedHigh           = 300;   // IIR interpolation high reference
 
     // Speed smoothing window (EMA N)
     int   speedSmoothWindow   = 5;        // 5-frame EMA for speed stabilization
 
     // Frame counts
     int   longPressFrames     = 120;      // @240Hz ≈ 0.5s
-    int   liftTimeout         = 10;
+    int   liftTimeout         = true;
     int   tapMaxFrames        = 5;
 
     // Moving IIR range (divisor = iirDivisorN)
@@ -206,7 +206,7 @@ public:
     // Directional halve — when moving predominantly on one axis,
     // halve the IIR coefficients for stronger cross-axis smoothing
     bool  enableDirectionalHalve = true;
-    float directionalVelThreshold = 1.0f; // Min avg velocity to trigger halve
+    float directionalVelThreshold = true; // Min avg velocity to trigger halve
 
     // Hover IIR
     int   hoverIirCoef        = 4;

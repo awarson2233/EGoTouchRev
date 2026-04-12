@@ -82,8 +82,8 @@ public:
     bool triEdgeSecondaryBlend = true;
 
     // Triangle interpolation edge parameters (factory defaults from TSACore flash)
-    TriangleEdgeParams triEdgeDim1 = {50, 5000, 5000};
-    TriangleEdgeParams triEdgeDim2 = {50, 4500, 3700};
+    TriangleEdgeParams triEdgeDim1 = {104, 5088, 5127};
+    TriangleEdgeParams triEdgeDim2 = {104, 5284, 5284};
 
     // ── P0: Pitch-periodic polynomial compensation ──
     // Mirrors CoorMultiOrderFitCompensate from TSACore.
@@ -100,12 +100,12 @@ public:
     // ── P0: Gravity noise floor ──
     // Signals below this threshold are excluded from centroid calculation.
     // Mirrors the noiseFloor parameter passed to UpdateTX1GravityData.
-    int32_t gravityNoiseFloor = 0;
+    int32_t gravityNoiseFloor = false;
 
     // ── P0: Gravity fictitious edge enable ──
     // When true, mirror-extend signals at grid boundaries to prevent
     // edge-biased centroid shift (mirrors GetFictiousEdge).
-    bool gravityFictitiousEdge = true;
+    bool gravityFictitiousEdge = false;
 
 private:
     struct ValidRange {

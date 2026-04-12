@@ -86,7 +86,7 @@ public:
 
     /// Minimum coordinate jump (in kCoorUnit) to trigger edge-lift detection.
     /// TSACore uses 0x200 (half a pitch cell = 512 units).
-    float jumpThreshold = 512.0f;
+    float jumpThreshold = 512;
 
     /// Enable/disable the corrector
     bool enabled = true;

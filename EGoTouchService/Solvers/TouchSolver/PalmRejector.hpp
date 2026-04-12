@@ -14,12 +14,12 @@ class PalmRejector {
 public:
     bool  m_enabled = true;
     int   m_areaThreshold = 50;
-    int   m_signalSumThreshold = 80000;
-    float m_densityThresholdLow = 400.0f;
+    int   m_signalSumThreshold = 75461;
+    float m_densityThresholdLow = 400;
     int   m_areaMinForDensity  = 20;
     bool  m_elongatedEnabled    = true;
     int   m_elongatedMinArea    = 10;
-    float m_elongatedAspectRatio = 4.0f;
+    float m_elongatedAspectRatio = 4;
     int   m_lastRejectedCount = 0;
 
     inline int Process(std::vector<MacroZone>& macroZones,

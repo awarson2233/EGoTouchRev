@@ -19,7 +19,7 @@ public:
     bool m_enabled = true;
 
     // Dynamic Touch Gate
-    float m_gateRatio = 0.10f;
+    float m_gateRatio = 0.1f;
     int m_gateStaticFloor = 200;
 
     // Low-signal decay IIR

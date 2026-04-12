@@ -38,7 +38,7 @@ public:
     ServiceMode GetMode() const { return m_mode; }
 
 private:
-    ServiceMode m_mode = ServiceMode::TouchOnly;
+    ServiceMode m_mode = ServiceMode::Full;
     bool m_autoMode = true;
     bool m_stylusVhfEnabled = true;
 

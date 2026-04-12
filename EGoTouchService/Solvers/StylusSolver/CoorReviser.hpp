@@ -261,8 +261,8 @@ public:
     /// Tilt multiplier: revise = multiplier × tilt_degrees.
     /// Temporarily scaled 10x for debugging direction/magnitude issues.
     /// Original Gaokun factory: prmt[0x26b] = prmt[0x26c] = 5.
-    int tiltMultiplierX = 50;
-    int tiltMultiplierY = 50;
+    int tiltMultiplierX = 5;
+    int tiltMultiplierY = 5;
 
     /// Coordinate diff averaging window (TSACore: GetTX1TX2CoorDifAverage(5))
     int diffAverageWindow = 5;
@@ -277,7 +277,7 @@ public:
     int reviseLimitStep = 15;
 
     /// Tilt jitter suppression threshold (degrees)
-    int tiltJitterDeg = 1;
+    int tiltJitterDeg = true;
 
     /// Tilt normalization length (TSACore: gridCols * prmt[0x26a] * 0x400 / totalPitch)
     /// Gaokun: (60 * 144 * 1024) / 2560 = 3456

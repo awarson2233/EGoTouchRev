@@ -22,7 +22,7 @@ public:
     static constexpr int kCols = 60;
     static constexpr int kGridSize = kRows * kCols;
 
-    int  m_tholdScaleNumer = 0x40; // ~50%  (TSACore DAT)
+    int  m_tholdScaleNumer = 64; // ~50%  (TSACore DAT)
     int  m_tholdScaleShift = 7;    // >>7
     bool m_dilateErode = true;
     int  m_maxTouches = 10;

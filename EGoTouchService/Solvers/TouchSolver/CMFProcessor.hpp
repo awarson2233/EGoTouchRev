@@ -18,8 +18,8 @@ public:
 
     bool m_enabled = true;
     DimensionMode m_mode = DimensionMode::RowWise;
-    int m_exclusionThreshold = 250;
-    int m_maxCorrection = 500;
+    int m_exclusionThreshold = 2000;
+    int m_maxCorrection = 2000;
 
     inline bool Process(HeatmapFrame& frame) {
         if (!m_enabled || m_mode == DimensionMode::None) return true;

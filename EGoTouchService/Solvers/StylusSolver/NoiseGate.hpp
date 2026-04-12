@@ -95,9 +95,9 @@ public:
 
     // ── Configuration ──
     bool  noisePostEnabled = false;
-    float coorJumpThreshold = 20.0f;
+    float coorJumpThreshold = 100;
     bool  exitSmoothEnabled = true;
-    bool  recheckEnabled = true;
+    bool  recheckEnabled = false;
     int   recheckSignalThreshBase = 120;
 
 private:

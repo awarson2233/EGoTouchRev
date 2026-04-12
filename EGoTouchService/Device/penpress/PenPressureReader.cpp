@@ -69,13 +69,21 @@ std::optional<std::wstring> PenPressureReader::FindDevicePath() {
 void PenPressureReader::OnPacketReceived(const std::vector<uint8_t>& packet) {
     // 解析 'U' 报文: [0x55][freq1][freq2][p0L][p0H][p1L][p1H][p2L][p2H][p3L][p3H]...
     if (packet.size() >= 11 && packet[0] == 0x55) {
+        constexpr uint32_t kInputPressureMax  = 16384;
+        constexpr uint32_t kOutputPressureMax = 4096;
+
         PenPressureStats s;
         s.reportType = packet[0];
         s.freq1      = packet[1];
         s.freq2      = packet[2];
         for (int k = 0; k < 4; ++k) {
-            s.press[k] = static_cast<uint16_t>(packet[3 + k * 2]) |
-                         (static_cast<uint16_t>(packet[4 + k * 2]) << 8);
+            const uint16_t rawPress = static_cast<uint16_t>(packet[3 + k * 2]) |
+                                      (static_cast<uint16_t>(packet[4 + k * 2]) << 8);
+            // 16384 精度压缩到 4096，使用向上取整；并限制到 4096 上限。
+            const uint32_t scaledPress =
+                (static_cast<uint32_t>(rawPress) * kOutputPressureMax + kInputPressureMax - 1) /
+                kInputPressureMax;
+            s.press[k] = static_cast<uint16_t>(std::min(scaledPress, kOutputPressureMax));
         }
         {
             std::lock_guard<std::mutex> lk(m_statsMutex);

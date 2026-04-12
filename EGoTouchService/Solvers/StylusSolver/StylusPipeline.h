@@ -121,7 +121,7 @@ private:
     PacketBuilder            m_packetBuilder;
 
     // ── Smoothing filter mode (0=IIR, 1=1-Euro, 2=None) ──
-    int m_filterMode = 0;
+    int m_filterMode = false;
 
     // ── Pipeline state ──
     StylusFrameData  m_lastResult{};
@@ -153,7 +153,7 @@ private:
     uint8_t m_rawSlaveHdr[7]{};
 
     // ── Button state ──
-    int m_buttonReleaseHoldFrames = 2;
+    int m_buttonReleaseHoldFrames = 4;
     int m_buttonReleaseCounter = 0;
     uint32_t UpdateButtonState(uint32_t rawBits, bool active);
 
@@ -162,7 +162,7 @@ private:
 
     // ── Noise level (for recheck) ──
     int m_noiseLevel = 0;
-    int m_recheckThBase = 800;
+    int m_recheckThBase = 120;
     int m_recheckThMulti = 1200;
 
     // ── Good frame history for freeze output ──
@@ -174,10 +174,10 @@ private:
 
     // ── Config ──
     bool m_enableSlaveChecksum = false;
-    bool m_emitPacketWhenInvalid = true;
+    bool m_emitPacketWhenInvalid = false;
 
     // P3 #16: TP Pattern Compensation (placeholder)
-    bool m_tpPatternCompEnabled = false;
+    bool m_tpPatternCompEnabled = true;
     std::array<double, 4> m_tpPatternCoefDim1{{0.0, 0.0, 0.0, 0.0}};
     std::array<double, 4> m_tpPatternCoefDim2{{0.0, 0.0, 0.0, 0.0}};
 

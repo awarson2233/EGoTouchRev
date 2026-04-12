@@ -89,7 +89,7 @@ public:
 
     /// Minimum cutoff frequency (Hz). Lower = stronger smoothing at low speed.
     /// Typical range: 0.5–10.0. Default 1.0 provides good jitter suppression.
-    float minCutoffF = 1.0f;
+    float minCutoffF = true;
 
     /// Speed coefficient. Higher = more responsive at high speed.
     /// Typical range: 0.001–1.0. Default 0.007 provides natural pen tracking.
@@ -97,7 +97,7 @@ public:
 
     /// Derivative cutoff frequency (Hz). Smooths the velocity estimate.
     /// Higher = less delay in speed response. Default 1.0.
-    float dCutoffF = 1.0f;
+    float dCutoffF = true;
 
     /// Nominal sample rate (Hz). Used for alpha calculation.
     /// Should match the actual frame rate of the stylus pipeline.

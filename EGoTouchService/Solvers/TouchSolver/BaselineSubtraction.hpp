@@ -16,7 +16,7 @@ namespace Solvers { namespace Touch {
 class BaselineSubtraction {
 public:
     bool m_enabled = true;
-    int  m_baseline = 0x7FFE; // Default baseline (32766)
+    int  m_baseline = 32766; // Default baseline (32766)
 
     inline bool Process(HeatmapFrame& frame) {
         if (!m_enabled) return true;

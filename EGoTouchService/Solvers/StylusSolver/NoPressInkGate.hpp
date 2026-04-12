@@ -102,15 +102,15 @@ public:
         m_exitStreak = 0;
     }
 
-    bool enabled = false;
-    int  baseThreshold = 10000;
+    bool enabled = true;
+    int  baseThreshold = 11982;
     int  enterRatioPercent = 100;
-    int  exitRatioPercent = 30;
+    int  exitRatioPercent = 60;
     int  tiltDeadzone = 1000;
     int  tiltCap = 10000;
     int  tiltScalePercent = 29;
-    int  enterDebounceFrames = 2;
-    int  exitDebounceFrames = 2;
+    int  enterDebounceFrames = 4;
+    int  exitDebounceFrames = true;
     int  syntheticMinPressure = 10;
 
 private:

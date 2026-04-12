@@ -194,27 +194,27 @@ public:
     }
 
     // ── Configuration ──
-    int   iirWeightQ8 = 64;
+    int   iirWeightQ8 = 59;
     bool  polyEnabled = true;
     std::array<double, 5> polySeg1{{0.0, 0.0, 0.0078740157480315, 0.0, 0.0}};
     std::array<double, 5> polySeg2{{-409.317785463, 4.39982201266, -0.00161165641489,
                                      2.623779267e-07, -1.60182e-11}};
-    int   seg1Threshold = 11;
+    int   seg1Threshold = 12;
     int   seg2Threshold = 127;
     int   gainPercent = 100;
-    int   tailFrames = 0;
-    int   tailMin = 10;
-    int   tailDecay = 48;
+    int   tailFrames = false;
+    int   tailMin = false;
+    int   tailDecay = 110;
 
     // Signal suppression hysteresis
     bool  signalSuppressEnabled = true;
-    int   signalSuppressEnter = 2200;
-    int   signalSuppressExit = 3200;
+    int   signalSuppressEnter = 444;
+    int   signalSuppressExit = 1861;
 
     // Edge signal suppression hysteresis
-    bool  edgeSignalSuppressEnabled = true;
-    int   edgeSignalSuppressEnter = 1500;
-    int   edgeSignalSuppressExit = 3000;
+    bool  edgeSignalSuppressEnabled = false;
+    int   edgeSignalSuppressEnter = 480;
+    int   edgeSignalSuppressExit = 10;
 
 private:
     uint16_t m_prevPressure = 0;
@@ -227,7 +227,7 @@ private:
         uint16_t pressure;
     };
 
-    static constexpr uint64_t kBtAggregationWindowMs = 28;
+    static constexpr uint64_t kBtAggregationWindowMs = 50;
     static constexpr uint64_t kBtHistoryKeepMs = 60;
     static constexpr size_t kBtHistoryCapacity = 64;
     static constexpr uint64_t kBtPressureMask = 0xFFFFu;

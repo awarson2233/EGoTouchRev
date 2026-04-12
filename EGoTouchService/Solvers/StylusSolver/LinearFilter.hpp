@@ -89,13 +89,13 @@ public:
     int minFitLength = 20;
 
     /// Residual threshold to enter straight-line mode
-    float enterResidualThreshold = 30.0f;
+    float enterResidualThreshold = 50;
 
     /// Maximum deviation to stay in straight-line mode
-    float exitDeviation = 200.0f;
+    float exitDeviation = 200;
 
     /// Perpendicular constraint strength (0.0 = none, 1.0 = full)
-    float perpConstraint = 0.7f;
+    float perpConstraint = 0.8f;
 
     /// Transition rate for alpha ramp (higher = faster transition)
     float transitionRate = 0.3f;

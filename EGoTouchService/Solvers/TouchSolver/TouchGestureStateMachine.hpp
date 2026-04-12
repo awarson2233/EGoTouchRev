@@ -37,13 +37,13 @@ class TouchGestureStateMachine {
 public:
     static constexpr int kMaxSlots = 20;
     bool  m_enabled = true;
-    int   m_pressCandidateFrames = 1;
-    int   m_pressCandidateMinSignal = 0;
-    float m_pressCandidateMinSizeMm = 0.0f;
+    int   m_pressCandidateFrames = true;
+    int   m_pressCandidateMinSignal = false;
+    float m_pressCandidateMinSizeMm = false;
     float m_dragThreshold = 0.8f;
     int   m_longPressFrames = 46;
     float m_longPressMoveTolerance = 0.8f;
-    int   m_releasePendingFrames = 0;
+    int   m_releasePendingFrames = false;
     bool  m_bypassStateMachine = false;
 
     TouchGestureStateMachine() { for (auto& s : m_slots) s.Reset(); }

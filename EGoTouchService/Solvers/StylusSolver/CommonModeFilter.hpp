@@ -38,7 +38,7 @@ public:
     }
 
     // ── Configuration ──
-    bool enabled = false;
+    bool enabled = true;
     int  windowSize = 6;  // erosion/dilation window half-width
 
 private:
