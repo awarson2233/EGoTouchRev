@@ -103,13 +103,13 @@ public:
     }
 
     bool enabled = true;
-    int  baseThreshold = 11982;
+    int  baseThreshold = 7973;
     int  enterRatioPercent = 100;
-    int  exitRatioPercent = 60;
+    int  exitRatioPercent = 70;
     int  tiltDeadzone = 1000;
     int  tiltCap = 10000;
     int  tiltScalePercent = 29;
-    int  enterDebounceFrames = 4;
+    int  enterDebounceFrames = 3;
     int  exitDebounceFrames = true;
     int  syntheticMinPressure = 10;
 

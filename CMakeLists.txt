@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(EGoTouchRev VERSION 0.1.0 LANGUAGES C CXX)
+project(EGoTouchRev VERSION 1.0.3 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -217,6 +217,11 @@ if (EGO_BUILD_TESTS)
     )
     target_link_libraries(TouchPipelineConfigRoundTripTest PRIVATE Solvers Common)
 
+    add_executable(PalmRejectorTemporalCarryoverTest
+        Tools/tests/PalmRejectorTemporalCarryoverTest.cpp
+    )
+    target_link_libraries(PalmRejectorTemporalCarryoverTest PRIVATE Solvers Common)
+
     add_executable(StylusPipelineFastInkTest
         Tools/tests/StylusPipelineFastInkTest.cpp
     )
@@ -226,6 +231,7 @@ if (EGO_BUILD_TESTS)
     add_test(NAME TouchTrackerSilentGapTest COMMAND TouchTrackerSilentGapTest)
     add_test(NAME TouchTrackerStylusSuppressTest COMMAND TouchTrackerStylusSuppressTest)
     add_test(NAME TouchPipelineConfigRoundTripTest COMMAND TouchPipelineConfigRoundTripTest)
+    add_test(NAME PalmRejectorTemporalCarryoverTest COMMAND PalmRejectorTemporalCarryoverTest)
     add_test(NAME StylusPipelineFastInkTest COMMAND StylusPipelineFastInkTest)
 endif()
 

@@ -207,14 +207,14 @@ public:
     int   tailDecay = 110;
 
     // Signal suppression hysteresis
-    bool  signalSuppressEnabled = true;
-    int   signalSuppressEnter = 444;
-    int   signalSuppressExit = 1861;
+    bool  signalSuppressEnabled = false;
+    int   signalSuppressEnter = 582;
+    int   signalSuppressExit = 1488;
 
     // Edge signal suppression hysteresis
-    bool  edgeSignalSuppressEnabled = false;
-    int   edgeSignalSuppressEnter = 480;
-    int   edgeSignalSuppressExit = 10;
+    bool  edgeSignalSuppressEnabled = true;
+    int   edgeSignalSuppressEnter = 2010;
+    int   edgeSignalSuppressExit = 1828;
 
 private:
     uint16_t m_prevPressure = 0;

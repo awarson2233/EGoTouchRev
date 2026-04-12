@@ -23,13 +23,13 @@ struct GestureSlot {
     float lastOutputX = 0, lastOutputY = 0;
     uint16_t ageFrames = 0, missingFrames = 0, stableFrames = 0;
     float sizeMm = 0; int signalSum = 0, area = 0; bool isEdge = false;
-    bool quickTapEligible = true, upEmitted = false;
+    bool quickTapEligible = true, upEmitted = false, hadVisibleOutput = false;
     void Reset() {
         phase = prevPhase = GesturePhase::Idle;
         anchorX = anchorY = lastTrackedX = lastTrackedY = lastOutputX = lastOutputY = 0;
         ageFrames = missingFrames = stableFrames = 0;
         sizeMm = 0; signalSum = area = 0; isEdge = false;
-        quickTapEligible = true; upEmitted = false;
+        quickTapEligible = true; upEmitted = false; hadVisibleOutput = false;
     }
 };
 
@@ -58,6 +58,8 @@ public:
 
     inline bool Process(HeatmapFrame& frame) {
         if (!m_enabled) return true;
+        const uint16_t requiredStableFrames = static_cast<uint16_t>(
+            std::max(1, m_pressCandidateFrames));
 
         // Bypass mode
         if (m_bypassStateMachine) {
@@ -111,25 +113,34 @@ public:
                 c.reportEvent = TouchReportIdle;
                 continue;
             }
-            const auto& slot = m_slots[idx];
+            auto& slot = m_slots[idx];
             switch (slot.phase) {
             case GesturePhase::Idle:
                 c.isReported = false; c.reportEvent = TouchReportIdle; break;
             case GesturePhase::PressCandidate:
-                if (slot.stableFrames >= static_cast<uint16_t>(m_pressCandidateFrames)) {
+                if (slot.stableFrames >= requiredStableFrames) {
                     c.isReported = true; c.reportEvent = TouchReportDown;
                     c.x = slot.lastOutputX; c.y = slot.lastOutputY;
                 } else { c.isReported = false; c.reportEvent = TouchReportIdle; }
                 break;
             case GesturePhase::Dragging:
-                c.isReported = true; c.reportEvent = TouchReportMove;
+                c.isReported = true;
+                c.reportEvent = slot.hadVisibleOutput ? TouchReportMove
+                                                      : TouchReportDown;
                 c.x = slot.lastOutputX; c.y = slot.lastOutputY; break;
             case GesturePhase::LongPressHold:
-                c.isReported = true; c.reportEvent = TouchReportMove;
+                c.isReported = true;
+                c.reportEvent = slot.hadVisibleOutput ? TouchReportMove
+                                                      : TouchReportDown;
                 c.x = slot.lastOutputX; c.y = slot.lastOutputY; break;
             case GesturePhase::ReleasePending:
-                c.isReported = true; c.reportEvent = TouchReportMove;
+                c.isReported = true;
+                c.reportEvent = slot.hadVisibleOutput ? TouchReportMove
+                                                      : TouchReportDown;
                 c.x = slot.lastOutputX; c.y = slot.lastOutputY; break;
+            }
+            if (c.isReported) {
+                slot.hadVisibleOutput = true;
             }
         }
 
@@ -138,6 +149,10 @@ public:
             auto& slot = m_slots[i];
             if (slot.phase != GesturePhase::ReleasePending) continue;
             if (slot.missingFrames <= static_cast<uint16_t>(m_releasePendingFrames)) continue;
+            if (!slot.hadVisibleOutput) {
+                slot.Reset();
+                continue;
+            }
             TouchContact upEvent;
             upEvent.id = i + 1; upEvent.x = slot.lastOutputX; upEvent.y = slot.lastOutputY;
             upEvent.state = TouchStateUp; upEvent.area = slot.area;
@@ -162,7 +177,7 @@ private:
                 slot.anchorX = contact->x; slot.anchorY = contact->y;
                 slot.lastTrackedX = contact->x; slot.lastTrackedY = contact->y;
                 slot.lastOutputX = contact->x; slot.lastOutputY = contact->y;
-                slot.ageFrames = 1; slot.missingFrames = 0; slot.stableFrames = 1;
+                slot.ageFrames = 1; slot.missingFrames = 0; slot.stableFrames = 0;
                 slot.sizeMm = contact->sizeMm; slot.signalSum = contact->signalSum;
                 slot.area = contact->area; slot.isEdge = contact->isEdge;
                 slot.quickTapEligible = true;
