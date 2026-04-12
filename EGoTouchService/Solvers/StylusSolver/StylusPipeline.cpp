@@ -12,6 +12,61 @@ inline uint16_t ReadU16Le(const uint8_t* p) {
     return static_cast<uint16_t>(p[0]) |
            (static_cast<uint16_t>(p[1]) << 8);
 }
+
+struct StylusSignalMetrics {
+    uint16_t signalX = 0;
+    uint16_t signalY = 0;
+    uint16_t maxRawPeak = 0;
+    uint16_t tx1Composite = 0;
+    uint16_t tx2Composite = 0;
+    bool dim1EdgeActive = false;
+    bool dim2EdgeActive = false;
+    uint16_t dim1EdgeSignal = 0;
+    uint16_t dim2EdgeSignal = 0;
+};
+
+inline uint16_t ClampU16(int value) {
+    return static_cast<uint16_t>(std::clamp(value, 0, 0xFFFF));
+}
+
+inline uint16_t NormalizeProjectionPeak(const int32_t* signal, int peakIdx, int span) {
+    if (peakIdx < 0 || span <= 0) {
+        return 0;
+    }
+    const int32_t peak = signal[peakIdx];
+    return ClampU16(static_cast<int>(peak / std::max(1, span)));
+}
+
+inline bool IsAxisEdgeActive(int32_t coor, int sensorDim) {
+    const int32_t margin = Asa::kCoorUnit;
+    const int32_t maxCoor = sensorDim * Asa::kCoorUnit;
+    return (coor < margin) || (coor > maxCoor - margin);
+}
+
+inline StylusSignalMetrics BuildSignalMetrics(const Asa::AsaProjection& proj,
+                                             const Asa::AsaCoorResult& rawCoor,
+                                             uint16_t tx1PeakSignal,
+                                             uint16_t tx2PeakSignal,
+                                             int sensorCols,
+                                             int sensorRows) {
+    StylusSignalMetrics metrics{};
+    metrics.signalX = tx1PeakSignal;
+    metrics.signalY = tx2PeakSignal;
+    metrics.maxRawPeak = std::max(metrics.signalX, metrics.signalY);
+
+    const uint16_t dim1ProjectionPeak =
+        NormalizeProjectionPeak(proj.dim1, proj.peakIdxDim1, proj.spanDim1);
+    const uint16_t dim2ProjectionPeak =
+        NormalizeProjectionPeak(proj.dim2, proj.peakIdxDim2, proj.spanDim2);
+    metrics.tx1Composite = ClampU16(
+        (static_cast<int>(dim1ProjectionPeak) + static_cast<int>(dim2ProjectionPeak)) / 2);
+    metrics.tx2Composite = tx2PeakSignal;
+    metrics.dim1EdgeActive = IsAxisEdgeActive(rawCoor.dim1, sensorCols);
+    metrics.dim2EdgeActive = IsAxisEdgeActive(rawCoor.dim2, sensorRows);
+    metrics.dim1EdgeSignal = dim1ProjectionPeak;
+    metrics.dim2EdgeSignal = dim2ProjectionPeak;
+    return metrics;
+}
 } // namespace
 
 // ══════════════════════════════════════════════
@@ -97,7 +152,10 @@ bool StylusPipeline::ProcessNoStylusFrame(
             m_emitPacketWhenInvalid, outPacket);
         m_prevValid = false;
         m_wasInking = false;
+        m_prevPressureVal = 0;
         m_penStateMachine.Update(false, 0, 0, 0);
+        m_pressureSolver.Reset();
+        m_noPressInkGate.Reset();
         m_lastResult.animState = static_cast<uint8_t>(m_penStateMachine.GetState());
         m_prevStatus = m_lastResult.status;
         return outPacket.valid;
@@ -109,12 +167,14 @@ bool StylusPipeline::ProcessNoStylusFrame(
         m_tiltSolver.Reset();
         m_coorReviser.Reset();
         m_linearFilter.Reset();
-        m_pressureSolver.ResetSuppression();
+        m_pressureSolver.Reset();
+        m_noPressInkGate.Reset();
         m_noiseGate.Reset();
         m_hasLastGoodFrame = false;
     }
     m_prevValid = false;
     m_wasInking = false;
+    m_prevPressureVal = 0;
     m_penStateMachine.Update(false, 0, 0, 0);
     m_lastResult.animState = static_cast<uint8_t>(m_penStateMachine.GetState());
     if (m_emitPacketWhenInvalid) {
@@ -181,6 +241,9 @@ bool StylusPipeline::ProcessRaw(
         StylusPacket& outPacket) {
     m_lastResult = StylusFrameData{};
     outPacket = StylusPacket{};
+#ifdef _DEBUG
+    m_dbg.sigSuppressActive = false;
+#endif
 
     // FreqShift freeze: output last known-good frame
     if (m_freqShiftFreezing && m_hasLastGoodFrame) {
@@ -215,6 +278,8 @@ bool StylusPipeline::ProcessRaw(
     if (!ParseSlaveWords(rawData, sw)) {
         m_lastResult.slaveValid = false;
         m_lastResult.pipelineStage = 1;
+        m_pressureSolver.Reset();
+        m_noPressInkGate.Reset();
         if (m_emitPacketWhenInvalid) {
             outPacket.valid = true; outPacket.reportId = 0x08;
             outPacket.length = 17; outPacket.bytes.fill(0);
@@ -310,7 +375,10 @@ bool StylusPipeline::ProcessRaw(
     if (!peak.valid) {
         m_lastResult.point.valid = false;
         m_lastResult.pipelineStage = 3;
+        m_pressureSolver.Reset();
+        m_noPressInkGate.Reset();
         m_prevValid = false;
+        m_prevPressureVal = 0;
         m_penStateMachine.Update(false, 0, 0, 0);
         m_lastResult.animState = static_cast<uint8_t>(m_penStateMachine.GetState());
         if (m_emitPacketWhenInvalid)
@@ -334,7 +402,10 @@ bool StylusPipeline::ProcessRaw(
     if (!rawCoor.valid) {
         m_lastResult.point.valid = false;
         m_lastResult.pipelineStage = 4;
+        m_pressureSolver.Reset();
+        m_noPressInkGate.Reset();
         m_prevValid = false;
+        m_prevPressureVal = 0;
         m_penStateMachine.Update(false, 0, 0, 0);
         m_lastResult.animState = static_cast<uint8_t>(m_penStateMachine.GetState());
         if (m_emitPacketWhenInvalid)
@@ -376,7 +447,10 @@ bool StylusPipeline::ProcessRaw(
         }
         m_lastResult.point.valid = false;
         m_lastResult.pipelineStage = 5;
+        m_pressureSolver.Reset();
+        m_noPressInkGate.Reset();
         m_prevValid = false;
+        m_prevPressureVal = 0;
         m_penStateMachine.Update(false, 0, 0, 0);
         m_lastResult.animState = static_cast<uint8_t>(m_penStateMachine.GetState());
         if (m_emitPacketWhenInvalid)
@@ -409,19 +483,57 @@ bool StylusPipeline::ProcessRaw(
     }
 
     // Pressure (BT MCU) — solve BEFORE state machine
+    const auto metrics = BuildSignalMetrics(
+        proj, rawCoor, tx1PeakSignal, tx2PeakSignal, m_sensorCols, m_sensorRows);
     m_lastResult.tx1BlockValid = m_gridData.tx1.valid;
     m_lastResult.tx2BlockValid = m_gridData.tx2.valid;
-    m_lastResult.signalX = tx1PeakSignal;
-    m_lastResult.signalY = tx2PeakSignal;
-    m_lastResult.maxRawPeak = std::max(m_lastResult.signalX, m_lastResult.signalY);
+    m_lastResult.signalX = metrics.signalX;
+    m_lastResult.signalY = metrics.signalY;
+    m_lastResult.maxRawPeak = metrics.maxRawPeak;
+    m_lastResult.point.peakTx1 = metrics.tx1Composite;
+    m_lastResult.point.peakTx2 = metrics.tx2Composite;
     m_lastResult.hpp3Dim1SignalValid = (m_lastResult.signalX > 0);
     m_lastResult.hpp3Dim2SignalValid = (m_lastResult.signalY > 0);
     {
         uint16_t btPress = m_pressureSolver.GetLatestBtPressure();
         m_lastResult.point.rawPressure = btPress;
-        m_lastResult.pressure = m_pressureSolver.Solve(
+        const Asa::EdgeSignalInputs edgeSignals{
+            metrics.dim1EdgeActive,
+            metrics.dim2EdgeActive,
+            static_cast<int>(metrics.dim1EdgeSignal),
+            static_cast<int>(metrics.dim2EdgeSignal)
+        };
+        const auto pressureStage = m_pressureSolver.SolveStage(
             btPress, rawCoor.valid,
-            static_cast<int>(m_lastResult.signalX), isEdge);
+            static_cast<int>(metrics.tx1Composite),
+            isEdge, edgeSignals);
+        const auto noPressResult = m_noPressInkGate.Apply(
+            rawCoor.valid,
+            m_lastResult.tx1BlockValid,
+            pressureStage.signalSuppressActive || pressureStage.edgeSignalSuppressActive,
+            pressureStage.realPressure,
+            m_prevPressureVal,
+            metrics.tx1Composite,
+            metrics.tx2Composite);
+        m_lastResult.noPressInkActive =
+            noPressResult.active && (pressureStage.realPressure == 0);
+        m_lastResult.point.mappedPressure = pressureStage.mappedPressure;
+        m_lastResult.pressure = noPressResult.outputPressure;
+        m_lastResult.point.pressure = m_lastResult.pressure;
+        m_lastResult.recheckEnabled = m_noiseGate.recheckEnabled;
+        m_lastResult.recheckThreshold =
+            static_cast<uint16_t>(std::clamp(m_recheckThBase, 0, 0xFFFF));
+        m_lastResult.recheckThresholdMulti =
+            static_cast<uint16_t>(std::clamp(m_recheckThMulti, 0, 0xFFFF));
+        m_lastResult.recheckPassed =
+            !m_noiseGate.recheckEnabled ||
+            (rawCoor.valid &&
+             m_lastResult.tx1BlockValid &&
+             metrics.tx1Composite >= m_lastResult.recheckThreshold);
+#ifdef _DEBUG
+        m_dbg.sigSuppressActive =
+            pressureStage.signalSuppressActive || pressureStage.edgeSignalSuppressActive;
+#endif
     }
 
     // State machine → MotionProfile
@@ -537,7 +649,6 @@ bool StylusPipeline::ProcessRaw(
     m_dbg.coorRevDeltaX     = static_cast<float>(m_coorReviser.GetLastReviseX());
     m_dbg.coorRevDeltaY     = static_cast<float>(m_coorReviser.GetLastReviseY());
     m_dbg.tiltAnomalyDamped = false;
-    m_dbg.sigSuppressActive = false;
     m_dbg.penLifecycle      = static_cast<uint8_t>(m_penStateMachine.GetState());
     m_dbg.wasInking         = m_wasInking;
     m_dbg.avg3PtDim1        = postCoor.dim1;
@@ -638,7 +749,9 @@ std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
         ConfigParam("sp.recheckEnabled", "Enable Recheck",
             ConfigParam::Bool, const_cast<bool*>(&m_noiseGate.recheckEnabled), Cat::Solver),
         ConfigParam("sp.recheckThBase", "Signal Thresh Base",
-            ConfigParam::Int, const_cast<int*>(&m_noiseGate.recheckSignalThreshBase), 10, 500, Cat::Solver),
+            ConfigParam::Int, const_cast<int*>(&m_recheckThBase), 10, 5000, Cat::Solver),
+        ConfigParam("sp.recheckThMulti", "Signal Thresh Multi",
+            ConfigParam::Int, const_cast<int*>(&m_recheckThMulti), 10, 5000, Cat::Solver),
         ConfigParam("sp.pitchMapEnabled", "Pitch Map Enabled",
             ConfigParam::Bool, const_cast<bool*>(&m_pitchMapEnabled), Cat::Solver),
         ConfigParam("sp.tpPatternEnabled", "TP Pattern Comp Enabled",
@@ -765,6 +878,32 @@ std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
             ConfigParam::Int, const_cast<int*>(&m_pressureSolver.signalSuppressEnter), 10, 2000, Cat::Output),
         ConfigParam("sp.sigSuppressExit", "Signal Suppress Exit Thr",
             ConfigParam::Int, const_cast<int*>(&m_pressureSolver.signalSuppressExit), 10, 3000, Cat::Output),
+        ConfigParam("sp.edgeSigSuppressEnabled", "Edge Signal Suppress Enabled",
+            ConfigParam::Bool, const_cast<bool*>(&m_pressureSolver.edgeSignalSuppressEnabled), Cat::Output),
+        ConfigParam("sp.edgeSigSuppressEnter", "Edge Signal Suppress Enter Thr",
+            ConfigParam::Int, const_cast<int*>(&m_pressureSolver.edgeSignalSuppressEnter), 10, 5000, Cat::Output),
+        ConfigParam("sp.edgeSigSuppressExit", "Edge Signal Suppress Exit Thr",
+            ConfigParam::Int, const_cast<int*>(&m_pressureSolver.edgeSignalSuppressExit), 10, 5000, Cat::Output),
+        ConfigParam("sp.noPressEnabled", "NoPressInk Enabled",
+            ConfigParam::Bool, const_cast<bool*>(&m_noPressInkGate.enabled), Cat::Output),
+        ConfigParam("sp.noPressBaseTh", "NoPress Base Threshold",
+            ConfigParam::Int, const_cast<int*>(&m_noPressInkGate.baseThreshold), 0, 20000, Cat::Output),
+        ConfigParam("sp.noPressEnterRatio", "NoPress Enter Ratio",
+            ConfigParam::Int, const_cast<int*>(&m_noPressInkGate.enterRatioPercent), 1, 200, Cat::Output),
+        ConfigParam("sp.noPressExitRatio", "NoPress Exit Ratio",
+            ConfigParam::Int, const_cast<int*>(&m_noPressInkGate.exitRatioPercent), 1, 200, Cat::Output),
+        ConfigParam("sp.noPressTiltDeadzone", "NoPress Tilt Deadzone",
+            ConfigParam::Int, const_cast<int*>(&m_noPressInkGate.tiltDeadzone), 0, 20000, Cat::Output),
+        ConfigParam("sp.noPressTiltCap", "NoPress Tilt Cap",
+            ConfigParam::Int, const_cast<int*>(&m_noPressInkGate.tiltCap), 0, 20000, Cat::Output),
+        ConfigParam("sp.noPressTiltScale", "NoPress Tilt Scale %",
+            ConfigParam::Int, const_cast<int*>(&m_noPressInkGate.tiltScalePercent), 0, 200, Cat::Output),
+        ConfigParam("sp.noPressDebounceEnter", "NoPress Enter Debounce",
+            ConfigParam::Int, const_cast<int*>(&m_noPressInkGate.enterDebounceFrames), 1, 10, Cat::Output),
+        ConfigParam("sp.noPressDebounceExit", "NoPress Exit Debounce",
+            ConfigParam::Int, const_cast<int*>(&m_noPressInkGate.exitDebounceFrames), 1, 10, Cat::Output),
+        ConfigParam("sp.noPressSyntheticMin", "NoPress Synthetic Min",
+            ConfigParam::Int, const_cast<int*>(&m_noPressInkGate.syntheticMinPressure), 1, 100, Cat::Output),
 
         // === Filter Mode ===
         ConfigParam("sp.filterMode", "Filter Mode (0=IIR 1=1Euro 2=Off)",
@@ -855,7 +994,8 @@ void StylusPipeline::SaveConfig(std::ostream& out) const {
     out << "sp.hpp3NoiseEnabled=" << m_noiseGate.noisePostEnabled << "\n";
     out << "sp.hpp3JumpTh=" << m_noiseGate.coorJumpThreshold << "\n";
     out << "sp.recheckEnabled=" << m_noiseGate.recheckEnabled << "\n";
-    out << "sp.recheckThBase=" << m_noiseGate.recheckSignalThreshBase << "\n";
+    out << "sp.recheckThBase=" << m_recheckThBase << "\n";
+    out << "sp.recheckThMulti=" << m_recheckThMulti << "\n";
     out << "sp.exitSmoothEnabled=" << m_noiseGate.exitSmoothEnabled << "\n";
     out << "sp.cmfEnabled=" << m_cmfFilter.enabled << "\n";
     out << "sp.cmfWindowSize=" << m_cmfFilter.windowSize << "\n";
@@ -873,6 +1013,19 @@ void StylusPipeline::SaveConfig(std::ostream& out) const {
     out << "sp.sigSuppressEnabled=" << m_pressureSolver.signalSuppressEnabled << "\n";
     out << "sp.sigSuppressEnter=" << m_pressureSolver.signalSuppressEnter << "\n";
     out << "sp.sigSuppressExit=" << m_pressureSolver.signalSuppressExit << "\n";
+    out << "sp.edgeSigSuppressEnabled=" << m_pressureSolver.edgeSignalSuppressEnabled << "\n";
+    out << "sp.edgeSigSuppressEnter=" << m_pressureSolver.edgeSignalSuppressEnter << "\n";
+    out << "sp.edgeSigSuppressExit=" << m_pressureSolver.edgeSignalSuppressExit << "\n";
+    out << "sp.noPressEnabled=" << (m_noPressInkGate.enabled ? "1" : "0") << "\n";
+    out << "sp.noPressBaseTh=" << m_noPressInkGate.baseThreshold << "\n";
+    out << "sp.noPressEnterRatio=" << m_noPressInkGate.enterRatioPercent << "\n";
+    out << "sp.noPressExitRatio=" << m_noPressInkGate.exitRatioPercent << "\n";
+    out << "sp.noPressTiltDeadzone=" << m_noPressInkGate.tiltDeadzone << "\n";
+    out << "sp.noPressTiltCap=" << m_noPressInkGate.tiltCap << "\n";
+    out << "sp.noPressTiltScale=" << m_noPressInkGate.tiltScalePercent << "\n";
+    out << "sp.noPressDebounceEnter=" << m_noPressInkGate.enterDebounceFrames << "\n";
+    out << "sp.noPressDebounceExit=" << m_noPressInkGate.exitDebounceFrames << "\n";
+    out << "sp.noPressSyntheticMin=" << m_noPressInkGate.syntheticMinPressure << "\n";
     // Filter mode
     out << "sp.filterMode=" << m_filterMode << "\n";
     out << "sp.1eur.minCutoff=" << m_oneEuroFilter.minCutoffF << "\n";
@@ -961,7 +1114,8 @@ void StylusPipeline::LoadConfig(
     else if (key == "sp.hpp3NoiseEnabled") m_noiseGate.noisePostEnabled = toBool(value);
     else if (key == "sp.hpp3JumpTh") m_noiseGate.coorJumpThreshold = toFloat(value);
     else if (key == "sp.recheckEnabled") m_noiseGate.recheckEnabled = toBool(value);
-    else if (key == "sp.recheckThBase") m_noiseGate.recheckSignalThreshBase = toInt(value);
+    else if (key == "sp.recheckThBase") m_recheckThBase = toInt(value);
+    else if (key == "sp.recheckThMulti") m_recheckThMulti = toInt(value);
     else if (key == "sp.exitSmoothEnabled") m_noiseGate.exitSmoothEnabled = toBool(value);
     else if (key == "sp.cmfEnabled") m_cmfFilter.enabled = toBool(value);
     else if (key == "sp.cmfWindowSize") m_cmfFilter.windowSize = toInt(value);
@@ -979,6 +1133,19 @@ void StylusPipeline::LoadConfig(
     else if (key == "sp.sigSuppressEnabled") m_pressureSolver.signalSuppressEnabled = toBool(value);
     else if (key == "sp.sigSuppressEnter") m_pressureSolver.signalSuppressEnter = toInt(value);
     else if (key == "sp.sigSuppressExit") m_pressureSolver.signalSuppressExit = toInt(value);
+    else if (key == "sp.edgeSigSuppressEnabled") m_pressureSolver.edgeSignalSuppressEnabled = toBool(value);
+    else if (key == "sp.edgeSigSuppressEnter") m_pressureSolver.edgeSignalSuppressEnter = toInt(value);
+    else if (key == "sp.edgeSigSuppressExit") m_pressureSolver.edgeSignalSuppressExit = toInt(value);
+    else if (key == "sp.noPressEnabled") m_noPressInkGate.enabled = toBool(value);
+    else if (key == "sp.noPressBaseTh") m_noPressInkGate.baseThreshold = toInt(value);
+    else if (key == "sp.noPressEnterRatio") m_noPressInkGate.enterRatioPercent = toInt(value);
+    else if (key == "sp.noPressExitRatio") m_noPressInkGate.exitRatioPercent = toInt(value);
+    else if (key == "sp.noPressTiltDeadzone") m_noPressInkGate.tiltDeadzone = toInt(value);
+    else if (key == "sp.noPressTiltCap") m_noPressInkGate.tiltCap = toInt(value);
+    else if (key == "sp.noPressTiltScale") m_noPressInkGate.tiltScalePercent = toInt(value);
+    else if (key == "sp.noPressDebounceEnter") m_noPressInkGate.enterDebounceFrames = toInt(value);
+    else if (key == "sp.noPressDebounceExit") m_noPressInkGate.exitDebounceFrames = toInt(value);
+    else if (key == "sp.noPressSyntheticMin") m_noPressInkGate.syntheticMinPressure = toInt(value);
     // Filter mode
     else if (key == "sp.filterMode") m_filterMode = toInt(value);
     else if (key == "sp.1eur.minCutoff") m_oneEuroFilter.minCutoffF = toFloat(value);

@@ -158,6 +158,7 @@ struct StylusFrameData {
     bool recheckPassed = true;
     bool recheckOverlap = false;
     uint16_t recheckThreshold = 0;
+    uint16_t recheckThresholdMulti = 0;
     bool touchNullLike = false;
     bool touchSuppressActive = false;
     uint8_t touchSuppressFrames = 0; // Remaining hold frames after current frame.

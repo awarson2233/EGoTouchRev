@@ -120,7 +120,8 @@ private:
     inline TouchContact BuildSilentGapContact(TrackState& track, int prevIndex, int cols, int rows, float edgeMargin) const;
     inline TouchContact BuildLiftOffContact(const TrackState& track, int prevIndex, int cols, int rows, float edgeMargin) const;
     inline int AllocateId(const TrackState* reservedNextTracks, int reservedCount) const;
-    inline StylusNoiseEvidence BuildStylusNoiseEvidence(const HeatmapFrame& frame) const;
+    inline StylusNoiseEvidence BuildStylusNoiseEvidence(const HeatmapFrame& frame,
+                                                        int recheckThreshold) const;
     inline bool IsStrongTouchCandidate(const TouchContact& touch) const;
     inline bool ApplyStylusTouchSuppression(HeatmapFrame& frame);
     inline bool ResolveStylusAftContext(const HeatmapFrame& frame, float& outX, float& outY);
@@ -333,7 +334,8 @@ inline int TouchTracker::AllocateId(const TrackState* reservedNextTracks, int re
 }
 
 inline TouchTracker::StylusNoiseEvidence TouchTracker::BuildStylusNoiseEvidence(
-    const HeatmapFrame& frame) const {
+    const HeatmapFrame& frame,
+    int recheckThreshold) const {
     StylusNoiseEvidence evidence;
     evidence.signalX = static_cast<int>(frame.stylus.signalX);
     evidence.signalY = static_cast<int>(frame.stylus.signalY);
@@ -354,12 +356,11 @@ inline TouchTracker::StylusNoiseEvidence TouchTracker::BuildStylusNoiseEvidence(
     evidence.writingLike =
         (frame.stylus.pressure > 0) ||
         (frame.stylus.animState >= 2);
-    evidence.tx2Strong =
-        evidence.signalY >= m_stylusSuppressPenPeakThreshold;
+    evidence.tx2Strong = evidence.signalY >= recheckThreshold;
     evidence.tx2Dominant =
         (evidence.signalY > 0) &&
         (evidence.signalY * 4 >= std::max(1, evidence.signalX) * 3);
-    const int sustainThreshold = std::max(64, m_stylusSuppressPenPeakThreshold / 2);
+    const int sustainThreshold = std::max(64, recheckThreshold / 2);
     evidence.stable =
         evidence.pointValid &&
         (evidence.maxRawPeak >= sustainThreshold) &&
@@ -377,17 +378,28 @@ inline bool TouchTracker::IsStrongTouchCandidate(const TouchContact& touch) cons
 }
 
 inline bool TouchTracker::ApplyStylusTouchSuppression(HeatmapFrame& frame) {
-    frame.stylus.recheckEnabled = m_stylusSuppressLocalEnabled || m_stylusAftEnabled;
-    frame.stylus.recheckPassed = true;
+    frame.stylus.recheckEnabled =
+        frame.stylus.recheckEnabled || m_stylusSuppressLocalEnabled || m_stylusAftEnabled;
     frame.stylus.recheckOverlap = false;
+    const int baseThreshold =
+        (frame.stylus.recheckThreshold > 0)
+            ? static_cast<int>(frame.stylus.recheckThreshold)
+            : m_stylusSuppressPenPeakThreshold;
+    const int multiThreshold =
+        (frame.stylus.recheckThresholdMulti > 0)
+            ? static_cast<int>(frame.stylus.recheckThresholdMulti)
+            : std::max(baseThreshold, 1200);
+    const int finalThreshold =
+        (frame.contacts.size() > 2) ? multiThreshold : baseThreshold;
     frame.stylus.recheckThreshold =
-        static_cast<uint16_t>(std::clamp(m_stylusSuppressPenPeakThreshold, 0, 0xFFFF));
+        static_cast<uint16_t>(std::clamp(finalThreshold, 0, 0xFFFF));
     frame.stylus.touchNullLike = false;
     frame.stylus.touchSuppressActive = false;
     frame.stylus.touchSuppressFrames = 0;
 
-    const StylusNoiseEvidence evidence = BuildStylusNoiseEvidence(frame);
-    frame.stylus.recheckPassed = evidence.stable;
+    const StylusNoiseEvidence evidence =
+        BuildStylusNoiseEvidence(frame, finalThreshold);
+    frame.stylus.recheckPassed = frame.stylus.recheckPassed && evidence.stable;
     if (!m_stylusSuppressLocalEnabled || !evidence.pointValid) return false;
 
     const float radiusSq = m_stylusSuppressLocalDistance * m_stylusSuppressLocalDistance;
@@ -431,6 +443,9 @@ inline bool TouchTracker::ApplyStylusTouchSuppression(HeatmapFrame& frame) {
         evidence.active && frame.stylus.recheckOverlap;
     frame.stylus.touchSuppressActive =
         evidence.active || suppressedCount > 0;
+    if (frame.stylus.recheckOverlap && evidence.active) {
+        frame.stylus.recheckPassed = false;
+    }
     frame.stylus.touchSuppressFrames = static_cast<uint8_t>(
         std::clamp(holdFrames, 0, 255));
     return false;
@@ -438,7 +453,18 @@ inline bool TouchTracker::ApplyStylusTouchSuppression(HeatmapFrame& frame) {
 
 inline bool TouchTracker::ResolveStylusAftContext(const HeatmapFrame& frame, float& outX, float& outY) {
     if (!m_stylusAftEnabled) return false;
-    const StylusNoiseEvidence evidence = BuildStylusNoiseEvidence(frame);
+    const int baseThreshold =
+        (frame.stylus.recheckThreshold > 0)
+            ? static_cast<int>(frame.stylus.recheckThreshold)
+            : m_stylusSuppressPenPeakThreshold;
+    const int multiThreshold =
+        (frame.stylus.recheckThresholdMulti > 0)
+            ? static_cast<int>(frame.stylus.recheckThresholdMulti)
+            : std::max(baseThreshold, 1200);
+    const int finalThreshold =
+        (frame.contacts.size() > 2) ? multiThreshold : baseThreshold;
+    const StylusNoiseEvidence evidence =
+        BuildStylusNoiseEvidence(frame, finalThreshold);
     if (evidence.pointValid && evidence.stable) {
         m_lastStylusX = evidence.x;
         m_lastStylusY = evidence.y;

@@ -55,6 +55,8 @@ public:
         // Determine col range for row projection (dim2)
         int cMin = std::max(0, peak.peakCol - projRadius);
         int cMax = std::min(kGridDim - 1, peak.peakCol + projRadius);
+        proj.spanDim1 = rMax - rMin + 1;
+        proj.spanDim2 = cMax - cMin + 1;
 
         // dim1[c] = sum of grid[rMin..rMax][c] (column signal)
         for (int c = 0; c < kGridDim; ++c) {

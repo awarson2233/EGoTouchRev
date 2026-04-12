@@ -7,42 +7,39 @@
 
 namespace Asa {
 
+struct EdgeSignalInputs {
+    bool dim1Active = false;
+    bool dim2Active = false;
+    int  dim1Signal = 0;
+    int  dim2Signal = 0;
+};
+
+struct PressureStageResult {
+    uint16_t rawPressure = 0;
+    uint16_t mappedPressure = 0;
+    uint16_t realPressure = 0;
+    uint16_t outputPressure = 0;
+    bool signalSuppressActive = false;
+    bool edgeSignalSuppressActive = false;
+};
+
 /// PressureSolver — BT MCU pressure mapping, IIR, tail decay, and signal suppression.
 ///
 /// Mirrors TSACore pressure chain: polynomial mapping → IIR → tail decay.
 /// Also implements HPP3_SuppressBtPressBySignal hysteresis.
 class PressureSolver {
 public:
-    /// Solve pressure for current frame.
-    /// @param rawPressure  Raw BT MCU pressure value
-    /// @param active       Whether pen is in valid contact
-    /// @param signalStrength  Peak signal magnitude (for signal suppression gate)
-    /// @param isEdge       Whether pen is in edge region (bypasses suppression)
-    /// @return Mapped + filtered pressure (0..4095)
-    inline uint16_t Solve(uint16_t rawPressure, bool active,
-                          int signalStrength = 0, bool isEdge = false) {
+    inline PressureStageResult SolveStage(uint16_t rawPressure, bool active,
+                                          int signalStrength = 0, bool isEdge = false,
+                                          const EdgeSignalInputs& edgeSignals = {}) {
+        PressureStageResult result{};
+        result.rawPressure = rawPressure;
+
         if (!active) {
-            m_prevPressure = 0;
-            m_tailCounter = 0;
-            return 0;
+            Reset();
+            return result;
         }
 
-        // Signal suppression with hysteresis (TSACore HPP3_SuppressBtPressBySignal)
-        if (signalSuppressEnabled && signalStrength > 0) {
-            if (!m_signalSuppressActive) {
-                if (signalStrength < signalSuppressEnter && !isEdge)
-                    m_signalSuppressActive = true;
-            } else {
-                if (signalStrength > signalSuppressExit)
-                    m_signalSuppressActive = false;
-            }
-            if (m_signalSuppressActive) {
-                m_prevPressure = 0;
-                return 0;
-            }
-        }
-
-        // Polynomial mapping
         const int x = static_cast<int>(rawPressure);
         int mapped = 0;
         if (x <= seg1Threshold) {
@@ -60,7 +57,6 @@ public:
         mapped = mapped * std::clamp(gainPercent, 1, 1000) / 100;
         mapped = std::clamp(mapped, 0, 0x0FFF);
 
-        // IIR — Q8 (÷256) to match TSACore
         if (mapped > 0 && m_prevPressure > 0) {
             const int w = std::clamp(iirWeightQ8, 1, 255);
             mapped = ((static_cast<int>(m_prevPressure) *
@@ -68,7 +64,6 @@ public:
             mapped = std::clamp(mapped, 0, 0x0FFF);
         }
 
-        // Tail decay
         if (mapped == 0 && m_prevPressure > 0 &&
             tailFrames > 0 && m_tailCounter < tailFrames) {
             mapped = std::max(tailMin,
@@ -80,13 +75,87 @@ public:
             m_tailCounter = 0;
         }
 
-        m_prevPressure = static_cast<uint16_t>(mapped);
-        return m_prevPressure;
+        result.mappedPressure = static_cast<uint16_t>(mapped);
+        result.realPressure = result.mappedPressure;
+
+        if (mapped == 0) {
+            m_signalSuppressActive = false;
+            m_edgeSignalSuppressActive = false;
+        } else {
+            if (signalSuppressEnabled) {
+                if (!m_signalSuppressActive) {
+                    if (!isEdge && signalStrength < signalSuppressEnter) {
+                        m_signalSuppressActive = true;
+                    }
+                } else if (signalStrength > signalSuppressExit) {
+                    m_signalSuppressActive = false;
+                }
+            } else {
+                m_signalSuppressActive = false;
+            }
+
+            const bool anyEdgeActive = edgeSignals.dim1Active || edgeSignals.dim2Active;
+            if (!edgeSignalSuppressEnabled || !anyEdgeActive) {
+                m_edgeSignalSuppressActive = false;
+            } else if (!m_edgeSignalSuppressActive) {
+                if ((edgeSignals.dim1Active &&
+                     edgeSignals.dim1Signal < edgeSignalSuppressEnter) ||
+                    (edgeSignals.dim2Active &&
+                     edgeSignals.dim2Signal < edgeSignalSuppressEnter)) {
+                    m_edgeSignalSuppressActive = true;
+                }
+            } else {
+                bool recovered = true;
+                if (edgeSignals.dim1Active) {
+                    recovered = recovered &&
+                                (edgeSignals.dim1Signal > edgeSignalSuppressExit);
+                }
+                if (edgeSignals.dim2Active) {
+                    recovered = recovered &&
+                                (edgeSignals.dim2Signal > edgeSignalSuppressExit);
+                }
+                if (recovered) {
+                    m_edgeSignalSuppressActive = false;
+                }
+            }
+        }
+
+        if (m_signalSuppressActive || m_edgeSignalSuppressActive) {
+            result.realPressure = 0;
+            m_prevPressure = 0;
+            m_tailCounter = 0;
+        } else {
+            m_prevPressure = result.mappedPressure;
+        }
+
+        result.signalSuppressActive = m_signalSuppressActive;
+        result.edgeSignalSuppressActive = m_edgeSignalSuppressActive;
+        result.outputPressure = result.realPressure;
+        return result;
     }
 
-    /// Reset suppression state (on pen-up)
-    inline void ResetSuppression() {
+    /// Solve pressure for current frame.
+    /// @param rawPressure  Raw BT MCU pressure value
+    /// @param active       Whether pen is in valid contact
+    /// @param signalStrength  Peak signal magnitude (for signal suppression gate)
+    /// @param isEdge       Whether pen is in edge region (bypasses suppression)
+    /// @return Mapped + filtered pressure (0..4095)
+    inline uint16_t Solve(uint16_t rawPressure, bool active,
+                          int signalStrength = 0, bool isEdge = false) {
+        return SolveStage(rawPressure, active, signalStrength, isEdge).outputPressure;
+    }
+
+    /// Reset pressure and suppression state (on pen-up / invalid frame).
+    inline void Reset() {
+        m_prevPressure = 0;
+        m_tailCounter = 0;
         m_signalSuppressActive = false;
+        m_edgeSignalSuppressActive = false;
+    }
+
+    /// Backward-compatible alias.
+    inline void ResetSuppression() {
+        Reset();
     }
 
     /// Inject BT MCU pressure sample with timestamp
@@ -130,14 +199,20 @@ public:
     int   tailDecay = 48;
 
     // Signal suppression hysteresis
-    bool  signalSuppressEnabled = false;
-    int   signalSuppressEnter = 200;
-    int   signalSuppressExit = 300;
+    bool  signalSuppressEnabled = true;
+    int   signalSuppressEnter = 2200;
+    int   signalSuppressExit = 3200;
+
+    // Edge signal suppression hysteresis
+    bool  edgeSignalSuppressEnabled = true;
+    int   edgeSignalSuppressEnter = 1500;
+    int   edgeSignalSuppressExit = 3000;
 
 private:
     uint16_t m_prevPressure = 0;
     int      m_tailCounter = 0;
     bool     m_signalSuppressActive = false;
+    bool     m_edgeSignalSuppressActive = false;
 
     struct BtPressureSample {
         uint64_t timestamp_ms;

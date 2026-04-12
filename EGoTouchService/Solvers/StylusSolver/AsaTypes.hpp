@@ -42,11 +42,15 @@ struct AsaProjection {
     int32_t dim2[kGridDim]{};  // col projection
     int     peakIdxDim1 = -1;  // peak index in dim1
     int     peakIdxDim2 = -1;  // peak index in dim2
+    int     spanDim1 = 0;      // contributing rows for dim1 projection
+    int     spanDim2 = 0;      // contributing cols for dim2 projection
 
     void Clear() {
         std::memset(dim1, 0, sizeof(dim1));
         std::memset(dim2, 0, sizeof(dim2));
         peakIdxDim1 = peakIdxDim2 = -1;
+        spanDim1 = 0;
+        spanDim2 = 0;
     }
 };
 

@@ -10,6 +10,7 @@
 #include "OneEuroFilter.hpp"
 #include "TiltSolver.hpp"
 #include "PressureSolver.hpp"
+#include "NoPressInkGate.hpp"
 #include "CommonModeFilter.hpp"
 #include "PenStateMachine.hpp"
 #include "PacketBuilder.hpp"
@@ -111,6 +112,7 @@ private:
     Asa::OneEuroFilter       m_oneEuroFilter;
     Asa::TiltSolver          m_tiltSolver;
     Asa::PressureSolver      m_pressureSolver;
+    Asa::NoPressInkGate      m_noPressInkGate;
     Asa::CommonModeFilter    m_cmfFilter;
     Asa::PenStateMachine     m_penStateMachine;
     Asa::NoiseGate           m_noiseGate;
@@ -160,6 +162,8 @@ private:
 
     // ── Noise level (for recheck) ──
     int m_noiseLevel = 0;
+    int m_recheckThBase = 800;
+    int m_recheckThMulti = 1200;
 
     // ── Good frame history for freeze output ──
     StylusFrameData m_lastGoodFrame{};
