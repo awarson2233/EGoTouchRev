@@ -1,9 +1,9 @@
 #pragma once
+#include <atomic>
 #include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdint>
-#include <mutex>
 
 namespace Asa {
 
@@ -45,12 +45,9 @@ public:
         if (x <= seg1Threshold) {
             mapped = (x > 1) ? 1 : x;
         } else if (polyEnabled) {
-            const auto eval = [x](const std::array<double, 5>& c) {
-                double d = static_cast<double>(x);
-                return static_cast<int>(
-                    c[0] + c[1]*d + c[2]*d*d + c[3]*d*d*d + c[4]*d*d*d*d);
-            };
-            mapped = (x <= seg2Threshold) ? eval(polySeg1) : eval(polySeg2);
+            mapped = (x <= seg2Threshold)
+                ? EvaluatePolynomial(polySeg1, x)
+                : EvaluatePolynomial(polySeg2, x);
         } else {
             mapped = x;
         }
@@ -163,8 +160,10 @@ public:
         auto nowObj = std::chrono::steady_clock::now();
         uint64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                               nowObj.time_since_epoch()).count();
-        std::lock_guard<std::mutex> lock(m_btMutex);
-        PushBtSample({now_ms, p});
+        const uint64_t writeSeq = m_btWriteSeq.load(std::memory_order_relaxed);
+        const size_t slot = static_cast<size_t>(writeSeq % kBtHistoryCapacity);
+        m_btHistory[slot].store(PackBtSample(now_ms, p), std::memory_order_relaxed);
+        m_btWriteSeq.store(writeSeq + 1, std::memory_order_release);
     }
 
     /// Get the most recent valid pressure sample from BT MCU history
@@ -173,13 +172,22 @@ public:
         auto nowObj = std::chrono::steady_clock::now();
         uint64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                               nowObj.time_since_epoch()).count();
-        std::lock_guard<std::mutex> lock(m_btMutex);
-        DiscardExpiredSamples(now_ms);
-        for (size_t offset = 0; offset < m_btCount; ++offset) {
-            const size_t logicalIndex = m_btCount - 1 - offset;
-            const auto& sample = BtSampleAt(logicalIndex);
-            if (now_ms <= sample.timestamp_ms + kBtAggregationWindowMs) {
-                if (sample.pressure > btPress) btPress = sample.pressure;
+        const uint64_t endSeq = m_btWriteSeq.load(std::memory_order_acquire);
+        const size_t available = static_cast<size_t>(
+            std::min<uint64_t>(endSeq, kBtHistoryCapacity));
+
+        for (size_t offset = 0; offset < available; ++offset) {
+            const uint64_t seq = endSeq - 1 - static_cast<uint64_t>(offset);
+            const size_t slot = static_cast<size_t>(seq % kBtHistoryCapacity);
+            const uint64_t packed = m_btHistory[slot].load(std::memory_order_acquire);
+            const BtPressureSample sample = UnpackBtSample(packed);
+
+            if (now_ms > sample.timestamp_ms + kBtHistoryKeepMs) {
+                continue;
+            }
+            if (now_ms <= sample.timestamp_ms + kBtAggregationWindowMs &&
+                sample.pressure > btPress) {
+                btPress = sample.pressure;
             }
         }
         return btPress;
@@ -221,38 +229,31 @@ private:
 
     static constexpr uint64_t kBtAggregationWindowMs = 28;
     static constexpr uint64_t kBtHistoryKeepMs = 60;
-    static constexpr size_t kBtHistoryCapacity = 20;
+    static constexpr size_t kBtHistoryCapacity = 64;
+    static constexpr uint64_t kBtPressureMask = 0xFFFFu;
+    static constexpr uint64_t kBtTimestampMask = (uint64_t{1} << 48) - 1;
+    static constexpr unsigned kBtTimestampShift = 16;
 
-    mutable std::mutex m_btMutex;
-    std::array<BtPressureSample, kBtHistoryCapacity> m_btHistory{};
-    size_t m_btHead = 0;
-    size_t m_btCount = 0;
+    std::array<std::atomic<uint64_t>, kBtHistoryCapacity> m_btHistory{};
+    std::atomic<uint64_t> m_btWriteSeq{0};
 
-    inline size_t BtPhysicalIndex(size_t logicalIndex) const {
-        return (m_btHead + logicalIndex) % kBtHistoryCapacity;
+    static inline int EvaluatePolynomial(const std::array<double, 5>& c, int x) {
+        const double d = static_cast<double>(x);
+        const double result =
+            (((c[4] * d + c[3]) * d + c[2]) * d + c[1]) * d + c[0];
+        return static_cast<int>(result);
     }
 
-    inline const BtPressureSample& BtSampleAt(size_t logicalIndex) const {
-        return m_btHistory[BtPhysicalIndex(logicalIndex)];
+    static inline uint64_t PackBtSample(uint64_t timestamp_ms, uint16_t pressure) {
+        return ((timestamp_ms & kBtTimestampMask) << kBtTimestampShift) |
+               static_cast<uint64_t>(pressure);
     }
 
-    inline void PushBtSample(const BtPressureSample& sample) {
-        if (m_btCount < kBtHistoryCapacity) {
-            m_btHistory[BtPhysicalIndex(m_btCount)] = sample;
-            ++m_btCount;
-            return;
-        }
-
-        m_btHistory[m_btHead] = sample;
-        m_btHead = (m_btHead + 1) % kBtHistoryCapacity;
-    }
-
-    inline void DiscardExpiredSamples(uint64_t now_ms) {
-        while (m_btCount > 0 &&
-               now_ms > BtSampleAt(0).timestamp_ms + kBtHistoryKeepMs) {
-            m_btHead = (m_btHead + 1) % kBtHistoryCapacity;
-            --m_btCount;
-        }
+    static inline BtPressureSample UnpackBtSample(uint64_t packed) {
+        BtPressureSample sample{};
+        sample.timestamp_ms = (packed >> kBtTimestampShift) & kBtTimestampMask;
+        sample.pressure = static_cast<uint16_t>(packed & kBtPressureMask);
+        return sample;
     }
 };
 

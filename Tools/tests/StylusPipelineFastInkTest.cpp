@@ -1,12 +1,16 @@
 #include "StylusSolver/NoPressInkGate.hpp"
 #include "StylusSolver/PressureSolver.hpp"
+#include "StylusSolver/GridPeakDetector.hpp"
 #include "StylusSolver/StylusPipeline.h"
 
+#include <algorithm>
+#include <atomic>
 #include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <iostream>
+#include <mutex>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -16,6 +20,7 @@
 namespace {
 
 using Asa::EdgeSignalInputs;
+using Asa::GridPeakDetector;
 using Asa::NoPressInkGate;
 using Asa::PressureSolver;
 using Solvers::HeatmapFrame;
@@ -163,6 +168,88 @@ void TestPressureStageEdgeSuppressHysteresis() {
     Require(!s2.edgeSignalSuppressActive, "edge suppression should clear after recovery");
 }
 
+void TestPressureHistoryWindowSemantics() {
+    PressureSolver solver;
+
+    Require(solver.GetLatestBtPressure() == 0,
+            "empty BT pressure history should report zero");
+
+    solver.SetBtMcuPressure(120);
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    solver.SetBtMcuPressure(320);
+    Require(solver.GetLatestBtPressure() == 320,
+            "latest BT window should return the max pressure in the 28ms window");
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(35));
+    Require(solver.GetLatestBtPressure() == 0,
+            "samples older than the aggregation window should not contribute");
+
+    solver.SetBtMcuPressure(450);
+    std::this_thread::sleep_for(std::chrono::milliseconds(65));
+    Require(solver.GetLatestBtPressure() == 0,
+            "samples older than the keep window should expire completely");
+}
+
+void TestPressureHistoryRingOverwrite() {
+    PressureSolver solver;
+    for (uint16_t i = 1; i <= 70; ++i) {
+        solver.SetBtMcuPressure(i);
+    }
+    Require(solver.GetLatestBtPressure() == 70,
+            "ring overwrite should still preserve the max over the recent published samples");
+}
+
+void TestPressureHistorySpscConcurrency() {
+    PressureSolver solver;
+    std::atomic<bool> stop{false};
+    std::atomic<uint16_t> nextPressure{1};
+    std::mutex historyMu;
+    std::vector<std::pair<std::chrono::steady_clock::time_point, uint16_t>> history;
+
+    std::thread writer([&]() {
+        while (!stop.load(std::memory_order_relaxed)) {
+            const uint16_t pressure = nextPressure.fetch_add(1, std::memory_order_relaxed);
+            const auto now = std::chrono::steady_clock::now();
+            {
+                std::lock_guard<std::mutex> lk(historyMu);
+                history.emplace_back(now, pressure);
+            }
+            solver.SetBtMcuPressure(pressure);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+
+    for (int i = 0; i < 30; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        const uint16_t actual = solver.GetLatestBtPressure();
+        const auto now = std::chrono::steady_clock::now();
+
+        uint16_t theoreticalMax = 0;
+        {
+            std::lock_guard<std::mutex> lk(historyMu);
+            history.erase(std::remove_if(history.begin(), history.end(),
+                [&](const auto& sample) {
+                    return now - sample.first > std::chrono::milliseconds(80);
+                }), history.end());
+            for (const auto& sample : history) {
+                if (now - sample.first <= std::chrono::milliseconds(28)) {
+                    theoreticalMax = std::max(theoreticalMax, sample.second);
+                }
+            }
+        }
+
+        Require(actual <= theoreticalMax,
+                "SPSC pressure reader should not exceed the theoretical max in the active window");
+    }
+
+    stop.store(true, std::memory_order_relaxed);
+    writer.join();
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(35));
+    Require(solver.GetLatestBtPressure() == 0,
+            "pressure history should decay to zero after the active window ends");
+}
+
 void TestNoPressInkGateEnterAndExit() {
     NoPressInkGate gate;
     gate.enabled = true;
@@ -306,17 +393,152 @@ void TestStylusPipelineConfigRoundTrip() {
     Require(hasKey("sp.recheckThMulti"), "schema should expose recheck multi threshold");
 }
 
+void TestGridPeakDetectorNoPeak() {
+    GridPeakDetector detector;
+    int16_t grid[kGridDim][kGridDim]{};
+
+    const auto analysis = detector.AnalyzePeakAndProjection(grid);
+    Require(!analysis.peak.valid, "empty grid should not produce a peak");
+    Require(analysis.projection.peakIdxDim1 == -1, "empty grid should not produce a dim1 projection peak");
+    Require(analysis.projection.peakIdxDim2 == -1, "empty grid should not produce a dim2 projection peak");
+}
+
+void TestGridPeakDetectorCenterPeakAndProjection() {
+    GridPeakDetector detector;
+    int16_t grid[kGridDim][kGridDim]{};
+    const auto src = MakeCrossGrid(16000, 14000, 12000, 10000);
+    for (int r = 0; r < kGridDim; ++r) {
+        for (int c = 0; c < kGridDim; ++c) {
+            grid[r][c] = static_cast<int16_t>(src[static_cast<size_t>(r * kGridDim + c)]);
+        }
+    }
+
+    const auto analysis = detector.AnalyzePeakAndProjection(grid);
+    Require(analysis.peak.valid, "center cross should produce a peak");
+    Require(analysis.peak.peakRow == 4 && analysis.peak.peakCol == 4,
+            "center cross should peak at the center cell");
+    Require(analysis.projection.peakIdxDim1 == 4 && analysis.projection.peakIdxDim2 == 4,
+            "center cross projection should peak on the center axis");
+    Require(analysis.projection.spanDim1 == 5 && analysis.projection.spanDim2 == 5,
+            "default projection radius should span five rows and columns");
+}
+
+void TestGridPeakDetectorEdgePeak() {
+    GridPeakDetector detector;
+    int16_t grid[kGridDim][kGridDim]{};
+    const auto src = MakeCrossGrid(14000, 9000, 6000, 4000, 0, 0);
+    for (int r = 0; r < kGridDim; ++r) {
+        for (int c = 0; c < kGridDim; ++c) {
+            grid[r][c] = static_cast<int16_t>(src[static_cast<size_t>(r * kGridDim + c)]);
+        }
+    }
+
+    const auto analysis = detector.AnalyzePeakAndProjection(grid);
+    Require(analysis.peak.valid, "corner cross should produce a peak");
+    Require(analysis.peak.peakRow == 0 && analysis.peak.peakCol == 0,
+            "corner cross should peak at the corner cell");
+    Require(analysis.projection.peakIdxDim1 == 0 && analysis.projection.peakIdxDim2 == 0,
+            "corner cross projection should clamp to the corner index");
+}
+
+void TestGridPeakDetectorConnectedReject() {
+    GridPeakDetector detector;
+    detector.maxConnected = 5;
+    int16_t grid[kGridDim][kGridDim]{};
+    grid[4][4] = 300;
+    grid[3][4] = 250;
+    grid[5][4] = 250;
+    grid[4][3] = 250;
+    grid[4][5] = 250;
+
+    const auto analysis = detector.AnalyzePeakAndProjection(grid);
+    Require(!analysis.peak.valid,
+            "connected region at or above maxConnected should be rejected");
+}
+
+void TestGridPeakDetectorNeighborSumAndTieBreak() {
+    GridPeakDetector detector;
+    int16_t grid[kGridDim][kGridDim]{};
+
+    const auto peakA = MakeCrossGrid(12000, 10000, 8000, 6000, 2, 2);
+    const auto peakB = MakeCrossGrid(14000, 12000, 9000, 7000, 6, 6);
+    for (size_t i = 0; i < peakA.size(); ++i) {
+        grid[i / kGridDim][i % kGridDim] =
+            static_cast<int16_t>(std::max<uint16_t>(peakA[i], peakB[i]));
+    }
+
+    auto analysis = detector.AnalyzePeakAndProjection(grid);
+    Require(analysis.peak.valid, "dual isolated peaks should still yield a valid peak");
+    Require(analysis.peak.peakRow == 6 && analysis.peak.peakCol == 6,
+            "larger 3x3 neighbor sum should win peak selection");
+
+    int16_t tieGrid[kGridDim][kGridDim]{};
+    const auto tieA = MakeCrossGrid(11000, 9000, 7000, 5000, 2, 2);
+    const auto tieB = MakeCrossGrid(11000, 9000, 7000, 5000, 6, 6);
+    for (size_t i = 0; i < tieA.size(); ++i) {
+        tieGrid[i / kGridDim][i % kGridDim] =
+            static_cast<int16_t>(std::max<uint16_t>(tieA[i], tieB[i]));
+    }
+
+    analysis = detector.AnalyzePeakAndProjection(tieGrid);
+    Require(analysis.peak.peakRow == 2 && analysis.peak.peakCol == 2,
+            "equal neighbor sums should preserve row-major tie breaking");
+}
+
+void TestGridPeakDetectorProjectionRadius() {
+    GridPeakDetector detector;
+    detector.projRadius = 1;
+    int16_t grid[kGridDim][kGridDim]{};
+    const auto src = MakeCrossGrid(16000, 14000, 12000, 10000);
+    for (int r = 0; r < kGridDim; ++r) {
+        for (int c = 0; c < kGridDim; ++c) {
+            grid[r][c] = static_cast<int16_t>(src[static_cast<size_t>(r * kGridDim + c)]);
+        }
+    }
+
+    const auto analysis = detector.AnalyzePeakAndProjection(grid);
+    Require(analysis.projection.spanDim1 == 3 && analysis.projection.spanDim2 == 3,
+            "custom projection radius should change projection span");
+}
+
+void TestStylusPipelinePeakMetrics() {
+    StylusPipeline pipeline;
+    pipeline.LoadConfig("sp.noPressEnabled", "0");
+    pipeline.LoadConfig("sp.sigSuppressEnabled", "0");
+
+    const auto tx1Grid = MakeCrossGrid(16000, 14000, 12000, 10000);
+    const auto tx2Grid = MakeCrossGrid(6000, 5000, 4000, 3000);
+    const auto raw = BuildCombinedStylusFrame(10, 10, tx1Grid, 10, 10, tx2Grid);
+
+    const auto frame = RunFrame(pipeline, raw, 300, 8);
+    Require(frame.point.valid, "pipeline should still solve a valid stylus point");
+    Require(frame.signalX == 16000, "TX1 peak signal should match the detector peak");
+    Require(frame.signalY == 6000, "TX2 peak signal should match the detector peak");
+    Require(frame.point.peakTx1 == 12800, "TX1 composite peak should match the projection average");
+    Require(frame.point.peakTx2 == 6000, "TX2 composite peak should mirror TX2 peak signal");
+}
+
 } // namespace
 
 int main() {
     try {
         TestPressureStageSignalSuppressHysteresis();
         TestPressureStageEdgeSuppressHysteresis();
+        TestPressureHistoryWindowSemantics();
+        TestPressureHistoryRingOverwrite();
+        TestPressureHistorySpscConcurrency();
         TestNoPressInkGateEnterAndExit();
         TestStylusPipelineNoPressSyntheticPressure();
         TestStylusPipelineLowSignalPressureSuppress();
         TestStylusPipelineEdgeLiftFreeze();
         TestStylusPipelineConfigRoundTrip();
+        TestGridPeakDetectorNoPeak();
+        TestGridPeakDetectorCenterPeakAndProjection();
+        TestGridPeakDetectorEdgePeak();
+        TestGridPeakDetectorConnectedReject();
+        TestGridPeakDetectorNeighborSumAndTieBreak();
+        TestGridPeakDetectorProjectionRadius();
+        TestStylusPipelinePeakMetrics();
         std::cout << "[TEST] Stylus fast ink tests passed.\n";
         return 0;
     } catch (const std::exception& ex) {

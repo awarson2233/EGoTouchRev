@@ -371,7 +371,8 @@ bool StylusPipeline::ProcessRaw(
     // ── Phase 2: Coordinate Solving ──
 
     // 5. Peak detection
-    auto peak = m_peakDetector.FindPeak(m_gridData.tx1.grid);
+    const auto tx1Analysis = m_peakDetector.AnalyzePeakAndProjection(m_gridData.tx1.grid);
+    const auto& peak = tx1Analysis.peak;
     if (!peak.valid) {
         m_lastResult.point.valid = false;
         m_lastResult.pipelineStage = 3;
@@ -390,7 +391,7 @@ bool StylusPipeline::ProcessRaw(
     }
 
     // 6. 1D projection
-    auto proj = m_peakDetector.ProjectTo1D(m_gridData.tx1.grid, peak);
+    const auto& proj = tx1Analysis.projection;
 
     // 7. Coordinate interpolation
     auto rawCoor = m_coordSolver.Solve(
@@ -471,10 +472,12 @@ bool StylusPipeline::ProcessRaw(
         std::clamp(m_gridData.tx1.grid[peak.peakRow][peak.peakCol],
                    static_cast<int16_t>(0), static_cast<int16_t>(0x7FFF)));
     uint16_t tx2PeakSignal = 0;
+    Asa::GridPeakDetector::PeakProjectionAnalysis tx2Analysis{};
     Asa::GridPeakUnit tx2Peak{};
     const bool tx2PeakValid = m_gridData.tx2.valid;
     if (tx2PeakValid) {
-        tx2Peak = m_peakDetector.FindPeak(m_gridData.tx2.grid);
+        tx2Analysis = m_peakDetector.AnalyzePeakAndProjection(m_gridData.tx2.grid);
+        tx2Peak = tx2Analysis.peak;
         if (tx2Peak.valid) {
             tx2PeakSignal = static_cast<uint16_t>(
                 std::clamp(m_gridData.tx2.grid[tx2Peak.peakRow][tx2Peak.peakCol],
@@ -565,8 +568,7 @@ bool StylusPipeline::ProcessRaw(
                 static_cast<int16_t>(tx1PeakSignal),
                 static_cast<int16_t>(tx2PeakSignal));
 
-            auto tx2Proj = m_peakDetector.ProjectTo1D(
-                m_gridData.tx2.grid, tx2Peak);
+            const auto& tx2Proj = tx2Analysis.projection;
             auto tx2Coor = m_coordSolver.Solve(
                 tx2Proj,
                 static_cast<int>(m_gridData.tx2.anchorRow),
