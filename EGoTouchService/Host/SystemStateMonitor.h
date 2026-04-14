@@ -6,6 +6,7 @@
 #include <atomic>
 #include <cstddef>
 #include <functional>
+#include <string>
 #include <thread>
 #include <windows.h>
 
@@ -31,14 +32,19 @@ public:
     bool IsRunning() const noexcept;
 
     static const std::array<const wchar_t*, kEventCount>& NamedEventList() noexcept;
+    static std::wstring NormalizeEventName(const wchar_t* name) noexcept;
 
-private:
+#if defined(EGO_SYSTEM_STATE_MONITOR_TEST_ACCESS)
+public:
+#endif
     bool OpenOrCreateEvents();
     void CloseEvents() noexcept;
     void WorkerLoop();
     static SystemStateEvent BuildEvent(std::size_t index);
 
+#if !defined(EGO_SYSTEM_STATE_MONITOR_TEST_ACCESS)
 private:
+#endif
     std::array<HANDLE, kEventCount> m_events{};
     HANDLE m_stopEvent = nullptr;
     EventCallback m_callback;

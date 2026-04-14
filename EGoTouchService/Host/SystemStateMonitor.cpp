@@ -2,6 +2,8 @@
 #include "Logger.h"
 
 #include <array>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <sddl.h>
 
@@ -26,6 +28,14 @@ HANDLE OpenOrCreateNamedEvent(const wchar_t* name) {
         return handle;
     }
 
+    std::wstring local_name = Host::SystemStateMonitor::NormalizeEventName(name);
+    if (local_name != name) {
+        handle = OpenEventW(SYNCHRONIZE | EVENT_MODIFY_STATE, FALSE, local_name.c_str());
+        if (handle != nullptr) {
+            return handle;
+        }
+    }
+
     SECURITY_ATTRIBUTES sa{};
     sa.nLength = sizeof(sa);
     sa.bInheritHandle = FALSE;
@@ -46,6 +56,9 @@ HANDLE OpenOrCreateNamedEvent(const wchar_t* name) {
     }
 
     HANDLE new_handle = CreateEventW(sa.lpSecurityDescriptor ? &sa : nullptr, TRUE, FALSE, name);
+    if (new_handle == nullptr && GetLastError() == ERROR_ACCESS_DENIED && local_name != name) {
+        new_handle = CreateEventW(sa.lpSecurityDescriptor ? &sa : nullptr, TRUE, FALSE, local_name.c_str());
+    }
 
     if (sa.lpSecurityDescriptor != nullptr) {
         LocalFree(sa.lpSecurityDescriptor);
@@ -55,6 +68,23 @@ HANDLE OpenOrCreateNamedEvent(const wchar_t* name) {
 }
 
 } // namespace
+
+std::wstring SystemStateMonitor::NormalizeEventName(const wchar_t* name) noexcept {
+    if (name == nullptr) {
+        return {};
+    }
+
+    constexpr std::wstring_view kGlobalPrefix = L"Global\\";
+    constexpr std::wstring_view kLocalPrefix = L"Local\\";
+    std::wstring_view view{name};
+    if (!view.starts_with(kGlobalPrefix)) {
+        return std::wstring{view};
+    }
+
+    std::wstring local_name{kLocalPrefix};
+    local_name.append(view.substr(kGlobalPrefix.size()));
+    return local_name;
+}
 
 const char* ToString(SystemStateEventType type) noexcept {
     switch (type) {

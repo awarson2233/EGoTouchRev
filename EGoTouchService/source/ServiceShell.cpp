@@ -51,11 +51,20 @@ DWORD WINAPI ServiceShell::SvcCtrlHandlerEx(
     auto* s = static_cast<ServiceShell*>(ctx);
 
     // Helper: signal a named event by index
-    auto signalEvent = [](std::size_t idx) {
+    auto signalEvent = [](std::size_t idx, std::string_view reason) {
         const auto& names = Host::SystemStateMonitor::NamedEventList();
-        if (idx >= names.size()) return;
+        if (idx >= names.size()) {
+            LOG_WARN("Service", __func__, "Power", "Skip signal for '{}' due to invalid event index={}", reason, idx);
+            return;
+        }
         HANDLE h = OpenEventW(EVENT_MODIFY_STATE, FALSE, names[idx]);
-        if (h) { SetEvent(h); CloseHandle(h); }
+        if (!h) {
+            LOG_WARN("Service", __func__, "Power", "OpenEvent failed for '{}' (index={}, err={})", reason, idx, GetLastError());
+            return;
+        }
+        SetEvent(h);
+        CloseHandle(h);
+        LOG_INFO("Service", __func__, "Power", "Signaled named event '{}' (index={}).", reason, idx);
     };
 
     switch (ctrl) {
@@ -64,23 +73,12 @@ DWORD WINAPI ServiceShell::SvcCtrlHandlerEx(
     case SERVICE_CONTROL_PRESHUTDOWN:
         LOG_INFO("Service", __func__, "Stopping", "Received stop/shutdown control code={}.", ctrl);
         // Signal MonitorShutDownEvent (index 6) so monitor thread sees it
-        signalEvent(6);
+        signalEvent(6, "Shutdown");
         s->ReportStatus(SERVICE_STOP_PENDING, 5000);
         SetEvent(s->m_stopEvent);
         return NO_ERROR;
 
     case SERVICE_CONTROL_POWEREVENT: {
-        // Handle PBT_APMRESUMEAUTOMATIC (system resumed from sleep)
-        if (evtType == PBT_APMRESUMEAUTOMATIC) {
-            LOG_INFO("Service", __func__, "Power", "PBT_APMRESUMEAUTOMATIC");
-            signalEvent(7);  // PBT_APMRESUMEAUTOMATIC event
-            return NO_ERROR;
-        }
-
-        if (evtType != PBT_POWERSETTINGCHANGE || !evtData)
-            return NO_ERROR;
-        auto* pbs = static_cast<POWERBROADCAST_SETTING*>(evtData);
-
         // GUID_CONSOLE_DISPLAY_STATE: 0=off, 1=on, 2=dimmed
         static const GUID kDisplayGuid =
             {0x6fe69556, 0x704a, 0x47a0,
@@ -89,26 +87,71 @@ DWORD WINAPI ServiceShell::SvcCtrlHandlerEx(
         static const GUID kLidGuid =
             {0xba3e0f4d, 0xb817, 0x4094,
              {0xa2, 0xd1, 0xd5, 0x63, 0x79, 0xe6, 0xa0, 0xf3}};
+        // GUID_SYSTEM_AWAYMODE (away mode / connected standby)
+        static const GUID kAwayGuid =
+            {0x98a7f580, 0x01f7, 0x48aa,
+             {0x9c, 0x0f, 0x44, 0x35, 0x2c, 0x29, 0xe5, 0xc0}};
 
+        switch (evtType) {
+        case PBT_APMSUSPEND:
+            LOG_INFO("Service", __func__, "Power", "PBT_APMSUSPEND -> suspend path");
+            signalEvent(1, "PBT_APMSUSPEND");
+            return NO_ERROR;
+        case PBT_APMRESUMEAUTOMATIC:
+            LOG_INFO("Service", __func__, "Power", "PBT_APMRESUMEAUTOMATIC -> wake path");
+            signalEvent(7, "PBT_APMRESUMEAUTOMATIC");
+            return NO_ERROR;
+        case PBT_APMRESUMESUSPEND:
+            LOG_INFO("Service", __func__, "Power", "PBT_APMRESUMESUSPEND -> wake path");
+            signalEvent(7, "PBT_APMRESUMESUSPEND");
+            return NO_ERROR;
+        case PBT_APMRESUMECRITICAL:
+            LOG_INFO("Service", __func__, "Power", "PBT_APMRESUMECRITICAL -> wake path");
+            signalEvent(7, "PBT_APMRESUMECRITICAL");
+            return NO_ERROR;
+        case PBT_POWERSETTINGCHANGE:
+            break;
+        default:
+            LOG_INFO("Service", __func__, "Power", "Ignored power event ctrl={}, evtType={}", ctrl, evtType);
+            return NO_ERROR;
+        }
+
+        if (!evtData) {
+            LOG_WARN("Service", __func__, "Power", "PBT_POWERSETTINGCHANGE without evtData.");
+            return NO_ERROR;
+        }
+
+        auto* pbs = static_cast<POWERBROADCAST_SETTING*>(evtData);
         if (pbs->PowerSetting == kDisplayGuid && pbs->DataLength >= 4) {
             DWORD state = *reinterpret_cast<DWORD*>(pbs->Data);
             LOG_INFO("Service", __func__, "Power", "GUID_CONSOLE_DISPLAY_STATE = {}", state);
             if (state >= 1) {
-                signalEvent(0);  // MonitorPowerOnEvent
-                signalEvent(2);  // MonitorConsoleDisplayOnEvent
+                signalEvent(0, "DisplayOn(Power)");
+                signalEvent(2, "DisplayOn(Console)");
             } else {
-                signalEvent(1);  // MonitorPowerOffEvent
-                signalEvent(3);  // MonitorConsoleDisplayOffEvent
+                signalEvent(1, "DisplayOff(Power)");
+                signalEvent(3, "DisplayOff(Console)");
             }
         }
         else if (pbs->PowerSetting == kLidGuid && pbs->DataLength >= 4) {
             DWORD state = *reinterpret_cast<DWORD*>(pbs->Data);
             LOG_INFO("Service", __func__, "Power", "GUID_LIDSWITCH_STATE = {} (1=open, 0=closed)", state);
             if (state == 1) {
-                signalEvent(4);  // MonitorLidOnEvent
+                signalEvent(4, "LidOn");
             } else {
-                signalEvent(5);  // MonitorLidOffEvent
+                signalEvent(5, "LidOff");
             }
+        }
+        else if (pbs->PowerSetting == kAwayGuid && pbs->DataLength >= 4) {
+            DWORD state = *reinterpret_cast<DWORD*>(pbs->Data);
+            LOG_INFO("Service", __func__, "Power", "GUID_SYSTEM_AWAYMODE = {} (1=enter, 0=exit)", state);
+            if (state == 0) {
+                signalEvent(7, "AwayModeExit");
+            } else {
+                signalEvent(1, "AwayModeEnter");
+            }
+        } else {
+            LOG_INFO("Service", __func__, "Power", "Unhandled power setting GUID with dataLength={}", pbs->DataLength);
         }
         return NO_ERROR;
     }

@@ -27,21 +27,32 @@ enum class result { error, timeout };
 using ThreadResult = std::expected<void, result>;
 
 enum class workerState {
-    suspend  = -2,   // 屏幕关闭/合盖 → worker 暂停（线程保留，等待唤醒）
-    quit     = -1,   // 服务终止/系统关机 → worker 线程退出
-    ready    =  0,   // 初始就绪
-    streaming,       // 正在采帧
-    recover,         // 恢复中
+    suspend      = -3,   // 硬 suspend：reset 拉低，等待唤醒/自愈
+    display_dark = -2,   // 软停 IO：屏幕短暂关闭或显示路径切换
+    quit         = -1,   // 服务终止/系统关机 → worker 线程退出
+    ready        =  0,   // 初始就绪
+    streaming,          // 正在采帧
+    recover,            // 恢复中
 };
 
 /// 停止原因（替代原来的 m_stopReq + m_shutdownReq 双 flag）
 enum class StopReason : uint8_t {
     None = 0,
-    ScreenOff,   // DisplayOff / LidOff → 进入 suspend
-    Shutdown,    // 系统关机 / Stop() → 进入 quit
+    DisplayDark,   // DisplayOff → 先软停 IO，再视情况升级为硬 suspend
+    HardSuspend,   // LidOff / 系统挂起 / recover exhausted → 进入 suspend
+    Shutdown,      // 系统关机 / Stop() → 进入 quit
+};
+
+enum class SuspendCause : uint8_t {
+    None = 0,
+    DisplayDarkTimeout,
+    LidClosed,
+    SystemSleep,
+    RecoverExhausted,
 };
 
 const char* ToString(workerState s) noexcept;
+const char* ToString(SuspendCause cause) noexcept;
 
 enum class CommandSource : uint8_t {
     External = 0,
@@ -67,6 +78,7 @@ struct RuntimeSnapshot {
     std::size_t queue_depth = 0;
     uint64_t last_command_id = 0;
     std::string last_note;
+    SuspendCause suspend_cause = SuspendCause::None;
 };
 
 // --------------- DeviceRuntime ---------------
@@ -84,7 +96,10 @@ public:
     void Stop();
     bool IsShutdownRequested() const;
     bool IsRunning() const { return m_running.load(); }
-    bool IsSuspended() const { return m_state.load() == workerState::suspend; }
+    bool IsSuspended() const {
+        const auto state = m_state.load();
+        return state == workerState::suspend || state == workerState::display_dark;
+    }
 
     // Auto/Manual 模式
     void SetAutoMode(bool enabled) { m_autoMode.store(enabled); }
@@ -104,6 +119,10 @@ public:
 
     /// 注入 BT MCU 压感值（由 PenBridge 线程写入，StylusPipeline 帧内读取）
     void SetBtMcuPressure(uint16_t p) { m_stylusPipeline.SetBtMcuPressure(p); }
+    void SetBtMcuPressureSequence(uint16_t p0, uint16_t p1,
+                                  uint16_t p2, uint16_t p3) {
+        m_stylusPipeline.SetBtMcuPressureSequence(p0, p1, p2, p3);
+    }
 
     /// 蓝牙按键数据注入（由 PenBridge / BLE 线程写入）
     void UpdateButtonFromBle(uint8_t raw) { m_stylusPipeline.UpdateButtonFromBle(raw); }
@@ -156,6 +175,9 @@ private:
                        bool ok, const std::string& det);
 
     void SetState(workerState newState);
+    void RequestSoftDisplayPause();
+    void RequestHardSuspend(SuspendCause cause, const char* reason);
+    void ResumeFromPause(const char* reason);
     std::atomic<workerState> m_state{workerState::quit};
     std::atomic<StopReason> m_stopReason{StopReason::None};
     std::atomic<bool> m_autoMode{false};
@@ -166,6 +188,9 @@ private:
     VhfReporter m_vhfReporter;
     uint8_t m_recoverCount = 0;
     bool m_needSuspendDeinit = false;  // suspend 首次进入时执行 Deinit
+    SuspendCause m_suspendCause = SuspendCause::None;
+    std::chrono::steady_clock::time_point m_suspendEnteredAt{};
+    std::chrono::steady_clock::time_point m_lastSelfHealAt{};
 
     // GetFrame 连续非Timeout失败计数（容忍 AFE 命令后的短暂 bus 异常）
     static constexpr int kMaxConsecutiveFrameErrors = 3;
