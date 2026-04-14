@@ -119,10 +119,6 @@ public:
 
     /// 注入 BT MCU 压感值（由 PenBridge 线程写入，StylusPipeline 帧内读取）
     void SetBtMcuPressure(uint16_t p) { m_stylusPipeline.SetBtMcuPressure(p); }
-    void SetBtMcuPressureSequence(uint16_t p0, uint16_t p1,
-                                  uint16_t p2, uint16_t p3) {
-        m_stylusPipeline.SetBtMcuPressureSequence(p0, p1, p2, p3);
-    }
 
     /// 蓝牙按键数据注入（由 PenBridge / BLE 线程写入）
     void UpdateButtonFromBle(uint8_t raw) { m_stylusPipeline.UpdateButtonFromBle(raw); }

@@ -309,8 +309,8 @@ bool ServiceHost::Start() {
         m_penPressureReader = std::make_unique<Himax::Pen::PenPressureReader>();
         if (m_penEvent) m_penPressureReader->SetNotifyEvent(m_penEvent);
         m_penPressureReader->SetPressureCallback(
-            [this](uint16_t p0, uint16_t p1, uint16_t p2, uint16_t p3) {
-                if (m_deviceRuntime) m_deviceRuntime->SetBtMcuPressureSequence(p0, p1, p2, p3);
+            [this](uint16_t press) {
+                if (m_deviceRuntime) m_deviceRuntime->SetBtMcuPressure(press);
             });
 
         // BT 频率提供者：DeviceRuntime 每帧 poll 获取最新 BT MCU 频率
