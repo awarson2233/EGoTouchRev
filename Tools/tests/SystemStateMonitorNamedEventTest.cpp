@@ -7,37 +7,12 @@
 #include <cstddef>
 #include <iostream>
 #include <mutex>
+#include <string>
 #include <string_view>
 #include <thread>
 #include <vector>
 
 namespace {
-
-bool SignalNamedEvent(const wchar_t* event_name) {
-    HANDLE event_handle = OpenEventW(EVENT_MODIFY_STATE, FALSE, event_name);
-    if (event_handle == nullptr) {
-        std::wcerr << L"[TEST] OpenEvent failed: " << event_name << L", gle=" << GetLastError() << L"\n";
-        return false;
-    }
-
-    const BOOL ok = SetEvent(event_handle);
-    const DWORD err = ok ? ERROR_SUCCESS : GetLastError();
-    CloseHandle(event_handle);
-
-    if (!ok) {
-        std::wcerr << L"[TEST] SetEvent failed: " << event_name << L", gle=" << err << L"\n";
-    }
-    return ok == TRUE;
-}
-
-void ResetNamedEventBestEffort(const wchar_t* event_name) {
-    HANDLE event_handle = OpenEventW(EVENT_MODIFY_STATE, FALSE, event_name);
-    if (event_handle == nullptr) {
-        return;
-    }
-    ResetEvent(event_handle);
-    CloseHandle(event_handle);
-}
 
 bool ExpectSequence(const std::vector<Host::SystemStateEventType>& expected,
                     const std::vector<Host::SystemStateEventType>& actual) {
@@ -78,25 +53,41 @@ int main() {
         return 1;
     }
 
-    const auto& named_events = Host::SystemStateMonitor::NamedEventList();
-    for (const wchar_t* event_name : named_events) {
-        ResetNamedEventBestEffort(event_name);
+    for (HANDLE event_handle : monitor.m_events) {
+        if (event_handle != nullptr && event_handle != INVALID_HANDLE_VALUE) {
+            ResetEvent(event_handle);
+        }
     }
 
     // Give worker thread a short warm-up window before injecting events.
     std::this_thread::sleep_for(80ms);
 
     const std::vector<std::pair<std::size_t, Host::SystemStateEventType>> script = {
+        {1, Host::SystemStateEventType::DisplayOff},
+        {0, Host::SystemStateEventType::DisplayOn},
         {3, Host::SystemStateEventType::DisplayOff},
         {2, Host::SystemStateEventType::DisplayOn},
         {5, Host::SystemStateEventType::LidOff},
+        {4, Host::SystemStateEventType::LidOn},
+        {6, Host::SystemStateEventType::Shutdown},
         {7, Host::SystemStateEventType::ResumeAutomatic},
     };
 
     for (const auto& step : script) {
         const std::size_t index = step.first;
-        if (!SignalNamedEvent(named_events[index])) {
+        if (index >= monitor.m_events.size()) {
             monitor.Stop();
+            return 2;
+        }
+        HANDLE event_handle = monitor.m_events[index];
+        if (event_handle == nullptr || event_handle == INVALID_HANDLE_VALUE) {
+            monitor.Stop();
+            std::cerr << "[TEST] Invalid event handle for index=" << index << "\n";
+            return 2;
+        }
+        if (!SetEvent(event_handle)) {
+            monitor.Stop();
+            std::cerr << "[TEST] SetEvent failed for index=" << index << ", gle=" << GetLastError() << "\n";
             return 2;
         }
         std::this_thread::sleep_for(20ms);
@@ -105,7 +96,11 @@ int main() {
     const std::vector<Host::SystemStateEventType> expected = {
         Host::SystemStateEventType::DisplayOff,
         Host::SystemStateEventType::DisplayOn,
+        Host::SystemStateEventType::DisplayOff,
+        Host::SystemStateEventType::DisplayOn,
         Host::SystemStateEventType::LidOff,
+        Host::SystemStateEventType::LidOn,
+        Host::SystemStateEventType::Shutdown,
         Host::SystemStateEventType::ResumeAutomatic,
     };
 

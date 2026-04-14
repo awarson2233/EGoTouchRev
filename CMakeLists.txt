@@ -189,6 +189,7 @@ if (EGO_BUILD_TESTS)
         Tools/tests/SystemStateMonitorNamedEventTest.cpp
     )
     target_include_directories(HostSystemStateMonitorTest PRIVATE "${HOST_ROOT}/include")
+    target_compile_definitions(HostSystemStateMonitorTest PRIVATE EGO_SYSTEM_STATE_MONITOR_TEST_ACCESS=1)
     target_link_libraries(HostSystemStateMonitorTest PRIVATE Host Common)
 
     add_executable(SolversRawdataBenchmarkTest

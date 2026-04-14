@@ -8,18 +8,40 @@
 namespace {
 constexpr std::size_t kMaxHistoryItems = 512;
 constexpr std::chrono::milliseconds kEventDebounce{400};
+constexpr std::chrono::milliseconds kDisplayDarkGrace{1500};
+constexpr std::chrono::milliseconds kSuspendPoll{100};
+constexpr std::chrono::seconds kDisplayDarkSelfHealInterval{30};
+constexpr std::chrono::seconds kRecoverExhaustedSelfHealInterval{5};
 } // namespace
 
 // --------------- ToString helpers ---------------
 
 const char* ToString(workerState s) noexcept {
     switch (s) {
-    case workerState::suspend:   return "suspend";
-    case workerState::quit:      return "quit";
-    case workerState::ready:     return "ready";
-    case workerState::streaming: return "streaming";
-    case workerState::recover:   return "recover";
-    default:                     return "unknown";
+    case workerState::suspend:      return "suspend";
+    case workerState::display_dark: return "display_dark";
+    case workerState::quit:         return "quit";
+    case workerState::ready:        return "ready";
+    case workerState::streaming:    return "streaming";
+    case workerState::recover:      return "recover";
+    default:                        return "unknown";
+    }
+}
+
+const char* ToString(SuspendCause cause) noexcept {
+    switch (cause) {
+    case SuspendCause::None:
+        return "None";
+    case SuspendCause::DisplayDarkTimeout:
+        return "DisplayDarkTimeout";
+    case SuspendCause::LidClosed:
+        return "LidClosed";
+    case SuspendCause::SystemSleep:
+        return "SystemSleep";
+    case SuspendCause::RecoverExhausted:
+        return "RecoverExhausted";
+    default:
+        return "Unknown";
     }
 }
 
@@ -46,6 +68,9 @@ bool DeviceRuntime::Start() {
     m_stopReason.store(StopReason::None);  // ← critical: clear stop reason for restart
     SetState(workerState::ready);
     m_needSuspendDeinit = false;
+    m_suspendCause = SuspendCause::None;
+    m_suspendEnteredAt = {};
+    m_lastSelfHealAt = {};
     m_recoverCount = 0;
     m_lastNote = "Runtime started";
     m_thread = std::thread(&DeviceRuntime::WorkerMain, this);
@@ -63,6 +88,58 @@ void DeviceRuntime::Stop() {
 
 bool DeviceRuntime::IsShutdownRequested() const {
     return m_stopReason.load() == StopReason::Shutdown;
+}
+
+void DeviceRuntime::RequestSoftDisplayPause() {
+    m_chip.CancelPendingFrameRead();
+
+    const auto state = m_state.load(std::memory_order_acquire);
+    if (state == workerState::suspend) {
+        LOG_INFO("Runtime", __func__, "Policy", "DisplayOff ignored because runtime is already in hard suspend.");
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lk(m_mu);
+        m_suspendCause = SuspendCause::None;
+        m_suspendEnteredAt = std::chrono::steady_clock::now();
+        m_lastNote = "Display dark: frame IO paused";
+    }
+
+    if (state != workerState::display_dark) {
+        m_stopReason.store(StopReason::DisplayDark, std::memory_order_release);
+    }
+}
+
+void DeviceRuntime::RequestHardSuspend(SuspendCause cause, const char* reason) {
+    m_chip.CancelPendingFrameRead();
+    {
+        std::lock_guard<std::mutex> lk(m_mu);
+        m_suspendCause = cause;
+        m_suspendEnteredAt = std::chrono::steady_clock::now();
+        m_lastNote = std::string("Hard suspend requested: ") + (reason ? reason : "unknown");
+    }
+    m_stopReason.store(StopReason::HardSuspend, std::memory_order_release);
+}
+
+void DeviceRuntime::ResumeFromPause(const char* reason) {
+    m_stopReason.store(StopReason::None, std::memory_order_release);
+    m_needSuspendDeinit = false;
+    {
+        std::lock_guard<std::mutex> lk(m_mu);
+        m_suspendCause = SuspendCause::None;
+        m_suspendEnteredAt = {};
+        m_lastSelfHealAt = {};
+        m_lastNote = std::string("Resumed by ") + (reason ? reason : "unknown");
+    }
+
+    const auto state = m_state.load(std::memory_order_acquire);
+    if (state == workerState::suspend || state == workerState::display_dark) {
+        SetState(workerState::ready);
+        LOG_INFO("Runtime", __func__, "Policy", "Resume request '{}' moved runtime to ready.", reason ? reason : "unknown");
+    } else if (state != workerState::quit) {
+        LOG_INFO("Runtime", __func__, "Policy", "Resume request '{}' ignored in state={}", reason ? reason : "unknown", ToString(state));
+    }
 }
 
 // --------------- 命令注入 ---------------
@@ -96,29 +173,25 @@ void DeviceRuntime::IngestSystemEvent(
     using ET = Host::SystemStateEventType;
     switch (ev.type) {
     case ET::DisplayOff:
+        LOG_INFO("Runtime", __func__, "Policy", "DisplayOff received, pausing frame IO without hard suspend.");
+        RequestSoftDisplayPause();
+        break;
     case ET::LidOff:
-        LOG_INFO("Runtime", __func__, "Policy", "Sleep event ({}), requesting suspend.", Host::ToString(ev.type));
-        m_chip.CancelPendingFrameRead();  // abort any blocking GetFrame NOW
-        m_stopReason.store(StopReason::ScreenOff);
+        LOG_INFO("Runtime", __func__, "Policy", "LidOff received, requesting hard suspend.");
+        RequestHardSuspend(SuspendCause::LidClosed, "LidOff");
         break;
     case ET::DisplayOn:
     case ET::LidOn:
     case ET::ResumeAutomatic:
         LOG_INFO("Runtime", __func__, "Policy", "Wake event ({}), attempting resume.", Host::ToString(ev.type));
-        // suspend 状态下直接恢复，无需重建线程
-        if (m_state.load() == workerState::suspend) {
-            SetState(workerState::ready);
-            LOG_INFO("Runtime", __func__, "Policy", "Resumed from suspend -> ready (zero-cost wakeup).");
-        } else {
-            Stop();
-            Start();
-        }
+        ResumeFromPause(Host::ToString(ev.type));
         break;
     case ET::Shutdown:
         LOG_INFO("Runtime", __func__, "Policy", "Shutdown event, requesting termination.");
         m_stopReason.store(StopReason::Shutdown);
         break;
-    default: break;
+    default:
+        break;
     }
 }
 
@@ -133,6 +206,7 @@ RuntimeSnapshot DeviceRuntime::GetSnapshot() const {
     s.queue_depth = m_cmdQueue.size();
     s.last_command_id = m_lastCmdId;
     s.last_note = m_lastNote;
+    s.suspend_cause = m_suspendCause;
     return s;
 }
 
@@ -194,14 +268,27 @@ bool DeviceRuntime::DrainCommands() {
 
 ThreadResult DeviceRuntime::WorkerMain() {
     while (true) {
-        // ── 检查停止请求，根据 StopReason 分流到 suspend 或 quit ──
+        // ── 检查停止请求，根据 StopReason 分流到 display_dark / suspend / quit ──
         auto reason = m_stopReason.exchange(StopReason::None,
                                             std::memory_order_acq_rel);
         if (reason != StopReason::None) {
-            if (reason == StopReason::ScreenOff) {
-                LOG_INFO("Runtime", __func__, "StopReq", "StopReason::ScreenOff consumed -> suspend");
+            if (reason == StopReason::DisplayDark) {
+                LOG_INFO("Runtime", __func__, "StopReq", "StopReason::DisplayDark consumed -> display_dark");
+                SetState(workerState::display_dark);
+                {
+                    std::lock_guard<std::mutex> lk(m_mu);
+                    m_suspendEnteredAt = std::chrono::steady_clock::now();
+                }
+            } else if (reason == StopReason::HardSuspend) {
+                LOG_INFO("Runtime", __func__, "StopReq", "StopReason::HardSuspend consumed -> suspend");
                 SetState(workerState::suspend);
-                m_needSuspendDeinit = true;   // 延迟到 OnSuspend 首次进入时执行
+                m_needSuspendDeinit = true;
+                {
+                    std::lock_guard<std::mutex> lk(m_mu);
+                    if (m_suspendEnteredAt == std::chrono::steady_clock::time_point{}) {
+                        m_suspendEnteredAt = std::chrono::steady_clock::now();
+                    }
+                }
             } else {
                 LOG_INFO("Runtime", __func__, "StopReq", "StopReason::Shutdown consumed -> quit");
                 SetState(workerState::quit);
@@ -214,10 +301,11 @@ ThreadResult DeviceRuntime::WorkerMain() {
 
         auto curState = m_state.load(std::memory_order_acquire);
         switch (curState) {
-        case workerState::ready:     OnReady();     break;
-        case workerState::streaming: OnStreaming();  break;
-        case workerState::recover:   OnRecover();   break;
-        case workerState::suspend:   OnSuspend();   break;
+        case workerState::ready:        OnReady();     break;
+        case workerState::streaming:    OnStreaming(); break;
+        case workerState::recover:      OnRecover();   break;
+        case workerState::display_dark: OnSuspend();   break;
+        case workerState::suspend:      OnSuspend();   break;
         case workerState::quit:
             if (OnQuit()) {
                 m_running.store(false);  // allow restart via Start()
@@ -391,14 +479,68 @@ bool DeviceRuntime::OnQuit() {
 }
 
 void DeviceRuntime::OnSuspend() {
-    // 首次进入 suspend 时执行 HoldReset（拉低 reset，关闭中断通道）
+    const auto state = m_state.load(std::memory_order_acquire);
+    const auto now = std::chrono::steady_clock::now();
+
+    if (state == workerState::display_dark) {
+        const auto enteredAt = m_suspendEnteredAt;
+        if (enteredAt != std::chrono::steady_clock::time_point{} && now - enteredAt >= kDisplayDarkGrace) {
+            {
+                std::lock_guard<std::mutex> lk(m_mu);
+                m_suspendCause = SuspendCause::DisplayDarkTimeout;
+                m_suspendEnteredAt = now;
+                m_lastNote = "Display dark persisted; escalating to hard suspend";
+            }
+            m_stopReason.store(StopReason::HardSuspend, std::memory_order_release);
+            LOG_WARN("Runtime", __func__, "display_dark", "Display stayed dark for {} ms; escalating to hard suspend.", kDisplayDarkGrace.count());
+            return;
+        }
+
+        std::this_thread::sleep_for(kSuspendPoll);
+        return;
+    }
+
+    // 首次进入 hard suspend 时执行 HoldReset（拉低 reset，关闭中断通道）
     if (m_needSuspendDeinit) {
         m_chip.HoldReset();
         m_needSuspendDeinit = false;
-        LOG_INFO("Runtime", __func__, "suspend", "Entered suspend, chip reset held low. Waiting for wake event.");
+        {
+            std::lock_guard<std::mutex> lk(m_mu);
+            if (m_suspendEnteredAt == std::chrono::steady_clock::time_point{}) {
+                m_suspendEnteredAt = now;
+            }
+            m_lastNote = std::string("Hard suspend active: ") + ToString(m_suspendCause);
+        }
+        LOG_INFO("Runtime", __func__, "suspend", "Entered suspend, chip reset held low. cause={}", ToString(m_suspendCause));
     }
+
+    const auto enteredAt = m_suspendEnteredAt;
+    const auto lastSelfHealAt = m_lastSelfHealAt;
+    const bool shouldSelfHeal =
+        (m_suspendCause == SuspendCause::RecoverExhausted &&
+         enteredAt != std::chrono::steady_clock::time_point{} &&
+         now - enteredAt >= kRecoverExhaustedSelfHealInterval &&
+         (lastSelfHealAt == std::chrono::steady_clock::time_point{} ||
+          now - lastSelfHealAt >= kRecoverExhaustedSelfHealInterval)) ||
+        (m_suspendCause == SuspendCause::DisplayDarkTimeout &&
+         enteredAt != std::chrono::steady_clock::time_point{} &&
+         now - enteredAt >= kDisplayDarkSelfHealInterval &&
+         (lastSelfHealAt == std::chrono::steady_clock::time_point{} ||
+          now - lastSelfHealAt >= kDisplayDarkSelfHealInterval));
+
+    if (shouldSelfHeal) {
+        {
+            std::lock_guard<std::mutex> lk(m_mu);
+            m_lastSelfHealAt = now;
+            m_lastNote = std::string("Self-heal triggered from suspend: ") + ToString(m_suspendCause);
+        }
+        LOG_WARN("Runtime", __func__, "suspend", "Self-heal triggered while suspended. cause={}", ToString(m_suspendCause));
+        SetState(workerState::ready);
+        return;
+    }
+
     // 低功耗等待，每 100ms 检查一次状态变更
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::this_thread::sleep_for(kSuspendPoll);
 }
 
 void DeviceRuntime::OnRecover() {
@@ -406,10 +548,9 @@ void DeviceRuntime::OnRecover() {
 
     // 最大重试 30 次（500ms 间隔 ≈ 15 秒恢复窗口）
     if (m_recoverCount > 30) {
-        LOG_ERROR("Runtime", __func__, "Recover", "Exceeded 30 recovery attempts, entering suspend.");
+        LOG_ERROR("Runtime", __func__, "Recover", "Exceeded 30 recovery attempts, entering self-healing suspend.");
         m_recoverCount = 0;
-        m_needSuspendDeinit = true;
-        SetState(workerState::suspend);
+        RequestHardSuspend(SuspendCause::RecoverExhausted, "RecoverExhausted");
         return;
     }
 
