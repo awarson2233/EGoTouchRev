@@ -12,7 +12,7 @@ if %errorlevel% neq 0 (
 
 echo === EGoTouchService Install (Dev Build) ===
 echo.
-echo Binary: %~dp0..\build\EGoTouchService.exe
+echo Binary: %~dp0EGoTouchService.exe
 echo.
 
 :: Stop and remove old service if exists
@@ -31,7 +31,7 @@ if not exist "C:\ProgramData\EGoTouchRev" mkdir "C:\ProgramData\EGoTouchRev"
 if not exist "C:\ProgramData\EGoTouchRev\logs" mkdir "C:\ProgramData\EGoTouchRev\logs"
 
 :: Install service pointing to build directory
-sc create EGoTouchService binPath= "%~dp0..\build\EGoTouchService.exe" start= auto
+sc create EGoTouchService binPath= "%~dp0../build/EGoTouchService.exe" start= auto
 if %errorlevel% neq 0 (
     echo [ERROR] Failed to create service.
     pause
@@ -52,6 +52,6 @@ timeout /t 2 /nobreak >nul
 sc query EGoTouchService | findstr STATE
 echo.
 echo [OK] Install complete. Service registered from:
-echo     %~dp0..\build\EGoTouchService.exe
+echo     %~dp0EGoTouchService.exe
 echo.
 pause
