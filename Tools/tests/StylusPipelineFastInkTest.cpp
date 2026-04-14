@@ -4,13 +4,11 @@
 #include "StylusSolver/StylusPipeline.h"
 
 #include <algorithm>
-#include <atomic>
 #include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <iostream>
-#include <mutex>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -110,6 +108,20 @@ StylusFrameData RunFrame(StylusPipeline& pipeline,
     return frame.stylus;
 }
 
+StylusFrameData RunFrameSeq(StylusPipeline& pipeline,
+                            const std::vector<uint8_t>& raw,
+                            uint16_t p0, uint16_t p1,
+                            uint16_t p2, uint16_t p3,
+                            uint64_t timestamp = 0) {
+    HeatmapFrame frame;
+    frame.rawPtr = raw.data();
+    frame.rawLen = raw.size();
+    frame.timestamp = timestamp;
+    pipeline.SetBtMcuPressureSequence(p0, p1, p2, p3);
+    pipeline.Process(frame);
+    return frame.stylus;
+}
+
 void LoadFromSavedText(StylusPipeline& pipeline, const std::string& saved) {
     std::istringstream in(saved);
     std::string line;
@@ -168,110 +180,104 @@ void TestPressureStageEdgeSuppressHysteresis() {
     Require(!s2.edgeSignalSuppressActive, "edge suppression should clear after recovery");
 }
 
-void TestPressureHistoryWindowSemantics() {
+void TestPressureMapOrderIncellSequence() {
     PressureSolver solver;
+    solver.pressureMapMode = 2;
 
-    Require(solver.GetLatestBtPressure() == 0,
-            "empty BT pressure history should report zero");
-
-    solver.SetBtMcuPressure(120);
-    std::this_thread::sleep_for(std::chrono::milliseconds(5));
-    solver.SetBtMcuPressure(320);
-    Require(solver.GetLatestBtPressure() == 320,
-            "latest BT window should return the max pressure in the 28ms window");
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(35));
-    Require(solver.GetLatestBtPressure() == 0,
-            "samples older than the aggregation window should not contribute");
-
-    solver.SetBtMcuPressure(450);
-    std::this_thread::sleep_for(std::chrono::milliseconds(65));
-    Require(solver.GetLatestBtPressure() == 0,
-            "samples older than the keep window should expire completely");
+    solver.SetBtMcuPressureSequence(100, 200, 300, 400);
+    Require(solver.GetLatestBtPressure() == 100,
+            "incell pressure map should read sample 0 first");
+    Require(solver.GetLatestBtPressure() == 200,
+            "incell pressure map should read sample 1 second");
+    Require(solver.GetLatestBtPressure() == 300,
+            "incell pressure map should read sample 2 third");
+    Require(solver.GetLatestBtPressure() == 400,
+            "incell pressure map should read sample 3 fourth");
+    Require(solver.GetLatestBtPressure() == 400,
+            "incell pressure map should fall back to raw-now after sequence is exhausted");
 }
 
-void TestPressureHistoryRingOverwrite() {
+void TestPressureMapOrderOncellSequence() {
     PressureSolver solver;
-    for (uint16_t i = 1; i <= 70; ++i) {
-        solver.SetBtMcuPressure(i);
-    }
-    Require(solver.GetLatestBtPressure() == 70,
-            "ring overwrite should still preserve the max over the recent published samples");
+    solver.pressureMapMode = 1;
+
+    solver.SetBtMcuPressureSequence(100, 200, 300, 400);
+    Require(solver.GetLatestBtPressure() == 100,
+            "oncell pressure map should read sample 0 first");
+    Require(solver.GetLatestBtPressure() == 200,
+            "oncell pressure map should read sample 1 second");
+    Require(solver.GetLatestBtPressure() == 200,
+            "oncell pressure map should read sample 1 twice");
+    Require(solver.GetLatestBtPressure() == 300,
+            "oncell pressure map should read sample 2 fourth");
+    Require(solver.GetLatestBtPressure() == 400,
+            "oncell pressure map should read sample 3 fifth");
+    Require(solver.GetLatestBtPressure() == 400,
+            "oncell pressure map should read sample 3 twice then fall back to raw-now");
+    Require(solver.GetLatestBtPressure() == 400,
+            "oncell pressure map should fall back to raw-now after sequence is exhausted");
 }
 
-void TestPressureHistorySpscConcurrency() {
+void TestPressureMapOrderResetOnNewPacket() {
     PressureSolver solver;
-    std::atomic<bool> stop{false};
-    std::atomic<uint16_t> nextPressure{1};
-    std::mutex historyMu;
-    std::vector<std::pair<std::chrono::steady_clock::time_point, uint16_t>> history;
+    solver.pressureMapMode = 2;
 
-    std::thread writer([&]() {
-        while (!stop.load(std::memory_order_relaxed)) {
-            const uint16_t pressure = nextPressure.fetch_add(1, std::memory_order_relaxed);
-            const auto now = std::chrono::steady_clock::now();
-            {
-                std::lock_guard<std::mutex> lk(historyMu);
-                history.emplace_back(now, pressure);
-            }
-            solver.SetBtMcuPressure(pressure);
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-    });
+    solver.SetBtMcuPressureSequence(10, 20, 30, 40);
+    Require(solver.GetLatestBtPressure() == 10,
+            "first packet should begin at sample 0");
+    Require(solver.GetLatestBtPressure() == 20,
+            "first packet should advance to sample 1");
 
-    for (int i = 0; i < 30; ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(2));
-        const uint16_t actual = solver.GetLatestBtPressure();
-        const auto now = std::chrono::steady_clock::now();
-
-        uint16_t theoreticalMax = 0;
-        {
-            std::lock_guard<std::mutex> lk(historyMu);
-            history.erase(std::remove_if(history.begin(), history.end(),
-                [&](const auto& sample) {
-                    return now - sample.first > std::chrono::milliseconds(80);
-                }), history.end());
-            for (const auto& sample : history) {
-                if (now - sample.first <= std::chrono::milliseconds(28)) {
-                    theoreticalMax = std::max(theoreticalMax, sample.second);
-                }
-            }
-        }
-
-        Require(actual <= theoreticalMax,
-                "SPSC pressure reader should not exceed the theoretical max in the active window");
-    }
-
-    stop.store(true, std::memory_order_relaxed);
-    writer.join();
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(35));
-    Require(solver.GetLatestBtPressure() == 0,
-            "pressure history should decay to zero after the active window ends");
+    solver.SetBtMcuPressureSequence(50, 60, 70, 80);
+    Require(solver.GetLatestBtPressure() == 50,
+            "new packet should reset GetPressInMapOrder to sample 0");
 }
 
 void TestNoPressInkGateEnterAndExit() {
     NoPressInkGate gate;
     gate.enabled = true;
+    gate.dualChannelMode = false;  // test with combined mode for simplicity
+    gate.tLearnedFeatureEnabled = false;
+    gate.coorReviseEnabled = false;
+    gate.enterDebounceFrames = 2;
+    gate.exitDebounceFrames = 2;
 
-    const auto r0 = gate.Apply(true, true, false, 0, 0, 10000, 0);
+    auto makeInput = [](uint16_t realPress, uint16_t prevOut,
+                        uint16_t tx1Composite, uint16_t tx2Composite) {
+        Asa::NoPressInkInput in{};
+        in.coordValid = true;
+        in.tx1BlockValid = true;
+        in.lowSignalSuppressed = false;
+        in.realPressure = realPress;
+        in.prevOutputPressure = prevOut;
+        in.tx1Composite = tx1Composite;
+        in.tx1SignalDim1 = tx1Composite;
+        in.tx1SignalDim2 = tx1Composite;
+        in.tx2Composite = tx2Composite;
+        in.coorDim1 = 20 * 1024;
+        in.coorDim2 = 20 * 1024;
+        return in;
+    };
+
+    const auto r0 = gate.Process(makeInput(0, 0, 12000, 0));
     Require(!r0.active, "first qualifying frame should not enter no-press ink yet");
     Require(r0.outputPressure == 0, "first qualifying frame should still output zero pressure");
 
-    const auto r1 = gate.Apply(true, true, false, 0, 0, 10000, 0);
+    const auto r1 = gate.Process(makeInput(0, 0, 12000, 0));
     Require(r1.active, "second qualifying frame should enter no-press ink");
-    Require(r1.outputPressure == 10, "entry frame should emit synthetic minimum pressure");
+    Require(r1.outputPressure == 0, "NoPressInk should only set active flag before post-pressure stage");
 
-    const auto r2 = gate.Apply(true, true, false, 120, 10, 20000, 0);
-    Require(r2.outputPressure == 120, "real pressure should override synthetic pressure");
+    const auto r2 = gate.Process(makeInput(120, 10, 20000, 0));
+    // With real pressure > 0, active state should reset
+    Require(r2.outputPressure == 120, "real pressure should be passed through");
 
-    const auto r3 = gate.Apply(true, true, false, 0, 10, 2000, 0);
+    const auto r3 = gate.Process(makeInput(0, 10, 2000, 0));
     Require(r3.active, "first exit-qualifying frame should still debounce");
-    Require(r3.outputPressure == 10, "debouncing exit should keep synthetic pressure");
+    Require(r3.outputPressure == 0, "gate should continue exposing zero pre-post-process pressure while debouncing exit");
 
-    const auto r4 = gate.Apply(true, true, false, 0, 10, 2000, 0);
+    const auto r4 = gate.Process(makeInput(0, 10, 2000, 0));
     Require(!r4.active, "second exit-qualifying frame should leave no-press ink");
-    Require(r4.outputPressure == 0, "exit frame should drop to zero pressure");
+    Require(r4.outputPressure == 0, "exit frame should drop back to zero pre-post-process pressure");
 }
 
 void TestStylusPipelineNoPressSyntheticPressure() {
@@ -300,7 +306,7 @@ void TestStylusPipelineLowSignalPressureSuppress() {
     pipeline.LoadConfig("sp.sigSuppressExit", "3200");
     pipeline.LoadConfig("sp.noPressEnabled", "0");
 
-    const auto weakGrid = MakeCrossGrid(1800, 1400, 900, 600);
+    const auto weakGrid = MakeCrossGrid(300, 200, 100, 50);
     const auto raw = BuildCombinedStylusFrame(12, 12, weakGrid, 12, 12, {});
 
     const auto frame = RunFrame(pipeline, raw, 180, 8);
@@ -334,6 +340,26 @@ void TestStylusPipelineEdgeLiftFreeze() {
                 "edge-lift frame should freeze Y to previous point");
 }
 
+void TestStylusPipelineFastLiftDropsPressureWithoutTx2() {
+    StylusPipeline pipeline;
+    pipeline.LoadConfig("sp.noPressEnabled", "1");
+    pipeline.LoadConfig("sp.sigSuppressEnabled", "0");
+    pipeline.LoadConfig("sp.filterMode", "2");
+
+    const auto tx1Grid = MakeCrossGrid(16000, 14000, 12000, 10000);
+    const auto tx2Grid = MakeCrossGrid(6000, 5000, 4000, 3000);
+    const auto rawDown = BuildCombinedStylusFrame(10, 10, tx1Grid, 10, 10, tx2Grid);
+    const auto rawLift = BuildCombinedStylusFrame(10, 10, tx1Grid, 0x00FF, 0x00FF, {});
+
+    const auto down = RunFrame(pipeline, rawDown, 180, 8);
+    Require(down.point.valid, "pen-down frame should be valid before fast lift");
+    Require(down.pressure > 0, "pen-down frame should report pressure before fast lift");
+
+    const auto lift = RunFrame(pipeline, rawLift, 0, 16);
+    Require(lift.pressure == 0, "missing TX2 should hard-clear pressure on fast lift");
+    Require(!lift.noPressInkActive, "missing TX2 should also clear no-press ink on fast lift");
+}
+
 void TestStylusPipelineConfigRoundTrip() {
     StylusPipeline pipeline;
     pipeline.LoadConfig("sp.recheckThBase", "888");
@@ -351,6 +377,8 @@ void TestStylusPipelineConfigRoundTrip() {
     pipeline.LoadConfig("sp.noPressDebounceEnter", "3");
     pipeline.LoadConfig("sp.noPressDebounceExit", "4");
     pipeline.LoadConfig("sp.noPressSyntheticMin", "12");
+    pipeline.LoadConfig("sp.noPressLearned", "1");
+    pipeline.LoadConfig("sp.noPressDualCh", "0");
 
     std::ostringstream out;
     pipeline.SaveConfig(out);
@@ -366,6 +394,10 @@ void TestStylusPipelineConfigRoundTrip() {
             "saved config should include no-press base threshold");
     Require(saved.find("sp.noPressDebounceExit=4") != std::string::npos,
             "saved config should include no-press exit debounce");
+    Require(saved.find("sp.noPressLearned=1") != std::string::npos,
+            "saved config should include no-press learned flag");
+    Require(saved.find("sp.noPressDualCh=0") != std::string::npos,
+            "saved config should include no-press dual channel flag");
 
     StylusPipeline loaded;
     LoadFromSavedText(loaded, saved);
@@ -379,6 +411,10 @@ void TestStylusPipelineConfigRoundTrip() {
             "loaded config should preserve edge signal suppress exit");
     Require(savedLoaded.find("sp.noPressSyntheticMin=12") != std::string::npos,
             "loaded config should preserve synthetic minimum");
+    Require(savedLoaded.find("sp.noPressLearned=1") != std::string::npos,
+            "loaded config should preserve no-press learned flag");
+    Require(savedLoaded.find("sp.noPressDualCh=0") != std::string::npos,
+            "loaded config should preserve no-press dual channel flag");
 
     const auto schema = loaded.GetConfigSchema();
     auto hasKey = [&](const char* key) {
@@ -505,6 +541,7 @@ void TestStylusPipelinePeakMetrics() {
     StylusPipeline pipeline;
     pipeline.LoadConfig("sp.noPressEnabled", "0");
     pipeline.LoadConfig("sp.sigSuppressEnabled", "0");
+    pipeline.LoadConfig("sp.noPressDualCh", "1");
 
     const auto tx1Grid = MakeCrossGrid(16000, 14000, 12000, 10000);
     const auto tx2Grid = MakeCrossGrid(6000, 5000, 4000, 3000);
@@ -514,9 +551,22 @@ void TestStylusPipelinePeakMetrics() {
     Require(frame.point.valid, "pipeline should still solve a valid stylus point");
     Require(frame.signalX == 16000, "TX1 peak signal should match the detector peak");
     Require(frame.signalY == 6000, "TX2 peak signal should match the detector peak");
-    Require(frame.point.peakTx1 == 12800, "TX1 composite peak should match the projection average");
-    Require(frame.point.peakTx2 == 6000, "TX2 composite peak should mirror TX2 peak signal");
+    GridPeakDetector detector;
+    int16_t grid[kGridDim][kGridDim]{};
+    for (int r = 0; r < kGridDim; ++r) {
+        for (int c = 0; c < kGridDim; ++c) {
+            grid[r][c] = static_cast<int16_t>(
+                tx1Grid[static_cast<size_t>(r * kGridDim + c)]);
+        }
+    }
+    const uint16_t expectedTx1GridSignal = static_cast<uint16_t>(
+        std::clamp(detector.AnalyzePeakAndProjection(grid).peak.neighborSum3x3, 0, 0xFFFF));
+    Require(frame.point.peakTx1 == expectedTx1GridSignal,
+            "TX1 composite peak should match TSACore grid 3x3 sum");
+    Require(frame.point.peakTx2 == expectedTx1GridSignal,
+            "TX2 composite peak should follow the TSACore grid build mapping");
 }
+
 
 } // namespace
 
@@ -524,13 +574,14 @@ int main() {
     try {
         TestPressureStageSignalSuppressHysteresis();
         TestPressureStageEdgeSuppressHysteresis();
-        TestPressureHistoryWindowSemantics();
-        TestPressureHistoryRingOverwrite();
-        TestPressureHistorySpscConcurrency();
+        TestPressureMapOrderIncellSequence();
+        TestPressureMapOrderOncellSequence();
+        TestPressureMapOrderResetOnNewPacket();
         TestNoPressInkGateEnterAndExit();
         TestStylusPipelineNoPressSyntheticPressure();
         TestStylusPipelineLowSignalPressureSuppress();
         TestStylusPipelineEdgeLiftFreeze();
+        TestStylusPipelineFastLiftDropsPressureWithoutTx2();
         TestStylusPipelineConfigRoundTrip();
         TestGridPeakDetectorNoPeak();
         TestGridPeakDetectorCenterPeakAndProjection();

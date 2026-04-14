@@ -17,8 +17,12 @@ struct StylusSignalMetrics {
     uint16_t signalX = 0;
     uint16_t signalY = 0;
     uint16_t maxRawPeak = 0;
+    uint16_t tx1SignalDim1 = 0;
+    uint16_t tx1SignalDim2 = 0;
     uint16_t tx1Composite = 0;
     uint16_t tx2Composite = 0;
+    uint16_t dim1ProjectionPeak = 0;   // projection peak kept for edge-signal suppression
+    uint16_t dim2ProjectionPeak = 0;   // projection peak kept for edge-signal suppression
     bool dim1EdgeActive = false;
     bool dim2EdgeActive = false;
     uint16_t dim1EdgeSignal = 0;
@@ -43,10 +47,11 @@ inline bool IsAxisEdgeActive(int32_t coor, int sensorDim) {
     return (coor < margin) || (coor > maxCoor - margin);
 }
 
-inline StylusSignalMetrics BuildSignalMetrics(const Asa::AsaProjection& proj,
+inline StylusSignalMetrics BuildSignalMetrics(const Asa::AsaProjection& tx1Proj,
                                              const Asa::AsaCoorResult& rawCoor,
                                              uint16_t tx1PeakSignal,
                                              uint16_t tx2PeakSignal,
+                                             uint16_t tx1GridSignal,
                                              int sensorCols,
                                              int sensorRows) {
     StylusSignalMetrics metrics{};
@@ -54,17 +59,26 @@ inline StylusSignalMetrics BuildSignalMetrics(const Asa::AsaProjection& proj,
     metrics.signalY = tx2PeakSignal;
     metrics.maxRawPeak = std::max(metrics.signalX, metrics.signalY);
 
-    const uint16_t dim1ProjectionPeak =
-        NormalizeProjectionPeak(proj.dim1, proj.peakIdxDim1, proj.spanDim1);
-    const uint16_t dim2ProjectionPeak =
-        NormalizeProjectionPeak(proj.dim2, proj.peakIdxDim2, proj.spanDim2);
-    metrics.tx1Composite = ClampU16(
-        (static_cast<int>(dim1ProjectionPeak) + static_cast<int>(dim2ProjectionPeak)) / 2);
-    metrics.tx2Composite = tx2PeakSignal;
+    // TSACore current grid build maps all TX1-facing NoPressInk signals to
+    // the TX1 main-peak 3x3 cluster strength (DAT_182309c6 → DAT_18231160/62/64).
+    metrics.tx1SignalDim1 = tx1GridSignal;
+    metrics.tx1SignalDim2 = tx1GridSignal;
+    metrics.tx1Composite = tx1GridSignal;
+
+    // TSACore current grid build computes a TX2 residual 3x3 strength, but the
+    // final exported TX2 combined signal seen by NoPressInk is still overwritten
+    // with the TX1 cluster strength.
+    metrics.tx2Composite = tx1GridSignal;
+
+    metrics.dim1ProjectionPeak =
+        NormalizeProjectionPeak(tx1Proj.dim1, tx1Proj.peakIdxDim1, tx1Proj.spanDim1);
+    metrics.dim2ProjectionPeak =
+        NormalizeProjectionPeak(tx1Proj.dim2, tx1Proj.peakIdxDim2, tx1Proj.spanDim2);
+
     metrics.dim1EdgeActive = IsAxisEdgeActive(rawCoor.dim1, sensorCols);
     metrics.dim2EdgeActive = IsAxisEdgeActive(rawCoor.dim2, sensorRows);
-    metrics.dim1EdgeSignal = dim1ProjectionPeak;
-    metrics.dim2EdgeSignal = dim2ProjectionPeak;
+    metrics.dim1EdgeSignal = metrics.dim1ProjectionPeak;
+    metrics.dim2EdgeSignal = metrics.dim2ProjectionPeak;
     return metrics;
 }
 } // namespace
@@ -155,7 +169,8 @@ bool StylusPipeline::ProcessNoStylusFrame(
         m_prevPressureVal = 0;
         m_penStateMachine.Update(false, 0, 0, 0);
         m_pressureSolver.Reset();
-        m_noPressInkGate.Reset();
+        m_noPressInkGate.ResetFrame();
+        m_penState.Reset();
         m_lastResult.animState = static_cast<uint8_t>(m_penStateMachine.GetState());
         m_prevStatus = m_lastResult.status;
         return outPacket.valid;
@@ -168,7 +183,8 @@ bool StylusPipeline::ProcessNoStylusFrame(
         m_coorReviser.Reset();
         m_linearFilter.Reset();
         m_pressureSolver.Reset();
-        m_noPressInkGate.Reset();
+        m_noPressInkGate.ResetFrame();
+        m_penState.Reset();
         m_noiseGate.Reset();
         m_hasLastGoodFrame = false;
     }
@@ -279,7 +295,7 @@ bool StylusPipeline::ProcessRaw(
         m_lastResult.slaveValid = false;
         m_lastResult.pipelineStage = 1;
         m_pressureSolver.Reset();
-        m_noPressInkGate.Reset();
+        m_noPressInkGate.ResetFrame();
         if (m_emitPacketWhenInvalid) {
             outPacket.valid = true; outPacket.reportId = 0x08;
             outPacket.length = 17; outPacket.bytes.fill(0);
@@ -377,7 +393,8 @@ bool StylusPipeline::ProcessRaw(
         m_lastResult.point.valid = false;
         m_lastResult.pipelineStage = 3;
         m_pressureSolver.Reset();
-        m_noPressInkGate.Reset();
+        m_noPressInkGate.ResetFrame();
+        m_penState.Reset();
         m_prevValid = false;
         m_prevPressureVal = 0;
         m_penStateMachine.Update(false, 0, 0, 0);
@@ -404,7 +421,8 @@ bool StylusPipeline::ProcessRaw(
         m_lastResult.point.valid = false;
         m_lastResult.pipelineStage = 4;
         m_pressureSolver.Reset();
-        m_noPressInkGate.Reset();
+        m_noPressInkGate.ResetFrame();
+        m_penState.Reset();
         m_prevValid = false;
         m_prevPressureVal = 0;
         m_penStateMachine.Update(false, 0, 0, 0);
@@ -449,7 +467,8 @@ bool StylusPipeline::ProcessRaw(
         m_lastResult.point.valid = false;
         m_lastResult.pipelineStage = 5;
         m_pressureSolver.Reset();
-        m_noPressInkGate.Reset();
+        m_noPressInkGate.ResetFrame();
+        m_penState.Reset();
         m_prevValid = false;
         m_prevPressureVal = 0;
         m_penStateMachine.Update(false, 0, 0, 0);
@@ -468,6 +487,8 @@ bool StylusPipeline::ProcessRaw(
         static_cast<float>(rawCoor.dim1), static_cast<float>(rawCoor.dim2),
         m_sensorCols, m_sensorRows);
 
+    bool tx2Started = false;
+
     const uint16_t tx1PeakSignal = static_cast<uint16_t>(
         std::clamp(m_gridData.tx1.grid[peak.peakRow][peak.peakCol],
                    static_cast<int16_t>(0), static_cast<int16_t>(0x7FFF)));
@@ -478,6 +499,7 @@ bool StylusPipeline::ProcessRaw(
     if (tx2PeakValid) {
         tx2Analysis = m_peakDetector.AnalyzePeakAndProjection(m_gridData.tx2.grid);
         tx2Peak = tx2Analysis.peak;
+        tx2Started = tx2Peak.valid;
         if (tx2Peak.valid) {
             tx2PeakSignal = static_cast<uint16_t>(
                 std::clamp(m_gridData.tx2.grid[tx2Peak.peakRow][tx2Peak.peakCol],
@@ -485,9 +507,20 @@ bool StylusPipeline::ProcessRaw(
         }
     }
 
+    uint16_t tx1GridSignal = 0;
+    if (peak.valid) {
+        tx1GridSignal = ClampU16(peak.neighborSum3x3);
+    }
+
     // Pressure (BT MCU) — solve BEFORE state machine
     const auto metrics = BuildSignalMetrics(
-        proj, rawCoor, tx1PeakSignal, tx2PeakSignal, m_sensorCols, m_sensorRows);
+        proj,
+        rawCoor,
+        tx1PeakSignal,
+        tx2PeakSignal,
+        tx1GridSignal,
+        m_sensorCols,
+        m_sensorRows);
     m_lastResult.tx1BlockValid = m_gridData.tx1.valid;
     m_lastResult.tx2BlockValid = m_gridData.tx2.valid;
     m_lastResult.signalX = metrics.signalX;
@@ -498,6 +531,7 @@ bool StylusPipeline::ProcessRaw(
     m_lastResult.hpp3Dim1SignalValid = (m_lastResult.signalX > 0);
     m_lastResult.hpp3Dim2SignalValid = (m_lastResult.signalY > 0);
     {
+        // ── Step ①: PressureSolver → realPressure ──
         uint16_t btPress = m_pressureSolver.GetLatestBtPressure();
         m_lastResult.point.rawPressure = btPress;
         const Asa::EdgeSignalInputs edgeSignals{
@@ -510,19 +544,69 @@ bool StylusPipeline::ProcessRaw(
             btPress, rawCoor.valid,
             static_cast<int>(metrics.tx1Composite),
             isEdge, edgeSignals);
-        const auto noPressResult = m_noPressInkGate.Apply(
-            rawCoor.valid,
-            m_lastResult.tx1BlockValid,
-            pressureStage.signalSuppressActive || pressureStage.edgeSignalSuppressActive,
-            pressureStage.realPressure,
-            m_prevPressureVal,
-            metrics.tx1Composite,
-            metrics.tx2Composite);
+        m_lastResult.point.mappedPressure = pressureStage.mappedPressure;
+
+        const bool sigSuppressed =
+            pressureStage.signalSuppressActive || pressureStage.edgeSignalSuppressActive;
+
+        // ── Step ②: NoPressInkGate.Process() → noPressInkValid ──
+        Asa::NoPressInkInput npiIn{};
+        npiIn.coordValid = rawCoor.valid;
+        npiIn.tx1BlockValid = m_lastResult.tx1BlockValid;
+        npiIn.lowSignalSuppressed = sigSuppressed;
+        npiIn.tx2Started = tx2Started;
+        npiIn.realPressure = pressureStage.realPressure;
+        npiIn.prevOutputPressure = m_prevPressureVal;
+        npiIn.rawPressure = btPress;
+        npiIn.tx1SignalDim1 = metrics.tx1SignalDim1;
+        npiIn.tx1SignalDim2 = metrics.tx1SignalDim2;
+        npiIn.tx1Composite = metrics.tx1Composite;
+        npiIn.tx2Composite = metrics.tx2Composite;
+        npiIn.tx2Started = tx2Started;
+        npiIn.coorDim1 = rawCoor.dim1;
+        npiIn.coorDim2 = rawCoor.dim2;
+        npiIn.prevStaticBits = m_penState.prevStaticBits;
+
+        const auto noPressResult = m_noPressInkGate.Process(npiIn);
         m_lastResult.noPressInkActive =
             noPressResult.active && (pressureStage.realPressure == 0);
-        m_lastResult.point.mappedPressure = pressureStage.mappedPressure;
-        m_lastResult.pressure = noPressResult.outputPressure;
-        m_lastResult.point.pressure = m_lastResult.pressure;
+
+        // ── Step ③: PostPressureProcess → finalPressure (INV-1, INV-4) ──
+        uint16_t finalPressure = pressureStage.realPressure;
+        bool finalRealPressValid = (pressureStage.realPressure > 0);
+        bool finalNoPressInkValid = noPressResult.active;
+        {
+            Asa::PressureSolver::PostPressureIO ppIO{
+                finalPressure,
+                finalRealPressValid,
+                noPressResult.active,
+                m_penState.prevPressure,
+                m_penState.fakePressAdded,
+                m_penState.fakePressAddNum
+            };
+            m_pressureSolver.PostPressureProcess(ppIO);
+        }
+
+        const bool lostTx2FastLift = m_coorReviser.enabled && !tx2Started;
+        const bool hadPreviousContact = (m_penState.prevPressure != 0);
+        if (lostTx2FastLift && (hadPreviousContact || noPressResult.active || sigSuppressed)) {
+            finalPressure = 0;
+            finalRealPressValid = false;
+            finalNoPressInkValid = false;
+            m_lastResult.noPressInkActive = false;
+            m_penState.fakePressAdded = 0;
+            m_penState.fakePressAddNum = 0;
+        }
+
+        m_penState.realPressValid = finalRealPressValid;
+        m_penState.noPressInkValid = finalNoPressInkValid;
+        m_lastResult.pressure = finalPressure;
+        m_lastResult.point.pressure = finalPressure;
+
+        // ── Step ④: AsaPenStateTracker update (INV-2) ──
+        m_penState.curPressure = finalPressure;
+        m_penState.PostProcess();
+
         m_lastResult.recheckEnabled = m_noiseGate.recheckEnabled;
         m_lastResult.recheckThreshold =
             static_cast<uint16_t>(std::clamp(m_recheckThBase, 0, 0xFFFF));
@@ -534,12 +618,11 @@ bool StylusPipeline::ProcessRaw(
              m_lastResult.tx1BlockValid &&
              metrics.tx1Composite >= m_lastResult.recheckThreshold);
 #ifdef _DEBUG
-        m_dbg.sigSuppressActive =
-            pressureStage.signalSuppressActive || pressureStage.edgeSignalSuppressActive;
+        m_dbg.sigSuppressActive = sigSuppressed;
 #endif
     }
 
-    // State machine → MotionProfile
+    // State machine → MotionProfile (reads finalPressure via m_lastResult.pressure)
     auto profile = m_penStateMachine.Update(
         rawCoor.valid, m_lastResult.pressure,
         rawCoor.dim1, rawCoor.dim2);
@@ -692,6 +775,9 @@ bool StylusPipeline::ProcessRaw(
     m_lastGoodFrame = m_lastResult;
     m_hasLastGoodFrame = true;
     if (m_lastResult.pressure > 0) m_wasInking = true;
+
+    // Latch pen state for next frame (INV-2)
+    m_penState.FrameEnd();
 
 #ifdef _DEBUG
     // Final diagnostics
@@ -898,14 +984,18 @@ std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
             ConfigParam::Int, const_cast<int*>(&m_noPressInkGate.tiltDeadzone), 0, 20000, Cat::Output),
         ConfigParam("sp.noPressTiltCap", "NoPress Tilt Cap",
             ConfigParam::Int, const_cast<int*>(&m_noPressInkGate.tiltCap), 0, 20000, Cat::Output),
-        ConfigParam("sp.noPressTiltScale", "NoPress Tilt Scale %",
-            ConfigParam::Int, const_cast<int*>(&m_noPressInkGate.tiltScalePercent), 0, 200, Cat::Output),
+        ConfigParam("sp.noPressTiltScale", "NoPress Tilt Scale Init",
+            ConfigParam::Int, const_cast<int*>(&m_noPressInkGate.tiltScaleInit), 0, 200, Cat::Output),
         ConfigParam("sp.noPressDebounceEnter", "NoPress Enter Debounce",
             ConfigParam::Int, const_cast<int*>(&m_noPressInkGate.enterDebounceFrames), 1, 10, Cat::Output),
         ConfigParam("sp.noPressDebounceExit", "NoPress Exit Debounce",
             ConfigParam::Int, const_cast<int*>(&m_noPressInkGate.exitDebounceFrames), 1, 10, Cat::Output),
         ConfigParam("sp.noPressSyntheticMin", "NoPress Synthetic Min",
             ConfigParam::Int, const_cast<int*>(&m_noPressInkGate.syntheticMinPressure), 1, 100, Cat::Output),
+        ConfigParam("sp.noPressLearned", "NoPress TLearned Enabled",
+            ConfigParam::Bool, const_cast<bool*>(&m_noPressInkGate.tLearnedFeatureEnabled), Cat::Output),
+        ConfigParam("sp.noPressDualCh", "NoPress Dual Channel Mode",
+            ConfigParam::Bool, const_cast<bool*>(&m_noPressInkGate.dualChannelMode), Cat::Output),
 
         // === Filter Mode ===
         ConfigParam("sp.filterMode", "Filter Mode (0=IIR 1=1Euro 2=Off)",
@@ -1024,10 +1114,12 @@ void StylusPipeline::SaveConfig(std::ostream& out) const {
     out << "sp.noPressExitRatio=" << m_noPressInkGate.exitRatioPercent << "\n";
     out << "sp.noPressTiltDeadzone=" << m_noPressInkGate.tiltDeadzone << "\n";
     out << "sp.noPressTiltCap=" << m_noPressInkGate.tiltCap << "\n";
-    out << "sp.noPressTiltScale=" << m_noPressInkGate.tiltScalePercent << "\n";
+    out << "sp.noPressTiltScale=" << m_noPressInkGate.tiltScaleInit << "\n";
     out << "sp.noPressDebounceEnter=" << m_noPressInkGate.enterDebounceFrames << "\n";
     out << "sp.noPressDebounceExit=" << m_noPressInkGate.exitDebounceFrames << "\n";
     out << "sp.noPressSyntheticMin=" << m_noPressInkGate.syntheticMinPressure << "\n";
+    out << "sp.noPressLearned=" << (m_noPressInkGate.tLearnedFeatureEnabled ? "1" : "0") << "\n";
+    out << "sp.noPressDualCh=" << (m_noPressInkGate.dualChannelMode ? "1" : "0") << "\n";
     // Filter mode
     out << "sp.filterMode=" << m_filterMode << "\n";
     out << "sp.1eur.minCutoff=" << m_oneEuroFilter.minCutoffF << "\n";
@@ -1144,10 +1236,12 @@ void StylusPipeline::LoadConfig(
     else if (key == "sp.noPressExitRatio") m_noPressInkGate.exitRatioPercent = toInt(value);
     else if (key == "sp.noPressTiltDeadzone") m_noPressInkGate.tiltDeadzone = toInt(value);
     else if (key == "sp.noPressTiltCap") m_noPressInkGate.tiltCap = toInt(value);
-    else if (key == "sp.noPressTiltScale") m_noPressInkGate.tiltScalePercent = toInt(value);
+    else if (key == "sp.noPressTiltScale") m_noPressInkGate.tiltScaleInit = toInt(value);
     else if (key == "sp.noPressDebounceEnter") m_noPressInkGate.enterDebounceFrames = toInt(value);
     else if (key == "sp.noPressDebounceExit") m_noPressInkGate.exitDebounceFrames = toInt(value);
     else if (key == "sp.noPressSyntheticMin") m_noPressInkGate.syntheticMinPressure = toInt(value);
+    else if (key == "sp.noPressLearned") m_noPressInkGate.tLearnedFeatureEnabled = toBool(value);
+    else if (key == "sp.noPressDualCh") m_noPressInkGate.dualChannelMode = toBool(value);
     // Filter mode
     else if (key == "sp.filterMode") m_filterMode = toInt(value);
     else if (key == "sp.1eur.minCutoff") m_oneEuroFilter.minCutoffF = toFloat(value);

@@ -11,6 +11,7 @@
 #include "TiltSolver.hpp"
 #include "PressureSolver.hpp"
 #include "NoPressInkGate.hpp"
+#include "AsaPenStateTracker.hpp"
 #include "CommonModeFilter.hpp"
 #include "PenStateMachine.hpp"
 #include "PacketBuilder.hpp"
@@ -47,6 +48,11 @@ public:
     /// 注入 BT MCU 压感值（由 PenBridge 线程实时更新）
     void SetBtMcuPressure(uint16_t p) {
         m_pressureSolver.SetBtMcuPressure(p);
+    }
+
+    void SetBtMcuPressureSequence(uint16_t p0, uint16_t p1,
+                                  uint16_t p2, uint16_t p3) {
+        m_pressureSolver.SetBtMcuPressureSequence(p0, p1, p2, p3);
     }
 
     /// 蓝牙按键数据注入接口
@@ -118,10 +124,11 @@ private:
     Asa::NoiseGate           m_noiseGate;
     Asa::EdgeCoorPost        m_edgeCoorPost;
     Asa::SignalRatioTracker  m_signalRatioTracker;
+    Asa::AsaPenStateTracker  m_penState;
     PacketBuilder            m_packetBuilder;
 
     // ── Smoothing filter mode (0=IIR, 1=1-Euro, 2=None) ──
-    int m_filterMode = false;
+    int m_filterMode = 0;
 
     // ── Pipeline state ──
     StylusFrameData  m_lastResult{};
@@ -153,7 +160,7 @@ private:
     uint8_t m_rawSlaveHdr[7]{};
 
     // ── Button state ──
-    int m_buttonReleaseHoldFrames = 4;
+    int m_buttonReleaseHoldFrames = 2;
     int m_buttonReleaseCounter = 0;
     uint32_t UpdateButtonState(uint32_t rawBits, bool active);
 
@@ -162,7 +169,7 @@ private:
 
     // ── Noise level (for recheck) ──
     int m_noiseLevel = 0;
-    int m_recheckThBase = 120;
+    int m_recheckThBase = 800;
     int m_recheckThMulti = 1200;
 
     // ── Good frame history for freeze output ──
@@ -174,10 +181,10 @@ private:
 
     // ── Config ──
     bool m_enableSlaveChecksum = false;
-    bool m_emitPacketWhenInvalid = false;
+    bool m_emitPacketWhenInvalid = true;
 
     // P3 #16: TP Pattern Compensation (placeholder)
-    bool m_tpPatternCompEnabled = true;
+    bool m_tpPatternCompEnabled = false;
     std::array<double, 4> m_tpPatternCoefDim1{{0.0, 0.0, 0.0, 0.0}};
     std::array<double, 4> m_tpPatternCoefDim2{{0.0, 0.0, 0.0, 0.0}};
 

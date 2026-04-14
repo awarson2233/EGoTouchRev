@@ -30,8 +30,9 @@ class PenPressureReader : public BtHidChannel {
 public:
     PenPressureReader() = default;
 
-    /// 设置压感回调（每收到一个 'U' 报文触发，参数为四通道最大值）
-    using PressureCallback = std::function<void(uint16_t press)>;
+    /// 设置压感回调（每收到一个 'U' 报文触发，参数为四通道原始 pressure）
+    using PressureCallback = std::function<void(uint16_t p0, uint16_t p1,
+                                                uint16_t p2, uint16_t p3)>;
     void SetPressureCallback(PressureCallback cb);
     /// 设置状态事件句柄（用于通知 App 侧刷新状态）
     void SetNotifyEvent(HANDLE h) { m_notifyEvent = h; }
