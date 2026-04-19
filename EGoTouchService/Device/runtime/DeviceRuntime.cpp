@@ -64,6 +64,13 @@ bool DeviceRuntime::IsShutdownRequested() const {
     return m_stopReason.load() == StopReason::Shutdown;
 }
 
+#ifdef _DEBUG
+void DeviceRuntime::SetFramePushCallback(DeviceRuntime::FramePushCallback cb) {
+    std::lock_guard<std::mutex> lk(m_framePushCbMu);
+    m_framePushCb = std::move(cb);
+}
+#endif
+
 // --------------- 命令注入 ---------------
 
 uint64_t DeviceRuntime::SubmitCommand(
@@ -127,7 +134,7 @@ RuntimeSnapshot DeviceRuntime::GetSnapshot() const {
     std::lock_guard<std::mutex> lk(m_mu);
     RuntimeSnapshot s;
     s.state = m_state.load();
-    s.stylus_connected = m_chip.m_afe.GetStylusState().connected;
+    s.stylus_connected = m_chip.IsStylusConnected();
     s.recover_count = m_recoverCount;
     s.queue_depth = m_cmdQueue.size();
     s.last_command_id = m_lastCmdId;
@@ -173,20 +180,29 @@ void DeviceRuntime::RecordHistory(
 // --------------- 命令执行 ---------------
 
 bool DeviceRuntime::DrainCommands() {
-    std::lock_guard<std::mutex> lk(m_mu);
-    while (!m_cmdQueue.empty()) {
-        auto qc = m_cmdQueue.front();
-        m_cmdQueue.pop_front();
-        m_lastCmdId = qc.id;
-        if (auto r = m_chip.m_afe.SendCommand(qc.cmd); !r) {
-            RecordHistory(qc, false, "afe_sendCommand failed");
+    while (true) {
+        QueuedCommand qc{};
+        {
+            std::lock_guard<std::mutex> lk(m_mu);
+            if (m_cmdQueue.empty()) {
+                return true;
+            }
+            qc = m_cmdQueue.front();
+            m_cmdQueue.pop_front();
+            m_lastCmdId = qc.id;
+        }
+
+        const bool ok = static_cast<bool>(m_chip.SendAfeCommand(qc.cmd));
+        {
+            std::lock_guard<std::mutex> lk(m_mu);
+            RecordHistory(qc, ok, ok ? "OK" : "afe_sendCommand failed");
+        }
+        if (!ok) {
             LOG_WARN("Runtime", __func__, "CmdExec", "Command '{}' (type={}) failed — skipping (non-fatal).", qc.reason, static_cast<int>(qc.cmd.type));
             // 不再触发 recover: AFE 命令失败不代表 bus 挂了
             continue;
         }
-        RecordHistory(qc, true, "OK");
     }
-    return true;
 }
 
 // ----------- Worker 核心循环 -----------
@@ -261,7 +277,7 @@ void DeviceRuntime::OnStreaming() {
     }
     m_consecutiveFrameErrors = 0;  // 成功读帧重置计数
 
-    const auto& rawData = m_chip.back_data;
+    const auto& rawData = m_chip.GetFrameBuffer();
 
     // 0. Build frame (zero-copy from Chip)
     Solvers::HeatmapFrame touchFrame;
@@ -271,12 +287,8 @@ void DeviceRuntime::OnStreaming() {
     // Debug/App 模式: 拷贝完整帧数据供 IPC 帧推送
     touchFrame.rawData.assign(rawData.begin(), rawData.end());
 #endif
-    touchFrame.masterWasRead = m_chip.m_lastMasterWasRead;
-    if (rawData.size() >= Frame::kMasterFrameSize) {
-        Frame::MasterSuffixView masterSuffix;
-        masterSuffix.LoadFromBytes(rawData.data() + Frame::kMasterSuffixOffset);
-        touchFrame.timestamp = masterSuffix.timestamp();
-    }
+    touchFrame.masterWasRead = m_chip.GetLastMasterWasRead();
+    touchFrame.timestamp = m_chip.GetLastFrameTimestamp();
 
     // 3. Stylus pipeline — reads rawPtr, writes frame.stylus
     m_stylusPipeline.Process(touchFrame);
@@ -290,6 +302,8 @@ void DeviceRuntime::OnStreaming() {
 
 #ifdef _DEBUG
     // 5. Debug frame push (IPC visualization)
+    // Hold callback mutex through invocation so disable() waits for in-flight callback to finish.
+    std::lock_guard<std::mutex> lk(m_framePushCbMu);
     if (m_framePushCb) {
         m_framePushCb(touchFrame);
     }
@@ -303,9 +317,17 @@ void DeviceRuntime::OnPenEvent(const Himax::Pen::PenEvent& ev) {
     switch (ev.code) {
 
     case EC::PenConnStatus: {
-        const bool connected = !ev.payload.empty() && ev.payload[0] != 0;
+        bool connected = false;
+        {
+            std::lock_guard<std::mutex> lk(m_penStateMu);
+            m_penState.hasConnection = ev.semantic.hasConnection;
+            m_penState.connected = ev.semantic.hasConnection ? ev.semantic.connected : false;
+            connected = m_penState.hasConnection && m_penState.connected;
+        }
+
         LOG_INFO("Runtime", __func__, "MCU", "PenConnStatus: {}.",
                  connected ? "connected" : "disconnected");
+
         command cmd{};
         if (connected) {
             cmd.type  = AFE_Command::InitStylus;
@@ -332,8 +354,16 @@ void DeviceRuntime::OnPenEvent(const Himax::Pen::PenEvent& ev) {
     }
 
     case EC::PenTypeInfo: {
-        uint8_t penType = ev.payload.empty() ? 0 : ev.payload[0];
+        uint8_t penType = 0;
+        {
+            std::lock_guard<std::mutex> lk(m_penStateMu);
+            m_penState.hasStylusId = ev.semantic.hasStylusId;
+            m_penState.stylusId = ev.semantic.hasStylusId ? ev.semantic.stylusId : 0;
+            penType = m_penState.stylusId;
+        }
+
         LOG_INFO("Runtime", __func__, "MCU", "PenTypeInfo: pen_type={}.", penType);
+
         command cmd{};
         cmd.type  = AFE_Command::SetStylusId;
         cmd.param = penType;
@@ -342,13 +372,34 @@ void DeviceRuntime::OnPenEvent(const Himax::Pen::PenEvent& ev) {
     }
 
     case EC::PenCurStatus: {
-        uint8_t mode = ev.payload.empty() ? 0 : ev.payload[0];
-        const char* modeStr = "unknown";
-        if (mode == 1) modeStr = "writing";
-        else if (mode == 2) modeStr = "hovering";
-        else if (mode == 3) modeStr = "eraser";
+        uint8_t modeRaw = 0;
+        Himax::Pen::PenCurrentMode mode = Himax::Pen::PenCurrentMode::Unknown;
+        {
+            std::lock_guard<std::mutex> lk(m_penStateMu);
+            m_penState.hasCurrentMode = ev.semantic.hasCurrentMode;
+            m_penState.currentModeRaw = ev.semantic.hasCurrentMode ? ev.semantic.currentModeRaw : 0;
+            m_penState.currentMode = ev.semantic.hasCurrentMode ? ev.semantic.currentMode : Himax::Pen::PenCurrentMode::Unknown;
+            modeRaw = m_penState.currentModeRaw;
+            mode = m_penState.currentMode;
+        }
+
         LOG_INFO("Runtime", __func__, "MCU",
-                 "PenCurStatus: mode={} ({}).", mode, modeStr);
+                 "PenCurStatus: mode={} ({}).", modeRaw, Himax::Pen::ToString(mode));
+        break;
+    }
+
+    case EC::EraserToggle: {
+        uint8_t eraserState = 0;
+        {
+            std::lock_guard<std::mutex> lk(m_penStateMu);
+            m_penState.hasEraserToggle = ev.semantic.hasEraserToggle;
+            m_penState.eraserToggle = ev.semantic.hasEraserToggle ? ev.semantic.eraserToggle : 0;
+            eraserState = m_penState.eraserToggle;
+        }
+
+        m_vhfReporter.SetEraserState(eraserState);
+        LOG_INFO("Runtime", __func__, "MCU",
+                 "EraserToggle: state={}", eraserState);
         break;
     }
 

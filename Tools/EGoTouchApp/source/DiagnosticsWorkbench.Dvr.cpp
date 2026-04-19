@@ -91,12 +91,11 @@ void DiagnosticsWorkbench::DrawDvrPanel() {
                 } else if (canonicalFile.extension() != ".dvrbin") {
                     m_lastDvrImportStatus = "Import failed: please select a .dvrbin file";
                 } else {
-                    const auto canonicalFileText = canonicalFile.generic_string();
-                    const auto canonicalRootText = canonicalRoot.generic_string();
-                    const bool inRoot = canonicalFileText.size() >= canonicalRootText.size() &&
-                        canonicalFileText.compare(0, canonicalRootText.size(), canonicalRootText) == 0;
+                    const auto relativeToRoot = canonicalFile.lexically_relative(canonicalRoot);
+                    const bool inRoot = !relativeToRoot.empty() &&
+                        (*relativeToRoot.begin() != std::filesystem::path(".."));
                     if (!inRoot) {
-                        m_lastDvrImportStatus = "Import failed: selection must stay under C:/ProgramData/EGoTouchRev/exports";
+                        m_lastDvrImportStatus = "Import failed: selection must stay under configured export root";
                     } else {
                         const bool ok = m_proxy->LoadDvrDataset(canonicalFile);
                         m_lastDvrImportStatus = ok

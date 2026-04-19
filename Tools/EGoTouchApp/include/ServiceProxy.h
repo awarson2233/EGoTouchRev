@@ -17,11 +17,21 @@
 #include <filesystem>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <thread>
 #include <unordered_map>
 #include <vector>
 
 namespace App {
+
+struct TouchPipelineModuleEnableState {
+    bool baselineEnabled = true;
+    bool cmfEnabled = true;
+    bool gridIIREnabled = true;
+    bool trackerEnabled = true;
+    bool coordFilterEnabled = true;
+    bool gestureEnabled = true;
+};
 
 class ServiceProxy {
 public:
@@ -176,7 +186,7 @@ private:
 
     // MasterParser-only mode
     bool m_masterParserOnly = false;
-    bool m_savedMasterOnly = false;
+    std::optional<TouchPipelineModuleEnableState> m_masterParserOnlySnapshot;
 
     // PenBridge status (polled alongside logs)
     mutable std::mutex m_penMutex;

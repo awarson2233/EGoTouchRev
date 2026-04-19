@@ -4,11 +4,19 @@
 #include <Windows.h>
 #include <SetupAPI.h>
 #include <hidsdi.h>
+
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
+#include <optional>
+#include <string>
+#include <thread>
+#include <utility>
+#include <vector>
 
 #pragma comment(lib, "setupapi.lib")
 #pragma comment(lib, "hid.lib")
@@ -243,9 +251,34 @@ void PenEventBridge::OnPacketReceived(const std::vector<uint8_t>& packet) {
     }
     if (cbCopy) {
         PenEvent ev;
-        ev.code     = static_cast<PenUsbEventCode>(eventCode);
-        ev.payload  = std::vector<uint8_t>(packet.begin() + 8, packet.end());
+        ev.code = static_cast<PenUsbEventCode>(eventCode);
+        ev.payload = std::vector<uint8_t>(packet.begin() + 8, packet.end());
         ev.receivedAt = std::chrono::steady_clock::now();
+
+        if (!ev.payload.empty()) {
+            switch (ev.code) {
+            case PenUsbEventCode::PenConnStatus:
+                ev.semantic.hasConnection = true;
+                ev.semantic.connected = (ev.payload[0] != 0);
+                break;
+            case PenUsbEventCode::PenTypeInfo:
+                ev.semantic.hasStylusId = true;
+                ev.semantic.stylusId = ev.payload[0];
+                break;
+            case PenUsbEventCode::PenCurStatus:
+                ev.semantic.hasCurrentMode = true;
+                ev.semantic.currentModeRaw = ev.payload[0];
+                ev.semantic.currentMode = PenCurrentModeFromRaw(ev.payload[0]);
+                break;
+            case PenUsbEventCode::EraserToggle:
+                ev.semantic.hasEraserToggle = true;
+                ev.semantic.eraserToggle = ev.payload[0];
+                break;
+            default:
+                break;
+            }
+        }
+
         cbCopy(ev);
     }
 
@@ -265,26 +298,63 @@ void PenEventBridge::OnPacketReceived(const std::vector<uint8_t>& packet) {
 //   #899 0x7D01 InitProtocolParams (40B = 8 header + 32 payload, USB HID)
 //        发送时间: 握手开始后约 2.8 秒
 void PenEventBridge::RunHandshake() {
-    if (!IsTransportOpen()) return;
+    auto canContinue = [this]() {
+        return IsRunning() && IsTransportOpen();
+    };
+
+    auto sleepInterruptible = [&canContinue](std::chrono::milliseconds total) {
+        constexpr auto kSlice = std::chrono::milliseconds(20);
+        auto slept = std::chrono::milliseconds(0);
+        while (slept < total) {
+            if (!canContinue()) {
+                return false;
+            }
+            const auto remain = total - slept;
+            const auto step = (remain < kSlice) ? remain : kSlice;
+            std::this_thread::sleep_for(step);
+            slept += step;
+        }
+        return canContinue();
+    };
+
+    if (!canContinue()) return;
     LOG_INFO("PenEvent", __func__, "MCU",
              "Starting factory init sequence: 0x7101 → 0x7701 → 0x7701 → 0x7D01");
 
     // Step 1: CheckPenStatus (cmd_id=0x7101)
     const std::vector<uint8_t> q1 = {0x07,0x00,0x02,0x00, 0x01,0x71, 0x11,0x00};
+    if (!canContinue()) {
+        LOG_INFO("PenEvent", __func__, "MCU", "Handshake aborted before 0x7101 (channel stopped/closed).");
+        return;
+    }
     SendRawPacket(q1);
     LOG_INFO("PenEvent", __func__, "MCU", "Sent 0x7101 CheckPenStatus");
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    if (!sleepInterruptible(std::chrono::milliseconds(300))) {
+        LOG_INFO("PenEvent", __func__, "MCU", "Handshake aborted during stage delay after 0x7101.");
+        return;
+    }
 
     // Step 2: CheckMcuStatus (cmd_id=0x7701) — 第1次
     const std::vector<uint8_t> q2 = {0x07,0x00,0x02,0x00, 0x01,0x77, 0x11,0x00};
+    if (!canContinue()) {
+        LOG_INFO("PenEvent", __func__, "MCU", "Handshake aborted before 1st 0x7701 (channel stopped/closed).");
+        return;
+    }
     SendRawPacket(q2);
     LOG_INFO("PenEvent", __func__, "MCU", "Sent 0x7701 CheckMcuStatus (1st)");
 
     // 等待 MCU 处理前两个事件响应 (~20ms in factory trace)
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    if (!sleepInterruptible(std::chrono::milliseconds(500))) {
+        LOG_INFO("PenEvent", __func__, "MCU", "Handshake aborted during stage delay before 2nd 0x7701.");
+        return;
+    }
 
     // Step 3: CheckMcuStatus (cmd_id=0x7701) — 第2次 (原厂在收到前两个事件 ACK 后重发)
+    if (!canContinue()) {
+        LOG_INFO("PenEvent", __func__, "MCU", "Handshake aborted before 2nd 0x7701 (channel stopped/closed).");
+        return;
+    }
     SendRawPacket(q2);
     LOG_INFO("PenEvent", __func__, "MCU", "Sent 0x7701 CheckMcuStatus (2nd)");
 

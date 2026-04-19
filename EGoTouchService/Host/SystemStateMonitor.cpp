@@ -2,23 +2,40 @@
 #include "Logger.h"
 
 #include <array>
+#include <atomic>
+#include <exception>
+#include <thread>
 #include <utility>
+
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
 #include <sddl.h>
 
 namespace Host {
 
+struct SystemStateMonitor::Impl {
+    HANDLE events[kEventCount]{};
+    HANDLE stopEvent = nullptr;
+    EventCallback callback;
+    std::thread worker;
+    std::atomic<bool> running{false};
+};
+
 namespace {
 
-constexpr std::array<const wchar_t*, SystemStateMonitor::kEventCount> kNamedEvents = {
-    L"Global\\MonitorPowerOnEvent",
-    L"Global\\MonitorPowerOffEvent",
-    L"Global\\MonitorConsoleDisplayOnEvent",
-    L"Global\\MonitorConsoleDisplayOffEvent",
-    L"Global\\MonitorLidOnEvent",
-    L"Global\\MonitorLidOffEvent",
-    L"Global\\MonitorShutDownEvent",
-    L"Global\\PBT_APMRESUMEAUTOMATIC",
+struct NamedEventNameListHolder {
+    const wchar_t* names[SystemStateMonitor::kEventCount]{};
+
+    constexpr NamedEventNameListHolder() {
+        for (std::size_t i = 0; i < SystemStateMonitor::kEventCount; ++i) {
+            names[i] = kSystemStateNamedEventSpecs[i].name;
+        }
+    }
 };
+
+inline constexpr NamedEventNameListHolder kNamedEventNameListHolder{};
 
 HANDLE OpenOrCreateNamedEvent(const wchar_t* name) {
     HANDLE handle = OpenEventW(SYNCHRONIZE | EVENT_MODIFY_STATE, FALSE, name);
@@ -75,62 +92,39 @@ const char* ToString(SystemStateEventType type) noexcept {
     }
 }
 
-SystemStateMonitor::SystemStateMonitor() {
-    m_events.fill(nullptr);
-}
+SystemStateMonitor::SystemStateMonitor()
+    : m_impl(std::make_unique<Impl>()) {}
 
 SystemStateMonitor::~SystemStateMonitor() {
     Stop();
 }
 
-bool SystemStateMonitor::Start(EventCallback callback) {
-    if (m_running.exchange(true, std::memory_order_acq_rel)) {
-        return false;
+namespace {
+
+SystemStateEvent BuildEvent(std::size_t index) {
+    SystemStateEvent event{};
+    event.source = SystemStateEventSource::ThpServiceNamedEvent;
+    event.timestamp = std::chrono::system_clock::now();
+    event.raw_index = static_cast<std::uint32_t>(index);
+
+    const SystemStateNamedEventSpec* spec = TryGetNamedEventSpec(index);
+    if (spec != nullptr) {
+        event.raw_name = spec->name;
+        event.type = spec->type;
+    } else {
+        event.raw_name = L"";
+        event.type = SystemStateEventType::Unknown;
     }
 
-    m_callback = std::move(callback);
-    m_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (m_stopEvent == nullptr) {
-        m_running.store(false, std::memory_order_release);
-        return false;
-    }
-
-    if (!OpenOrCreateEvents()) {
-        Stop();
-        return false;
-    }
-
-    m_worker = std::thread(&SystemStateMonitor::WorkerLoop, this);
-    return true;
+    return event;
 }
 
-void SystemStateMonitor::Stop() {
-    m_running.store(false, std::memory_order_release);
-
-    if (m_stopEvent != nullptr) {
-        SetEvent(m_stopEvent);
-    }
-
-    if (m_worker.joinable()) {
-        m_worker.join();
-    }
-
-    CloseEvents();
-    m_callback = nullptr;
-}
-
-bool SystemStateMonitor::IsRunning() const noexcept {
-    return m_running.load(std::memory_order_acquire);
-}
-
-const std::array<const wchar_t*, SystemStateMonitor::kEventCount>& SystemStateMonitor::NamedEventList() noexcept {
-    return kNamedEvents;
-}
-
-bool SystemStateMonitor::OpenOrCreateEvents() {
-    for (std::size_t i = 0; i < kEventCount; ++i) {
-        m_events[i] = OpenOrCreateNamedEvent(kNamedEvents[i]);
-        if (m_events[i] == nullptr || m_events[i] == INVALID_HANDLE_VALUE) {
+template <typename ImplT>
+bool OpenOrCreateEvents(ImplT& impl) {
+    for (std::size_t i = 0; i < SystemStateMonitor::kEventCount; ++i) {
+        const SystemStateNamedEventSpec& spec = kSystemStateNamedEventSpecs[i];
+        impl.events[i] = OpenOrCreateNamedEvent(spec.name);
+        if (impl.events[i] == nullptr || impl.events[i] == INVALID_HANDLE_VALUE) {
             return false;
         }
     }
@@ -138,29 +132,31 @@ bool SystemStateMonitor::OpenOrCreateEvents() {
     return true;
 }
 
-void SystemStateMonitor::CloseEvents() noexcept {
-    for (HANDLE& event_handle : m_events) {
+template <typename ImplT>
+void CloseEvents(ImplT& impl) noexcept {
+    for (HANDLE& event_handle : impl.events) {
         if (event_handle != nullptr && event_handle != INVALID_HANDLE_VALUE) {
             CloseHandle(event_handle);
         }
         event_handle = nullptr;
     }
 
-    if (m_stopEvent != nullptr && m_stopEvent != INVALID_HANDLE_VALUE) {
-        CloseHandle(m_stopEvent);
-        m_stopEvent = nullptr;
+    if (impl.stopEvent != nullptr && impl.stopEvent != INVALID_HANDLE_VALUE) {
+        CloseHandle(impl.stopEvent);
+        impl.stopEvent = nullptr;
     }
 }
 
-void SystemStateMonitor::WorkerLoop() {
-    std::array<HANDLE, kEventCount + 1> wait_handles{};
-    wait_handles[0] = m_stopEvent;
-    for (std::size_t i = 0; i < kEventCount; ++i) {
-        wait_handles[i + 1] = m_events[i];
+template <typename ImplT>
+void WorkerLoop(ImplT& impl) {
+    std::array<HANDLE, SystemStateMonitor::kEventCount + 1> wait_handles{};
+    wait_handles[0] = impl.stopEvent;
+    for (std::size_t i = 0; i < SystemStateMonitor::kEventCount; ++i) {
+        wait_handles[i + 1] = impl.events[i];
     }
 
-    while (m_running.load(std::memory_order_acquire)) {
-        DWORD wait_result = WaitForMultipleObjects(
+    while (impl.running.load(std::memory_order_acquire)) {
+        const DWORD wait_result = WaitForMultipleObjects(
             static_cast<DWORD>(wait_handles.size()),
             wait_handles.data(),
             FALSE,
@@ -171,17 +167,24 @@ void SystemStateMonitor::WorkerLoop() {
             break;
         }
 
-        if (wait_result >= WAIT_OBJECT_0 + 1 && wait_result < WAIT_OBJECT_0 + 1 + kEventCount) {
+        if (wait_result >= WAIT_OBJECT_0 + 1 &&
+            wait_result < WAIT_OBJECT_0 + 1 + SystemStateMonitor::kEventCount) {
             const std::size_t event_index = static_cast<std::size_t>(wait_result - WAIT_OBJECT_0 - 1);
             SystemStateEvent event = BuildEvent(event_index);
 
-            LOG_INFO("Host", __func__, "Signal", "Named event[{}] signaled → type={}",  event_index, ToString(event.type));
+            LOG_INFO("Host", __func__, "Signal", "Named event[{}] signaled → type={}", event_index, ToString(event.type));
 
-            if (m_callback) {
-                m_callback(event);
+            if (impl.callback) {
+                try {
+                    impl.callback(event);
+                } catch (const std::exception& ex) {
+                    LOG_ERROR("Host", __func__, "Callback", "SystemStateMonitor callback threw std::exception: {}", ex.what());
+                } catch (...) {
+                    LOG_ERROR("Host", __func__, "Callback", "SystemStateMonitor callback threw unknown exception.");
+                }
             }
 
-            HANDLE event_handle = m_events[event_index];
+            HANDLE event_handle = impl.events[event_index];
             if (event_handle != nullptr && event_handle != INVALID_HANDLE_VALUE) {
                 ResetEvent(event_handle);
             }
@@ -190,47 +193,106 @@ void SystemStateMonitor::WorkerLoop() {
         }
 
         // WAIT_FAILED/WAIT_ABANDONED are treated as hard stop for this monitor instance.
-        LOG_WARN("Host", __func__, "Error", "WaitForMultipleObjects returned unexpected result: {}",  wait_result);
+        LOG_WARN("Host", __func__, "Error", "WaitForMultipleObjects returned unexpected result: {}", wait_result);
         break;
     }
 
-    m_running.store(false, std::memory_order_release);
+    impl.running.store(false, std::memory_order_release);
 }
 
-SystemStateEvent SystemStateMonitor::BuildEvent(std::size_t index) {
-    SystemStateEvent event{};
-    event.source = SystemStateEventSource::ThpServiceNamedEvent;
-    event.timestamp = std::chrono::system_clock::now();
-    event.raw_index = static_cast<std::uint32_t>(index);
-    event.raw_name = index < kEventCount ? kNamedEvents[index] : L"";
+} // namespace
 
-    switch (index) {
-    case 0:
-    case 2:
-        event.type = SystemStateEventType::DisplayOn;
-        break;
-    case 1:
-    case 3:
-        event.type = SystemStateEventType::DisplayOff;
-        break;
-    case 4:
-        event.type = SystemStateEventType::LidOn;
-        break;
-    case 5:
-        event.type = SystemStateEventType::LidOff;
-        break;
-    case 6:
-        event.type = SystemStateEventType::Shutdown;
-        break;
-    case 7:
-        event.type = SystemStateEventType::ResumeAutomatic;
-        break;
-    default:
-        event.type = SystemStateEventType::Unknown;
-        break;
+bool SystemStateMonitor::Start(EventCallback callback) {
+    Impl& impl = *m_impl;
+
+    if (impl.running.load(std::memory_order_acquire)) {
+        return false;
     }
 
-    return event;
+    if (impl.worker.joinable()) {
+        if (impl.worker.get_id() == std::this_thread::get_id()) {
+            LOG_WARN("Host", __func__, "Thread", "Start() called from worker thread while previous worker is joinable.");
+            return false;
+        }
+
+        impl.worker.join();
+        CloseEvents(impl);
+        impl.callback = nullptr;
+    }
+
+    if (impl.running.exchange(true, std::memory_order_acq_rel)) {
+        return false;
+    }
+
+    impl.callback = std::move(callback);
+    impl.stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (impl.stopEvent == nullptr) {
+        impl.running.store(false, std::memory_order_release);
+        return false;
+    }
+
+    if (!OpenOrCreateEvents(impl)) {
+        Stop();
+        return false;
+    }
+
+    impl.worker = std::thread([this]() {
+        WorkerLoop(*m_impl);
+    });
+    return true;
+}
+
+void SystemStateMonitor::Stop() {
+    if (!m_impl) {
+        return;
+    }
+
+    Impl& impl = *m_impl;
+    impl.running.store(false, std::memory_order_release);
+
+    if (impl.stopEvent != nullptr) {
+        SetEvent(impl.stopEvent);
+    }
+
+    if (impl.worker.joinable()) {
+        if (impl.worker.get_id() == std::this_thread::get_id()) {
+            LOG_INFO("Host", __func__, "Thread", "Stop() called from worker thread; deferring join to external caller.");
+            return;
+        }
+
+        impl.worker.join();
+    }
+
+    CloseEvents(impl);
+    impl.callback = nullptr;
+}
+
+bool SystemStateMonitor::IsRunning() const noexcept {
+    return m_impl && m_impl->running.load(std::memory_order_acquire);
+}
+
+const SystemStateNamedEventSpec (&SystemStateMonitor::NamedEventSpecs() noexcept)[SystemStateMonitor::kEventCount] {
+    return kSystemStateNamedEventSpecs;
+}
+
+const wchar_t* const (&SystemStateMonitor::NamedEventList() noexcept)[SystemStateMonitor::kEventCount] {
+    return kNamedEventNameListHolder.names;
+}
+
+bool SystemStateMonitor::SignalNamedEvent(SystemStateNamedEventId id) noexcept {
+    const SystemStateNamedEventSpec* spec = TryGetNamedEventSpec(id);
+    if (spec == nullptr || spec->name == nullptr || spec->name[0] == L'\0') {
+        return false;
+    }
+
+    HANDLE event_handle = OpenEventW(EVENT_MODIFY_STATE, FALSE, spec->name);
+    if (event_handle == nullptr || event_handle == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+
+    const BOOL set_result = SetEvent(event_handle);
+    CloseHandle(event_handle);
+    return set_result != FALSE;
 }
 
 } // namespace Host

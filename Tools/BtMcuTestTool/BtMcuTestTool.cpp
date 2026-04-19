@@ -10,6 +10,7 @@
 #include <fstream>
 #include <sstream>
 #include <iomanip>
+#include <atomic>
 
 #include "imgui.h"
 #include "imgui_impl_win32.h"
@@ -236,6 +237,9 @@ std::optional<std::wstring> FindPressureDevicePath() {
 static std::atomic<bool> g_autoAckEnabled{true};
 static std::atomic<uint32_t> g_ackSentCount{0};
 static std::atomic<bool> g_handshakeComplete{false};
+static std::atomic<bool> g_handshakeCancelRequested{false};
+static std::thread g_handshakeThread;
+static std::mutex g_handshakeMutex;
 
 static const char* GetEventName(uint8_t code) {
     switch (code) {
@@ -295,18 +299,70 @@ static void SendInitParamEcho(const uint8_t* data, size_t len) {
     SendRawEvtPacket(pkt, "InitEcho");
 }
 
+static bool ShouldAbortHandshake() {
+    return g_handshakeCancelRequested.load(std::memory_order_acquire) ||
+           !g_evtTransport || !g_evtTransport->IsOpen();
+}
+
+static bool SleepHandshakeInterruptible(std::chrono::milliseconds total) {
+    constexpr auto kSlice = std::chrono::milliseconds(20);
+    auto slept = std::chrono::milliseconds(0);
+    while (slept < total) {
+        if (ShouldAbortHandshake()) {
+            return false;
+        }
+        const auto remain = total - slept;
+        const auto step = (remain < kSlice) ? remain : kSlice;
+        std::this_thread::sleep_for(step);
+        slept += step;
+    }
+    return !ShouldAbortHandshake();
+}
+
 // Auto-handshake: send 0x7101 (Query Pen) + 0x7701 (Query MCU)
-static void RunHandshake() {
-    if (!g_evtTransport || !g_evtTransport->IsOpen()) return;
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+static void RunHandshakeWorker() {
+    if (!SleepHandshakeInterruptible(std::chrono::milliseconds(200))) {
+        return;
+    }
+
     // 0x7101 Query Pen Status
-    std::vector<uint8_t> q1 = {0x07,0x00,0x02,0x00, 0x01,0x71, 0x11,0x00};
+    const std::vector<uint8_t> q1 = {0x07,0x00,0x02,0x00, 0x01,0x71, 0x11,0x00};
+    if (ShouldAbortHandshake()) {
+        return;
+    }
     SendRawEvtPacket(q1, "Handshake");
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+    if (!SleepHandshakeInterruptible(std::chrono::milliseconds(300))) {
+        return;
+    }
+
     // 0x7701 Query MCU Status
-    std::vector<uint8_t> q2 = {0x07,0x00,0x02,0x00, 0x01,0x77, 0x11,0x00};
+    const std::vector<uint8_t> q2 = {0x07,0x00,0x02,0x00, 0x01,0x77, 0x11,0x00};
+    if (ShouldAbortHandshake()) {
+        return;
+    }
     SendRawEvtPacket(q2, "Handshake");
-    g_handshakeComplete.store(true);
+
+    if (!ShouldAbortHandshake()) {
+        g_handshakeComplete.store(true, std::memory_order_release);
+    }
+}
+
+static void StopHandshakeWorker() {
+    g_handshakeCancelRequested.store(true, std::memory_order_release);
+    std::lock_guard<std::mutex> lock(g_handshakeMutex);
+    if (g_handshakeThread.joinable()) {
+        g_handshakeThread.join();
+    }
+}
+
+static void StartHandshakeWorker() {
+    StopHandshakeWorker();
+    g_handshakeComplete.store(false, std::memory_order_release);
+    g_handshakeCancelRequested.store(false, std::memory_order_release);
+
+    std::lock_guard<std::mutex> lock(g_handshakeMutex);
+    g_handshakeThread = std::thread(RunHandshakeWorker);
 }
 
 static void ResetFrameRateCounters() {
@@ -602,15 +658,15 @@ int main(int, char**)
                 LOG_ERROR("Tool", __func__, "Press", "Pressure HID device not found.");
             }
 
-            // Auto-handshake in background thread
-            g_handshakeComplete.store(false);
-            std::thread(RunHandshake).detach();
+            // Auto-handshake in owned worker thread
+            StartHandshakeWorker();
         }
         ImGui::SameLine();
         if (ImGui::Button("Close Both")) {
+            StopHandshakeWorker();
             if (g_evtTransport) g_evtTransport->Close();
             if (g_pressTransport) g_pressTransport->Close();
-            g_handshakeComplete.store(false);
+            g_handshakeComplete.store(false, std::memory_order_release);
             ResetFrameRateCounters();
             lastFpsTick = std::chrono::steady_clock::now();
             lastEvtRxCount = 0;
@@ -633,8 +689,7 @@ int main(int, char**)
         if (ImGui::Button("Query Info (0x7701)")) { SendPacket(0x7701, {}); }
         ImGui::SameLine();
         if (ImGui::Button("Re-Handshake")) {
-            g_handshakeComplete.store(false);
-            std::thread(RunHandshake).detach();
+            StartHandshakeWorker();
         }
         ImGui::SameLine();
         if (ImGui::Button("Match Info Reply (0x7E01)")) { SendPacket(0x7E01, {0x01}); }
@@ -757,6 +812,7 @@ int main(int, char**)
         }
     }
 
+    StopHandshakeWorker();
     StopThreads();
     CloseLogFile();
     if (g_evtTransport) { g_evtTransport->Close(); g_evtTransport.reset(); }

@@ -25,6 +25,8 @@ public:
     ChipResult<> EnterIdle(uint8_t param = 0);
     ChipResult<> ForceExitIdle();
     ChipResult<> StartCalibration(uint8_t param = 0);
+    // NOTE: ClearStatus command is currently not implemented in this refactor stage.
+    // Callers must handle InvalidOperation until protocol semantics are fully defined.
     ChipResult<> ClearStatus(uint8_t cmd_val);
     ChipResult<> ForceToScanRate(uint8_t rate_idx);
 

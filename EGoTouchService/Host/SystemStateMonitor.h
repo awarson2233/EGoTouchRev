@@ -2,20 +2,20 @@
 
 #include "SystemStateEvent.h"
 
-#include <array>
-#include <atomic>
 #include <cstddef>
 #include <functional>
-#include <thread>
-#include <windows.h>
+#include <memory>
 
 namespace Host {
 
 class SystemStateMonitor {
 public:
+    // Invoked on the monitor worker thread for each signaled named event.
+    // Callback exceptions are contained inside the monitor and logged.
+    // Callback may call Stop(); Stop() is reentrant-safe for worker-thread calls.
     using EventCallback = std::function<void(const SystemStateEvent&)>;
 
-    static constexpr std::size_t kEventCount = 8;
+    static constexpr std::size_t kEventCount = kSystemStateNamedEventCount;
 
     SystemStateMonitor();
     ~SystemStateMonitor();
@@ -30,20 +30,13 @@ public:
 
     bool IsRunning() const noexcept;
 
-    static const std::array<const wchar_t*, kEventCount>& NamedEventList() noexcept;
+    static const SystemStateNamedEventSpec (&NamedEventSpecs() noexcept)[kEventCount];
+    static const wchar_t* const (&NamedEventList() noexcept)[kEventCount];
+    static bool SignalNamedEvent(SystemStateNamedEventId id) noexcept;
 
 private:
-    bool OpenOrCreateEvents();
-    void CloseEvents() noexcept;
-    void WorkerLoop();
-    static SystemStateEvent BuildEvent(std::size_t index);
-
-private:
-    std::array<HANDLE, kEventCount> m_events{};
-    HANDLE m_stopEvent = nullptr;
-    EventCallback m_callback;
-    std::thread m_worker;
-    std::atomic<bool> m_running{false};
+    struct Impl;
+    std::unique_ptr<Impl> m_impl;
 };
 
 } // namespace Host

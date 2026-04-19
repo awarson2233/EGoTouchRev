@@ -2,11 +2,17 @@
 
 #include "btmcu/BtHidChannel.h"
 #include "btmcu/PenUsbTypes.h"
+
+#include <cstdint>
+#include <mutex>
+#include <optional>
+#include <string>
+#include <vector>
+
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#include <mutex>
 
 namespace Himax::Pen {
 

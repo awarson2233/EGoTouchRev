@@ -4,8 +4,8 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
-#include <atomic>
-#include "ServiceHost.h"
+
+#include <memory>
 
 namespace Service {
 
@@ -16,6 +16,14 @@ inline constexpr wchar_t kServiceName[] = L"EGoTouchService";
 /// 不了解任何业务模块，只持有一个 ServiceHost。
 class ServiceShell {
 public:
+    ServiceShell();
+    ~ServiceShell();
+
+    ServiceShell(const ServiceShell&) = delete;
+    ServiceShell& operator=(const ServiceShell&) = delete;
+    ServiceShell(ServiceShell&&) = delete;
+    ServiceShell& operator=(ServiceShell&&) = delete;
+
     static ServiceShell* Instance();
 
     /// 控制台调试模式（--console 参数或无 SCM 时退回）
@@ -25,6 +33,8 @@ public:
     static void WINAPI SvcMain(DWORD argc, LPWSTR* argv);
 
 private:
+    struct Impl;
+
     static DWORD WINAPI SvcCtrlHandlerEx(
         DWORD ctrl, DWORD evtType,
         LPVOID evtData, LPVOID ctx);
@@ -34,15 +44,7 @@ private:
     void ReportStatus(DWORD state, DWORD waitHint = 0);
     void WaitForStop();
 
-    SERVICE_STATUS_HANDLE m_statusHandle = nullptr;
-    SERVICE_STATUS        m_status{};
-    HANDLE                m_stopEvent = nullptr;
-    ServiceHost           m_host;
-
-    // PBT power setting notification handles
-    HPOWERNOTIFY m_hDisplayNotify = nullptr;
-    HPOWERNOTIFY m_hLidNotify     = nullptr;
-    HPOWERNOTIFY m_hSuspendNotify = nullptr;
+    std::unique_ptr<Impl> m_impl;
 };
 
 } // namespace Service

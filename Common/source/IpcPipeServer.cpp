@@ -29,12 +29,12 @@ void IpcPipeServer::Stop() {
 
 void IpcPipeServer::ServerLoop() {
     // Build secure security descriptor for cross-session access
-    // (Service runs as SYSTEM, App runs as user)
+    // (Service runs as SYSTEM, App runs as an interactive user)
     // D: (DACL)
-    // (A;;GA;;;SY)  - Allow Full Access to SYSTEM
-    // (A;;GA;;;BA)  - Allow Full Access to Built-in Administrators
-    // (A;;GRGW;;;BU) - Allow Read/Write to Built-in Users
-    LPCWSTR sddl = L"D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;BU)";
+    // (A;;GA;;;SY)   - Full Access to SYSTEM
+    // (A;;GA;;;BA)   - Full Access to Built-in Administrators
+    // (A;;GRGW;;;IU) - Read/Write to Interactive Users
+    LPCWSTR sddl = L"D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;IU)";
     PSECURITY_DESCRIPTOR pSd = nullptr;
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
             sddl, SDDL_REVISION_1, &pSd, nullptr)) {

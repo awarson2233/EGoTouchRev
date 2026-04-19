@@ -16,6 +16,25 @@ bool ParseIniKeyValue(std::string_view line, std::string& key, std::string& valu
 bool IsLegacyTouchSection(const std::string& section);
 std::optional<std::string> MapLegacyTouchKey(const std::string& section, const std::string& key);
 
+TouchPipelineModuleEnableState CaptureTouchPipelineModuleEnableState(
+    const Solvers::TouchPipeline& pipeline);
+void ApplyTouchPipelineModuleEnableState(
+    Solvers::TouchPipeline& pipeline,
+    const TouchPipelineModuleEnableState& state);
+std::string BuildServiceConfigSection(bool modeFull,
+                                      bool autoMode,
+                                      bool stylusVhfEnabled);
+std::string BuildTouchPipelineConfigSection(
+    const Solvers::TouchPipeline& pipeline,
+    const TouchPipelineModuleEnableState* persistedModuleState = nullptr);
+std::string BuildStylusPipelineConfigSection(
+    const Solvers::StylusPipeline& pipeline);
+std::string MergeServiceProxyConfigSections(
+    std::string_view existingText,
+    std::string_view serviceSection,
+    std::string_view touchSection,
+    std::string_view stylusSection);
+
 std::filesystem::path ResolveReplayBinaryPath(const std::filesystem::path& input);
 bool WriteDvrBinaryFile(const std::filesystem::path& filePath,
                         const std::vector<Dvr::DvrFrameSlot>& frames,

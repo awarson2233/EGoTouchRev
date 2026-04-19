@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Device.h"
+#include "common/DeviceError.h"
 #include <cstdint>
 #include <memory>
 #include <span>

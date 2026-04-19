@@ -2,33 +2,18 @@
 
 #include <windows.h>
 
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
 #include <iostream>
 #include <mutex>
-#include <string_view>
+#include <stdexcept>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace {
-
-bool SignalNamedEvent(const wchar_t* event_name) {
-    HANDLE event_handle = OpenEventW(EVENT_MODIFY_STATE, FALSE, event_name);
-    if (event_handle == nullptr) {
-        std::wcerr << L"[TEST] OpenEvent failed: " << event_name << L", gle=" << GetLastError() << L"\n";
-        return false;
-    }
-
-    const BOOL ok = SetEvent(event_handle);
-    const DWORD err = ok ? ERROR_SUCCESS : GetLastError();
-    CloseHandle(event_handle);
-
-    if (!ok) {
-        std::wcerr << L"[TEST] SetEvent failed: " << event_name << L", gle=" << err << L"\n";
-    }
-    return ok == TRUE;
-}
 
 void ResetNamedEventBestEffort(const wchar_t* event_name) {
     HANDLE event_handle = OpenEventW(EVENT_MODIFY_STATE, FALSE, event_name);
@@ -37,6 +22,13 @@ void ResetNamedEventBestEffort(const wchar_t* event_name) {
     }
     ResetEvent(event_handle);
     CloseHandle(event_handle);
+}
+
+void ResetAllNamedEventsBestEffort() {
+    const auto& named_events = Host::SystemStateMonitor::NamedEventList();
+    for (const wchar_t* event_name : named_events) {
+        ResetNamedEventBestEffort(event_name);
+    }
 }
 
 bool ExpectSequence(const std::vector<Host::SystemStateEventType>& expected,
@@ -54,9 +46,7 @@ bool ExpectSequence(const std::vector<Host::SystemStateEventType>& expected,
     return true;
 }
 
-} // namespace
-
-int main() {
+bool RunNamedEventSequenceTest() {
     using namespace std::chrono_literals;
 
     Host::SystemStateMonitor monitor;
@@ -74,30 +64,27 @@ int main() {
     });
 
     if (!started) {
-        std::cerr << "[TEST] SystemStateMonitor start failed.\n";
-        return 1;
+        std::cerr << "[TEST] SystemStateMonitor start failed in sequence test.\n";
+        return false;
     }
 
-    const auto& named_events = Host::SystemStateMonitor::NamedEventList();
-    for (const wchar_t* event_name : named_events) {
-        ResetNamedEventBestEffort(event_name);
-    }
+    ResetAllNamedEventsBestEffort();
 
     // Give worker thread a short warm-up window before injecting events.
     std::this_thread::sleep_for(80ms);
 
-    const std::vector<std::pair<std::size_t, Host::SystemStateEventType>> script = {
-        {3, Host::SystemStateEventType::DisplayOff},
-        {2, Host::SystemStateEventType::DisplayOn},
-        {5, Host::SystemStateEventType::LidOff},
-        {7, Host::SystemStateEventType::ResumeAutomatic},
+    const std::vector<std::pair<Host::SystemStateNamedEventId, Host::SystemStateEventType>> script = {
+        {Host::SystemStateNamedEventId::MonitorConsoleDisplayOff, Host::SystemStateEventType::DisplayOff},
+        {Host::SystemStateNamedEventId::MonitorConsoleDisplayOn, Host::SystemStateEventType::DisplayOn},
+        {Host::SystemStateNamedEventId::MonitorLidOff, Host::SystemStateEventType::LidOff},
+        {Host::SystemStateNamedEventId::PbtApmResumeAutomatic, Host::SystemStateEventType::ResumeAutomatic},
     };
 
     for (const auto& step : script) {
-        const std::size_t index = step.first;
-        if (!SignalNamedEvent(named_events[index])) {
+        if (!Host::SystemStateMonitor::SignalNamedEvent(step.first)) {
             monitor.Stop();
-            return 2;
+            std::cerr << "[TEST] Failed to signal named event in sequence test.\n";
+            return false;
         }
         std::this_thread::sleep_for(20ms);
     }
@@ -116,8 +103,8 @@ int main() {
         });
         if (!received_all) {
             monitor.Stop();
-            std::cerr << "[TEST] Timeout waiting for detector events. observed=" << observed.size() << "\n";
-            return 3;
+            std::cerr << "[TEST] Timeout waiting for sequence events. observed=" << observed.size() << "\n";
+            return false;
         }
     }
 
@@ -128,9 +115,139 @@ int main() {
         for (std::size_t i = 0; i < observed.size(); ++i) {
             std::cerr << "  observed[" << i << "]=" << Host::ToString(observed[i]) << "\n";
         }
-        return 4;
+        return false;
     }
 
-    std::cout << "[TEST] SystemStateMonitor event test passed. observed=" << observed.size() << "\n";
+    return true;
+}
+
+bool RunCallbackExceptionContainmentTest() {
+    using namespace std::chrono_literals;
+
+    Host::SystemStateMonitor monitor;
+
+    std::atomic<int> callback_count{0};
+    std::mutex mu;
+    std::condition_variable cv;
+
+    const bool started = monitor.Start([&](const Host::SystemStateEvent&) {
+        const int n = callback_count.fetch_add(1, std::memory_order_acq_rel) + 1;
+        if (n == 1) {
+            throw std::runtime_error("intentional callback failure");
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(mu);
+        }
+        cv.notify_all();
+    });
+
+    if (!started) {
+        std::cerr << "[TEST] SystemStateMonitor start failed in exception containment test.\n";
+        return false;
+    }
+
+    ResetAllNamedEventsBestEffort();
+    std::this_thread::sleep_for(80ms);
+
+    if (!Host::SystemStateMonitor::SignalNamedEvent(Host::SystemStateNamedEventId::MonitorConsoleDisplayOn)) {
+        monitor.Stop();
+        std::cerr << "[TEST] Failed first signal in exception containment test.\n";
+        return false;
+    }
+
+    std::this_thread::sleep_for(30ms);
+
+    if (!Host::SystemStateMonitor::SignalNamedEvent(Host::SystemStateNamedEventId::MonitorLidOn)) {
+        monitor.Stop();
+        std::cerr << "[TEST] Failed second signal in exception containment test.\n";
+        return false;
+    }
+
+    {
+        std::unique_lock<std::mutex> lock(mu);
+        const bool received_after_throw = cv.wait_for(lock, 2s, [&] {
+            return callback_count.load(std::memory_order_acquire) >= 2;
+        });
+        if (!received_after_throw) {
+            monitor.Stop();
+            std::cerr << "[TEST] Monitor did not process callback after exception. count="
+                      << callback_count.load(std::memory_order_acquire) << "\n";
+            return false;
+        }
+    }
+
+    monitor.Stop();
+    return true;
+}
+
+bool RunCallbackReentrantStopTest() {
+    using namespace std::chrono_literals;
+
+    Host::SystemStateMonitor monitor;
+
+    std::atomic<int> callback_count{0};
+    std::mutex mu;
+    std::condition_variable cv;
+
+    const bool started = monitor.Start([&](const Host::SystemStateEvent&) {
+        callback_count.fetch_add(1, std::memory_order_acq_rel);
+        monitor.Stop();
+        cv.notify_all();
+    });
+
+    if (!started) {
+        std::cerr << "[TEST] SystemStateMonitor start failed in reentrant Stop test.\n";
+        return false;
+    }
+
+    ResetAllNamedEventsBestEffort();
+    std::this_thread::sleep_for(80ms);
+
+    if (!Host::SystemStateMonitor::SignalNamedEvent(Host::SystemStateNamedEventId::MonitorPowerOn)) {
+        monitor.Stop();
+        std::cerr << "[TEST] Failed signal in reentrant Stop test.\n";
+        return false;
+    }
+
+    {
+        std::unique_lock<std::mutex> lock(mu);
+        const bool callback_observed = cv.wait_for(lock, 2s, [&] {
+            return callback_count.load(std::memory_order_acquire) >= 1;
+        });
+        if (!callback_observed) {
+            monitor.Stop();
+            std::cerr << "[TEST] Timeout waiting for callback in reentrant Stop test.\n";
+            return false;
+        }
+    }
+
+    // External Stop() should complete join/cleanup when callback called Stop() from worker thread.
+    monitor.Stop();
+
+    if (monitor.IsRunning()) {
+        std::cerr << "[TEST] Monitor still running after reentrant Stop test.\n";
+        return false;
+    }
+
+    return true;
+}
+
+} // namespace
+
+int main() {
+    if (!RunNamedEventSequenceTest()) {
+        return 1;
+    }
+
+    if (!RunCallbackExceptionContainmentTest()) {
+        return 2;
+    }
+
+    if (!RunCallbackReentrantStopTest()) {
+        return 3;
+    }
+
+    std::cout << "[TEST] SystemStateMonitor named-event tests passed.\n";
     return 0;
 }

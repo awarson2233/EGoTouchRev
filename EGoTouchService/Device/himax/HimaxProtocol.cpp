@@ -7,7 +7,7 @@
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
 #include "himax/HimaxProtocol.h"
-#include "Device.h"
+#include "himax/HimaxByteUtils.h"
 #include <cstddef>
 #include <cstdint>
 #include <array>
@@ -18,7 +18,7 @@
 #include <synchapi.h>
 #include <windows.h>
 #include <winscard.h>
-
+#include <cstring>
 
 constexpr uint8_t OP_WRITE_MASTER = 0xF2;
 constexpr uint8_t OP_READ_MASTER  = 0xF3;
@@ -419,46 +419,25 @@ namespace Himax {
         return {};
     }
 
-    /**
-    * @brief 将地址值按指定长度解析为小端序字节数组
-    * @param addr 地址值
-    * @param cmd 目标缓冲区
-    * @param len 目标长度 (1, 2, 或 4)
-    */
-    void himax_parse_assign_cmd(uint32_t addr, uint8_t *cmd, int len) {
-        switch (len) {
-        case 1:
-            cmd[0] = static_cast<uint8_t>(addr & 0xFF);
-            break;
-        case 2:
-            cmd[0] = static_cast<uint8_t>(addr & 0xFF);
-            cmd[1] = static_cast<uint8_t>((addr >> 8) & 0xFF);
-            break;
-        case 4:
-            cmd[0] = static_cast<uint8_t>(addr & 0xFF);
-            cmd[1] = static_cast<uint8_t>((addr >> 8) & 0xFF);
-            cmd[2] = static_cast<uint8_t>((addr >> 16) & 0xFF);
-            cmd[3] = static_cast<uint8_t>((addr >> 24) & 0xFF);
-            break;
-        default:
-            break;
-        }
+    namespace {
+
+    ChipResult<> ConfigureBurstForLength(HalDevice* dev, uint32_t len) {
+        return HimaxProtocol::burst_enable(dev, len > 4);
     }
+
+    } // anonymous namespace
 
     ChipResult<> HimaxProtocol::register_read(HalDevice *dev, const uint32_t addr, uint8_t *buffer, uint32_t len) {
         if (!dev || !dev->IsValid()) return std::unexpected(ChipError::CommunicationError);
 
         uint8_t tmp_data[4];
-        himax_parse_assign_cmd(addr, tmp_data, 4);
+        detail::ParseAddressLittleEndian(addr, tmp_data, 4);
 
         if (len > 256) {
             return std::unexpected(ChipError::InvalidOperation);
         }
-        if (len > 4) {
-            if (auto res = burst_enable(dev, true); !res) return res;
-        } else {
-            if (auto res = burst_enable(dev, false); !res) return res;
-        }
+
+        if (auto res = ConfigureBurstForLength(dev, len); !res) return res;
 
         if (auto res = dev->WriteBus(0x00, tmp_data, nullptr, 0); !res) {
             return res;
@@ -479,13 +458,9 @@ namespace Himax {
     ChipResult<> HimaxProtocol::register_write(HalDevice *dev, const uint32_t addr, const uint8_t *data, uint32_t len) {
         if (!dev || !dev->IsValid()) return std::unexpected(ChipError::CommunicationError);
         uint8_t tmp_data[4];
-        himax_parse_assign_cmd(addr, tmp_data, 4);
+        detail::ParseAddressLittleEndian(addr, tmp_data, 4);
 
-        if (len > 4) {
-            if (auto res = burst_enable(dev, 1); !res) return res;
-        } else {
-            if (auto res = burst_enable(dev, 0); !res) return res;
-        }
+        if (auto res = ConfigureBurstForLength(dev, len); !res) return res;
         return dev->WriteBus(0x00, tmp_data, data, len);
     }
 

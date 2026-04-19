@@ -11,7 +11,6 @@
 #ifndef _WINDOWS_
 #include <Windows.h>
 #endif
-#include <SetupAPI.h>
 
 /// VhfReporter — 负责将 Pipeline 输出的 TouchPacket /
 /// StylusPacket 通过 VHF HID 注入器驱动写入系统。
@@ -45,8 +44,11 @@ public:
     void Close();
 
 private:
-    void BuildTouchReports(Solvers::HeatmapFrame& frame);
-    void ApplyStylusPostTransform(std::array<uint8_t, 17>& bytes);
+    void WriteTouchPacketsLocked(
+        const std::array<Solvers::TouchPacket, 2>& packets);
+    void WriteTouchAllUpLocked();
+    void WriteStylusPacketLocked(const uint8_t* data, size_t len);
+
     bool EnsureDeviceOpen();
     void CloseDevice();
     void ReopenDevice();

@@ -468,38 +468,38 @@ void DiagnosticsWorkbench::DrawSystemEventsPanel() {
                        "that SystemStateMonitor is listening to.");
     ImGui::Separator();
 
-    const auto& events = Host::SystemStateMonitor::NamedEventList();
+#if defined(_DEBUG) || !defined(NDEBUG)
     struct EventInfo {
         const char* label;
-        size_t index;
+        Host::SystemStateNamedEventId id;
         ImVec4 color;
     };
     const EventInfo items[] = {
-        {"Display ON (Power)",     0, {0.3f, 1.f, 0.3f, 1.f}},
-        {"Display OFF (Power)",    1, {1.f, 0.3f, 0.3f, 1.f}},
-        {"Display ON (Console)",   2, {0.3f, 1.f, 0.3f, 1.f}},
-        {"Display OFF (Console)",  3, {1.f, 0.3f, 0.3f, 1.f}},
-        {"Lid ON",                 4, {0.3f, 0.8f, 1.f, 1.f}},
-        {"Lid OFF",                5, {1.f, 0.6f, 0.2f, 1.f}},
-        {"Shutdown",               6, {1.f, 0.2f, 0.2f, 1.f}},
-        {"Resume Automatic",       7, {0.5f, 1.f, 0.5f, 1.f}},
+        {"Display ON (Power)",     Host::SystemStateNamedEventId::MonitorPowerOn, {0.3f, 1.f, 0.3f, 1.f}},
+        {"Display OFF (Power)",    Host::SystemStateNamedEventId::MonitorPowerOff, {1.f, 0.3f, 0.3f, 1.f}},
+        {"Display ON (Console)",   Host::SystemStateNamedEventId::MonitorConsoleDisplayOn, {0.3f, 1.f, 0.3f, 1.f}},
+        {"Display OFF (Console)",  Host::SystemStateNamedEventId::MonitorConsoleDisplayOff, {1.f, 0.3f, 0.3f, 1.f}},
+        {"Lid ON",                 Host::SystemStateNamedEventId::MonitorLidOn, {0.3f, 0.8f, 1.f, 1.f}},
+        {"Lid OFF",                Host::SystemStateNamedEventId::MonitorLidOff, {1.f, 0.6f, 0.2f, 1.f}},
+        {"Shutdown",               Host::SystemStateNamedEventId::MonitorShutDown, {1.f, 0.2f, 0.2f, 1.f}},
+        {"Resume Automatic",       Host::SystemStateNamedEventId::PbtApmResumeAutomatic, {0.5f, 1.f, 0.5f, 1.f}},
     };
 
     for (const auto& item : items) {
         ImGui::PushStyleColor(ImGuiCol_Button, item.color);
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0, 0, 0, 1));
         if (ImGui::Button(item.label, ImVec2(-1, 28))) {
-            HANDLE h = OpenEventW(EVENT_MODIFY_STATE, FALSE, events[item.index]);
-            if (h) {
-                SetEvent(h);
-                CloseHandle(h);
+            if (Host::SystemStateMonitor::SignalNamedEvent(item.id)) {
                 LOG_INFO("App", __func__, "UI", "Signaled: {}", item.label);
             } else {
-                LOG_WARN("App", __func__, "UI", "Failed to open event (index={}, err={})", item.index, GetLastError());
+                LOG_WARN("App", __func__, "UI", "Failed to signal named event for {}", item.label);
             }
         }
         ImGui::PopStyleColor(2);
     }
+#else
+    ImGui::TextDisabled("Named-event signaling controls are available in debug/test builds only.");
+#endif
 }
 
 } // namespace App

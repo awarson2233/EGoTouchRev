@@ -8,10 +8,10 @@
  */
 // HimaxHal.h
 #pragma once
+#include "common/DeviceError.h"
+
 #include <vector>
 #include <windows.h>
-#include <winnt.h>
-#include "Device.h"
 
 namespace Himax {
     enum class DeviceType { Master, Slave, Interrupt };

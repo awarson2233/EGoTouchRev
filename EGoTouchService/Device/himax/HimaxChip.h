@@ -1,17 +1,19 @@
 #pragma once
-#include "Device.h"
-#include "HimaxProtocol.h"
+#include "common/DeviceError.h"
 #include "HimaxRegisters.h"
 #include "himax/HimaxAfe.h"
+
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <memory>
-#include <array>
 #include <string>
 #include <thread>
-#include <winnt.h>
 
 namespace Himax {
+
+    enum class DeviceType;
+    class HalDevice;
 
     enum class ConnectionState {
         Unconnected = 0,    // 未连接/句柄未打开
@@ -47,22 +49,23 @@ namespace Himax {
         
             
             ChipResult<HalDevice*> SelectDevice(DeviceType type);
+
+            // ── Init/Deinit & recovery internals ─────────────────────────
             ChipResult<> init_buffers_and_register(void);
-            
             ChipResult<> hx_hw_reset_ahb_intf(DeviceType type);
-            ChipResult<> hx_sw_reset_ahb_intf(DeviceType type); 
+            ChipResult<> hx_sw_reset_ahb_intf(DeviceType type);
+            ChipResult<> hx_sense_on(bool isHwReset);
+            ChipResult<> hx_sense_off(bool check_en);
+            ChipResult<> himax_mcu_power_on_init(void);
+            ChipResult<> himax_mcu_interface_on(void);
             ChipResult<> hx_is_reload_done_ahb(void);
             ChipResult<> himax_mcu_reload_disable(uint8_t disable);
             ChipResult<> himax_mcu_read_FW_status(void);
 
-            ChipResult<> hx_sense_on(bool isHwReset);
-            ChipResult<> hx_sense_off(bool check_en);
-            ChipResult<> himax_mcu_power_on_init(void);
-            
+            // ── Mode/config internals ────────────────────────────────────
             ChipResult<> himax_mcu_assign_sorting_mode(uint8_t* tmp_data);
             ChipResult<> himax_switch_data_type(DeviceType device, THP_INSPECTION_ENUM mode);
             ChipResult<> himax_switch_mode_inspection(THP_INSPECTION_ENUM mode);
-            ChipResult<> himax_mcu_interface_on(void);
             ChipResult<> hx_set_N_frame(uint8_t nFrame);
             
         public:
@@ -97,8 +100,14 @@ namespace Himax {
             HalDevice* GetMasterDevice() { return m_master.get(); }
             uint8_t& GetCurrentSlot() { return current_slot; }
             ConnectionState GetConnectionState() const { return m_connState.load(); }
-            const std::array<uint8_t, 6000>& GetFrameBuffer() const { return back_data; }
             void SetAfeMode(THP_AFE_MODE mode) { afe_mode.store(mode); }
+
+            // ── Runtime Facade (stable boundary for DeviceRuntime) ───────
+            ChipResult<> SendAfeCommand(command cmd);
+            bool IsStylusConnected() const;
+            const std::array<uint8_t, 6000>& GetFrameBuffer() const { return back_data; }
+            bool GetLastMasterWasRead() const { return m_lastMasterWasRead; }
+            uint16_t GetLastFrameTimestamp() const;
 
             ChipResult<> SetFrameReadPolicy(bool block, uint8_t timeoutMs);
             ChipResult<> SetFrameReadNormalPolicy();

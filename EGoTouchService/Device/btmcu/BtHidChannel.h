@@ -1,14 +1,14 @@
 #pragma once
 
-#include <Windows.h>
 #include "btmcu/PenUsbTransport.h"
+
 #include <atomic>
-#include <chrono>
-#include <functional>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace Himax::Pen {
 

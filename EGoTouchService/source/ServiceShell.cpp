@@ -1,5 +1,6 @@
 #include "ServiceShell.h"
 #include "SystemStateMonitor.h"
+#include "ServiceHost.h"
 #include "Logger.h"
 
 #include <string_view>
@@ -7,7 +8,24 @@
 
 namespace Service {
 
+struct ServiceShell::Impl {
+    SERVICE_STATUS_HANDLE statusHandle = nullptr;
+    SERVICE_STATUS status{};
+    HANDLE stopEvent = nullptr;
+    ServiceHost host;
+
+    // PBT power setting notification handles
+    HPOWERNOTIFY hDisplayNotify = nullptr;
+    HPOWERNOTIFY hLidNotify = nullptr;
+    HPOWERNOTIFY hSuspendNotify = nullptr;
+};
+
 static ServiceShell s_instance;
+
+ServiceShell::ServiceShell()
+    : m_impl(std::make_unique<Impl>()) {}
+
+ServiceShell::~ServiceShell() = default;
 
 ServiceShell* ServiceShell::Instance() {
     return &s_instance;
@@ -18,18 +36,18 @@ ServiceShell* ServiceShell::Instance() {
 void WINAPI ServiceShell::SvcMain(DWORD argc, LPWSTR* argv) {
     auto* s = Instance();
 
-    s->m_statusHandle = RegisterServiceCtrlHandlerExW(
+    s->m_impl->statusHandle = RegisterServiceCtrlHandlerExW(
         kServiceName, SvcCtrlHandlerEx, s);
-    if (!s->m_statusHandle) {
+    if (!s->m_impl->statusHandle) {
         LOG_ERROR("Service", __func__, "Boot", "RegisterServiceCtrlHandlerExW failed.");
         return;
     }
 
     s->ReportStatus(SERVICE_START_PENDING, 3000);
-    s->m_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    s->m_impl->stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
 
     LOG_INFO("Service", __func__, "Boot", "Starting modules...");
-    if (!s->m_host.Start()) {
+    if (!s->m_impl->host.Start()) {
         LOG_ERROR("Service", __func__, "Boot", "ServiceHost::Start() failed.");
         s->ReportStatus(SERVICE_STOPPED);
         return;
@@ -41,7 +59,7 @@ void WINAPI ServiceShell::SvcMain(DWORD argc, LPWSTR* argv) {
     LOG_INFO("Service", __func__, "Running", "Service is running. Waiting for stop signal...");
     s->WaitForStop();
     s->UnregisterPowerNotifications();
-    s->m_host.Stop();
+    s->m_impl->host.Stop();
     s->ReportStatus(SERVICE_STOPPED);
     LOG_INFO("Service", __func__, "Stopped", "Service stopped.");
 }
@@ -50,12 +68,8 @@ DWORD WINAPI ServiceShell::SvcCtrlHandlerEx(
         DWORD ctrl, DWORD evtType, LPVOID evtData, LPVOID ctx) {
     auto* s = static_cast<ServiceShell*>(ctx);
 
-    // Helper: signal a named event by index
-    auto signalEvent = [](std::size_t idx) {
-        const auto& names = Host::SystemStateMonitor::NamedEventList();
-        if (idx >= names.size()) return;
-        HANDLE h = OpenEventW(EVENT_MODIFY_STATE, FALSE, names[idx]);
-        if (h) { SetEvent(h); CloseHandle(h); }
+    auto signalEvent = [](Host::SystemStateNamedEventId id) {
+        return Host::SystemStateMonitor::SignalNamedEvent(id);
     };
 
     switch (ctrl) {
@@ -63,17 +77,16 @@ DWORD WINAPI ServiceShell::SvcCtrlHandlerEx(
     case SERVICE_CONTROL_SHUTDOWN:
     case SERVICE_CONTROL_PRESHUTDOWN:
         LOG_INFO("Service", __func__, "Stopping", "Received stop/shutdown control code={}.", ctrl);
-        // Signal MonitorShutDownEvent (index 6) so monitor thread sees it
-        signalEvent(6);
+        signalEvent(Host::SystemStateNamedEventId::MonitorShutDown);
         s->ReportStatus(SERVICE_STOP_PENDING, 5000);
-        SetEvent(s->m_stopEvent);
+        SetEvent(s->m_impl->stopEvent);
         return NO_ERROR;
 
     case SERVICE_CONTROL_POWEREVENT: {
         // Handle PBT_APMRESUMEAUTOMATIC (system resumed from sleep)
         if (evtType == PBT_APMRESUMEAUTOMATIC) {
             LOG_INFO("Service", __func__, "Power", "PBT_APMRESUMEAUTOMATIC");
-            signalEvent(7);  // PBT_APMRESUMEAUTOMATIC event
+            signalEvent(Host::SystemStateNamedEventId::PbtApmResumeAutomatic);
             return NO_ERROR;
         }
 
@@ -94,20 +107,20 @@ DWORD WINAPI ServiceShell::SvcCtrlHandlerEx(
             DWORD state = *reinterpret_cast<DWORD*>(pbs->Data);
             LOG_INFO("Service", __func__, "Power", "GUID_CONSOLE_DISPLAY_STATE = {}", state);
             if (state >= 1) {
-                signalEvent(0);  // MonitorPowerOnEvent
-                signalEvent(2);  // MonitorConsoleDisplayOnEvent
+                signalEvent(Host::SystemStateNamedEventId::MonitorPowerOn);
+                signalEvent(Host::SystemStateNamedEventId::MonitorConsoleDisplayOn);
             } else {
-                signalEvent(1);  // MonitorPowerOffEvent
-                signalEvent(3);  // MonitorConsoleDisplayOffEvent
+                signalEvent(Host::SystemStateNamedEventId::MonitorPowerOff);
+                signalEvent(Host::SystemStateNamedEventId::MonitorConsoleDisplayOff);
             }
         }
         else if (pbs->PowerSetting == kLidGuid && pbs->DataLength >= 4) {
             DWORD state = *reinterpret_cast<DWORD*>(pbs->Data);
             LOG_INFO("Service", __func__, "Power", "GUID_LIDSWITCH_STATE = {} (1=open, 0=closed)", state);
             if (state == 1) {
-                signalEvent(4);  // MonitorLidOnEvent
+                signalEvent(Host::SystemStateNamedEventId::MonitorLidOn);
             } else {
-                signalEvent(5);  // MonitorLidOffEvent
+                signalEvent(Host::SystemStateNamedEventId::MonitorLidOff);
             }
         }
         return NO_ERROR;
@@ -123,39 +136,39 @@ DWORD WINAPI ServiceShell::SvcCtrlHandlerEx(
 // ─── 控制台模式 ──────────────────────────────
 
 void ServiceShell::RunAsConsole() {
-    m_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    m_impl->stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
 
     SetConsoleCtrlHandler([](DWORD) -> BOOL {
-        SetEvent(Instance()->m_stopEvent);
+        SetEvent(Instance()->m_impl->stopEvent);
         return TRUE;
     }, TRUE);
 
     LOG_INFO("Service", __func__, "Boot", "Starting modules (console mode)...");
-    if (!m_host.Start()) {
+    if (!m_impl->host.Start()) {
         LOG_ERROR("Service", __func__, "Boot", "ServiceHost::Start() failed.");
         return;
     }
 
     LOG_INFO("Service", __func__, "Running", "Service running in console mode. Press Ctrl+C to stop.");
     WaitForStop();
-    m_host.Stop();
+    m_impl->host.Stop();
     LOG_INFO("Service", __func__, "Stopped", "Console mode stopped.");
 }
 
 // ─── 辅助 ────────────────────────────────────
 
 void ServiceShell::ReportStatus(DWORD state, DWORD waitHint) {
-    if (!m_statusHandle) return;
+    if (!m_impl->statusHandle) return;
 
-    m_status.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
-    m_status.dwCurrentState = state;
-    m_status.dwWin32ExitCode = NO_ERROR;
-    m_status.dwWaitHint = waitHint;
+    m_impl->status.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
+    m_impl->status.dwCurrentState = state;
+    m_impl->status.dwWin32ExitCode = NO_ERROR;
+    m_impl->status.dwWaitHint = waitHint;
 
     if (state == SERVICE_START_PENDING) {
-        m_status.dwControlsAccepted = 0;
+        m_impl->status.dwControlsAccepted = 0;
     } else {
-        m_status.dwControlsAccepted =
+        m_impl->status.dwControlsAccepted =
             SERVICE_ACCEPT_STOP |
             SERVICE_ACCEPT_SHUTDOWN |
             SERVICE_ACCEPT_PRESHUTDOWN |
@@ -164,24 +177,24 @@ void ServiceShell::ReportStatus(DWORD state, DWORD waitHint) {
 
     static DWORD checkPoint = 1;
     if (state == SERVICE_RUNNING || state == SERVICE_STOPPED) {
-        m_status.dwCheckPoint = 0;
+        m_impl->status.dwCheckPoint = 0;
     } else {
-        m_status.dwCheckPoint = checkPoint++;
+        m_impl->status.dwCheckPoint = checkPoint++;
     }
 
-    SetServiceStatus(m_statusHandle, &m_status);
+    SetServiceStatus(m_impl->statusHandle, &m_impl->status);
 }
 
 void ServiceShell::WaitForStop() {
-    if (m_stopEvent) {
-        WaitForSingleObject(m_stopEvent, INFINITE);
-        CloseHandle(m_stopEvent);
-        m_stopEvent = nullptr;
+    if (m_impl->stopEvent) {
+        WaitForSingleObject(m_impl->stopEvent, INFINITE);
+        CloseHandle(m_impl->stopEvent);
+        m_impl->stopEvent = nullptr;
     }
 }
 
 void ServiceShell::RegisterPowerNotifications() {
-    if (!m_statusHandle) return;
+    if (!m_impl->statusHandle) return;
 
     // GUID_CONSOLE_DISPLAY_STATE
     static const GUID kDisplayGuid =
@@ -196,28 +209,28 @@ void ServiceShell::RegisterPowerNotifications() {
         {0x98a7f580, 0x01f7, 0x48aa,
          {0x9c, 0x0f, 0x44, 0x35, 0x2c, 0x29, 0xe5, 0xc0}};
 
-    m_hDisplayNotify = RegisterPowerSettingNotification(
-        m_statusHandle, &kDisplayGuid, DEVICE_NOTIFY_SERVICE_HANDLE);
-    m_hLidNotify = RegisterPowerSettingNotification(
-        m_statusHandle, &kLidGuid, DEVICE_NOTIFY_SERVICE_HANDLE);
-    m_hSuspendNotify = RegisterPowerSettingNotification(
-        m_statusHandle, &kAwayGuid, DEVICE_NOTIFY_SERVICE_HANDLE);
+    m_impl->hDisplayNotify = RegisterPowerSettingNotification(
+        m_impl->statusHandle, &kDisplayGuid, DEVICE_NOTIFY_SERVICE_HANDLE);
+    m_impl->hLidNotify = RegisterPowerSettingNotification(
+        m_impl->statusHandle, &kLidGuid, DEVICE_NOTIFY_SERVICE_HANDLE);
+    m_impl->hSuspendNotify = RegisterPowerSettingNotification(
+        m_impl->statusHandle, &kAwayGuid, DEVICE_NOTIFY_SERVICE_HANDLE);
 
-    LOG_INFO("Service", __func__, "Power", "Registered PBT notifications (display={}, lid={}, away={}).", m_hDisplayNotify != nullptr, m_hLidNotify != nullptr, m_hSuspendNotify != nullptr);
+    LOG_INFO("Service", __func__, "Power", "Registered PBT notifications (display={}, lid={}, away={}).", m_impl->hDisplayNotify != nullptr, m_impl->hLidNotify != nullptr, m_impl->hSuspendNotify != nullptr);
 }
 
 void ServiceShell::UnregisterPowerNotifications() {
-    if (m_hDisplayNotify) {
-        UnregisterPowerSettingNotification(m_hDisplayNotify);
-        m_hDisplayNotify = nullptr;
+    if (m_impl->hDisplayNotify) {
+        UnregisterPowerSettingNotification(m_impl->hDisplayNotify);
+        m_impl->hDisplayNotify = nullptr;
     }
-    if (m_hLidNotify) {
-        UnregisterPowerSettingNotification(m_hLidNotify);
-        m_hLidNotify = nullptr;
+    if (m_impl->hLidNotify) {
+        UnregisterPowerSettingNotification(m_impl->hLidNotify);
+        m_impl->hLidNotify = nullptr;
     }
-    if (m_hSuspendNotify) {
-        UnregisterPowerSettingNotification(m_hSuspendNotify);
-        m_hSuspendNotify = nullptr;
+    if (m_impl->hSuspendNotify) {
+        UnregisterPowerSettingNotification(m_impl->hSuspendNotify);
+        m_impl->hSuspendNotify = nullptr;
     }
 }
 

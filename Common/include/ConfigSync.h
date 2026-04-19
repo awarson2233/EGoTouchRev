@@ -10,10 +10,11 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#include <sddl.h>
 
 namespace Ipc {
 
-constexpr const wchar_t* kConfigDirtyName = L"Local\\EGoTouchConfigDirty";
+constexpr const wchar_t* kConfigDirtyName = L"Global\\EGoTouchConfigDirty";
 
 class ConfigDirtyFlag {
 public:
@@ -24,14 +25,42 @@ public:
 
     // Open or create the shared flag
     bool Open() {
-        m_mapHandle = CreateFileMappingW(
-            INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE,
-            0, sizeof(std::atomic<uint32_t>), kConfigDirtyName);
+        // Service/UI cross-session security:
+        //   SYSTEM + Administrators: full control
+        //   Interactive Users: read/write access (no full control)
+        constexpr LPCWSTR kConfigDirtySddl =
+            L"D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;IU)";
+        PSECURITY_DESCRIPTOR sd = nullptr;
+        if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                kConfigDirtySddl, SDDL_REVISION_1, &sd, nullptr)) {
+            return false;
+        }
+
+        SECURITY_ATTRIBUTES sa{};
+        sa.nLength = sizeof(sa);
+        sa.lpSecurityDescriptor = sd;
+        sa.bInheritHandle = FALSE;
+
+        m_mapHandle = OpenFileMappingW(
+            FILE_MAP_READ | FILE_MAP_WRITE, FALSE, kConfigDirtyName);
+        if (!m_mapHandle && GetLastError() == ERROR_FILE_NOT_FOUND) {
+            m_mapHandle = CreateFileMappingW(
+                INVALID_HANDLE_VALUE, &sa, PAGE_READWRITE,
+                0, sizeof(std::atomic<uint32_t>), kConfigDirtyName);
+        }
+
+        LocalFree(sd);
+
         if (!m_mapHandle) return false;
         m_flag = static_cast<std::atomic<uint32_t>*>(
-            MapViewOfFile(m_mapHandle, FILE_MAP_ALL_ACCESS,
+            MapViewOfFile(m_mapHandle, FILE_MAP_READ | FILE_MAP_WRITE,
                           0, 0, sizeof(std::atomic<uint32_t>)));
-        return m_flag != nullptr;
+        if (!m_flag) {
+            CloseHandle(m_mapHandle);
+            m_mapHandle = nullptr;
+            return false;
+        }
+        return true;
     }
 
     // App calls this after writing config.ini

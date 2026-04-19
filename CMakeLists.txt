@@ -217,6 +217,15 @@ if (EGO_BUILD_TESTS)
     )
     target_link_libraries(TouchPipelineConfigRoundTripTest PRIVATE Solvers Common)
 
+    add_executable(ServiceProxyConfigMergeTest
+        Tools/tests/ServiceProxyConfigMergeTest.cpp
+        Tools/EGoTouchApp/source/ServiceProxy.cpp
+    )
+    target_include_directories(ServiceProxyConfigMergeTest PRIVATE
+        "${APP_ROOT}/include"
+    )
+    target_link_libraries(ServiceProxyConfigMergeTest PRIVATE Solvers Common)
+
     add_executable(StylusPipelineFastInkTest
         Tools/tests/StylusPipelineFastInkTest.cpp
     )
@@ -226,6 +235,7 @@ if (EGO_BUILD_TESTS)
     add_test(NAME TouchTrackerSilentGapTest COMMAND TouchTrackerSilentGapTest)
     add_test(NAME TouchTrackerStylusSuppressTest COMMAND TouchTrackerStylusSuppressTest)
     add_test(NAME TouchPipelineConfigRoundTripTest COMMAND TouchPipelineConfigRoundTripTest)
+    add_test(NAME ServiceProxyConfigMergeTest COMMAND ServiceProxyConfigMergeTest)
     add_test(NAME StylusPipelineFastInkTest COMMAND StylusPipelineFastInkTest)
 endif()
 

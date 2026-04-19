@@ -25,6 +25,7 @@ bool ServiceProxy::RefreshDynamicDebugSchema() {
     uint16_t totalFields = 0;
     uint16_t schemaVersion = 0;
     uint32_t schemaHash = 0;
+    bool haveSchemaHeader = false;
 
     while (true) {
         Ipc::DebugSchemaRequest reqSchema{};
@@ -47,9 +48,14 @@ bool ServiceProxy::RefreshDynamicDebugSchema() {
             return false;
         }
 
-        schemaVersion = hdr.schemaVersion;
-        schemaHash = hdr.schemaHash;
-        totalFields = hdr.totalFields;
+        if (!haveSchemaHeader) {
+            schemaVersion = hdr.schemaVersion;
+            schemaHash = hdr.schemaHash;
+            totalFields = hdr.totalFields;
+            haveSchemaHeader = true;
+        } else if (schemaVersion != hdr.schemaVersion || schemaHash != hdr.schemaHash || totalFields != hdr.totalFields) {
+            return false;
+        }
 
         size_t cursor = sizeof(Ipc::DebugSchemaResponseHeader);
         for (uint16_t i = 0; i < hdr.returnedFields; ++i) {

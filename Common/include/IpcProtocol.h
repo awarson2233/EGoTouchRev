@@ -16,15 +16,15 @@ enum class IpcCommand : uint8_t {
     EnterDebugMode = 1,   // Request carries shared memory name (wchar_t[])
     ExitDebugMode  = 2,   // Service stops pushing, closes shared memory
     // Hardware control
-    StartRuntime   = 10,
-    StopRuntime    = 11,
+    StartRuntime   = 10,  // Idempotent: success=true when runtime starts OR is already running
+    StopRuntime    = 11,  // Idempotent: success=true when runtime stops OR is already stopped
     // AFE
     AfeCommand     = 20,  // param[0] = AFE_Command, param[1] = uint8_t
     // VHF
     SetVhfEnabled    = 30,
     SetVhfTranspose  = 31,
     // Config
-    ReloadConfig   = 40,  // Force Service to re-read config.ini
+    ReloadConfig   = 40,  // Re-read config.ini; response data may include ReloadConfigSummaryWire
     SaveConfig     = 41,  // Service saves current params to config.ini
     // Logs
     GetLogs        = 50,  // App requests recent log lines from Service
@@ -99,10 +99,13 @@ struct DebugSchemaRequest {
 };
 
 struct DebugSchemaResponseHeader {
+    // Deterministic schema id derived from descriptor content.
+    // It must change whenever field descriptors change, and match DebugSnapshotHeader::schemaVersion.
     uint16_t schemaVersion = 0;
     uint16_t totalFields = 0;
     uint16_t returnedFields = 0;
     uint16_t recordSize = 0;
+    // Full 32-bit content hash of field descriptors (used for stronger schema identity).
     uint32_t schemaHash = 0;
 };
 
@@ -127,6 +130,7 @@ struct DebugFieldSchemaWire {
 };
 
 struct DebugSnapshotHeader {
+    // Must be identical to DebugSchemaResponseHeader::schemaVersion for the same descriptor set.
     uint16_t schemaVersion = 0;
     uint16_t fieldCount = 0;
     uint16_t recordSize = 0;
@@ -139,6 +143,16 @@ struct DebugSnapshotValueWire {
     uint8_t  flags = 0; // bit0: value valid
     uint32_t _reserved0 = 0;
     uint64_t rawValue = 0;
+};
+
+struct ReloadConfigSummaryWire {
+    // Bit layout (LSB-first):
+    // bit0: [Service].mode
+    // bit1: [Service].auto_mode
+    // bit2: [Service].stylus_vhf_enabled
+    uint8_t changedFields = 0;
+    uint8_t appliedFields = 0;
+    uint8_t restartRequiredFields = 0;
 };
 
 struct IpcRequest {

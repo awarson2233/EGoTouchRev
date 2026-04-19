@@ -69,6 +69,21 @@ struct RuntimeSnapshot {
     std::string last_note;
 };
 
+struct RuntimePenState {
+    bool hasConnection = false;
+    bool connected = false;
+
+    bool hasStylusId = false;
+    uint8_t stylusId = 0;
+
+    bool hasCurrentMode = false;
+    Himax::Pen::PenCurrentMode currentMode = Himax::Pen::PenCurrentMode::Unknown;
+    uint8_t currentModeRaw = 0;
+
+    bool hasEraserToggle = false;
+    uint8_t eraserToggle = 0;
+};
+
 // --------------- DeviceRuntime ---------------
 
 class DeviceRuntime {
@@ -105,10 +120,10 @@ public:
     /// 注入 BT MCU 压感值（由 PenBridge 线程写入，StylusPipeline 帧内读取）
     void SetBtMcuPressure(uint16_t p) { m_stylusPipeline.SetBtMcuPressure(p); }
 
-#ifdef _DEBUG
     // Frame push callback for IPC (called after pipeline+VHF in worker loop)
     using FramePushCallback = std::function<void(const Solvers::HeatmapFrame&)>;
-    void SetFramePushCallback(FramePushCallback cb) { m_framePushCb = std::move(cb); }
+#ifdef _DEBUG
+    void SetFramePushCallback(FramePushCallback cb);
 #endif
 
     void IngestSystemEvent(const Host::SystemStateEvent& ev);
@@ -147,6 +162,9 @@ private:
     void SetState(workerState newState);
     std::atomic<workerState> m_state{workerState::quit};
     std::atomic<StopReason> m_stopReason{StopReason::None};
+
+    RuntimePenState m_penState{};
+    mutable std::mutex m_penStateMu;
     std::atomic<bool> m_autoMode{false};
     std::atomic<bool> m_stylusVhfEnabled{true};
     Himax::Chip m_chip;
@@ -170,6 +188,7 @@ private:
     std::string m_lastNote;
     std::atomic<uint64_t> m_nextCmdId{1};
 #ifdef _DEBUG
+    mutable std::mutex m_framePushCbMu;
     FramePushCallback m_framePushCb;
 #endif
 

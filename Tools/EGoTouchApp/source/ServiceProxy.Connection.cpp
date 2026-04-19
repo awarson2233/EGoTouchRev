@@ -119,12 +119,20 @@ bool ServiceProxy::SwitchAfeMode(uint8_t afeCmd, uint8_t param) {
 
 bool ServiceProxy::StartRemoteRuntime() {
     if (!IsLiveControlAllowed()) return false;
-    return m_client.StartRuntime().success;
+    const auto resp = m_client.StartRuntime();
+    if (!resp.success) {
+        LOG_WARN("App", __func__, "IPC", "StartRuntime request failed.");
+    }
+    return resp.success;
 }
 
 bool ServiceProxy::StopRemoteRuntime() {
     if (!IsLiveControlAllowed()) return false;
-    return m_client.StopRuntime().success;
+    const auto resp = m_client.StopRuntime();
+    if (!resp.success) {
+        LOG_WARN("App", __func__, "IPC", "StopRuntime request failed.");
+    }
+    return resp.success;
 }
 
 // ── VHF control ──

@@ -3,28 +3,45 @@
 #include "Logger.h"
 #include <algorithm>
 #include <cstring>
+#include <sddl.h>
 
 namespace Ipc {
+
+namespace {
+
+constexpr LPCWSTR kIpcObjectSddl =
+    L"D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;IU)";
+
+struct ScopedSecurityDescriptor {
+    PSECURITY_DESCRIPTOR value = nullptr;
+    ~ScopedSecurityDescriptor() {
+        if (value) {
+            LocalFree(value);
+        }
+    }
+};
+
+bool BuildIpcSecurityAttributes(SECURITY_ATTRIBUTES& sa,
+                                ScopedSecurityDescriptor& sd) {
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            kIpcObjectSddl, SDDL_REVISION_1, &sd.value, nullptr)) {
+        return false;
+    }
+    sa.nLength = sizeof(sa);
+    sa.lpSecurityDescriptor = sd.value;
+    sa.bInheritHandle = FALSE;
+    return true;
+}
+
+} // namespace
 
 // ─── SharedFrameWriter (Service side) ───────────────────
 
 bool SharedFrameWriter::Open(const wchar_t* name) {
     m_mapHandle = OpenFileMappingW(FILE_MAP_WRITE, FALSE, name);
     if (!m_mapHandle) {
-        // If OpenFileMapping fails, try creating with permissive access
-        // (for cross-session Service writes to App-created mapping)
-        SECURITY_DESCRIPTOR sd{};
-        InitializeSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION);
-        SetSecurityDescriptorDacl(&sd, TRUE, nullptr, FALSE);
-        SECURITY_ATTRIBUTES sa{};
-        sa.nLength = sizeof(sa);
-        sa.lpSecurityDescriptor = &sd;
-        sa.bInheritHandle = FALSE;
-        m_mapHandle = OpenFileMappingW(FILE_MAP_WRITE, FALSE, name);
-        if (!m_mapHandle) {
-            LOG_ERROR("Common", __func__, "IPC", "OpenFileMapping failed: {}",  GetLastError());
-            return false;
-        }
+        LOG_ERROR("Common", __func__, "IPC", "OpenFileMapping failed: {}",  GetLastError());
+        return false;
     }
     m_buf = static_cast<SharedTripleBuffer*>(
         MapViewOfFile(m_mapHandle, FILE_MAP_WRITE, 0, 0,
@@ -48,13 +65,12 @@ bool SharedFrameWriter::Open(const wchar_t* name) {
 }
 
 bool SharedFrameWriter::Create(const wchar_t* name) {
-    SECURITY_DESCRIPTOR sd{};
-    InitializeSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION);
-    SetSecurityDescriptorDacl(&sd, TRUE, nullptr, FALSE);
     SECURITY_ATTRIBUTES sa{};
-    sa.nLength = sizeof(sa);
-    sa.lpSecurityDescriptor = &sd;
-    sa.bInheritHandle = FALSE;
+    ScopedSecurityDescriptor sd;
+    if (!BuildIpcSecurityAttributes(sa, sd)) {
+        LOG_ERROR("Common", __func__, "IPC", "Build mapping security descriptor failed: {}",  GetLastError());
+        return false;
+    }
 
     m_mapHandle = CreateFileMappingW(
         INVALID_HANDLE_VALUE, &sa, PAGE_READWRITE,
@@ -248,14 +264,12 @@ void SharedFrameWriter::Close() {
 // ─── SharedFrameReader (App side) ───────────────────────
 
 bool SharedFrameReader::Create(const wchar_t* name) {
-    // Build permissive security descriptor for cross-session access
-    SECURITY_DESCRIPTOR sd{};
-    InitializeSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION);
-    SetSecurityDescriptorDacl(&sd, TRUE, nullptr, FALSE);
     SECURITY_ATTRIBUTES sa{};
-    sa.nLength = sizeof(sa);
-    sa.lpSecurityDescriptor = &sd;
-    sa.bInheritHandle = FALSE;
+    ScopedSecurityDescriptor sd;
+    if (!BuildIpcSecurityAttributes(sa, sd)) {
+        LOG_ERROR("Common", __func__, "IPC", "Build mapping security descriptor failed: {}",  GetLastError());
+        return false;
+    }
 
     m_mapHandle = CreateFileMappingW(
         INVALID_HANDLE_VALUE, &sa, PAGE_READWRITE,
@@ -330,13 +344,19 @@ bool SharedFrameReader::Read(Solvers::HeatmapFrame& out) {
 #if EGOTOUCH_DIAG
     std::memcpy(out.touchZones.data(), m_data->touchZones, sizeof(m_data->touchZones));
     std::memcpy(out.peakZones.data(), m_data->peakZones, sizeof(m_data->peakZones));
-    out.peaks.clear();
+    if (out.peaks.capacity() < 30) {
+        out.peaks.reserve(30);
+    }
+    out.peaks.resize(m_data->peakCount);
     for (int i = 0; i < m_data->peakCount; ++i) {
-        out.peaks.push_back({m_data->peaks[i].r, m_data->peaks[i].c, m_data->peaks[i].z, m_data->peaks[i].id});
+        out.peaks[static_cast<size_t>(i)] = {m_data->peaks[i].r, m_data->peaks[i].c, m_data->peaks[i].z, m_data->peaks[i].id};
     }
 #endif
 
     // Copy contacts
+    if (out.contacts.capacity() < kMaxSharedContacts) {
+        out.contacts.reserve(kMaxSharedContacts);
+    }
     out.contacts.resize(m_data->contactCount);
     for (int i = 0; i < m_data->contactCount; ++i) {
         const auto& src = m_data->contacts[i];

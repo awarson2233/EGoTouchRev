@@ -1,7 +1,17 @@
 #include "ServiceHost.h"
+
+#include "SystemStateMonitor.h"
+#include "runtime/DeviceRuntime.h"
+#include "penevt/PenEventBridge.h"
+#include "penpress/PenPressureReader.h"
+#include "IpcPipeServer.h"
+#include "SharedFrameBuffer.h"
+#include "ConfigSync.h"
+
 #include "GuiLogSink.h"
 #include "Logger.h"
 #include "IpcProtocol.h"
+
 #include <fstream>
 #include <string>
 #include <algorithm>
@@ -21,6 +31,29 @@
 
 namespace Service {
 
+struct ServiceHost::Impl {
+    std::unique_ptr<Host::SystemStateMonitor> m_sysMonitor;
+    // BT MCU 事件通道 (col00)：设备发现 + 握手 + ACK + 0x7D01 回显 —— 仅 Full 模式
+    std::unique_ptr<Himax::Pen::PenEventBridge> m_penEventBridge;
+    // BT MCU 压力通道 (col01)：'U' 报文读取 + 频率 / 压感数据 —— 仅 Full 模式
+    std::unique_ptr<Himax::Pen::PenPressureReader> m_penPressureReader;
+
+    // IPC
+    Ipc::IpcPipeServer m_ipcServer;
+    Ipc::SharedFrameWriter m_frameWriter;
+    Ipc::ConfigDirtyFlag m_configDirty;
+    bool m_debugMode = false;
+    HANDLE m_logEvent = nullptr;
+    HANDLE m_penEvent = nullptr;
+
+    std::vector<Ipc::DebugFieldSchemaWire> m_debugSchema;
+    uint16_t m_debugSchemaVersion = 0;
+    uint32_t m_debugSchemaHash = 0;
+    std::mutex m_debugFrameMutex;
+    Solvers::HeatmapFrame m_latestDebugFrame;
+    bool m_hasLatestDebugFrame = false;
+};
+
 // ── 固化路径 ──
 static const std::string kConfigPath  = "C:/ProgramData/EGoTouchRev/config.ini";
 
@@ -30,6 +63,23 @@ static const std::wstring kDevicePathSlave     = L"\\\\.\\Global\\SPBTESTTOOL_SL
 static const std::wstring kDevicePathInterrupt = L"\\\\.\\Global\\SPBTESTTOOL_MASTER";
 
 namespace {
+
+enum class ServiceConfigField : uint8_t {
+    Mode = 0,
+    AutoMode = 1,
+    StylusVhfEnabled = 2,
+};
+
+enum class DebugDerivedSourceIndex : int16_t {
+    MasterWasRead = 0,
+    ContactCount = 1,
+    PeakCount = 2,
+    FrameTimestamp = 3,
+};
+
+constexpr uint8_t ToFieldBit(ServiceConfigField field) {
+    return static_cast<uint8_t>(1u << static_cast<uint8_t>(field));
+}
 
 uint64_t EncodeU32(uint32_t value) {
     return static_cast<uint64_t>(value);
@@ -48,6 +98,12 @@ uint64_t EncodeF32(float value) {
     static_assert(sizeof(bits) == sizeof(value), "float/u32 size mismatch");
     std::memcpy(&bits, &value, sizeof(bits));
     return static_cast<uint64_t>(bits);
+}
+
+template <size_t N>
+std::string_view CStrArrayView(const char (&value)[N]) {
+    const auto* end = std::find(value, value + N, '\0');
+    return std::string_view(value, static_cast<size_t>(end - value));
 }
 
 struct LoadPipelineConfigResult {
@@ -192,18 +248,20 @@ bool WriteCanonicalConfig(const std::string& configPath,
 
 } // namespace
 
+ServiceHost::ServiceHost()
+    : m_impl(std::make_unique<Impl>()) {}
+
 ServiceHost::~ServiceHost() {
     Stop();
 }
 
 // ── 模式解析 ──────────────────────────────────────────
-void ServiceHost::ParseServiceConfig(const std::string& configPath) {
+ServiceHost::ServiceConfigState ServiceHost::ParseServiceConfig(const std::string& configPath) const {
+    ServiceConfigState parsed{};
+
     std::ifstream cfg(configPath);
     if (!cfg.is_open()) {
-        m_mode = ServiceMode::Full;
-        m_autoMode = true;
-        m_stylusVhfEnabled = true;
-        return;
+        return parsed;
     }
 
     std::string line;
@@ -222,37 +280,87 @@ void ServiceHost::ParseServiceConfig(const std::string& configPath) {
         if (!ParseIniKeyValue(trimmed, key, val)) continue;
 
         if (key == "mode") {
-            m_mode = (val == "touch_only") ? ServiceMode::TouchOnly : ServiceMode::Full;
+            parsed.mode = (val == "touch_only") ? ServiceMode::TouchOnly : ServiceMode::Full;
         } else if (key == "auto_mode") {
-            m_autoMode = ParseBoolValue(val);
+            parsed.autoMode = ParseBoolValue(val);
         } else if (key == "stylus_vhf_enabled") {
-            m_stylusVhfEnabled = ParseBoolValue(val);
+            parsed.stylusVhfEnabled = ParseBoolValue(val);
         }
     }
+
+    return parsed;
 }
 
-bool ServiceHost::Start() {
-    // ── 0. 解析运行模式 ──────────────────────────────────
-    ParseServiceConfig(kConfigPath);
-    LOG_INFO("Service", __func__, "Boot", "Service mode: {}, AutoMode: {}", m_mode == ServiceMode::Full ? "full" : "touch_only", m_autoMode);
+void ServiceHost::ApplyServiceConfigToRuntime(const ServiceConfigState& config) {
+    if (!m_deviceRuntime) return;
 
-    // ── 1. DeviceRuntime（先创建，后续模块依赖它） ─────────
+    m_deviceRuntime->SetAutoMode(config.autoMode);
+    m_deviceRuntime->SetStylusVhfEnabled(config.stylusVhfEnabled);
+}
+
+ServiceHost::ReloadServiceConfigResult ServiceHost::HandleReloadServiceConfig(
+    const ServiceConfigState& reloadedConfig) {
+    ReloadServiceConfigResult result{};
+
+    const bool modeChanged = (m_configState.mode != reloadedConfig.mode);
+    const bool autoModeChanged = (m_configState.autoMode != reloadedConfig.autoMode);
+    const bool stylusVhfChanged = (m_configState.stylusVhfEnabled != reloadedConfig.stylusVhfEnabled);
+
+    if (modeChanged) {
+        result.changedFields |= ToFieldBit(ServiceConfigField::Mode);
+        result.restartRequiredFields |= ToFieldBit(ServiceConfigField::Mode);
+        LOG_WARN("Service", __func__, "IPC",
+                 "[Service].mode changed from {} to {}; runtime topology remains {} until service restart.",
+                 ServiceModeToConfig(m_configState.mode),
+                 ServiceModeToConfig(reloadedConfig.mode),
+                 ServiceModeToConfig(m_runtimeMode));
+    }
+
+    if (autoModeChanged) {
+        result.changedFields |= ToFieldBit(ServiceConfigField::AutoMode);
+        if (m_deviceRuntime) {
+            m_deviceRuntime->SetAutoMode(reloadedConfig.autoMode);
+            result.appliedFields |= ToFieldBit(ServiceConfigField::AutoMode);
+        }
+        LOG_INFO("Service", __func__, "IPC",
+                 "[Service].auto_mode reloaded to {} (immediate apply).",
+                 reloadedConfig.autoMode ? 1 : 0);
+    }
+
+    if (stylusVhfChanged) {
+        result.changedFields |= ToFieldBit(ServiceConfigField::StylusVhfEnabled);
+        if (m_deviceRuntime) {
+            m_deviceRuntime->SetStylusVhfEnabled(reloadedConfig.stylusVhfEnabled);
+            result.appliedFields |= ToFieldBit(ServiceConfigField::StylusVhfEnabled);
+        }
+        LOG_INFO("Service", __func__, "IPC",
+                 "[Service].stylus_vhf_enabled reloaded to {} (immediate apply).",
+                 reloadedConfig.stylusVhfEnabled ? 1 : 0);
+    }
+
+    m_configState = reloadedConfig;
+    return result;
+}
+
+bool ServiceHost::StartRuntimeAndPipeline(const std::string& configPath) {
     m_deviceRuntime = std::make_unique<DeviceRuntime>(
         kDevicePathMaster, kDevicePathSlave, kDevicePathInterrupt);
-    m_deviceRuntime->SetAutoMode(m_autoMode);
-    m_deviceRuntime->SetStylusVhfEnabled(m_stylusVhfEnabled);
-    BuildDefaultPipeline(kConfigPath);
+    ApplyServiceConfigToRuntime(m_configState);
+    BuildDefaultPipeline(configPath);
     BuildDebugSchema();
 
     if (!m_deviceRuntime->Start()) {
         LOG_ERROR("Service", __func__, "Boot", "DeviceRuntime::Start() failed.");
         return false;
     }
-    LOG_INFO("Service", __func__, "Boot", "DeviceRuntime started (auto mode).");
 
-    // ── 2. SystemStateMonitor（事件 → DeviceRuntime 命令队列） ─
-    m_sysMonitor = std::make_unique<Host::SystemStateMonitor>();
-    bool monitorOk = m_sysMonitor->Start(
+    LOG_INFO("Service", __func__, "Boot", "DeviceRuntime started (auto mode).");
+    return true;
+}
+
+void ServiceHost::StartSystemStateMonitor() {
+    m_impl->m_sysMonitor = std::make_unique<Host::SystemStateMonitor>();
+    const bool monitorOk = m_impl->m_sysMonitor->Start(
         [this](const Host::SystemStateEvent& ev) {
             LOG_INFO("Service", __func__, "Event", "System event: type={}", Host::ToString(ev.type));
             m_deviceRuntime->IngestSystemEvent(ev);
@@ -260,122 +368,175 @@ bool ServiceHost::Start() {
 
     if (!monitorOk) {
         LOG_WARN("Service", __func__, "Monitor", "SystemStateMonitor failed to start; running without system state detection.");
-        m_sysMonitor.reset();
-    } else {
-        LOG_INFO("Service", __func__, "Monitor", "SystemStateMonitor started.");
+        m_impl->m_sysMonitor.reset();
+        return;
     }
 
+    LOG_INFO("Service", __func__, "Monitor", "SystemStateMonitor started.");
+}
+
+void ServiceHost::StartIpcSubsystem() {
 #ifdef _DEBUG
-    // ── 3. Shared Memory (Service creates Global\\ mapping, debug only) ──
-    if (!m_frameWriter.Create(Ipc::kSharedFrameName)) {
+    // Service creates Global\\ mapping in debug builds.
+    if (!m_impl->m_frameWriter.Create(Ipc::kSharedFrameName)) {
         LOG_WARN("Service", __func__, "IPC", "Failed to create shared memory; App debug will be disabled.");
     } else {
         LOG_INFO("Service", __func__, "IPC", "Shared memory created for App connection.");
     }
 #endif
 
-    // ── 4. IPC Pipe Server ──────────────────────────────────
-    // Create log/pen status events for App (cross-session)
     {
         SECURITY_DESCRIPTOR sd{};
         InitializeSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION);
         SetSecurityDescriptorDacl(&sd, TRUE, nullptr, FALSE);
+
         SECURITY_ATTRIBUTES sa{};
         sa.nLength = sizeof(sa);
         sa.lpSecurityDescriptor = &sd;
         sa.bInheritHandle = FALSE;
-        m_logEvent = CreateEventW(&sa, FALSE, FALSE, Ipc::kLogReadyEventName);
-        if (!m_logEvent) {
+
+        m_impl->m_logEvent = CreateEventW(&sa, FALSE, FALSE, Ipc::kLogReadyEventName);
+        if (!m_impl->m_logEvent) {
             LOG_WARN("Service", __func__, "IPC", "CreateEvent failed for LogReadyEvent: {}", GetLastError());
         } else {
-            Common::GuiLogSink::Instance()->SetNotifyEvent(m_logEvent);
+            Common::GuiLogSink::Instance()->SetNotifyEvent(m_impl->m_logEvent);
         }
-        m_penEvent = CreateEventW(&sa, FALSE, FALSE, Ipc::kPenReadyEventName);
-        if (!m_penEvent) {
+
+        m_impl->m_penEvent = CreateEventW(&sa, FALSE, FALSE, Ipc::kPenReadyEventName);
+        if (!m_impl->m_penEvent) {
             LOG_WARN("Service", __func__, "IPC", "CreateEvent failed for PenReadyEvent: {}", GetLastError());
         }
     }
-    m_configDirty.Open();
-    m_ipcServer.SetCommandHandler(
+
+    m_impl->m_configDirty.Open();
+    m_impl->m_ipcServer.SetCommandHandler(
         [this](const Ipc::IpcRequest& req) {
             return HandleIpcCommand(req);
         });
-    m_ipcServer.Start();
+    m_impl->m_ipcServer.Start();
     LOG_INFO("Service", __func__, "Boot", "IPC pipe server started.");
+}
 
-    LOG_INFO("Service", __func__, "Boot", "All modules started.");
-
-    // ── 4. BT MCU（仅 Full 模式启用） ─────────────────────
-    if (m_mode == ServiceMode::Full) {
-        // ── 4a. 事件通道 (col00): 握手 + ACK + 0x7D01 回显 ──
-        m_penEventBridge = std::make_unique<Himax::Pen::PenEventBridge>();
-        if (m_penEvent) m_penEventBridge->SetNotifyEvent(m_penEvent);
-        m_penEventBridge->SetEventCallback(
-            [this](const Himax::Pen::PenEvent& ev) {
-                if (m_deviceRuntime)
-                    m_deviceRuntime->OnPenEvent(ev);
-            });
-        m_penEventBridge->Start();
-        LOG_INFO("Service", __func__, "MCU", "PenEventBridge started (col00 event channel).");
-
-        // ── 4b. 压力通道 (col01): 'U' 报文频率 + 压感 ──────
-        m_penPressureReader = std::make_unique<Himax::Pen::PenPressureReader>();
-        if (m_penEvent) m_penPressureReader->SetNotifyEvent(m_penEvent);
-        m_penPressureReader->SetPressureCallback(
-            [this](uint16_t press) {
-                if (m_deviceRuntime) m_deviceRuntime->SetBtMcuPressure(press);
-            });
-
-        m_penPressureReader->Start();
-        LOG_INFO("Service", __func__, "MCU", "PenPressureReader started (col01 pressure channel).");
-    } else {
+void ServiceHost::StartPenSubsystem() {
+    if (m_runtimeMode != ServiceMode::Full) {
         LOG_INFO("Service", __func__, "MCU", "Pen modules skipped (touch_only mode).");
+        return;
     }
 
+    m_impl->m_penEventBridge = std::make_unique<Himax::Pen::PenEventBridge>();
+    if (m_impl->m_penEvent) {
+        m_impl->m_penEventBridge->SetNotifyEvent(m_impl->m_penEvent);
+    }
+    m_impl->m_penEventBridge->SetEventCallback(
+        [this](const Himax::Pen::PenEvent& ev) {
+            if (m_deviceRuntime) {
+                m_deviceRuntime->OnPenEvent(ev);
+            }
+        });
+    m_impl->m_penEventBridge->Start();
+    LOG_INFO("Service", __func__, "MCU", "PenEventBridge started (col00 event channel).");
+
+    m_impl->m_penPressureReader = std::make_unique<Himax::Pen::PenPressureReader>();
+    if (m_impl->m_penEvent) {
+        m_impl->m_penPressureReader->SetNotifyEvent(m_impl->m_penEvent);
+    }
+    m_impl->m_penPressureReader->SetPressureCallback(
+        [this](uint16_t press) {
+            if (m_deviceRuntime) {
+                m_deviceRuntime->SetBtMcuPressure(press);
+            }
+        });
+    m_impl->m_penPressureReader->Start();
+    LOG_INFO("Service", __func__, "MCU", "PenPressureReader started (col01 pressure channel).");
+}
+
+bool ServiceHost::Start() {
+    m_configState = ParseServiceConfig(kConfigPath);
+    m_runtimeMode = m_configState.mode;
+    LOG_INFO("Service", __func__, "Boot", "Service mode: {}, AutoMode: {}",
+             ServiceModeToConfig(m_configState.mode), m_configState.autoMode);
+
+    if (!StartRuntimeAndPipeline(kConfigPath)) {
+        return false;
+    }
+
+    StartSystemStateMonitor();
+    StartIpcSubsystem();
+    StartPenSubsystem();
+
+    LOG_INFO("Service", __func__, "Boot", "All modules started.");
     return true;
+}
+
+void ServiceHost::StopIpcSubsystem() {
+    m_impl->m_ipcServer.Stop();
+#ifdef _DEBUG
+    if (m_deviceRuntime) {
+        m_deviceRuntime->SetFramePushCallback(nullptr);
+    }
+#endif
+    {
+        std::lock_guard<std::mutex> lk(m_impl->m_debugFrameMutex);
+        m_impl->m_hasLatestDebugFrame = false;
+        m_impl->m_latestDebugFrame = Solvers::HeatmapFrame{};
+    }
+    m_impl->m_debugMode = false;
+
+    m_impl->m_frameWriter.Close();
+    m_impl->m_configDirty.Close();
+
+    if (m_impl->m_logEvent) {
+        Common::GuiLogSink::Instance()->SetNotifyEvent(nullptr);
+        CloseHandle(m_impl->m_logEvent);
+        m_impl->m_logEvent = nullptr;
+    }
+
+    if (m_impl->m_penEvent) {
+        CloseHandle(m_impl->m_penEvent);
+        m_impl->m_penEvent = nullptr;
+    }
+}
+
+void ServiceHost::StopPenSubsystem() {
+    if (m_impl->m_penPressureReader) {
+        m_impl->m_penPressureReader->Stop();
+        m_impl->m_penPressureReader.reset();
+        LOG_INFO("Service", __func__, "MCU", "PenPressureReader stopped.");
+    }
+
+    if (m_impl->m_penEventBridge) {
+        m_impl->m_penEventBridge->Stop();
+        m_impl->m_penEventBridge.reset();
+        LOG_INFO("Service", __func__, "MCU", "PenEventBridge stopped.");
+    }
+}
+
+void ServiceHost::StopSystemStateMonitor() {
+    if (!m_impl->m_sysMonitor) {
+        return;
+    }
+
+    m_impl->m_sysMonitor->Stop();
+    m_impl->m_sysMonitor.reset();
+    LOG_INFO("Service", __func__, "Monitor", "SystemStateMonitor stopped.");
+}
+
+void ServiceHost::StopRuntimeSubsystem() {
+    if (!m_deviceRuntime) {
+        return;
+    }
+
+    m_deviceRuntime->Stop();
+    m_deviceRuntime.reset();
+    LOG_INFO("Service", __func__, "Device", "DeviceRuntime stopped.");
 }
 
 void ServiceHost::Stop() {
     // 逆序停止（后启动的先停止）
-
-    m_ipcServer.Stop();
-    m_frameWriter.Close();
-    m_configDirty.Close();
-    m_debugMode = false;
-    if (m_logEvent) {
-        Common::GuiLogSink::Instance()->SetNotifyEvent(nullptr);
-        CloseHandle(m_logEvent);
-        m_logEvent = nullptr;
-    }
-    if (m_penEvent) {
-        CloseHandle(m_penEvent);
-        m_penEvent = nullptr;
-    }
-
-    // Pen 通道（先停，避免回调中仍访问 DeviceRuntime）
-    if (m_penPressureReader) {
-        m_penPressureReader->Stop();
-        m_penPressureReader.reset();
-        LOG_INFO("Service", __func__, "MCU", "PenPressureReader stopped.");
-    }
-    if (m_penEventBridge) {
-        m_penEventBridge->Stop();
-        m_penEventBridge.reset();
-        LOG_INFO("Service", __func__, "MCU", "PenEventBridge stopped.");
-    }
-
-    if (m_sysMonitor) {
-
-        m_sysMonitor->Stop();
-        m_sysMonitor.reset();
-        LOG_INFO("Service", __func__, "Monitor", "SystemStateMonitor stopped.");
-    }
-
-    if (m_deviceRuntime) {
-        m_deviceRuntime->Stop();
-        m_deviceRuntime.reset();
-        LOG_INFO("Service", __func__, "Device", "DeviceRuntime stopped.");
-    }
+    StopIpcSubsystem();
+    StopPenSubsystem();
+    StopSystemStateMonitor();
+    StopRuntimeSubsystem();
 
     LOG_INFO("Service", __func__, "Shutdown", "All modules stopped.");
 }
@@ -426,7 +587,7 @@ static LoadPipelineConfigResult LoadPipelineConfig(
 }
 
 // ── Pipeline 构建 ──────────────────────────────
-void ServiceHost::CopyCString(char* dst, size_t dstSize, const std::string& src) {
+void ServiceHost::CopyCString(char* dst, size_t dstSize, std::string_view src) {
     if (!dst || dstSize == 0) return;
     std::memset(dst, 0, dstSize);
     if (src.empty()) return;
@@ -434,7 +595,7 @@ void ServiceHost::CopyCString(char* dst, size_t dstSize, const std::string& src)
     std::memcpy(dst, src.data(), n);
 }
 
-uint32_t ServiceHost::HashDebugSchema(const std::vector<DebugFieldDef>& defs) {
+uint32_t ServiceHost::HashDebugSchema(const std::vector<Ipc::DebugFieldSchemaWire>& defs) {
     uint32_t h = 2166136261u;
     auto hashBytes = [&h](const void* p, size_t n) {
         const auto* b = reinterpret_cast<const uint8_t*>(p);
@@ -443,27 +604,42 @@ uint32_t ServiceHost::HashDebugSchema(const std::vector<DebugFieldDef>& defs) {
             h *= 16777619u;
         }
     };
+
     for (const auto& d : defs) {
         hashBytes(&d.fieldId, sizeof(d.fieldId));
-        const uint8_t t = static_cast<uint8_t>(d.valueType);
-        const uint8_t sk = static_cast<uint8_t>(d.sourceKind);
-        const uint8_t dt = static_cast<uint8_t>(d.dvrTarget);
-        const uint8_t pm = static_cast<uint8_t>(d.dvrPositionMode);
-        hashBytes(&t, sizeof(t));
-        hashBytes(&sk, sizeof(sk));
+        hashBytes(&d.valueType, sizeof(d.valueType));
+        hashBytes(&d.sourceKind, sizeof(d.sourceKind));
         hashBytes(&d.sourceIndex, sizeof(d.sourceIndex));
         hashBytes(&d.uiOrder, sizeof(d.uiOrder));
-        hashBytes(&dt, sizeof(dt));
-        hashBytes(&pm, sizeof(pm));
+        hashBytes(&d.dvrTarget, sizeof(d.dvrTarget));
+        hashBytes(&d.dvrPositionMode, sizeof(d.dvrPositionMode));
         hashBytes(&d.dvrIndex, sizeof(d.dvrIndex));
-        hashBytes(d.key.data(), d.key.size());
-        hashBytes(d.displayName.data(), d.displayName.size());
-        hashBytes(d.unit.data(), d.unit.size());
-        hashBytes(d.uiGroup.data(), d.uiGroup.size());
-        hashBytes(d.dvrColumnName.data(), d.dvrColumnName.size());
-        hashBytes(d.dvrAnchor.data(), d.dvrAnchor.size());
+
+        const std::string_view key = CStrArrayView(d.key);
+        const std::string_view displayName = CStrArrayView(d.displayName);
+        const std::string_view unit = CStrArrayView(d.unit);
+        const std::string_view uiGroup = CStrArrayView(d.uiGroup);
+        const std::string_view dvrColumnName = CStrArrayView(d.dvrColumnName);
+        const std::string_view dvrAnchor = CStrArrayView(d.dvrAnchor);
+
+        hashBytes(key.data(), key.size());
+        hashBytes(displayName.data(), displayName.size());
+        hashBytes(unit.data(), unit.size());
+        hashBytes(uiGroup.data(), uiGroup.size());
+        hashBytes(dvrColumnName.data(), dvrColumnName.size());
+        hashBytes(dvrAnchor.data(), dvrAnchor.size());
     }
+
     return h;
+}
+
+uint16_t ServiceHost::DeriveDebugSchemaVersion(uint32_t schemaHash) {
+    // Update policy: schemaVersion is deterministically derived from descriptor content.
+    // Any descriptor change that affects schemaHash automatically changes schemaVersion.
+    constexpr uint16_t kVersionSalt = 0xA5C3u;
+    const uint16_t folded = static_cast<uint16_t>((schemaHash & 0xFFFFu) ^ (schemaHash >> 16));
+    const uint16_t version = static_cast<uint16_t>(folded ^ kVersionSalt);
+    return version == 0 ? 1 : version;
 }
 
 uint64_t ServiceHost::EncodePenValue(const Himax::Pen::PenPressureStats& s,
@@ -489,10 +665,12 @@ uint64_t ServiceHost::EncodePenValue(const Himax::Pen::PenPressureStats& s,
 }
 
 uint64_t ServiceHost::EncodeDebugValue(const Solvers::HeatmapFrame& frame,
-                                       const DebugFieldDef& def,
+                                       const Ipc::DebugFieldSchemaWire& def,
                                        bool& valid) {
     valid = true;
-    switch (def.sourceKind) {
+    const auto sourceKind = static_cast<Ipc::DebugSourceKind>(def.sourceKind);
+
+    switch (sourceKind) {
     case Ipc::DebugSourceKind::MasterSuffixWord:
         if (!frame.masterSuffixValid || def.sourceIndex < 0 || def.sourceIndex >= Frame::kMasterSuffixWords) {
             valid = false;
@@ -532,12 +710,19 @@ uint64_t ServiceHost::EncodeDebugValue(const Solvers::HeatmapFrame& frame,
         valid = false;
         return 0;
     case Ipc::DebugSourceKind::DerivedField:
-        if (def.key == "master_was_read") return EncodeBool(frame.masterWasRead);
-        if (def.key == "contact_count") return EncodeU32(static_cast<uint32_t>(frame.contacts.size()));
-        if (def.key == "peak_count") return EncodeU32(static_cast<uint32_t>(frame.peaks.size()));
-        if (def.key == "frame_timestamp") return frame.timestamp;
-        valid = false;
-        return 0;
+        switch (static_cast<DebugDerivedSourceIndex>(def.sourceIndex)) {
+        case DebugDerivedSourceIndex::MasterWasRead:
+            return EncodeBool(frame.masterWasRead);
+        case DebugDerivedSourceIndex::ContactCount:
+            return EncodeU32(static_cast<uint32_t>(frame.contacts.size()));
+        case DebugDerivedSourceIndex::PeakCount:
+            return EncodeU32(static_cast<uint32_t>(frame.peaks.size()));
+        case DebugDerivedSourceIndex::FrameTimestamp:
+            return frame.timestamp;
+        default:
+            valid = false;
+            return 0;
+        }
     default:
         valid = false;
         return 0;
@@ -545,104 +730,132 @@ uint64_t ServiceHost::EncodeDebugValue(const Solvers::HeatmapFrame& frame,
 }
 
 void ServiceHost::BuildDebugSchema() {
-    m_debugSchema.clear();
+    m_impl->m_debugSchema.clear();
 
-    auto add = [this](DebugFieldDef d) {
-        m_debugSchema.push_back(std::move(d));
+    auto add = [this](uint16_t fieldId,
+                      Ipc::DebugValueType valueType,
+                      Ipc::DebugSourceKind sourceKind,
+                      int16_t sourceIndex,
+                      uint8_t uiOrder,
+                      Ipc::DebugDvrTarget dvrTarget,
+                      Ipc::DebugDvrPositionMode dvrPositionMode,
+                      int16_t dvrIndex,
+                      std::string_view key,
+                      std::string_view displayName,
+                      std::string_view unit,
+                      std::string_view uiGroup,
+                      std::string_view dvrColumnName,
+                      std::string_view dvrAnchor) {
+        Ipc::DebugFieldSchemaWire w{};
+        w.fieldId = fieldId;
+        w.valueType = static_cast<uint8_t>(valueType);
+        w.sourceKind = static_cast<uint8_t>(sourceKind);
+        w.sourceIndex = sourceIndex;
+        w.uiOrder = uiOrder;
+        w.dvrTarget = static_cast<uint8_t>(dvrTarget);
+        w.dvrPositionMode = static_cast<uint8_t>(dvrPositionMode);
+        w.dvrIndex = dvrIndex;
+        CopyCString(w.key, sizeof(w.key), key);
+        CopyCString(w.displayName, sizeof(w.displayName), displayName);
+        CopyCString(w.unit, sizeof(w.unit), unit);
+        CopyCString(w.uiGroup, sizeof(w.uiGroup), uiGroup);
+        CopyCString(w.dvrColumnName, sizeof(w.dvrColumnName), dvrColumnName);
+        CopyCString(w.dvrAnchor, sizeof(w.dvrAnchor), dvrAnchor);
+        m_impl->m_debugSchema.push_back(w);
     };
 
-    add({1, Ipc::DebugValueType::UInt32, Ipc::DebugSourceKind::MasterSuffixWord,
-         static_cast<int16_t>(Frame::MasterWord::kTpFreq1), 1,
-         Ipc::DebugDvrTarget::MasterStatus, Ipc::DebugDvrPositionMode::AfterAnchor, -1,
-         "master_tp_freq1", "Master TpFreq1", "", "MasterSuffix",
-         "DBG_MasterTpFreq1", "MasterSuffixValid"});
+    add(1, Ipc::DebugValueType::UInt32, Ipc::DebugSourceKind::MasterSuffixWord,
+        static_cast<int16_t>(Frame::MasterWord::kTpFreq1), 1,
+        Ipc::DebugDvrTarget::MasterStatus, Ipc::DebugDvrPositionMode::AfterAnchor, -1,
+        "master_tp_freq1", "Master TpFreq1", "", "MasterSuffix",
+        "DBG_MasterTpFreq1", "MasterSuffixValid");
 
-    add({2, Ipc::DebugValueType::UInt32, Ipc::DebugSourceKind::MasterSuffixWord,
-         static_cast<int16_t>(Frame::MasterWord::kTpFreq2), 2,
-         Ipc::DebugDvrTarget::MasterStatus, Ipc::DebugDvrPositionMode::AfterAnchor, -1,
-         "master_tp_freq2", "Master TpFreq2", "", "MasterSuffix",
-         "DBG_MasterTpFreq2", "DBG_MasterTpFreq1"});
+    add(2, Ipc::DebugValueType::UInt32, Ipc::DebugSourceKind::MasterSuffixWord,
+        static_cast<int16_t>(Frame::MasterWord::kTpFreq2), 2,
+        Ipc::DebugDvrTarget::MasterStatus, Ipc::DebugDvrPositionMode::AfterAnchor, -1,
+        "master_tp_freq2", "Master TpFreq2", "", "MasterSuffix",
+        "DBG_MasterTpFreq2", "DBG_MasterTpFreq1");
 
-    add({3, Ipc::DebugValueType::UInt32, Ipc::DebugSourceKind::StylusField,
-         static_cast<int16_t>(Ipc::DebugStylusSourceIndex::Pressure), 1,
-         Ipc::DebugDvrTarget::SlaveSuffix, Ipc::DebugDvrPositionMode::AfterAnchor, -1,
-         "stylus_pressure", "Stylus Pressure", "", "Stylus",
-         "DBG_StylusPressure", "Pressure"});
+    add(3, Ipc::DebugValueType::UInt32, Ipc::DebugSourceKind::StylusField,
+        static_cast<int16_t>(Ipc::DebugStylusSourceIndex::Pressure), 1,
+        Ipc::DebugDvrTarget::SlaveSuffix, Ipc::DebugDvrPositionMode::AfterAnchor, -1,
+        "stylus_pressure", "Stylus Pressure", "", "Stylus",
+        "DBG_StylusPressure", "Pressure");
 
-    add({4, Ipc::DebugValueType::Float32, Ipc::DebugSourceKind::StylusField,
-         static_cast<int16_t>(Ipc::DebugStylusSourceIndex::PointX), 2,
-         Ipc::DebugDvrTarget::SlaveSuffix, Ipc::DebugDvrPositionMode::AfterAnchor, -1,
-         "stylus_point_x", "Stylus Point X", "grid", "Stylus",
-         "DBG_StylusPointX", "PointX"});
+    add(4, Ipc::DebugValueType::Float32, Ipc::DebugSourceKind::StylusField,
+        static_cast<int16_t>(Ipc::DebugStylusSourceIndex::PointX), 2,
+        Ipc::DebugDvrTarget::SlaveSuffix, Ipc::DebugDvrPositionMode::AfterAnchor, -1,
+        "stylus_point_x", "Stylus Point X", "grid", "Stylus",
+        "DBG_StylusPointX", "PointX");
 
-    add({5, Ipc::DebugValueType::Float32, Ipc::DebugSourceKind::StylusField,
-         static_cast<int16_t>(Ipc::DebugStylusSourceIndex::PointY), 3,
-         Ipc::DebugDvrTarget::SlaveSuffix, Ipc::DebugDvrPositionMode::AfterAnchor, -1,
-         "stylus_point_y", "Stylus Point Y", "grid", "Stylus",
-         "DBG_StylusPointY", "DBG_StylusPointX"});
+    add(5, Ipc::DebugValueType::Float32, Ipc::DebugSourceKind::StylusField,
+        static_cast<int16_t>(Ipc::DebugStylusSourceIndex::PointY), 3,
+        Ipc::DebugDvrTarget::SlaveSuffix, Ipc::DebugDvrPositionMode::AfterAnchor, -1,
+        "stylus_point_y", "Stylus Point Y", "grid", "Stylus",
+        "DBG_StylusPointY", "DBG_StylusPointX");
 
-    add({13, Ipc::DebugValueType::UInt32, Ipc::DebugSourceKind::StylusField,
-         static_cast<int16_t>(Ipc::DebugStylusSourceIndex::BtSeq), 4,
-         Ipc::DebugDvrTarget::SlaveSuffix, Ipc::DebugDvrPositionMode::AfterAnchor, -1,
-         "stylus_bt_seq", "Stylus BT Seq", "", "Stylus",
-         "DBG_StylusBtSeq", "DBG_StylusPointY"});
+    add(13, Ipc::DebugValueType::UInt32, Ipc::DebugSourceKind::StylusField,
+        static_cast<int16_t>(Ipc::DebugStylusSourceIndex::BtSeq), 4,
+        Ipc::DebugDvrTarget::SlaveSuffix, Ipc::DebugDvrPositionMode::AfterAnchor, -1,
+        "stylus_bt_seq", "Stylus BT Seq", "", "Stylus",
+        "DBG_StylusBtSeq", "DBG_StylusPointY");
 
-    add({14, Ipc::DebugValueType::UInt32, Ipc::DebugSourceKind::StylusField,
-         static_cast<int16_t>(Ipc::DebugStylusSourceIndex::PredictedAgeFrames), 5,
-         Ipc::DebugDvrTarget::SlaveSuffix, Ipc::DebugDvrPositionMode::AfterAnchor, -1,
-         "stylus_predicted_age", "Predicted Age", "frames", "Stylus",
-         "DBG_StylusPredictedAge", "DBG_StylusBtSeq"});
+    add(14, Ipc::DebugValueType::UInt32, Ipc::DebugSourceKind::StylusField,
+        static_cast<int16_t>(Ipc::DebugStylusSourceIndex::PredictedAgeFrames), 5,
+        Ipc::DebugDvrTarget::SlaveSuffix, Ipc::DebugDvrPositionMode::AfterAnchor, -1,
+        "stylus_predicted_age", "Predicted Age", "frames", "Stylus",
+        "DBG_StylusPredictedAge", "DBG_StylusBtSeq");
 
-    add({15, Ipc::DebugValueType::Bool, Ipc::DebugSourceKind::StylusField,
-         static_cast<int16_t>(Ipc::DebugStylusSourceIndex::PressureIsReal), 6,
-         Ipc::DebugDvrTarget::SlaveSuffix, Ipc::DebugDvrPositionMode::AfterAnchor, -1,
-         "stylus_pressure_is_real", "Pressure Is Real", "", "Stylus",
-         "DBG_StylusPressureIsReal", "DBG_StylusPredictedAge"});
+    add(15, Ipc::DebugValueType::Bool, Ipc::DebugSourceKind::StylusField,
+        static_cast<int16_t>(Ipc::DebugStylusSourceIndex::PressureIsReal), 6,
+        Ipc::DebugDvrTarget::SlaveSuffix, Ipc::DebugDvrPositionMode::AfterAnchor, -1,
+        "stylus_pressure_is_real", "Pressure Is Real", "", "Stylus",
+        "DBG_StylusPressureIsReal", "DBG_StylusPredictedAge");
 
-    add({6, Ipc::DebugValueType::UInt32, Ipc::DebugSourceKind::PenBridgeField,
-         static_cast<int16_t>(Ipc::DebugPenSourceIndex::Freq1), 1,
-         Ipc::DebugDvrTarget::None, Ipc::DebugDvrPositionMode::Append, -1,
-         "pen_freq1", "Pen Freq1", "", "PenBridge",
-         "DBG_PenFreq1", ""});
+    add(6, Ipc::DebugValueType::UInt32, Ipc::DebugSourceKind::PenBridgeField,
+        static_cast<int16_t>(Ipc::DebugPenSourceIndex::Freq1), 1,
+        Ipc::DebugDvrTarget::None, Ipc::DebugDvrPositionMode::Append, -1,
+        "pen_freq1", "Pen Freq1", "", "PenBridge",
+        "DBG_PenFreq1", "");
 
-    add({7, Ipc::DebugValueType::UInt32, Ipc::DebugSourceKind::PenBridgeField,
-         static_cast<int16_t>(Ipc::DebugPenSourceIndex::Freq2), 2,
-         Ipc::DebugDvrTarget::None, Ipc::DebugDvrPositionMode::Append, -1,
-         "pen_freq2", "Pen Freq2", "", "PenBridge",
-         "DBG_PenFreq2", ""});
+    add(7, Ipc::DebugValueType::UInt32, Ipc::DebugSourceKind::PenBridgeField,
+        static_cast<int16_t>(Ipc::DebugPenSourceIndex::Freq2), 2,
+        Ipc::DebugDvrTarget::None, Ipc::DebugDvrPositionMode::Append, -1,
+        "pen_freq2", "Pen Freq2", "", "PenBridge",
+        "DBG_PenFreq2", "");
 
-    add({8, Ipc::DebugValueType::UInt32, Ipc::DebugSourceKind::PenBridgeField,
-         static_cast<int16_t>(Ipc::DebugPenSourceIndex::Press0), 3,
-         Ipc::DebugDvrTarget::None, Ipc::DebugDvrPositionMode::Append, -1,
-         "pen_press0", "Pen Press0", "", "PenBridge",
-         "DBG_PenPress0", ""});
+    add(8, Ipc::DebugValueType::UInt32, Ipc::DebugSourceKind::PenBridgeField,
+        static_cast<int16_t>(Ipc::DebugPenSourceIndex::Press0), 3,
+        Ipc::DebugDvrTarget::None, Ipc::DebugDvrPositionMode::Append, -1,
+        "pen_press0", "Pen Press0", "", "PenBridge",
+        "DBG_PenPress0", "");
 
-    add({9, Ipc::DebugValueType::UInt32, Ipc::DebugSourceKind::PenBridgeField,
-         static_cast<int16_t>(Ipc::DebugPenSourceIndex::Press1), 4,
-         Ipc::DebugDvrTarget::None, Ipc::DebugDvrPositionMode::Append, -1,
-         "pen_press1", "Pen Press1", "", "PenBridge",
-         "DBG_PenPress1", ""});
+    add(9, Ipc::DebugValueType::UInt32, Ipc::DebugSourceKind::PenBridgeField,
+        static_cast<int16_t>(Ipc::DebugPenSourceIndex::Press1), 4,
+        Ipc::DebugDvrTarget::None, Ipc::DebugDvrPositionMode::Append, -1,
+        "pen_press1", "Pen Press1", "", "PenBridge",
+        "DBG_PenPress1", "");
 
-    add({10, Ipc::DebugValueType::UInt32, Ipc::DebugSourceKind::DerivedField,
-         -1, 1,
-         Ipc::DebugDvrTarget::MasterStatus, Ipc::DebugDvrPositionMode::AfterAnchor, -1,
-         "contact_count", "Contact Count", "", "Frame",
-         "DBG_ContactCount", "ContactCount"});
+    add(10, Ipc::DebugValueType::UInt32, Ipc::DebugSourceKind::DerivedField,
+        static_cast<int16_t>(DebugDerivedSourceIndex::ContactCount), 1,
+        Ipc::DebugDvrTarget::MasterStatus, Ipc::DebugDvrPositionMode::AfterAnchor, -1,
+        "contact_count", "Contact Count", "", "Frame",
+        "DBG_ContactCount", "ContactCount");
 
-    add({11, Ipc::DebugValueType::UInt32, Ipc::DebugSourceKind::DerivedField,
-         -1, 2,
-         Ipc::DebugDvrTarget::MasterStatus, Ipc::DebugDvrPositionMode::AfterAnchor, -1,
-         "peak_count", "Peak Count", "", "Frame",
-         "DBG_PeakCount", "DBG_ContactCount"});
+    add(11, Ipc::DebugValueType::UInt32, Ipc::DebugSourceKind::DerivedField,
+        static_cast<int16_t>(DebugDerivedSourceIndex::PeakCount), 2,
+        Ipc::DebugDvrTarget::MasterStatus, Ipc::DebugDvrPositionMode::AfterAnchor, -1,
+        "peak_count", "Peak Count", "", "Frame",
+        "DBG_PeakCount", "DBG_ContactCount");
 
-    add({12, Ipc::DebugValueType::Bool, Ipc::DebugSourceKind::DerivedField,
-         -1, 3,
-         Ipc::DebugDvrTarget::MasterStatus, Ipc::DebugDvrPositionMode::AfterAnchor, -1,
-         "master_was_read", "Master Was Read", "", "Frame",
-         "DBG_MasterWasRead", "DBG_PeakCount"});
+    add(12, Ipc::DebugValueType::Bool, Ipc::DebugSourceKind::DerivedField,
+        static_cast<int16_t>(DebugDerivedSourceIndex::MasterWasRead), 3,
+        Ipc::DebugDvrTarget::MasterStatus, Ipc::DebugDvrPositionMode::AfterAnchor, -1,
+        "master_was_read", "Master Was Read", "", "Frame",
+        "DBG_MasterWasRead", "DBG_PeakCount");
 
-    m_debugSchemaHash = HashDebugSchema(m_debugSchema);
-    m_debugSchemaVersion = 1;
+    m_impl->m_debugSchemaHash = HashDebugSchema(m_impl->m_debugSchema);
+    m_impl->m_debugSchemaVersion = DeriveDebugSchemaVersion(m_impl->m_debugSchemaHash);
 }
 
 void ServiceHost::BuildDefaultPipeline(const std::string& configPath) {
@@ -662,7 +875,7 @@ void ServiceHost::BuildDefaultPipeline(const std::string& configPath) {
     if (loadResult.migrated) {
         std::string backupPath;
         if (BackupConfigFile(configPath, backupPath)) {
-            if (WriteCanonicalConfig(configPath, m_mode, m_autoMode, m_stylusVhfEnabled, tp, sp)) {
+            if (WriteCanonicalConfig(configPath, m_configState.mode, m_configState.autoMode, m_configState.stylusVhfEnabled, tp, sp)) {
                 LOG_INFO("Service", __func__, "Boot",
                          "Migrated legacy pipeline config from {} and rewrote canonical sections. Backup: {}",
                          configPath, backupPath);
@@ -687,123 +900,310 @@ void ServiceHost::BuildDefaultPipeline(const std::string& configPath) {
     }
 }
 
+// ── IPC helpers ──────────────────────────────
+void ServiceHost::HandleIpcEnterDebugMode(Ipc::IpcResponse& resp) {
+#ifdef _DEBUG
+    // Shared memory is already created at startup.
+    // Just activate the frame push callback.
+    if (m_impl->m_frameWriter.IsOpen()) {
+        m_deviceRuntime->SetFramePushCallback(
+            [this](const Solvers::HeatmapFrame& f) {
+                {
+                    std::lock_guard<std::mutex> lk(m_impl->m_debugFrameMutex);
+                    m_impl->m_latestDebugFrame = f;
+                    m_impl->m_hasLatestDebugFrame = true;
+                }
+                m_impl->m_frameWriter.Write(f);
+            });
+        m_impl->m_debugMode = true;
+        resp.success = true;
+        LOG_INFO("Service", __func__, "IPC", "Entered debug mode.");
+    } else {
+        LOG_ERROR("Service", __func__, "IPC", "EnterDebugMode rejected: shared memory not available.");
+    }
+#else
+    LOG_WARN("Service", __func__, "IPC", "EnterDebugMode not available in release build.");
+#endif
+}
+
+void ServiceHost::HandleIpcExitDebugMode(Ipc::IpcResponse& resp) {
+#ifdef _DEBUG
+    m_deviceRuntime->SetFramePushCallback(nullptr);
+    {
+        std::lock_guard<std::mutex> lk(m_impl->m_debugFrameMutex);
+        m_impl->m_hasLatestDebugFrame = false;
+        m_impl->m_latestDebugFrame = Solvers::HeatmapFrame{};
+    }
+    m_impl->m_debugMode = false;
+#endif
+
+    resp.success = true;
+    LOG_INFO("Service", __func__, "IPC", "Exited debug mode.");
+}
+
+void ServiceHost::HandleIpcReloadConfig(Ipc::IpcResponse& resp) {
+    if (!m_deviceRuntime) {
+        return;
+    }
+
+    auto& tp = m_deviceRuntime->GetPipeline();
+    auto& sp = m_deviceRuntime->GetStylusPipeline();
+    const auto loadResult = LoadPipelineConfig(kConfigPath, tp, &sp);
+    if (!loadResult.fileOpened) {
+        LOG_WARN("Service", __func__, "IPC", "ReloadConfig failed: config file not found: {}", kConfigPath);
+        return;
+    }
+
+    const auto reloadedConfig = ParseServiceConfig(kConfigPath);
+    const auto reloadState = HandleReloadServiceConfig(reloadedConfig);
+
+    if (loadResult.migrated) {
+        std::string backupPath;
+        if (BackupConfigFile(kConfigPath, backupPath)) {
+            if (WriteCanonicalConfig(kConfigPath, m_configState.mode, m_configState.autoMode, m_configState.stylusVhfEnabled, tp, sp)) {
+                LOG_INFO("Service", __func__, "IPC",
+                         "Reloaded legacy config from {} and rewrote canonical sections. Backup: {}",
+                         kConfigPath, backupPath);
+            } else {
+                LOG_WARN("Service", __func__, "IPC",
+                         "Reloaded legacy config from {} but failed to rewrite canonical config.",
+                         kConfigPath);
+            }
+        } else {
+            LOG_WARN("Service", __func__, "IPC",
+                     "Reloaded legacy config from {} but failed to create backup before migration.",
+                     kConfigPath);
+        }
+    } else {
+        LOG_INFO("Service", __func__, "IPC", "Config reloaded from {}.", kConfigPath);
+    }
+
+    if (reloadState.restartRequiredFields != 0u) {
+        LOG_WARN("Service", __func__, "IPC",
+                 "ReloadConfig completed with restart-required fields. changed=0x{:02X} applied_now=0x{:02X} restart_required=0x{:02X}.",
+                 static_cast<unsigned int>(reloadState.changedFields),
+                 static_cast<unsigned int>(reloadState.appliedFields),
+                 static_cast<unsigned int>(reloadState.restartRequiredFields));
+    } else {
+        LOG_INFO("Service", __func__, "IPC",
+                 "ReloadConfig completed. changed=0x{:02X} applied_now=0x{:02X} restart_required=0x{:02X}.",
+                 static_cast<unsigned int>(reloadState.changedFields),
+                 static_cast<unsigned int>(reloadState.appliedFields),
+                 static_cast<unsigned int>(reloadState.restartRequiredFields));
+    }
+
+    resp.success = true;
+    resp.dataLen = 3;
+    resp.data[0] = reloadState.changedFields;
+    resp.data[1] = reloadState.appliedFields;
+    resp.data[2] = reloadState.restartRequiredFields;
+}
+
+void ServiceHost::HandleIpcSaveConfig(Ipc::IpcResponse& resp) {
+    if (!m_deviceRuntime) {
+        return;
+    }
+
+    auto& tp = m_deviceRuntime->GetPipeline();
+    auto& sp = m_deviceRuntime->GetStylusPipeline();
+    if (WriteCanonicalConfig(kConfigPath, m_configState.mode, m_configState.autoMode, m_configState.stylusVhfEnabled, tp, sp)) {
+        resp.success = true;
+        LOG_INFO("Service", __func__, "IPC", "Config saved to {}.", kConfigPath);
+    }
+}
+
+void ServiceHost::HandleIpcGetLogs(Ipc::IpcResponse& resp) {
+    auto lines = Common::GuiLogSink::Instance()->DrainNewLines();
+    std::string packed;
+    for (const auto& l : lines) {
+        if (packed.size() + l.size() + 1 > sizeof(resp.data)) {
+            break;
+        }
+        packed += l;
+        packed += '\n';
+    }
+
+    resp.dataLen = static_cast<uint16_t>(std::min(packed.size(), sizeof(resp.data)));
+    std::memcpy(resp.data, packed.data(), resp.dataLen);
+    resp.success = true;
+}
+
+void ServiceHost::HandleIpcGetPenBridgeStatus(Ipc::IpcResponse& resp) {
+    // Pack: [evtRunning:1][pressRunning:1][reportType:1][freq1:1][freq2:1]
+    //       [p0L:1][p0H:1][p1L:1][p1H:1][p2L:1][p2H:1][p3L:1][p3H:1]
+    // Total: 13 bytes
+    uint8_t buf[13] = {};
+    buf[0] = (m_impl->m_penEventBridge && m_impl->m_penEventBridge->IsRunning()) ? 1 : 0;
+    buf[1] = (m_impl->m_penPressureReader && m_impl->m_penPressureReader->IsRunning()) ? 1 : 0;
+    if (m_impl->m_penPressureReader) {
+        auto s = m_impl->m_penPressureReader->GetPressureStats();
+        buf[2] = s.reportType;
+        buf[3] = s.freq1;
+        buf[4] = s.freq2;
+        for (int k = 0; k < 4; ++k) {
+            buf[5 + k * 2] = static_cast<uint8_t>(s.press[k] & 0xFF);
+            buf[5 + k * 2 + 1] = static_cast<uint8_t>(s.press[k] >> 8);
+        }
+    }
+
+    std::memcpy(resp.data, buf, sizeof(buf));
+    resp.dataLen = sizeof(buf);
+    resp.success = true;
+}
+
+void ServiceHost::HandleIpcGetDebugSchema(const Ipc::IpcRequest& req, Ipc::IpcResponse& resp) {
+    Ipc::DebugSchemaRequest reqSchema{};
+    if (req.paramLen >= sizeof(Ipc::DebugSchemaRequest)) {
+        std::memcpy(&reqSchema, req.param, sizeof(Ipc::DebugSchemaRequest));
+    }
+
+    const uint16_t total = static_cast<uint16_t>(m_impl->m_debugSchema.size());
+    const uint16_t offset = std::min<uint16_t>(reqSchema.offset, total);
+    const uint16_t maxByPayload = static_cast<uint16_t>(
+        (sizeof(resp.data) - sizeof(Ipc::DebugSchemaResponseHeader)) / sizeof(Ipc::DebugFieldSchemaWire));
+    uint16_t requested = reqSchema.limit == 0 ? maxByPayload : reqSchema.limit;
+    requested = std::min<uint16_t>(requested, maxByPayload);
+    const uint16_t available = static_cast<uint16_t>(total - offset);
+    const uint16_t take = std::min<uint16_t>(requested, available);
+
+    Ipc::DebugSchemaResponseHeader hdr{};
+    hdr.schemaVersion = m_impl->m_debugSchemaVersion;
+    hdr.totalFields = total;
+    hdr.returnedFields = take;
+    hdr.recordSize = static_cast<uint16_t>(sizeof(Ipc::DebugFieldSchemaWire));
+    hdr.schemaHash = m_impl->m_debugSchemaHash;
+
+    std::memcpy(resp.data, &hdr, sizeof(hdr));
+    size_t cursor = sizeof(hdr);
+    for (uint16_t i = 0; i < take; ++i) {
+        const auto& def = m_impl->m_debugSchema[offset + i];
+        std::memcpy(resp.data + cursor, &def, sizeof(def));
+        cursor += sizeof(def);
+    }
+
+    resp.dataLen = static_cast<uint16_t>(cursor);
+    resp.success = true;
+}
+
+void ServiceHost::HandleIpcGetDebugSnapshot(Ipc::IpcResponse& resp) {
+    Solvers::HeatmapFrame frame{};
+    bool hasFrame = false;
+    {
+        std::lock_guard<std::mutex> lk(m_impl->m_debugFrameMutex);
+        if (m_impl->m_hasLatestDebugFrame) {
+            frame = m_impl->m_latestDebugFrame;
+            hasFrame = true;
+        }
+    }
+
+    const bool evtRunning = (m_impl->m_penEventBridge && m_impl->m_penEventBridge->IsRunning());
+    const bool pressRunning = (m_impl->m_penPressureReader && m_impl->m_penPressureReader->IsRunning());
+    Himax::Pen::PenPressureStats penStats{};
+    if (m_impl->m_penPressureReader) {
+        penStats = m_impl->m_penPressureReader->GetPressureStats();
+    }
+
+    const uint16_t maxByPayload = static_cast<uint16_t>(
+        (sizeof(resp.data) - sizeof(Ipc::DebugSnapshotHeader)) / sizeof(Ipc::DebugSnapshotValueWire));
+    const uint16_t take = std::min<uint16_t>(static_cast<uint16_t>(m_impl->m_debugSchema.size()), maxByPayload);
+
+    Ipc::DebugSnapshotHeader hdr{};
+    hdr.schemaVersion = m_impl->m_debugSchemaVersion;
+    hdr.fieldCount = take;
+    hdr.recordSize = static_cast<uint16_t>(sizeof(Ipc::DebugSnapshotValueWire));
+    std::memcpy(resp.data, &hdr, sizeof(hdr));
+
+    size_t cursor = sizeof(hdr);
+    for (uint16_t i = 0; i < take; ++i) {
+        const auto& def = m_impl->m_debugSchema[i];
+        bool valid = true;
+        uint64_t raw = 0;
+
+        const auto sourceKind = static_cast<Ipc::DebugSourceKind>(def.sourceKind);
+        if (sourceKind == Ipc::DebugSourceKind::PenBridgeField) {
+            raw = EncodePenValue(penStats, evtRunning, pressRunning, def.sourceIndex, valid);
+        } else if (hasFrame) {
+            raw = EncodeDebugValue(frame, def, valid);
+        } else {
+            valid = false;
+        }
+
+        Ipc::DebugSnapshotValueWire v{};
+        v.fieldId = def.fieldId;
+        v.valueType = def.valueType;
+        v.flags = valid ? 0x1 : 0x0;
+        v.rawValue = raw;
+        std::memcpy(resp.data + cursor, &v, sizeof(v));
+        cursor += sizeof(v);
+    }
+
+    resp.dataLen = static_cast<uint16_t>(cursor);
+    resp.success = true;
+}
+
 // ── IPC Command Handler ──────────────────────────────
-Ipc::IpcResponse ServiceHost::HandleIpcCommand(
-        const Ipc::IpcRequest& req) {
+Ipc::IpcResponse ServiceHost::HandleIpcCommand(const Ipc::IpcRequest& req) {
     Ipc::IpcResponse resp{};
+
     switch (req.command) {
     case Ipc::IpcCommand::Ping:
         resp.success = true;
         break;
 
-    case Ipc::IpcCommand::EnterDebugMode: {
-#ifdef _DEBUG
-        // Shared memory is already created at startup.
-        // Just activate the frame push callback.
-        if (m_frameWriter.IsOpen()) {
-            m_deviceRuntime->SetFramePushCallback(
-                [this](const Solvers::HeatmapFrame& f) {
-                    {
-                        std::lock_guard<std::mutex> lk(m_debugFrameMutex);
-                        m_latestDebugFrame = f;
-                        m_hasLatestDebugFrame = true;
-                    }
-                    m_frameWriter.Write(f);
-                });
-            m_debugMode = true;
-            resp.success = true;
-            LOG_INFO("Service", __func__, "IPC", "Entered debug mode.");
-        } else {
-            LOG_ERROR("Service", __func__, "IPC", "EnterDebugMode rejected: shared memory not available.");
-        }
-#else
-        LOG_WARN("Service", __func__, "IPC", "EnterDebugMode not available in release build.");
-#endif
+    case Ipc::IpcCommand::EnterDebugMode:
+        HandleIpcEnterDebugMode(resp);
         break;
-    }
 
     case Ipc::IpcCommand::ExitDebugMode:
-#ifdef _DEBUG
-        m_deviceRuntime->SetFramePushCallback(nullptr);
-        {
-            std::lock_guard<std::mutex> lk(m_debugFrameMutex);
-            m_hasLatestDebugFrame = false;
-            m_latestDebugFrame = Solvers::HeatmapFrame{};
-        }
-        m_debugMode = false;
-#endif
-        resp.success = true;
-        LOG_INFO("Service", __func__, "IPC", "Exited debug mode.");
+        HandleIpcExitDebugMode(resp);
         break;
 
     case Ipc::IpcCommand::AfeCommand:
         if (req.paramLen >= 2 && m_deviceRuntime) {
-            command cmd{};
-            cmd.type = static_cast<AFE_Command>(req.param[0]);
-            cmd.param = req.param[1];
-            m_deviceRuntime->SubmitCommand(
-                cmd, CommandSource::External, "IPC AFE");
+            command cmd{
+                .type = static_cast<AFE_Command>(req.param[0]),
+                .param = req.param[1],
+            };
+            m_deviceRuntime->SubmitCommand(cmd, CommandSource::External, "IPC AFE");
             resp.success = true;
         }
         break;
 
     case Ipc::IpcCommand::StartRuntime:
         if (m_deviceRuntime) {
-            resp.success = m_deviceRuntime->Start();
+            if (m_deviceRuntime->IsRunning()) {
+                resp.success = true;
+                LOG_INFO("Service", __func__, "IPC", "StartRuntime accepted: runtime already running (idempotent no-op).");
+            } else {
+                resp.success = m_deviceRuntime->Start();
+                if (resp.success) {
+                    LOG_INFO("Service", __func__, "IPC", "StartRuntime accepted: runtime started.");
+                } else {
+                    LOG_WARN("Service", __func__, "IPC", "StartRuntime failed: runtime did not start.");
+                }
+            }
         }
         break;
 
     case Ipc::IpcCommand::StopRuntime:
         if (m_deviceRuntime) {
-            m_deviceRuntime->Stop();
-            resp.success = true;
+            if (!m_deviceRuntime->IsRunning()) {
+                resp.success = true;
+                LOG_INFO("Service", __func__, "IPC", "StopRuntime accepted: runtime already stopped (idempotent no-op).");
+            } else {
+                m_deviceRuntime->Stop();
+                resp.success = true;
+                LOG_INFO("Service", __func__, "IPC", "StopRuntime accepted: runtime stopped.");
+            }
         }
         break;
 
     case Ipc::IpcCommand::ReloadConfig:
-        if (m_deviceRuntime) {
-            // First, re-read [Service] global configs
-            ParseServiceConfig(kConfigPath);
-            m_deviceRuntime->SetStylusVhfEnabled(m_stylusVhfEnabled);
-
-            auto& tp = m_deviceRuntime->GetPipeline();
-            auto& sp = m_deviceRuntime->GetStylusPipeline();
-            const auto loadResult = LoadPipelineConfig(kConfigPath, tp, &sp);
-            if (loadResult.fileOpened) {
-                if (loadResult.migrated) {
-                    std::string backupPath;
-                    if (BackupConfigFile(kConfigPath, backupPath)) {
-                        if (WriteCanonicalConfig(kConfigPath, m_mode, m_autoMode, m_stylusVhfEnabled, tp, sp)) {
-                            LOG_INFO("Service", __func__, "IPC",
-                                     "Reloaded legacy config from {} and rewrote canonical sections. Backup: {}",
-                                     kConfigPath, backupPath);
-                        } else {
-                            LOG_WARN("Service", __func__, "IPC",
-                                     "Reloaded legacy config from {} but failed to rewrite canonical config.",
-                                     kConfigPath);
-                        }
-                    } else {
-                        LOG_WARN("Service", __func__, "IPC",
-                                 "Reloaded legacy config from {} but failed to create backup before migration.",
-                                 kConfigPath);
-                    }
-                } else {
-                    LOG_INFO("Service", __func__, "IPC", "Config reloaded from {}.", kConfigPath);
-                }
-                resp.success = true;
-            }
-        }
+        HandleIpcReloadConfig(resp);
         break;
 
     case Ipc::IpcCommand::SaveConfig:
-        if (m_deviceRuntime) {
-            auto& tp = m_deviceRuntime->GetPipeline();
-            auto& sp = m_deviceRuntime->GetStylusPipeline();
-            if (WriteCanonicalConfig(kConfigPath, m_mode, m_autoMode, m_stylusVhfEnabled, tp, sp)) {
-                resp.success = true;
-                LOG_INFO("Service", __func__, "IPC", "Config saved to {}.", kConfigPath);
-            }
-        }
+        HandleIpcSaveConfig(resp);
         break;
 
     case Ipc::IpcCommand::SetVhfEnabled:
@@ -820,153 +1220,26 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(
         }
         break;
 
-    case Ipc::IpcCommand::GetLogs: {
-        auto lines = Common::GuiLogSink::Instance()->DrainNewLines();
-        std::string packed;
-        for (const auto& l : lines) {
-            if (packed.size() + l.size() + 1 > sizeof(resp.data)) break;
-            packed += l;
-            packed += '\n';
-        }
-        resp.dataLen = static_cast<uint16_t>(
-            std::min(packed.size(), sizeof(resp.data)));
-        std::memcpy(resp.data, packed.data(), resp.dataLen);
-        resp.success = true;
+    case Ipc::IpcCommand::GetLogs:
+        HandleIpcGetLogs(resp);
         break;
-    }
 
-    case Ipc::IpcCommand::GetPenBridgeStatus: {
-        // Pack: [evtRunning:1][pressRunning:1][reportType:1][freq1:1][freq2:1]
-        //       [p0L:1][p0H:1][p1L:1][p1H:1][p2L:1][p2H:1][p3L:1][p3H:1]
-        // Total: 13 bytes
-        uint8_t buf[13] = {};
-        buf[0] = (m_penEventBridge && m_penEventBridge->IsRunning()) ? 1 : 0;
-        buf[1] = (m_penPressureReader && m_penPressureReader->IsRunning()) ? 1 : 0;
-        if (m_penPressureReader) {
-            auto s = m_penPressureReader->GetPressureStats();
-            buf[2]  = s.reportType;
-            buf[3]  = s.freq1;
-            buf[4]  = s.freq2;
-            for (int k = 0; k < 4; ++k) {
-                buf[5 + k * 2]     = static_cast<uint8_t>(s.press[k] & 0xFF);
-                buf[5 + k * 2 + 1] = static_cast<uint8_t>(s.press[k] >> 8);
-            }
-        }
-        std::memcpy(resp.data, buf, sizeof(buf));
-        resp.dataLen = sizeof(buf);
-        resp.success = true;
+    case Ipc::IpcCommand::GetPenBridgeStatus:
+        HandleIpcGetPenBridgeStatus(resp);
         break;
-    }
 
-    case Ipc::IpcCommand::GetDebugSchema: {
-        Ipc::DebugSchemaRequest reqSchema{};
-        if (req.paramLen >= sizeof(Ipc::DebugSchemaRequest)) {
-            std::memcpy(&reqSchema, req.param, sizeof(Ipc::DebugSchemaRequest));
-        }
-
-        const uint16_t total = static_cast<uint16_t>(m_debugSchema.size());
-        const uint16_t offset = std::min<uint16_t>(reqSchema.offset, total);
-        const uint16_t maxByPayload = static_cast<uint16_t>(
-            (sizeof(resp.data) - sizeof(Ipc::DebugSchemaResponseHeader)) / sizeof(Ipc::DebugFieldSchemaWire));
-        uint16_t requested = reqSchema.limit == 0 ? maxByPayload : reqSchema.limit;
-        requested = std::min<uint16_t>(requested, maxByPayload);
-        const uint16_t available = static_cast<uint16_t>(total - offset);
-        const uint16_t take = std::min<uint16_t>(requested, available);
-
-        Ipc::DebugSchemaResponseHeader hdr{};
-        hdr.schemaVersion = m_debugSchemaVersion;
-        hdr.totalFields = total;
-        hdr.returnedFields = take;
-        hdr.recordSize = static_cast<uint16_t>(sizeof(Ipc::DebugFieldSchemaWire));
-        hdr.schemaHash = m_debugSchemaHash;
-
-        std::memcpy(resp.data, &hdr, sizeof(hdr));
-        size_t cursor = sizeof(hdr);
-        for (uint16_t i = 0; i < take; ++i) {
-            const auto& def = m_debugSchema[offset + i];
-            Ipc::DebugFieldSchemaWire w{};
-            w.fieldId = def.fieldId;
-            w.valueType = static_cast<uint8_t>(def.valueType);
-            w.sourceKind = static_cast<uint8_t>(def.sourceKind);
-            w.sourceIndex = def.sourceIndex;
-            w.uiOrder = def.uiOrder;
-            w.dvrTarget = static_cast<uint8_t>(def.dvrTarget);
-            w.dvrPositionMode = static_cast<uint8_t>(def.dvrPositionMode);
-            w.dvrIndex = def.dvrIndex;
-            CopyCString(w.key, sizeof(w.key), def.key);
-            CopyCString(w.displayName, sizeof(w.displayName), def.displayName);
-            CopyCString(w.unit, sizeof(w.unit), def.unit);
-            CopyCString(w.uiGroup, sizeof(w.uiGroup), def.uiGroup);
-            CopyCString(w.dvrColumnName, sizeof(w.dvrColumnName), def.dvrColumnName);
-            CopyCString(w.dvrAnchor, sizeof(w.dvrAnchor), def.dvrAnchor);
-            std::memcpy(resp.data + cursor, &w, sizeof(w));
-            cursor += sizeof(w);
-        }
-
-        resp.dataLen = static_cast<uint16_t>(cursor);
-        resp.success = true;
+    case Ipc::IpcCommand::GetDebugSchema:
+        HandleIpcGetDebugSchema(req, resp);
         break;
-    }
 
-    case Ipc::IpcCommand::GetDebugSnapshot: {
-        Solvers::HeatmapFrame frame{};
-        bool hasFrame = false;
-        {
-            std::lock_guard<std::mutex> lk(m_debugFrameMutex);
-            if (m_hasLatestDebugFrame) {
-                frame = m_latestDebugFrame;
-                hasFrame = true;
-            }
-        }
-
-        const bool evtRunning = (m_penEventBridge && m_penEventBridge->IsRunning());
-        const bool pressRunning = (m_penPressureReader && m_penPressureReader->IsRunning());
-        Himax::Pen::PenPressureStats penStats{};
-        if (m_penPressureReader) {
-            penStats = m_penPressureReader->GetPressureStats();
-        }
-
-        const uint16_t maxByPayload = static_cast<uint16_t>(
-            (sizeof(resp.data) - sizeof(Ipc::DebugSnapshotHeader)) / sizeof(Ipc::DebugSnapshotValueWire));
-        const uint16_t take = std::min<uint16_t>(static_cast<uint16_t>(m_debugSchema.size()), maxByPayload);
-
-        Ipc::DebugSnapshotHeader hdr{};
-        hdr.schemaVersion = m_debugSchemaVersion;
-        hdr.fieldCount = take;
-        hdr.recordSize = static_cast<uint16_t>(sizeof(Ipc::DebugSnapshotValueWire));
-        std::memcpy(resp.data, &hdr, sizeof(hdr));
-
-        size_t cursor = sizeof(hdr);
-        for (uint16_t i = 0; i < take; ++i) {
-            const auto& def = m_debugSchema[i];
-            bool valid = true;
-            uint64_t raw = 0;
-
-            if (def.sourceKind == Ipc::DebugSourceKind::PenBridgeField) {
-                raw = EncodePenValue(penStats, evtRunning, pressRunning, def.sourceIndex, valid);
-            } else if (hasFrame) {
-                raw = EncodeDebugValue(frame, def, valid);
-            } else {
-                valid = false;
-            }
-
-            Ipc::DebugSnapshotValueWire v{};
-            v.fieldId = def.fieldId;
-            v.valueType = static_cast<uint8_t>(def.valueType);
-            v.flags = valid ? 0x1 : 0x0;
-            v.rawValue = raw;
-            std::memcpy(resp.data + cursor, &v, sizeof(v));
-            cursor += sizeof(v);
-        }
-
-        resp.dataLen = static_cast<uint16_t>(cursor);
-        resp.success = true;
+    case Ipc::IpcCommand::GetDebugSnapshot:
+        HandleIpcGetDebugSnapshot(resp);
         break;
-    }
 
     default:
         break;
     }
+
     return resp;
 }
 

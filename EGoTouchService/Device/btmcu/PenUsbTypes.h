@@ -41,6 +41,46 @@ enum class PenSessionState : uint8_t {
     Error,
 };
 
+enum class PenCurrentMode : uint8_t {
+    Unknown = 0,
+    Writing = 1,
+    Hovering = 2,
+    Eraser = 3,
+};
+
+constexpr PenCurrentMode PenCurrentModeFromRaw(uint8_t raw) noexcept {
+    switch (raw) {
+    case 1: return PenCurrentMode::Writing;
+    case 2: return PenCurrentMode::Hovering;
+    case 3: return PenCurrentMode::Eraser;
+    default: return PenCurrentMode::Unknown;
+    }
+}
+
+constexpr const char* ToString(PenCurrentMode mode) noexcept {
+    switch (mode) {
+    case PenCurrentMode::Writing: return "writing";
+    case PenCurrentMode::Hovering: return "hovering";
+    case PenCurrentMode::Eraser: return "eraser";
+    default: return "unknown";
+    }
+}
+
+struct PenSemanticState {
+    bool hasConnection = false;
+    bool connected = false;
+
+    bool hasStylusId = false;
+    uint8_t stylusId = 0;
+
+    bool hasCurrentMode = false;
+    PenCurrentMode currentMode = PenCurrentMode::Unknown;
+    uint8_t currentModeRaw = 0;
+
+    bool hasEraserToggle = false;
+    uint8_t eraserToggle = 0;
+};
+
 struct PenUsbHeader {
     uint8_t reportId     = 0x07;  // byte[0]: HID report type (always 0x07)
     uint8_t hasPayload   = 0x00;  // byte[1]: 0x00=no payload, 0x01=has payload
@@ -59,6 +99,7 @@ struct PenUsbPacket {
 struct PenEvent {
     PenUsbEventCode code = PenUsbEventCode::Unknown;
     std::vector<uint8_t> payload{};
+    PenSemanticState semantic{};
     std::chrono::steady_clock::time_point receivedAt{};
 };
 

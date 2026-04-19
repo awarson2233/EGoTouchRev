@@ -1,18 +1,27 @@
 #pragma once
 
-#include "SystemStateMonitor.h"
-#include "runtime/DeviceRuntime.h"
-#include "penevt/PenEventBridge.h"
-#include "penpress/PenPressureReader.h"
-#include "IpcPipeServer.h"
-#include "SharedFrameBuffer.h"
-#include "ConfigSync.h"
-#include "IpcProtocol.h"
-#include "SolverTypes.h"
+#include <cstddef>
+#include <cstdint>
 #include <memory>
-#include <mutex>
 #include <string>
+#include <string_view>
 #include <vector>
+
+class DeviceRuntime;
+
+namespace Himax::Pen {
+struct PenPressureStats;
+}
+
+namespace Ipc {
+struct DebugFieldSchemaWire;
+struct IpcRequest;
+struct IpcResponse;
+}
+
+namespace Solvers {
+struct HeatmapFrame;
+}
 
 namespace Service {
 
@@ -26,7 +35,7 @@ enum class ServiceMode {
 /// 不知道 SCM 的存在，可以独立测试。
 class ServiceHost {
 public:
-    ServiceHost() = default;
+    ServiceHost();
     ~ServiceHost();
 
     ServiceHost(const ServiceHost&) = delete;
@@ -38,56 +47,34 @@ public:
     /// 逆序停止所有模块
     void Stop();
 
-    ServiceMode GetMode() const { return m_mode; }
+    ServiceMode GetMode() const { return m_runtimeMode; }
 
 private:
-    ServiceMode m_mode = ServiceMode::TouchOnly;
-    bool m_autoMode = true;
-    bool m_stylusVhfEnabled = true;
+    struct Impl;
 
-    std::unique_ptr<DeviceRuntime>                   m_deviceRuntime;
-    std::unique_ptr<Host::SystemStateMonitor>         m_sysMonitor;
-    // BT MCU 事件通道 (col00)：设备发现 + 握手 + ACK + 0x7D01 回显 —— 仅 Full 模式
-    std::unique_ptr<Himax::Pen::PenEventBridge>       m_penEventBridge;
-    // BT MCU 压力通道 (col01)：'U' 报文读取 + 频率 / 压感数据 —— 仅 Full 模式
-    std::unique_ptr<Himax::Pen::PenPressureReader>    m_penPressureReader;
-
-    // IPC
-    Ipc::IpcPipeServer      m_ipcServer;
-    Ipc::SharedFrameWriter  m_frameWriter;
-    Ipc::ConfigDirtyFlag    m_configDirty;
-    bool                    m_debugMode = false;
-    HANDLE                  m_logEvent = nullptr;
-    HANDLE                  m_penEvent = nullptr;
-
-    struct DebugFieldDef {
-        uint16_t fieldId = 0;
-        Ipc::DebugValueType valueType = Ipc::DebugValueType::UInt32;
-        Ipc::DebugSourceKind sourceKind = Ipc::DebugSourceKind::DerivedField;
-        int16_t sourceIndex = -1;
-        uint8_t uiOrder = 0;
-        Ipc::DebugDvrTarget dvrTarget = Ipc::DebugDvrTarget::None;
-        Ipc::DebugDvrPositionMode dvrPositionMode = Ipc::DebugDvrPositionMode::Append;
-        int16_t dvrIndex = -1;
-        std::string key;
-        std::string displayName;
-        std::string unit;
-        std::string uiGroup;
-        std::string dvrColumnName;
-        std::string dvrAnchor;
+    struct ServiceConfigState {
+        ServiceMode mode = ServiceMode::Full;
+        bool autoMode = true;
+        bool stylusVhfEnabled = true;
     };
 
-    std::vector<DebugFieldDef> m_debugSchema;
-    uint16_t m_debugSchemaVersion = 1;
-    uint32_t m_debugSchemaHash = 0;
-    mutable std::mutex m_debugFrameMutex;
-    Solvers::HeatmapFrame m_latestDebugFrame;
-    bool m_hasLatestDebugFrame = false;
+    struct ReloadServiceConfigResult {
+        uint8_t changedFields = 0;
+        uint8_t appliedFields = 0;
+        uint8_t restartRequiredFields = 0;
+    };
 
-    static void CopyCString(char* dst, size_t dstSize, const std::string& src);
-    static uint32_t HashDebugSchema(const std::vector<DebugFieldDef>& defs);
+    ServiceConfigState m_configState{};
+    ServiceMode m_runtimeMode = ServiceMode::Full;
+
+    std::unique_ptr<DeviceRuntime> m_deviceRuntime;
+    std::unique_ptr<Impl> m_impl;
+
+    static void CopyCString(char* dst, size_t dstSize, std::string_view src);
+    static uint32_t HashDebugSchema(const std::vector<Ipc::DebugFieldSchemaWire>& defs);
+    static uint16_t DeriveDebugSchemaVersion(uint32_t schemaHash);
     static uint64_t EncodeDebugValue(const Solvers::HeatmapFrame& frame,
-                                     const DebugFieldDef& def,
+                                     const Ipc::DebugFieldSchemaWire& def,
                                      bool& valid);
     static uint64_t EncodePenValue(const Himax::Pen::PenPressureStats& s,
                                    bool evtRunning,
@@ -96,8 +83,30 @@ private:
                                    bool& valid);
     void BuildDebugSchema();
 
-    void ParseServiceConfig(const std::string& configPath);
+    ServiceConfigState ParseServiceConfig(const std::string& configPath) const;
+    void ApplyServiceConfigToRuntime(const ServiceConfigState& config);
+    ReloadServiceConfigResult HandleReloadServiceConfig(const ServiceConfigState& reloadedConfig);
     void BuildDefaultPipeline(const std::string& configPath);
+
+    bool StartRuntimeAndPipeline(const std::string& configPath);
+    void StartSystemStateMonitor();
+    void StartIpcSubsystem();
+    void StartPenSubsystem();
+
+    void StopIpcSubsystem();
+    void StopPenSubsystem();
+    void StopSystemStateMonitor();
+    void StopRuntimeSubsystem();
+
+    void HandleIpcEnterDebugMode(Ipc::IpcResponse& resp);
+    void HandleIpcExitDebugMode(Ipc::IpcResponse& resp);
+    void HandleIpcReloadConfig(Ipc::IpcResponse& resp);
+    void HandleIpcSaveConfig(Ipc::IpcResponse& resp);
+    void HandleIpcGetLogs(Ipc::IpcResponse& resp);
+    void HandleIpcGetPenBridgeStatus(Ipc::IpcResponse& resp);
+    void HandleIpcGetDebugSchema(const Ipc::IpcRequest& req, Ipc::IpcResponse& resp);
+    void HandleIpcGetDebugSnapshot(Ipc::IpcResponse& resp);
+
     Ipc::IpcResponse HandleIpcCommand(const Ipc::IpcRequest& req);
 };
 

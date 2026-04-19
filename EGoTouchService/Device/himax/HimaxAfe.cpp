@@ -93,8 +93,12 @@ ChipResult<> AfeController::ClearStatus(uint8_t cmd_val) {
     if (m_chip.GetConnectionState() != ConnectionState::Connected)
         return std::unexpected(ChipError::InvalidOperation);
 
-    LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "ClearStatus: 0x{:02X}", static_cast<unsigned>(cmd_val));
-    return {};
+    // WS-2.5 stage: this command path is intentionally explicit about being unsupported
+    // until full protocol semantics are verified and implemented.
+    LOG_WARN("HimaxAFE", __func__, m_chip.GetStateStr(),
+             "ClearStatus is currently unsupported/incomplete (param=0x{:02X})",
+             static_cast<unsigned>(cmd_val));
+    return std::unexpected(ChipError::InvalidOperation);
 }
 
 ChipResult<> AfeController::ForceToScanRate(uint8_t rate_idx) {
