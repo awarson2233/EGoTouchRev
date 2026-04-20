@@ -156,12 +156,16 @@ struct DvrFrameSlot {
         }
 
         // Copy peaks (clamped to fixed capacity)
+#if EGOTOUCH_DIAG
         peakCount = static_cast<uint8_t>(
             std::min(static_cast<int>(src.peaks.size()), kMaxPeaks));
         for (int i = 0; i < peakCount; ++i) {
             const auto& sp = src.peaks[i];
             peaks[i] = { sp.r, sp.c, sp.z, sp.id, 0 };
         }
+#else
+        peakCount = 0;
+#endif
         for (int i = peakCount; i < kMaxPeaks; ++i) {
             peaks[i] = {};
         }

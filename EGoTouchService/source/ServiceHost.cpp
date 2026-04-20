@@ -716,7 +716,11 @@ uint64_t ServiceHost::EncodeDebugValue(const Solvers::HeatmapFrame& frame,
         case DebugDerivedSourceIndex::ContactCount:
             return EncodeU32(static_cast<uint32_t>(frame.contacts.size()));
         case DebugDerivedSourceIndex::PeakCount:
+#if EGOTOUCH_DIAG
             return EncodeU32(static_cast<uint32_t>(frame.peaks.size()));
+#else
+            return EncodeU32(0);
+#endif
         case DebugDerivedSourceIndex::FrameTimestamp:
             return frame.timestamp;
         default:
