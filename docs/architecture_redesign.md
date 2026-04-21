@@ -1,353 +1,158 @@
-# EGoTouch 驱动服务 — 架构文档 (v3)
+# EGoTouch 驱动服务 — 架构文档（Phase 4 收口版）
 
-> **最后更新**: 2026-04-01  
-> **状态**: 文档已与当前代码实现对齐（非规划稿）
+> 最后更新：2026-04-20  
+> 状态：按 Phase 1-3 已落地代码对齐（仅记录当前行为）
 
 ---
 
-## 一、架构演进概述
-
-### 1.1 v3 更新目标（已完成 ✅）
-
-本次 v3 不是再次重构代码，而是对架构文档进行“**代码对齐修订**”，解决 v2 中的若干描述漂移问题。
-
-| # | v2 文档问题 | v3 修正结果 |
-|---|-----------|------------|
-| D1 | Shared Memory 名称写为 `Local\EGoTouchSharedFrame` | ✅ 已修正为 `Global\EGoTouchSharedFrame` |
-| D2 | Touch Pipeline 仍写 9 段且包含 `StylusProcessor` | ✅ 已修正为当前 Service 实际注册的 8 段 |
-| D3 | “第二阶段规划”口径偏重未来态 | ✅ 改为“当前实现 + 风险清单 + 优先级” |
-| D4 | 配置链路描述不完整 | ✅ 明确记录 App 本地写配置 + Service Reload 的现状 |
-| D5 | 调试帧通道在 Release 可用性未说明 | ✅ 明确 `_DEBUG` 分支行为与风险 |
-
-### 1.2 当前实际层次结构
+## 1. 当前架构总览
 
 ```text
-EGoTouchService.exe                     ← 生产服务进程
-  ServiceEntry.cpp                      — wmain: --install/--uninstall/--console
-  ├── ServiceShell                      — SCM 控制码与电源事件桥接
-  │     └── ServiceHost                 — 模块加载器
-  │           ├── DeviceRuntime         — 状态机 + 帧采集 Worker + 命令队列
-  │           │     ├── Himax::Chip     — I2C/USB 硬件独占
-  │           │     ├── FramePipeline   — Touch 算法管线 (8 stages)
-  │           │     ├── StylusPipeline  — Stylus 独立管线
-  │           │     └── VhfReporter     — HID VHF 注入
-  │           ├── SystemStateMonitor    — 亮灭屏/Lid/Resume/Shutdown 事件
-  │           ├── PenEventBridge        — BT MCU 事件通道 (col00)
-  │           ├── PenPressureReader     — BT MCU 压力通道 (col01)
-  │           ├── IpcPipeServer         — Named Pipe IPC 命令通道
-  │           └── SharedFrameWriter     — Shared Memory 帧推送（Debug）
+EGoTouchService.exe
+  ServiceShell
+    -> ServiceHost
+       -> DeviceRuntime
+       -> Host::SystemStateMonitor
+       -> IpcPipeServer
+       -> PenEventBridge / PenPressureReader (full 模式)
+       -> SharedFrameWriter (Debug)
 
-EGoTouchApp.exe                         ← 调试诊断上位机 (Tools/)
-  ApplicationEntry.cpp                  — ImGui DX11 主循环
-  ├── ServiceProxy                      — Pipe + SharedMem 客户端代理
-  │     ├── IpcPipeClient               — 命令通道客户端
-  │     ├── SharedFrameReader           — 帧数据读取
-  │     ├── FramePipeline (local copy)  — GUI 参数镜像
-  │     └── DVR RingBuffer              — 本地回放缓存
-  └── DiagnosticsWorkbench              — 调试 UI 面板
-
-BtMcuTestTool.exe                       ← BT MCU 协议验证工具
+EGoTouchApp.exe
+  ServiceProxy
+    -> IpcPipeClient
+    -> SharedFrameReader
+    -> 本地 Touch/Stylus 配置镜像（UI 编辑用）
 ```
 
-### 1.3 当前设计亮点
+核心边界：
 
-**核心已落地能力：**
-
-1. `ServiceShell + ServiceHost + DeviceRuntime` 分层明确，服务主链稳定。
-2. 触摸和手写笔处理链独立，便于分开调试与禁用。
-3. App 通过 `ServiceProxy` 代理通信，不再直接访问硬件。
-4. 系统电源事件已闭环接入到 Runtime 状态机。
-5. 支持 `full / touch_only` 运行模式切换。
+1. **配置权威语义在 Service**（snapshot/patch/persist）
+2. **system-state 归一化在 Host::SystemStateMonitor**
+3. **DeviceRuntime 以 façade 暴露，不再泄漏内部 pipeline/VHF 对象**
 
 ---
 
-## 二、当前模块详解
+## 2. 配置链路（Service-owned + thin-client 语义）
 
-### 2.1 服务端三层架构
+### 2.1 已落地的 canonical 命令
 
-```mermaid
-flowchart TD
-    subgraph SHELL["ServiceShell（最外层壳）"]
-        SCM["SCM 注册 / 控制台回退<br/>SvcMain() / RunAsConsole()"]
-    end
+`IpcCommand` 已包含：
 
-    SCM -->|"Start() / Stop()"| HOST
+- `GetConfigSnapshot` (`42`)
+- `ApplyConfigPatch` (`43`)
+- `PersistConfig` (`44`)
 
-    subgraph HOST["ServiceHost（模块加载器）"]
-        SSM["SystemStateMonitor<br/>NamedEvent 监听"]
-        IPC["IpcPipeServer<br/>Named Pipe 命令"]
-        PE["PenEventBridge<br/>BT MCU 事件通道"]
-        PP["PenPressureReader<br/>BT MCU 压力通道"]
-        SFW["SharedFrameWriter<br/>Debug 帧推送"]
+`ServiceHost` 已实现对应处理，并返回 typed wire：
 
-        subgraph DR["DeviceRuntime（设备维护 + 处理）"]
-            CQ["命令队列 + Worker"]
-            CHIP["Himax::Chip"]
-            TP["FramePipeline<br/>Touch 8-stage"]
-            SP["StylusPipeline"]
-            VHF["VhfReporter<br/>HID 注入"]
-        end
-    end
+- `ConfigSnapshotWire`
+- `ConfigMutationResultWire`
+- `PersistConfigResponseWire`
 
-    SSM -->|"IngestSystemEvent()"| CQ
-    IPC -->|"SubmitCommand / SetVhf / ReloadConfig"| CQ
-    PE -->|"InitStylus / DisconnectStylus"| CQ
-    PP -->|"SetBtMcuPressure"| SP
-    CQ -->|"AFE 命令"| CHIP
-    CHIP -->|"GetFrame"| TP
-    CHIP -->|"rawData"| SP
-    TP -->|"TouchPacket"| VHF
-    SP -->|"StylusPacket"| VHF
-    DR -->|"FramePushCallback"| SFW
-```
+### 2.2 desired / active 语义
 
-### 2.2 IPC 通信协议
+当前快照明确区分：
 
-**命令通道**: `\\.\pipe\EGoTouchControl`
+- `desiredMode`：配置目标模式
+- `activeMode`：当前 runtime 实际模式
 
-| 命令 | 方向 | 用途 |
-|------|------|------|
-| `Ping` | App→Svc | 连接探活 |
-| `EnterDebugMode` / `ExitDebugMode` | App→Svc | 控制调试帧推送 |
-| `StartRuntime` / `StopRuntime` | App→Svc | 远程启停 Runtime |
-| `AfeCommand` | App→Svc | AFE 控制命令 |
-| `SetVhfEnabled` / `SetVhfTranspose` | App→Svc | VHF 输出控制 |
-| `SetAutoAfeSync` | App→Svc | 当前为 placeholder（返回成功） |
-| `ReloadConfig` / `SaveConfig` | App→Svc | 配置读取/保存 |
-| `GetLogs` | App→Svc | 拉取 Service 端日志 |
-| `GetPenBridgeStatus` | App→Svc | 查询 Pen 通道运行状态与压力数据 |
+App 侧 `ServiceProxy` 已分别维护镜像（desired/active），不再把两者混成单一 `mode` 语义。
 
-**帧通道**: Shared Memory `Global\EGoTouchSharedFrame`
+### 2.3 当前兼容行为（仍存在）
 
-### 2.3 DeviceRuntime 状态机
+为兼容既有 pipeline 配置流程，App 端 `SaveConfig()` 在已连接模式下仍会：
 
-```mermaid
-stateDiagram-v2
-    [*] --> quit
+1. 先走 `ApplyConfigPatch + PersistConfig` 更新 `[Service]`
+2. 本地合并写入 touch/stylus pipeline section
+3. 调用 `ReloadConfig` 触发服务重载 pipeline
 
-    quit --> ready : Start()
-    ready --> streaming : Chip::Init 成功
-    ready --> recover : Chip::Init 失败
-
-    streaming --> recover : 连续读帧失败达到阈值
-    streaming --> suspend : ScreenOff/LidOff
-    streaming --> quit : Shutdown/Stop
-
-    recover --> streaming : 恢复成功
-    recover --> suspend : 超过恢复上限
-    recover --> quit : Shutdown/Stop
-
-    suspend --> ready : DisplayOn/LidOn/Resume
-    suspend --> quit : Shutdown/Stop
-
-    quit --> [*]
-```
-
-**状态说明：**
-
-| 状态 | Worker 行为 |
-|------|------------|
-| `ready` | auto mode 下尝试 `Chip::Init()` |
-| `streaming` | `GetFrame()` + Touch/Stylus 处理 + VHF 上报 |
-| `recover` | `check_bus()` + `Init()` 重试 |
-| `suspend` | `HoldReset()` 后低功耗等待唤醒事件 |
-| `quit` | 退出线程并释放运行态 |
-
-### 2.4 线程汇总
-
-| 线程 | 所属 | 职责 | 创建时机 |
-|------|------|------|---------|
-| `DeviceRuntime::WorkerMain` | DeviceRuntime | 状态机 + 采帧 + Pipeline + VHF | `DeviceRuntime::Start()` |
-| `SystemStateMonitor::WorkerLoop` | Host | 监听 NamedEvent 并回调 | `ServiceHost::Start()` |
-| `IpcPipeServer::ServerLoop` | Common | IPC 连接与命令分发 | `ServiceHost::Start()` |
-| `PenEventBridge` 线程 | Device/penevt | BT 事件通道读取与处理 | `mode=full` 时 |
-| `PenPressureReader` 线程 | Device/penpress | BT 压力通道读取 | `mode=full` 时 |
-| `ServiceProxy::PollLoop` | App | 轮询 SharedMem 帧数据 | App 连接后 |
-| `ServiceProxy::DiscoveryLoop` | App | 自动发现并重连 Service | App 启动后 |
-
-### 2.5 Engine Pipeline 处理链（当前实现）
-
-```text
-Touch Pipeline (Service 侧注册顺序，共 8 段):
-  1. MasterFrameParser
-  2. BaselineSubtraction
-  3. CMFProcessor
-  4. GridIIRProcessor
-  5. FeatureExtractor
-  6. TouchTracker
-  7. CoordinateFilter
-  8. TouchGestureStateMachine
-
-Stylus Pipeline:
-  StylusPipeline
-    -> GridPeakDetector
-    -> CoordinateSolver
-    -> CoorPostProcessor
-    -> StylusPacket
-```
+因此当前是“Service 负责 `[Service]` 语义 + pipeline section 兼容重载”的混合阶段。
 
 ---
 
-## 三、目录结构（当前）
+## 3. System-state 语义归一化 ownership
 
-```text
-EGoTouchRev-rebuild/
-├── CMakeLists.txt
-├── Common/
-│   ├── include/
-│   │   ├── Logger.h / GuiLogSink.h
-│   │   ├── IpcProtocol.h / IpcPipeServer.h / IpcPipeClient.h
-│   │   ├── SharedFrameBuffer.h
-│   │   └── ConfigSync.h
-│   └── source/
-│
-├── EGoTouchService/
-│   ├── include/                      ← ServiceShell.h / ServiceHost.h
-│   ├── source/                       ← ServiceEntry.cpp / ServiceShell.cpp / ServiceHost.cpp
-│   ├── Device/
-│   │   ├── runtime/                  ← DeviceRuntime
-│   │   ├── himax/                    ← HimaxChip / HimaxAfe / Protocol / Registers
-│   │   ├── vhf/                      ← VhfReporter
-│   │   ├── btmcu/                    ← BT HID transport/channel
-│   │   ├── penevt/                   ← PenEventBridge
-│   │   └── penpress/                 ← PenPressureReader
-│   ├── Engine/
-│   │   ├── Preprocessing/
-│   │   ├── TouchSolver/
-│   │   ├── Reporting/
-│   │   └── StylusSolver/
-│   └── Host/                         ← SystemStateMonitor
-│
-├── Tools/
-│   ├── EGoTouchApp/
-│   ├── BtMcuTestTool/
-│   └── tests/
-│
-├── scripts/
-│   ├── install_service.bat
-│   └── uninstall_service.bat
-│
-└── docs/
-    └── architecture_redesign.md
-```
+### 3.1 分层职责
+
+- `ServiceShell`：接收 SCM / Power 原始事件，并发出 transport named event。
+- `Host::SystemStateMonitor`：监听 named event，执行 normalization + dedupe。
+- `ServiceHost`：把 `Host::SystemStateEvent` 翻译为 `RuntimePolicyEvent`，再下发到 `DeviceRuntime`。
+- `DeviceRuntime`：只消费 policy event（Display/Lid/Shutdown/Resume），不再作为 normalized owner。
+
+### 3.2 canonical/legacy transport 现状
+
+`SystemStateEvent.h` 中已标注：
+
+- canonical：`MonitorConsoleDisplayOn/Off`、`MonitorLidOn/Off`、`MonitorShutDown`、`PBT_APMRESUMEAUTOMATIC`
+- legacy alias：`MonitorPowerOn/Off`
+
+`SystemStateMonitor` 在同批事件中优先 canonical transport，并对 normalized type 做去重。
 
 ---
 
-## 四、当前实现与架构风险
+## 4. DeviceRuntime façade seam（已收口）
 
-### 4.1 风险清单
+`DeviceRuntime` 当前公开接口集中在：
 
-| # | 问题 | 影响 | 优先级 |
-|---|------|------|--------|
-| R1 | **配置链路双写**：App 直接写 `config.ini`，Service 也支持 `SaveConfig` | 配置主权分散，后续权限与审计复杂 | 🔴 P0 |
-| R2 | **StylusPipeline 配置闭环不完整** | UI 改动可能未实际作用于 Service 运行态 | 🔴 P0 |
-| R3 | **ConfigDirtyFlag 未在 Service 主循环消费** | `SetDirty` 机制价值不足，易误导 | 🟠 P1 |
-| R4 | **Common 依赖 EngineTypes（反向耦合）** | 公共层复用与拆分难度上升 | 🟠 P1 |
-| R5 | **调试帧通道受 `_DEBUG` 限制** | Release 下 App 调试能力不确定 | 🟡 P2 |
-| R6 | **`SetAutoAfeSync` 是 placeholder** | UI 显示成功但行为不变 | 🟡 P2 |
+- lifecycle（`Start/Stop/RequestStart/RequestStop`）
+- policy ingress（`IngestPolicyEvent`）
+- command ingress（`SubmitExternalAfeCommand`）
+- 配置 façade（load/save pipeline config、VHF 控制）
 
-### 4.2 详细说明
+已不再公开：
 
-1. `ServiceProxy::SaveConfig()` 当前直接写 `C:/ProgramData/EGoTouchRev/config.ini`，再通知 `ReloadConfig`。
-2. Service 侧 `BuildDefaultPipeline/ReloadConfig` 遍历的是 touch processors，StylusPipeline 配置未显式闭环。
-3. `ConfigSync.h` 有 `CheckAndClear()`，但未见 Service 周期消费逻辑。
-4. `SharedFrameBuffer` 直接包含 `EngineTypes`，使 Common 变成“准业务层”。
-5. `EnterDebugMode` 的共享帧推送绑定 `_DEBUG` 分支，需明确产品策略。
-6. `SetAutoAfeSync` 当前仅 `resp.success = true`，未落地 runtime 行为。
+- `GetPipeline()`
+- `GetStylusPipeline()`
+- `GetVhfReporter()`
+- `IngestSystemEvent(const Host::SystemStateEvent&)`
+
+这条 seam 已使 `ServiceHost` 与 runtime 内部对象解耦。
 
 ---
 
-## 五、实施优先级建议
+## 5. IPC / Shared-memory 契约现状
 
-| 优先级 | 任务 | 涉及模块 |
-|--------|------|---------|
-| 🔴 P0 | 统一配置主权到 Service（App 不直接写文件） | `ServiceProxy`, `ServiceHost`, IPC |
-| 🔴 P0 | 补齐 StylusPipeline 配置加载/保存 | `ServiceHost`, `DeviceRuntime`, `StylusPipeline` |
-| 🟠 P1 | 明确并实现 ConfigDirtyFlag 消费路径 | `ServiceHost` 或 `DeviceRuntime` |
-| 🟠 P1 | 拆分共享契约，降低 Common/Engine 耦合 | `Common`, `Engine`, 新 `DataContracts` |
-| 🟡 P2 | 明确 Release 调试策略（启用或明确禁用） | `ServiceHost`, `ServiceProxy`, 文档/UI |
-| 🟡 P2 | 清理 placeholder IPC 命令返回语义 | `ServiceHost`, `IpcProtocol`, App UI |
+### 5.1 Pipe 协议
 
----
+- `IpcResponse` 已包含 `IpcStatusCode`，同时保留 `success` 兼容字段。
+- 传输层仍是固定结构体整包读写（非变长 framing）。
 
-## 六、构建目标 (CMake)
+### 5.2 Shared-memory ABI
 
-| Target | 类型 | 用途 |
-|--------|------|------|
-| `EGoTouchService` | EXE | 生产服务（Shell + Host + Device + Engine） |
-| `EGoTouchApp` | EXE | 调试诊断 GUI（ImGui DX11 + ServiceProxy） |
-| `BtMcuTestTool` | EXE | BT MCU 协议验证 |
-| `HostSystemStateMonitorTest` | EXE | Host 事件监听测试 |
-| `SolversRawdataBenchmarkTest` | EXE | Engine 性能基准 |
+`SharedFrameBuffer.h` 已具备 Common-owned ABI 头与版本字段：
 
-**依赖图（按 CMake 当前配置）：**
+- `SharedFrameAbiHeader`
+- `kSharedFrameAbiVersion`（当前 `1`）
+- triple-buffer `SharedTripleBuffer`
 
-```mermaid
-graph LR
-    Service[EGoTouchService] --> Device
-    Service --> Host
-    Service --> Common
-
-    App[EGoTouchApp] --> Device
-    App --> Engine
-    App --> Host
-    App --> Common
-
-    Device --> Common
-    Device --> Host
-    Device --> Engine
-
-    Engine --> Common
-    Host --> Common
-```
+Shared frame 仍是 POD 稳定布局方向，包含 touch/stylus/suffix 与 diagnostics mirror。
 
 ---
 
-## 七、核心接口速查
+## 6. 已知限制与下一阶段 follow-ups
 
-### DeviceRuntime
+1. **配置链路最终收口未完成**  
+   App 仍会本地写 pipeline section 并触发 `ReloadConfig`；下一阶段应继续压缩该兼容路径。
 
-```cpp
-class DeviceRuntime {
-    bool Start();
-    void Stop();
-    void SetAutoMode(bool enabled);
-    void SetTouchOnlyMode(bool enabled);
-    void SetStylusVhfEnabled(bool enabled);
+2. **legacy 配置命令仍在主流程中出现**  
+   `ReloadConfig/SaveConfig` 仍可用；下一阶段需继续降级并最终退役主控制角色。
 
-    uint64_t SubmitCommand(command cmd, CommandSource src, const char* reason);
-    void IngestSystemEvent(const Host::SystemStateEvent& ev);
+3. **IPC 状态码一致性仍需收口**  
+   新命令已使用 `IpcStatusCode`，部分旧命令路径仍以 `success` 为主。
 
-    Solvers::FramePipeline& GetPipeline();
-    Solvers::StylusPipeline& GetStylusPipeline();
-    VhfReporter& GetVhfReporter();
-};
-```
+4. **`SetAutoAfeSync` 仍未落地**  
+   文档中不再作为当前可用能力；保留为后续语义收口项。
 
-### ServiceHost
+5. **Debug 帧推送仍受构建配置约束**  
+   `EnterDebugMode` 在 Release 下返回不支持，后续如需产品化需单独决策。
 
-```cpp
-class ServiceHost {
-    bool Start();   // Parse config -> Runtime -> Monitor -> IPC -> Pen(full)
-    void Stop();    // IPC -> Pen -> Monitor -> Runtime
-};
-```
+---
 
-### ServiceProxy (App 端)
+## 7. 结论
 
-```cpp
-class ServiceProxy {
-    bool Connect();
-    void Disconnect();
-    bool GetLatestFrame(Solvers::HeatmapFrame& out);
+截至 Phase 1-3，三条主线已达成可验证落地：
 
-    bool SwitchAfeMode(uint8_t cmd, uint8_t param);
-    bool SetVhfEnabled(bool enabled);
-    bool SetVhfTranspose(bool enabled);
+1. 配置 canonical 路径已在 Service 建立（并支持 desired/active 区分）。
+2. Host 已成为 system-state normalization owner。
+3. DeviceRuntime 已收口为 façade seam。
 
-    void SaveConfig();
-    void LoadConfig();
-    PenBridgeStatus GetPenBridgeStatus() const;
-};
-```
-
+Phase 4 文档收口后，后续工作重点是“兼容路径退役与语义一致性收尾”，不是再次改写主契约。
