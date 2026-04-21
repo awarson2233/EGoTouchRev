@@ -77,8 +77,9 @@ DWORD WINAPI ServiceShell::SvcCtrlHandlerEx(
     case SERVICE_CONTROL_SHUTDOWN:
     case SERVICE_CONTROL_PRESHUTDOWN:
         LOG_INFO("Service", __func__, "Stopping", "Received stop/shutdown control code={}.", ctrl);
-        s->SignalShutdownTransportAndStop();
+        signalEvent(Host::SystemStateNamedEventId::MonitorShutDown);
         s->ReportStatus(SERVICE_STOP_PENDING, 5000);
+        SetEvent(s->m_impl->stopEvent);
         return NO_ERROR;
 
     case SERVICE_CONTROL_POWEREVENT: {
@@ -134,31 +135,13 @@ DWORD WINAPI ServiceShell::SvcCtrlHandlerEx(
 
 // ─── 控制台模式 ──────────────────────────────
 
-BOOL WINAPI ServiceShell::ConsoleCtrlHandler(DWORD ctrlType) {
-    switch (ctrlType) {
-    case CTRL_C_EVENT:
-    case CTRL_BREAK_EVENT:
-    case CTRL_CLOSE_EVENT:
-    case CTRL_LOGOFF_EVENT:
-    case CTRL_SHUTDOWN_EVENT:
-        Instance()->SignalShutdownTransportAndStop();
-        return TRUE;
-    default:
-        return FALSE;
-    }
-}
-
-void ServiceShell::SignalShutdownTransportAndStop() noexcept {
-    Host::SystemStateMonitor::SignalNamedEvent(Host::SystemStateNamedEventId::MonitorShutDown);
-    if (m_impl != nullptr && m_impl->stopEvent != nullptr) {
-        SetEvent(m_impl->stopEvent);
-    }
-}
-
 void ServiceShell::RunAsConsole() {
     m_impl->stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
 
-    SetConsoleCtrlHandler(&ServiceShell::ConsoleCtrlHandler, TRUE);
+    SetConsoleCtrlHandler([](DWORD) -> BOOL {
+        SetEvent(Instance()->m_impl->stopEvent);
+        return TRUE;
+    }, TRUE);
 
     LOG_INFO("Service", __func__, "Boot", "Starting modules (console mode)...");
     if (!m_impl->host.Start()) {

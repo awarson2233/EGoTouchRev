@@ -38,9 +38,7 @@ private:
     static DWORD WINAPI SvcCtrlHandlerEx(
         DWORD ctrl, DWORD evtType,
         LPVOID evtData, LPVOID ctx);
-    static BOOL WINAPI ConsoleCtrlHandler(DWORD ctrlType);
 
-    void SignalShutdownTransportAndStop() noexcept;
     void RegisterPowerNotifications();
     void UnregisterPowerNotifications();
     void ReportStatus(DWORD state, DWORD waitHint = 0);

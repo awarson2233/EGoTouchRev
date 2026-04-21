@@ -21,9 +21,6 @@ struct SystemStateMonitor::Impl {
     EventCallback callback;
     std::thread worker;
     std::atomic<bool> running{false};
-    SystemStateEventType lastDisplayType = SystemStateEventType::Unknown;
-    SystemStateEventType lastLidType = SystemStateEventType::Unknown;
-    bool shutdownObserved = false;
 };
 
 namespace {
@@ -104,65 +101,6 @@ SystemStateMonitor::~SystemStateMonitor() {
 
 namespace {
 
-constexpr std::size_t kInvalidBatchPosition = static_cast<std::size_t>(-1);
-
-const char* ToString(SystemStateTransportRole role) noexcept {
-    switch (role) {
-    case SystemStateTransportRole::Canonical:
-        return "canonical";
-    case SystemStateTransportRole::LegacyAlias:
-        return "legacy_alias";
-    default:
-        return "unknown";
-    }
-}
-
-bool IsDisplayStateEvent(SystemStateEventType type) noexcept {
-    return type == SystemStateEventType::DisplayOn ||
-           type == SystemStateEventType::DisplayOff;
-}
-
-bool IsLidStateEvent(SystemStateEventType type) noexcept {
-    return type == SystemStateEventType::LidOn ||
-           type == SystemStateEventType::LidOff;
-}
-
-template <typename ImplT>
-void ResetNormalizationState(ImplT& impl) noexcept {
-    impl.lastDisplayType = SystemStateEventType::Unknown;
-    impl.lastLidType = SystemStateEventType::Unknown;
-    impl.shutdownObserved = false;
-}
-
-template <typename ImplT>
-bool ShouldSuppressNormalizedEvent(const ImplT& impl, SystemStateEventType type) noexcept {
-    if (IsDisplayStateEvent(type)) {
-        return impl.lastDisplayType == type;
-    }
-    if (IsLidStateEvent(type)) {
-        return impl.lastLidType == type;
-    }
-    if (type == SystemStateEventType::Shutdown) {
-        return impl.shutdownObserved;
-    }
-    return false;
-}
-
-template <typename ImplT>
-void RememberNormalizedEvent(ImplT& impl, SystemStateEventType type) noexcept {
-    if (IsDisplayStateEvent(type)) {
-        impl.lastDisplayType = type;
-        return;
-    }
-    if (IsLidStateEvent(type)) {
-        impl.lastLidType = type;
-        return;
-    }
-    if (type == SystemStateEventType::Shutdown) {
-        impl.shutdownObserved = true;
-    }
-}
-
 SystemStateEvent BuildEvent(std::size_t index) {
     SystemStateEvent event{};
     event.source = SystemStateEventSource::ThpServiceNamedEvent;
@@ -179,144 +117,6 @@ SystemStateEvent BuildEvent(std::size_t index) {
     }
 
     return event;
-}
-
-struct NormalizedBatchEntry {
-    bool present = false;
-    std::size_t firstPosition = kInvalidBatchPosition;
-    SystemStateEvent event{};
-    SystemStateTransportRole transportRole = SystemStateTransportRole::Canonical;
-};
-
-bool ShouldPreferTransportRole(SystemStateTransportRole current, SystemStateTransportRole candidate) noexcept {
-    return current != SystemStateTransportRole::Canonical &&
-           candidate == SystemStateTransportRole::Canonical;
-}
-
-template <typename ImplT>
-std::size_t CollectSignaledEventBatch(
-    ImplT& impl,
-    std::size_t firstEventIndex,
-    std::array<std::size_t, SystemStateMonitor::kEventCount>& batchIndices) noexcept {
-    std::size_t batchCount = 0;
-    batchIndices[batchCount++] = firstEventIndex;
-
-    for (std::size_t i = 0; i < SystemStateMonitor::kEventCount; ++i) {
-        if (i == firstEventIndex) {
-            continue;
-        }
-
-        HANDLE eventHandle = impl.events[i];
-        if (eventHandle == nullptr || eventHandle == INVALID_HANDLE_VALUE) {
-            continue;
-        }
-
-        if (WaitForSingleObject(eventHandle, 0) == WAIT_OBJECT_0) {
-            batchIndices[batchCount++] = i;
-        }
-    }
-
-    return batchCount;
-}
-
-template <typename ImplT>
-void ResetSignaledEvents(
-    ImplT& impl,
-    const std::array<std::size_t, SystemStateMonitor::kEventCount>& batchIndices,
-    std::size_t batchCount) noexcept {
-    for (std::size_t i = 0; i < batchCount; ++i) {
-        HANDLE eventHandle = impl.events[batchIndices[i]];
-        if (eventHandle != nullptr && eventHandle != INVALID_HANDLE_VALUE) {
-            ResetEvent(eventHandle);
-        }
-    }
-}
-
-template <typename ImplT>
-void DispatchNormalizedBatch(
-    ImplT& impl,
-    const std::array<std::size_t, SystemStateMonitor::kEventCount>& batchIndices,
-    std::size_t batchCount) {
-    std::array<NormalizedBatchEntry, kSystemStateEventTypeCount> entries{};
-
-    for (std::size_t position = 0; position < batchCount; ++position) {
-        const std::size_t eventIndex = batchIndices[position];
-        const SystemStateNamedEventSpec* spec = TryGetNamedEventSpec(eventIndex);
-        SystemStateEvent event = BuildEvent(eventIndex);
-        NormalizedBatchEntry& entry = entries[ToIndex(event.type)];
-
-        if (!entry.present) {
-            entry.present = true;
-            entry.firstPosition = position;
-            entry.event = event;
-            if (spec != nullptr) {
-                entry.transportRole = spec->transportRole;
-            }
-            continue;
-        }
-
-        if (spec != nullptr && ShouldPreferTransportRole(entry.transportRole, spec->transportRole)) {
-            const auto firstTimestamp = entry.event.timestamp;
-            entry.event = event;
-            entry.event.timestamp = firstTimestamp;
-            entry.transportRole = spec->transportRole;
-        }
-    }
-
-    for (std::size_t position = 0; position < batchCount; ++position) {
-        const std::size_t eventIndex = batchIndices[position];
-        const SystemStateNamedEventSpec* spec = TryGetNamedEventSpec(eventIndex);
-        const SystemStateEventType type = spec != nullptr ? spec->type : SystemStateEventType::Unknown;
-        const NormalizedBatchEntry& entry = entries[ToIndex(type)];
-
-        if (!entry.present) {
-            continue;
-        }
-
-        if (entry.firstPosition != position) {
-            LOG_INFO(
-                "Host",
-                __func__,
-                "Normalize",
-                "Suppressing named event[{}] as duplicate transport for type={}.",
-                eventIndex,
-                ToString(type));
-            continue;
-        }
-
-        if (ShouldSuppressNormalizedEvent(impl, entry.event.type)) {
-            LOG_INFO(
-                "Host",
-                __func__,
-                "Normalize",
-                "Suppressing normalized duplicate type={} from named event[{}] (role={}).",
-                ToString(entry.event.type),
-                entry.event.raw_index,
-                ToString(entry.transportRole));
-            continue;
-        }
-
-        LOG_INFO(
-            "Host",
-            __func__,
-            "Signal",
-            "Named event[{}] normalized -> type={} (role={}).",
-            entry.event.raw_index,
-            ToString(entry.event.type),
-            ToString(entry.transportRole));
-
-        RememberNormalizedEvent(impl, entry.event.type);
-
-        if (impl.callback) {
-            try {
-                impl.callback(entry.event);
-            } catch (const std::exception& ex) {
-                LOG_ERROR("Host", __func__, "Callback", "SystemStateMonitor callback threw std::exception: {}", ex.what());
-            } catch (...) {
-                LOG_ERROR("Host", __func__, "Callback", "SystemStateMonitor callback threw unknown exception.");
-            }
-        }
-    }
 }
 
 template <typename ImplT>
@@ -369,11 +169,26 @@ void WorkerLoop(ImplT& impl) {
 
         if (wait_result >= WAIT_OBJECT_0 + 1 &&
             wait_result < WAIT_OBJECT_0 + 1 + SystemStateMonitor::kEventCount) {
-            const std::size_t firstEventIndex = static_cast<std::size_t>(wait_result - WAIT_OBJECT_0 - 1);
-            std::array<std::size_t, SystemStateMonitor::kEventCount> batchIndices{};
-            const std::size_t batchCount = CollectSignaledEventBatch(impl, firstEventIndex, batchIndices);
-            DispatchNormalizedBatch(impl, batchIndices, batchCount);
-            ResetSignaledEvents(impl, batchIndices, batchCount);
+            const std::size_t event_index = static_cast<std::size_t>(wait_result - WAIT_OBJECT_0 - 1);
+            SystemStateEvent event = BuildEvent(event_index);
+
+            LOG_INFO("Host", __func__, "Signal", "Named event[{}] signaled → type={}", event_index, ToString(event.type));
+
+            if (impl.callback) {
+                try {
+                    impl.callback(event);
+                } catch (const std::exception& ex) {
+                    LOG_ERROR("Host", __func__, "Callback", "SystemStateMonitor callback threw std::exception: {}", ex.what());
+                } catch (...) {
+                    LOG_ERROR("Host", __func__, "Callback", "SystemStateMonitor callback threw unknown exception.");
+                }
+            }
+
+            HANDLE event_handle = impl.events[event_index];
+            if (event_handle != nullptr && event_handle != INVALID_HANDLE_VALUE) {
+                ResetEvent(event_handle);
+            }
+
             continue;
         }
 
@@ -409,7 +224,6 @@ bool SystemStateMonitor::Start(EventCallback callback) {
         return false;
     }
 
-    ResetNormalizationState(impl);
     impl.callback = std::move(callback);
     impl.stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (impl.stopEvent == nullptr) {
