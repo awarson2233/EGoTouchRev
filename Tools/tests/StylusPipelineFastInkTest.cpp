@@ -323,19 +323,16 @@ void TestStylusPipelineNoPressSyntheticPressure() {
     Require(!f1.fastLiftOutput, "fast-lift output should remain disabled");
 }
 
-void TestStylusPipelineLowSignalPressureSuppress() {
+void TestStylusPipelineLowSignalKeepsCoordinateButZeroPressureUntilAuthoritativeDown() {
     StylusPipeline pipeline;
-    pipeline.LoadConfig("sp.sigSuppressEnabled", "1");
-    pipeline.LoadConfig("sp.sigSuppressEnter", "2200");
-    pipeline.LoadConfig("sp.sigSuppressExit", "3200");
-    pipeline.LoadConfig("sp.noPressEnabled", "0");
 
     const auto weakGrid = MakeCrossGrid(1800, 1400, 900, 600);
     const auto raw = BuildCombinedStylusFrame(12, 12, weakGrid, 12, 12, {});
 
     const auto frame = RunFrame(pipeline, raw, 180, 8);
     Require(frame.point.valid, "weak-signal frame should still solve coordinates");
-    Require(frame.pressure > 0, "weak-signal frame should no longer suppress pressure");
+    Require(frame.pressure == 0, "weak-signal frame should not output pressure before authoritative down");
+    Require(!frame.tipSwitchActive, "weak-signal frame should remain out of writing state");
     Require(!frame.noPressInkActive, "no-press ink should stay inactive");
 }
 
@@ -358,6 +355,7 @@ void TestStylusPipelineFastLiftToNoSignal() {
     const auto lift = RunFrame(pipeline, BuildCombinedStylusFrame(0x00FF, 0x00FF, {}, 0, 0, {}), 0, 16);
     Require(!lift.point.valid, "no-signal lift frame should not keep a valid point");
     Require(lift.pressure == 0, "no-signal lift frame should drop pressure");
+    Require(!lift.tipSwitchActive, "no-signal lift frame should clear tip switch");
     Require(!lift.noPressInkActive, "no-signal lift frame should keep no-press inactive");
 }
 
@@ -366,17 +364,23 @@ void TestStylusPipelineReleaseRetainsPreviousOutput() {
     pipeline.LoadConfig("sp.noPressEnabled", "0");
     pipeline.LoadConfig("sp.sigSuppressEnabled", "0");
     pipeline.LoadConfig("sp.filterMode", "2");
+    pipeline.LoadConfig("sp.tx1InkEnterTh", "9000");
+    pipeline.LoadConfig("sp.tx1LiftSuspiciousTh", "7000");
+    pipeline.LoadConfig("sp.tx1LiftAbsoluteTh", "4500");
 
     const auto raw = BuildCombinedStylusFrame(10, 10,
         MakeCrossGrid(12000, 9000, 7000, 5000, 4, 4), 10, 10, {});
+    const auto suspiciousRaw = BuildCombinedStylusFrame(10, 10,
+        MakeCrossGrid(6500, 6500, 6400, 6300, 4, 4), 10, 10, {});
     const auto down = RunFrame(pipeline, raw, 220, 8);
     Require(down.point.valid, "precondition should produce a valid down frame");
     Require(down.pressure > 0, "precondition should carry pressure");
 
-    const auto weak = RunFrame(pipeline, raw, 0, 16);
+    const auto weak = RunFrame(pipeline, suspiciousRaw, 0, 16);
     Require(!weak.fastLiftOutput, "fast-lift output should stay disabled");
     Require(!weak.sustainOutput, "sustain output should stay disabled");
-    Require(weak.pressure == 0, "zero BT pressure should not retain synthetic output");
+    Require(weak.pressure == down.pressure, "suspicious frame should reuse previous committed pressure");
+    Require(weak.tipSwitchActive == down.tipSwitchActive, "suspicious frame should reuse previous tip state");
 }
 
 void TestStylusPipelineEdgeFastLiftRetainsCoordinate() {
@@ -399,6 +403,9 @@ void TestStylusPipelineConfigRoundTrip() {
     StylusPipeline pipeline;
     pipeline.LoadConfig("sp.recheckThBase", "888");
     pipeline.LoadConfig("sp.recheckThMulti", "1333");
+    pipeline.LoadConfig("sp.tx1InkEnterTh", "9000");
+    pipeline.LoadConfig("sp.tx1LiftSuspiciousTh", "7000");
+    pipeline.LoadConfig("sp.tx1LiftAbsoluteTh", "4500");
     pipeline.LoadConfig("sp.edgeSigSuppressEnabled", "1");
     pipeline.LoadConfig("sp.edgeSigSuppressEnter", "1444");
     pipeline.LoadConfig("sp.edgeSigSuppressExit", "3555");
@@ -426,6 +433,12 @@ void TestStylusPipelineConfigRoundTrip() {
             "saved config should include recheck base threshold");
     Require(saved.find("sp.recheckThMulti=1333") != std::string::npos,
             "saved config should include recheck multi threshold");
+    Require(saved.find("sp.tx1InkEnterTh=9000") != std::string::npos,
+            "saved config should include tx1 ink enter threshold");
+    Require(saved.find("sp.tx1LiftSuspiciousTh=7000") != std::string::npos,
+            "saved config should include tx1 suspicious lift threshold");
+    Require(saved.find("sp.tx1LiftAbsoluteTh=4500") != std::string::npos,
+            "saved config should include tx1 absolute lift threshold");
     Require(saved.find("sp.edgeSigSuppressEnter=") == std::string::npos,
             "saved config should not include deprecated edge suppress keys");
     Require(saved.find("sp.noPressBaseTh=") == std::string::npos,
@@ -466,6 +479,9 @@ void TestStylusPipelineConfigRoundTrip() {
     Require(!hasKey("sp.btMapMode"), "schema should not expose deprecated bt map mode key");
     Require(!hasKey("sp.pressIirQ8"), "schema should not expose deprecated pressure iir key");
     Require(hasKey("sp.recheckThMulti"), "schema should expose recheck multi threshold");
+    Require(hasKey("sp.tx1InkEnterTh"), "schema should expose tx1 ink enter threshold");
+    Require(hasKey("sp.tx1LiftSuspiciousTh"), "schema should expose tx1 suspicious lift threshold");
+    Require(hasKey("sp.tx1LiftAbsoluteTh"), "schema should expose tx1 absolute lift threshold");
 }
 
 void TestGridPeakDetectorNoPeak() {
@@ -494,8 +510,8 @@ void TestGridPeakDetectorCenterPeakAndProjection() {
             "center cross should peak at the center cell");
     Require(analysis.projection.peakIdxDim1 == 4 && analysis.projection.peakIdxDim2 == 4,
             "center cross projection should peak on the center axis");
-    Require(analysis.projection.spanDim1 == 5 && analysis.projection.spanDim2 == 5,
-            "default projection radius should span five rows and columns");
+    Require(analysis.projection.spanDim1 == 3 && analysis.projection.spanDim2 == 3,
+            "default projection radius should span three rows and columns");
 }
 
 void TestGridPeakDetectorEdgePeak() {
@@ -589,7 +605,7 @@ void TestStylusPipelinePeakMetrics() {
     Require(frame.point.valid, "pipeline should still solve a valid stylus point");
     Require(frame.signalX == 16000, "TX1 peak signal should match the detector peak");
     Require(frame.signalY == 6000, "TX2 peak signal should match the detector peak");
-    Require(frame.point.peakTx1 == 12800, "TX1 composite peak should match the projection average");
+    Require(frame.point.peakTx1 == 14666, "TX1 composite peak should use the pre-CMF projection average");
     Require(frame.point.peakTx2 == 6000, "TX2 composite peak should mirror TX2 peak signal");
 }
 
@@ -617,15 +633,23 @@ void TestStylusPipelineUsesPredictedIntermediatePressure() {
     Require(f1.diag.predictedAgeFrames >= 1, "predicted frame should increase predicted age");
 #endif
 
-    const auto f2 = RunFrame(pipeline, raw, 260, 24, true);
-    Require(f2.pressure > 0, "next real BT frame should still output pressure");
+    const auto lift = RunFrame(pipeline, BuildCombinedStylusFrame(0x00FF, 0x00FF, {}, 0, 0, {}), 220, 20, false);
+    Require(lift.pressure == 0, "release should close pressure gate immediately");
+    Require(!lift.tipSwitchActive, "release should clear tip switch");
+
+    const auto hoverOnly = RunFrame(pipeline, raw, 220, 24, false);
+    Require(hoverOnly.tipSwitchActive, "TX1 should still allow immediate writing on the next down frame");
+    Require(hoverOnly.pressure == 0, "stale BT sample should not reopen pressure gate");
+
+    const auto f2 = RunFrame(pipeline, raw, 260, 32, true);
+    Require(f2.pressure > 0, "new BT push after release should reopen pressure output");
 #if EGOTOUCH_DIAG
     Require(f2.diag.pressureIsReal, "new BT push should restore real pressure flag");
-    Require(f2.diag.btSeq == 2, "second BT push should advance sequence");
+    Require(f2.diag.btSeq >= 2, "new BT push should advance sequence");
 #endif
 }
 
-void TestStylusPipelineRealZeroReleasesQuickly() {
+void TestStylusPipelineRealZeroDropsPressureButKeepsWritingWhenTx1StillDown() {
     StylusPipeline pipeline;
     pipeline.LoadConfig("sp.filterMode", "2");
 
@@ -637,7 +661,7 @@ void TestStylusPipelineRealZeroReleasesQuickly() {
 
     const auto up = RunFrame(pipeline, raw, 0, 16, true);
     Require(up.pressure == 0, "real zero BT sample should drop output pressure immediately");
-    Require(!up.tipSwitchActive, "real zero BT sample should clear tip switch quickly");
+    Require(up.tipSwitchActive, "real zero BT sample should keep writing while TX1 still indicates down");
 #if EGOTOUCH_DIAG
     Require(up.diag.pressureIsReal, "real zero frame should still be marked as real");
 #endif
@@ -660,7 +684,7 @@ int main() {
         TestFakePressureDecayReset();
         TestNoPressInkGateEnterAndExit();
         TestStylusPipelineNoPressSyntheticPressure();
-        TestStylusPipelineLowSignalPressureSuppress();
+        TestStylusPipelineLowSignalKeepsCoordinateButZeroPressureUntilAuthoritativeDown();
         TestStylusPipelineFastLiftToNoSignal();
         TestStylusPipelineReleaseRetainsPreviousOutput();
         TestStylusPipelineEdgeFastLiftRetainsCoordinate();
@@ -673,7 +697,7 @@ int main() {
         TestGridPeakDetectorProjectionRadius();
         TestStylusPipelinePeakMetrics();
         TestStylusPipelineUsesPredictedIntermediatePressure();
-        TestStylusPipelineRealZeroReleasesQuickly();
+        TestStylusPipelineRealZeroDropsPressureButKeepsWritingWhenTx1StillDown();
         std::cout << "[TEST] Stylus fast ink tests passed.\n";
         return 0;
     } catch (const std::exception& ex) {

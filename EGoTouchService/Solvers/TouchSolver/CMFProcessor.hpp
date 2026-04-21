@@ -4,7 +4,6 @@
 // Common Mode Filter: removes global row/column shift noise.
 
 #include "SolverTypes.h"
-#include "NeonCompat.h"
 #include <algorithm>
 #include <cstdint>
 

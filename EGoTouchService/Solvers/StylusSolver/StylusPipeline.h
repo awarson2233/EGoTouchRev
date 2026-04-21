@@ -88,6 +88,8 @@ private:
     bool HasCurrentStylusSignal(std::span<const uint8_t> rawData) const;
     bool ProcessNoStylusFrame(std::span<const uint8_t> rawData,
                               StylusPacket& outPacket);
+    void ClosePressureGate(uint32_t latestBtSeq);
+    void TrackBlockedBtSeq(uint32_t latestBtSeq);
 
     // ── Algorithm modules (header-only) ──
     Asa::GridPeakDetector    m_peakDetector;
@@ -116,6 +118,9 @@ private:
     uint32_t m_prevStatus = 0;
     float m_prevPointX = 0.0f;
     float m_prevPointY = 0.0f;
+    bool m_pressureGateOpen = false;
+    bool m_waitingFreshBtAfterRelease = false;
+    uint32_t m_blockedBtSeqFloor = 0;
 
     // ── Sensor dimensions ──
     int m_sensorRows = 40;
@@ -144,6 +149,9 @@ private:
     bool m_enableSlaveChecksum = false;
     bool m_emitPacketWhenInvalid = true;
     int  m_btMapMode = 0;
+    int  m_tx1InkEnterThreshold = 9000;
+    int  m_tx1LiftSuspiciousThreshold = 7000;
+    int  m_tx1LiftAbsoluteThreshold = 4500;
 
     // P3 #16: TP Pattern Compensation (placeholder)
     bool m_tpPatternCompEnabled = false;

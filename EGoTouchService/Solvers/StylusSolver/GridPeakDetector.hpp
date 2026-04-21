@@ -65,7 +65,7 @@ public:
     // Configuration
     int   noiseThreshold = 50;     // signal > this to be considered (lowered for bringup)
     int   maxConnected   = 81;     // disabled for bringup (full grid = 9*9)
-    int   projRadius     = 2;      // rows/cols around peak for projection
+    int   projRadius     = 1;      // rows/cols around peak for projection
 
 private:
     struct FourNeighborList {

@@ -6,7 +6,6 @@
 #include "SolverTypes.h"
 #include "EdgeCompensation.h"
 #include <vector>
-#include <cstdint>
 
 namespace Solvers { namespace Touch {
 

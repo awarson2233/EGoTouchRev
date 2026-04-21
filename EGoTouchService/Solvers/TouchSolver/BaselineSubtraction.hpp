@@ -3,7 +3,6 @@
 // Header-only. Converted from Preprocessing/BaselineSubtraction.{h,cpp}.
 
 #include "SolverTypes.h"
-#include "NeonCompat.h"
 #include <cstddef>
 #include <cstdint>
 

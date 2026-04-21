@@ -1,5 +1,4 @@
 #include "TouchPipeline.h"
-#include "Logger.h"
 
 namespace Solvers {
 
