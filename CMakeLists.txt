@@ -232,6 +232,7 @@ if (EGO_BUILD_TESTS)
     target_link_libraries(StylusPipelineFastInkTest PRIVATE Solvers Common)
 
     add_test(NAME CommonLoggerTest COMMAND CommonLoggerTest)
+    add_test(NAME HostSystemStateMonitorTest COMMAND HostSystemStateMonitorTest)
     add_test(NAME TouchTrackerSilentGapTest COMMAND TouchTrackerSilentGapTest)
     add_test(NAME TouchTrackerStylusSuppressTest COMMAND TouchTrackerStylusSuppressTest)
     add_test(NAME TouchPipelineConfigRoundTripTest COMMAND TouchPipelineConfigRoundTripTest)
