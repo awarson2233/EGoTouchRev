@@ -6,8 +6,6 @@
 #include "SolverTypes.h"
 #include <array>
 #include <cstdint>
-#include <algorithm>
-#include <cmath>
 
 namespace Solvers { namespace Touch {
 

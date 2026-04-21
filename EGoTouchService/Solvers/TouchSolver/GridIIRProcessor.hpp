@@ -4,7 +4,6 @@
 // Dynamic threshold gated IIR with aggressive noise floor decay.
 
 #include "SolverTypes.h"
-#include "NeonCompat.h"
 #include <algorithm>
 #include <cstring>
 #include <cmath>

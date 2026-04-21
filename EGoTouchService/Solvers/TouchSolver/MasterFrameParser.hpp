@@ -5,7 +5,6 @@
 
 #include "SolverTypes.h"
 #include "FrameLayout.h"
-#include <cstring>
 
 namespace Solvers { namespace Touch {
 

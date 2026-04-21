@@ -14,6 +14,10 @@ struct PenFrameEvidence {
     bool sustainActive = false;
     bool activeStylusPresent = false;
     bool hoverSignalPresent = false;
+    bool authoritativeDown = false;
+    bool keepInkAlive = false;
+    bool hoverPresent = false;
+    bool immediateRelease = false;
     bool recheckPassed = true;
     bool overlapLike = false;
     bool edgeLike = false;
@@ -135,13 +139,12 @@ public:
 
         const bool hasCoord = evidence.coordValid;
         const bool hasSignal = !evidence.noSignal && evidence.tx1BlockValid;
-        const bool hasHoverSignal = evidence.hoverSignalPresent || (hasSignal && hasCoord);
-        const uint16_t contactPressure = (evidence.pressureForContact > 0)
-            ? evidence.pressureForContact
-            : evidence.realPressure;
-        const bool contactLike = hasCoord && (contactPressure > 0);
-        const bool activeLike = evidence.activeStylusPresent || contactLike || hasHoverSignal;
-        const bool hoverLike = activeLike && hasCoord && !contactLike;
+        const bool contactLike = evidence.authoritativeDown;
+        const bool activeLike = evidence.keepInkAlive || evidence.hoverPresent ||
+                                evidence.activeStylusPresent || evidence.hoverSignalPresent ||
+                                (hasSignal && hasCoord);
+        const bool hoverLike = evidence.hoverPresent ||
+                               (!contactLike && (evidence.hoverSignalPresent || (hasSignal && hasCoord)));
         const bool noSignalLike = !activeLike || !hasCoord;
 
         if (activeLike && evidence.recheckPassed) {
@@ -178,7 +181,16 @@ public:
             break;
 
         case State::Writing:
-            if (contactLike) {
+            if (evidence.immediateRelease) {
+                m_releaseHoldRemaining = 0;
+                if (hoverLike) {
+                    EnterHover();
+                } else {
+                    EnterNoSignal();
+                }
+                break;
+            }
+            if (evidence.keepInkAlive) {
                 m_releaseHoldRemaining = std::max(1, releaseHoldFrames);
                 ++m_btFrameCount;
                 if (m_branch == Branch::FastDown) {
@@ -191,9 +203,7 @@ public:
                     SetBranch(Branch::None);
                 }
             } else {
-                if (evidence.pressureIsReal && evidence.realMeasuredPressure == 0) {
-                    m_releaseHoldRemaining = 0;
-                } else if (m_releaseHoldRemaining > 0) {
+                if (m_releaseHoldRemaining > 0) {
                     --m_releaseHoldRemaining;
                 }
                 if (hoverLike) {
@@ -205,7 +215,7 @@ public:
             break;
         }
 
-        if (m_state == State::Writing && contactLike) {
+        if (m_state == State::Writing && evidence.keepInkAlive) {
             ++m_totalContactFrames;
         } else if (m_state != State::Writing) {
             m_totalContactFrames = 0;
@@ -497,15 +507,11 @@ private:
             return policy;
 
         case State::Writing:
-            if (evidence.realPressure > 0) {
-                policy.outputPressure = evidence.realPressure;
-            } else if (evidence.mappedPressure > 0 && evidence.recheckPassed && !evidence.overlapLike) {
-                policy.outputPressure = evidence.mappedPressure;
-            }
+            policy.outputPressure = evidence.realPressure;
             break;
         }
 
-        policy.tipSwitchActive = (policy.outputPressure > 0);
+        policy.tipSwitchActive = (m_state == State::Writing);
         policy.noPressInkActive = false;
         policy.sustainOutput = false;
         policy.fastLiftOutput = false;

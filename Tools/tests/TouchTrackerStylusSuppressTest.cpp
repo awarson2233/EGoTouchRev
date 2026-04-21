@@ -107,6 +107,17 @@ void TestWeakTouchNearStylusIsSuppressedUsingStylusCoordinates() {
     Require(frame.stylus.touchSuppressFrames > 0, "suppress hold should be armed");
 }
 
+void TestZeroPressureWritingStillSuppressesWeakOverlapTouch() {
+    TrackerHarness harness;
+    const StylusSpec stylus = MakeStylusSpec(true, 12.5f, 7.75f, 0, 500, 2200, 2);
+    const auto frame = harness.Run({
+        ContactSpec{12.55f, 7.80f, 3, 160, 0.8f}
+    }, stylus);
+
+    Require(frame.contacts.empty(), "writing animState should suppress weak overlap even at zero pressure");
+    Require(frame.stylus.touchSuppressActive, "touch suppress should stay active when animState indicates writing");
+}
+
 void TestStrongTouchNearStylusIsPreserved() {
     TrackerHarness harness;
     const StylusSpec stylus = MakeStylusSpec(true, 18.0f, 12.0f, 160, 700, 2100, 2);
@@ -157,6 +168,7 @@ void TestAftKeepsSuppressingRecentWeakTouchAfterStylusLeaves() {
 int main() {
     try {
         TestWeakTouchNearStylusIsSuppressedUsingStylusCoordinates();
+        TestZeroPressureWritingStillSuppressesWeakOverlapTouch();
         TestStrongTouchNearStylusIsPreserved();
         TestFarTouchIsNotMisSuppressed();
         TestAftKeepsSuppressingRecentWeakTouchAfterStylusLeaves();

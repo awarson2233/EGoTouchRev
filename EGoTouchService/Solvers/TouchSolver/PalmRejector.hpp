@@ -6,7 +6,6 @@
 #include "SolverTypes.h"
 #include <vector>
 #include <algorithm>
-#include <cstdint>
 
 namespace Solvers { namespace Touch {
 
