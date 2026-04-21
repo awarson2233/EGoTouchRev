@@ -194,10 +194,21 @@ void DiagnosticsWorkbench::DrawControlPanel() {
     ImGui::TextUnformatted("Global Config");
     if (m_proxy) {
         if (!allowLiveControl) ImGui::BeginDisabled();
-        bool isFull = m_proxy->IsSrvModeFull();
-        bool isTouchOnly = !isFull;
+        const bool desiredFull = m_proxy->IsSrvModeFull();
+        const bool activeFull = m_proxy->IsSrvActiveModeFull();
+        bool isTouchOnly = !desiredFull;
         if (ImGui::Checkbox("Touch-Only Mode (Pure Finger, Disable Pen)", &isTouchOnly)) {
             m_proxy->SetSrvModeFull(!isTouchOnly);
+        }
+        const char* activeModeText = activeFull ? "Full" : "Touch-Only";
+        const char* desiredModeText = desiredFull ? "Full" : "Touch-Only";
+        if (desiredFull == activeFull) {
+            ImGui::TextDisabled("Mode: active=%s", activeModeText);
+        } else {
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f),
+                               "Mode pending: desired=%s, active=%s",
+                               desiredModeText,
+                               activeModeText);
         }
 
         bool autoMode = m_proxy->IsSrvAutoMode();
