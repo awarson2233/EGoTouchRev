@@ -6,6 +6,54 @@
 #include <thread>
 #include <chrono>
 
+namespace {
+
+constexpr auto kIdleProbeInterval = std::chrono::milliseconds{50};
+constexpr uint32_t kIdleEntryThreshold = 600;
+
+ChipResult<> ReadFrameBuffer(Himax::HalDevice* dev,
+                             void* buffer,
+                             uint32_t sizeBytes,
+                             const char* logFunc,
+                             const char* chipState,
+                             const char* deviceName,
+                             bool logFailures) {
+    if (!dev || !dev->IsValid()) {
+        if (logFailures) {
+            LOG_ERROR("HimaxChip", logFunc, chipState, "{} handle invalid", deviceName);
+        }
+        return std::unexpected(ChipError::CommunicationError);
+    }
+
+    if (auto res = dev->GetFrame(buffer, sizeBytes, nullptr); !res) {
+        if (dev->IsTimeoutError()) {
+            return std::unexpected(ChipError::Timeout);
+        }
+        if (logFailures) {
+            LOG_ERROR("HimaxChip", logFunc, chipState, "{} GetFrame failed!", deviceName);
+        }
+        return res;
+    }
+
+    return {};
+}
+
+bool ShouldSkipMasterRead(uint32_t frameCount, bool stylusActive) noexcept {
+    return ((frameCount & 1u) != 0u) && stylusActive;
+}
+
+bool ShouldEnterIdle(uint32_t& zeroFrameCount, bool inputDetected) noexcept {
+    if (inputDetected) {
+        zeroFrameCount = 0;
+        return false;
+    }
+
+    ++zeroFrameCount;
+    return zeroFrameCount >= kIdleEntryThreshold;
+}
+
+} // anonymous namespace
+
 namespace Himax {
 
 ChipResult<> Chip::SetFrameReadPolicy(bool block, uint8_t timeoutMs) {
@@ -74,64 +122,66 @@ ChipResult<> Chip::GetFrame(void) {
     constexpr uint32_t kSlaveFrameBytes = static_cast<uint32_t>(Frame::kSlaveFrameSize);
     constexpr size_t kSlaveFrameOffset = static_cast<size_t>(Frame::kSlaveHeaderOffset);
 
-    // Idle: periodic probe only
+    auto readMaster = [&](bool logFailures) -> ChipResult<> {
+        return ReadFrameBuffer(m_master.get(),
+                               back_data.data(),
+                               kMasterFrameBytes,
+                               __func__,
+                               GetStateStr(),
+                               "Master",
+                               logFailures);
+    };
+
+    auto readSlave = [&](bool logFailures) -> ChipResult<> {
+        return ReadFrameBuffer(m_slave.get(),
+                               back_data.data() + kSlaveFrameOffset,
+                               kSlaveFrameBytes,
+                               __func__,
+                               GetStateStr(),
+                               "Slave",
+                               logFailures);
+    };
+
     if (afe_mode.load() == THP_AFE_MODE::Idle) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        std::this_thread::sleep_for(kIdleProbeInterval);
 
-        auto m_res = m_master->GetFrame(back_data.data(), kMasterFrameBytes, nullptr);
-        auto s_res = m_slave->GetFrame(back_data.data() + kSlaveFrameOffset, kSlaveFrameBytes, nullptr);
+        const auto masterRes = readMaster(false);
+        const auto slaveRes = readSlave(false);
 
-        if (m_res && s_res) {
-            if (isFingerDetected() || isStylusDetected()) {
-                (void)NotifyTouchWakeup();
-                LOG_INFO("HimaxChip", __func__, GetStateStr(), "Input detected in idle → wakeup to Normal");
-            }
-            return std::unexpected(ChipError::Timeout);
+        if (masterRes && slaveRes && (isFingerDetected() || isStylusDetected())) {
+            (void)NotifyTouchWakeup();
+            LOG_INFO("HimaxChip", __func__, GetStateStr(), "Input detected in idle → wakeup to Normal");
         }
+
         return std::unexpected(ChipError::Timeout);
     }
 
-    const bool skipMaster = (m_frameCount & 1) != 0 && m_stylusActive;
+    const bool skipMaster = ShouldSkipMasterRead(m_frameCount, m_stylusActive);
 
-    if (auto res = m_slave->GetFrame(back_data.data() + kSlaveFrameOffset, kSlaveFrameBytes, nullptr); !res) {
-        if (m_slave->IsTimeoutError())
-            return std::unexpected(ChipError::Timeout);
-        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "Slave GetFrame failed!");
+    if (auto res = readSlave(true); !res) {
         return res;
     }
 
     if (!skipMaster) {
-        if (auto res = m_master->GetFrame(back_data.data(), kMasterFrameBytes, nullptr); !res) {
-            if (m_master->IsTimeoutError())
-                return std::unexpected(ChipError::Timeout);
-            LOG_ERROR("HimaxChip", __func__, GetStateStr(), "Master GetFrame failed!");
+        if (auto res = readMaster(true); !res) {
             return res;
         }
     }
 
     m_lastMasterWasRead = !skipMaster;
-    m_frameCount++;
+    ++m_frameCount;
 
+    const bool fingerNow = isFingerDetected();
     const bool stylusNow = isStylusDetected();
-    if (stylusNow && !m_stylusActive) {
-        m_stylusActive = true;
-    } else if (!stylusNow && m_stylusActive) {
+    m_stylusActive = stylusNow;
+
+    if (ShouldEnterIdle(m_zeroFrameCount, fingerNow || stylusNow)) {
+        LOG_INFO("HimaxChip", __func__, GetStateStr(), "No input for {} frames → EnterIdle", m_zeroFrameCount);
         m_stylusActive = false;
-    }
-
-    constexpr uint32_t kIdleEntryThreshold = 600;
-
-    if (isFingerDetected() || stylusNow) {
+        (void)m_afe.EnterIdle();
         m_zeroFrameCount = 0;
-    } else {
-        m_zeroFrameCount++;
-        if (m_zeroFrameCount >= kIdleEntryThreshold) {
-            LOG_INFO("HimaxChip", __func__, GetStateStr(), "No input for {} frames → EnterIdle", m_zeroFrameCount);
-            m_stylusActive = false;
-            (void)m_afe.EnterIdle();
-            m_zeroFrameCount = 0;
-        }
     }
+
     return {};
 }
 

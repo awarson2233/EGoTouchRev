@@ -318,6 +318,12 @@ ChipResult<> Chip::Init(void) {
         return res;
     }
 
+    current_slot = 0;
+    m_zeroFrameCount = 0;
+    m_frameCount = 0;
+    m_stylusActive = false;
+    m_lastMasterWasRead = true;
+    afe_mode.store(THP_AFE_MODE::Normal);
     m_connState.store(ConnectionState::Connected);
 
     m_afe.ResetStylusState();
@@ -339,8 +345,15 @@ ChipResult<> Chip::Init(void) {
 }
 
 ChipResult<> Chip::Deinit(bool check_en) {
-    m_connState.store(ConnectionState::Unconnected);
     LOG_INFO("HimaxChip", __func__, GetStateStr(), "Starting Deinit sequence...");
+    m_connState.store(ConnectionState::Unconnected);
+    afe_mode.store(THP_AFE_MODE::Normal);
+    m_zeroFrameCount = 0;
+    m_frameCount = 0;
+    m_stylusActive = false;
+    m_lastMasterWasRead = true;
+    current_slot = 0;
+    m_afe.ResetStylusState();
 
     auto resOff = hx_sense_off(check_en);
     if (!resOff) {
@@ -360,6 +373,13 @@ ChipResult<> Chip::Deinit(bool check_en) {
 
 void Chip::HoldReset() {
     m_connState.store(ConnectionState::Unconnected);
+    afe_mode.store(THP_AFE_MODE::Normal);
+    m_zeroFrameCount = 0;
+    m_frameCount = 0;
+    m_stylusActive = false;
+    m_lastMasterWasRead = true;
+    current_slot = 0;
+    m_afe.ResetStylusState();
 
     CancelPendingFrameRead();
 

@@ -2,9 +2,10 @@
 
 #include <array>
 #include <atomic>
+#include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <mutex>
-#include <vector>
 
 #include "SolverTypes.h"
 
@@ -32,37 +33,47 @@ public:
     void DispatchTouch(Solvers::HeatmapFrame& frame);
 
     // 开关
-    void SetEnabled(bool v) { m_enabled.store(v); }
-    bool IsEnabled() const { return m_enabled.load(); }
+    void SetEnabled(bool v) { m_enabled.store(v, std::memory_order_relaxed); }
+    bool IsEnabled() const { return m_enabled.load(std::memory_order_relaxed); }
 
-    void SetTransposeEnabled(bool v) { m_transpose.store(v); }
-    bool IsTransposeEnabled() const { return m_transpose.load(); }
+    void SetTransposeEnabled(bool v) {
+        m_transpose.store(v, std::memory_order_relaxed);
+    }
+    bool IsTransposeEnabled() const {
+        return m_transpose.load(std::memory_order_relaxed);
+    }
 
-    void SetEraserState(uint8_t v) { m_eraserState.store(v); }
+    void SetEraserState(uint8_t v) {
+        m_eraserState.store(v, std::memory_order_relaxed);
+    }
 
     bool IsDeviceOpen() const;
     void Close();
 
 private:
+    bool UpdateTouchState(bool hasTouch);
+
     void WriteTouchPacketsLocked(
         const std::array<Solvers::TouchPacket, 2>& packets);
     void WriteTouchAllUpLocked();
     void WriteStylusPacketLocked(const uint8_t* data, size_t len);
 
-    bool EnsureDeviceOpen();
-    void CloseDevice();
-    void ReopenDevice();
-    bool WritePacket(const uint8_t* data, size_t len,
-                     const char* tag);
+    bool EnsureDeviceOpenLocked();
+    void CloseDeviceLocked();
+    void ScheduleReopenLocked();
+    bool WritePacketLocked(const uint8_t* data, size_t len,
+                           const char* tag);
+
+    static constexpr auto kReopenBackoff = std::chrono::milliseconds(200);
 
     std::atomic<bool> m_enabled{true};
     std::atomic<bool> m_transpose{false};
     std::atomic<bool> m_hadTouchLastFrame{false};
     std::atomic<uint8_t> m_eraserState{0};
 
-    std::mutex m_mu;
+    mutable std::mutex m_mu;
     HANDLE m_handle = INVALID_HANDLE_VALUE;
+    std::chrono::steady_clock::time_point m_nextOpenAttempt{};
 
     static const GUID kVhfGuid;
 };
-

@@ -51,18 +51,38 @@ protected:
     const char* ChannelName() const override { return "PenEventBridge"; }
 
 private:
+    enum class SessionPhase : uint8_t {
+        AwaitingPenStatus = 0,
+        AwaitingMcuStatus,
+        AwaitingInitParamRequest,
+        Running,
+    };
+
     static const GUID kEventDeviceGuid;
     static int GetAckCode(uint8_t eventCode);
 
-    void SendRawPacket(const std::vector<uint8_t>& pkt);
+    bool SendRawPacket(const std::vector<uint8_t>& pkt);
     void SendAck(uint8_t ackCode);
+    void ResetSessionState();
+    void AdvanceSessionFromEvent(uint8_t eventCode);
 
-    void SendInitProtocolParams();
+    bool SendQueryPenStatus();
+    bool SendFirstMcuStatusQuery();
+    bool SendSecondMcuStatusQuery();
+    bool SendInitProtocolParams();
 
     mutable std::mutex m_cbMutex;
+    mutable std::mutex m_sessionMutex;
+    mutable std::mutex m_txMutex;
     PenEventCallback m_eventCallback;
     HANDLE m_notifyEvent = nullptr;
-    bool m_initParamSent = false;  // 原厂只发送一次 InitParam
+    SessionPhase m_sessionPhase = SessionPhase::AwaitingPenStatus;
+    bool m_initParamSent = false;
+    bool m_penStatusQuerySent = false;
+    bool m_firstMcuStatusQuerySent = false;
+    bool m_secondMcuStatusQuerySent = false;
+    bool m_receivedPenCurStatus = false;
+    bool m_receivedPenTypeInfo = false;
 };
 
 } // namespace Himax::Pen
