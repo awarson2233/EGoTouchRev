@@ -667,6 +667,121 @@ void TestStylusPipelineRealZeroDropsPressureButKeepsWritingWhenTx1StillDown() {
 #endif
 }
 
+void TestStylusPipelineParseFailPacketLength13() {
+    StylusPipeline pipeline;
+    pipeline.LoadConfig("sp.filterMode", "2");
+
+    std::vector<uint8_t> raw(kMasterBytes + kSlaveFrameBytes, 0xFF);
+    const auto result = RunFrame(pipeline, raw, 100);
+
+    Require(result.packetRoute == Solvers::StylusPacketRoute::ParseFailure13,
+            "Parse-fail path should preserve parse-failure packet route for VHF");
+    Require(!result.packet.valid,
+            "Parse-fail path should no longer build a packet inside the pipeline");
+}
+
+void TestStylusPipelineShortFrameDoesNotLeakState() {
+    StylusPipeline pipeline;
+
+    const auto validRaw = BuildCombinedStylusFrame(10, 10,
+        MakeCrossGrid(12000, 9000, 7000, 5000, 4, 4), 10, 10, {});
+    const auto validRes = RunFrame(pipeline, validRaw, 240);
+    Require(validRes.point.valid, "First frame should be valid");
+    Require(validRes.pressure > 0, "First frame should produce pressure");
+    Require(validRes.tipSwitchActive, "First frame should assert tip switch");
+
+    std::vector<uint8_t> shortRaw(10, 0);
+    const auto shortRes = RunFrame(pipeline, shortRaw, 240);
+
+    Require(!shortRes.point.valid, "Short frame should not be valid");
+    Require(shortRes.pressure == 0, "Short frame should clear previous pressure");
+    Require(shortRes.point.pressure == 0, "Short frame should clear point pressure");
+    Require(!shortRes.tipSwitchActive, "Short frame should clear previous tip switch state");
+    Require(shortRes.packetRoute == Solvers::StylusPacketRoute::ParseFailure13,
+            "Short frame should preserve parse-failure packet route for VHF");
+    Require(!shortRes.packet.valid,
+            "Short frame should no longer build a packet inside the pipeline");
+}
+
+void TestStylusPipelineInvalidPathUpdatesBlockedBtSeq() {
+    StylusPipeline pipeline;
+
+    std::array<uint16_t, kGridDim * kGridDim> flatGrid{};
+    flatGrid.fill(100);
+    const auto rawNoPeak = BuildCombinedStylusFrame(10, 10, flatGrid, 10, 10, {});
+
+    const auto resNoPeak = RunFrame(pipeline, rawNoPeak, 500);
+    Require(!resNoPeak.point.valid, "Frame should be invalid (no peak)");
+    Require(resNoPeak.pipelineStage == 3, "Should fail at peak detection stage");
+}
+
+void TestStylusPipelineNoSignalFrameClearsCommittedOutputState() {
+    StylusPipeline pipeline;
+    pipeline.LoadConfig("sp.filterMode", "2");
+
+    const auto validRaw = BuildCombinedStylusFrame(10, 10,
+        MakeCrossGrid(12000, 9000, 7000, 5000, 4, 4), 10, 10, {});
+    const auto down = RunFrame(pipeline, validRaw, 240, 8, true);
+    Require(down.point.valid, "Precondition frame should be valid");
+    Require(down.pressure > 0, "Precondition frame should carry pressure");
+    Require(down.tipSwitchActive, "Precondition frame should assert tip switch");
+
+    const auto noSignal = RunFrame(pipeline, BuildCombinedStylusFrame(0x00FF, 0x00FF, {}, 0, 0, {}), 0, 16, true);
+    Require(!noSignal.point.valid, "No-signal frame should invalidate point output");
+    Require(noSignal.pressure == 0, "No-signal frame should clear committed pressure");
+    Require(noSignal.point.pressure == 0, "No-signal frame should clear point pressure");
+    Require(!noSignal.tipSwitchActive, "No-signal frame should clear tip switch");
+}
+
+void TestStylusPipelineLegacyAliasRoundTripKeepsCanonicalKey() {
+    StylusPipeline pipeline;
+    pipeline.LoadConfig("sp.coordEdgeCompBit3", "1");
+
+    std::ostringstream out;
+    pipeline.SaveConfig(out);
+    const std::string saved = out.str();
+
+    Require(saved.find("sp.triEdgeSecondaryBlend=1") != std::string::npos,
+            "legacy alias should persist through canonical triEdgeSecondaryBlend key");
+    Require(saved.find("sp.coordEdgeCompBit3=") == std::string::npos,
+            "legacy alias key should not be emitted in saved config");
+
+    const auto schema = pipeline.GetConfigSchema();
+    bool foundCanonical = false;
+    bool foundAlias = false;
+    for (const auto& param : schema) {
+        if (param.key == "sp.triEdgeSecondaryBlend") foundCanonical = true;
+        if (param.key == "sp.coordEdgeCompBit3") foundAlias = true;
+    }
+    Require(foundCanonical, "schema should expose canonical secondary blend key");
+    Require(!foundAlias, "schema should not expose legacy alias key");
+}
+
+void TestStylusPipelineNoSignalFrameKeepsNeutralPipelineStage() {
+    StylusPipeline pipeline;
+    pipeline.LoadConfig("sp.filterMode", "2");
+
+    const auto noSignal = RunFrame(pipeline, BuildCombinedStylusFrame(0x00FF, 0x00FF, {}, 0, 0, {}), 0, 16, true);
+    Require(noSignal.pipelineStage == 0,
+            "No-signal frame should keep neutral pipeline stage for diagnostics");
+}
+
+void TestStylusPipelineProcessReturnsTrueWithoutPacketBuild() {
+    StylusPipeline pipeline;
+    std::vector<uint8_t> raw(kMasterBytes + kSlaveFrameBytes, 0xFF);
+
+    HeatmapFrame frame;
+    frame.rawPtr = raw.data();
+    frame.rawLen = raw.size();
+
+    const bool processed = pipeline.Process(frame);
+    Require(processed, "Process should still report successful finalize without packet construction");
+    Require(frame.stylus.packetRoute == Solvers::StylusPacketRoute::ParseFailure13,
+            "Process should still classify parse-failure routes for VHF");
+    Require(!frame.stylus.packet.valid,
+            "Process should not report packet validity as its success signal");
+}
+
 } // namespace
 
 int main() {
@@ -698,6 +813,13 @@ int main() {
         TestStylusPipelinePeakMetrics();
         TestStylusPipelineUsesPredictedIntermediatePressure();
         TestStylusPipelineRealZeroDropsPressureButKeepsWritingWhenTx1StillDown();
+        TestStylusPipelineParseFailPacketLength13();
+        TestStylusPipelineShortFrameDoesNotLeakState();
+        TestStylusPipelineInvalidPathUpdatesBlockedBtSeq();
+        TestStylusPipelineNoSignalFrameClearsCommittedOutputState();
+        TestStylusPipelineLegacyAliasRoundTripKeepsCanonicalKey();
+        TestStylusPipelineNoSignalFrameKeepsNeutralPipelineStage();
+        TestStylusPipelineProcessReturnsTrueWithoutPacketBuild();
         std::cout << "[TEST] Stylus fast ink tests passed.\n";
         return 0;
     } catch (const std::exception& ex) {

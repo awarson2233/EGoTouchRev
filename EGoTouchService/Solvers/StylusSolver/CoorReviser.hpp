@@ -1,5 +1,6 @@
 #pragma once
 #include "AsaTypes.hpp"
+#include "StylusFrameState.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -21,6 +22,38 @@ namespace Asa {
 /// caused by pen inclination.
 class CoorReviser {
 public:
+    inline AsaCoorResult Process(Solvers::StylusFrameState& state) {
+        HandleInactiveState(state.lifecycle.outputPressure);
+
+        if (!state.output.postCoor.valid) {
+            return state.output.postCoor;
+        }
+
+        if (!IsActive(state)) {
+            return state.output.postCoor;
+        }
+
+        int16_t tiltX = state.output.tiltX;
+        int16_t tiltY = state.output.tiltY;
+        state.output.postCoor = Revise(
+            state.output.postCoor,
+            state.tx2.globalCoor,
+            state.lifecycle.outputPressure,
+            tiltX,
+            tiltY);
+        state.output.tiltX = tiltX;
+        state.output.tiltY = tiltY;
+        return state.output.postCoor;
+    }
+
+    inline AsaCoorResult Process(const AsaCoorResult& tx1,
+                                 const AsaCoorResult& tx2,
+                                 uint16_t curPressure,
+                                 int16_t& outTiltX,
+                                 int16_t& outTiltY) {
+        return Revise(tx1, tx2, curPressure, outTiltX, outTiltY);
+    }
+
     /// Reset all internal state (call on pen-up or init).
     /// Mirrors TSACore CoorReviseInit + TiltInit.
     inline void Reset() {
@@ -30,6 +63,9 @@ public:
         m_diffBufDim2.fill(0);
         m_prevDiffDim1 = 0;
         m_prevDiffDim2 = 0;
+        m_tiltBufCount = 0;
+        m_tiltBufX.fill(0);
+        m_tiltBufY.fill(0);
         m_reviseBufCount = 0;
         m_reviseBufX.fill(0);
         m_reviseBufY.fill(0);
@@ -293,6 +329,21 @@ public:
     int maxGridRows = 40;   // DAT_1820d611
 
 private:
+    inline bool IsActive(const Solvers::StylusFrameState& state) const {
+        return enabled && state.lifecycle.enableCoorReviser;
+    }
+
+    inline void HandleInactiveState(uint16_t outputPressure) {
+        if (m_prevPressure != 0 && outputPressure == 0) {
+            Reset();
+            return;
+        }
+
+        if (!m_initialized) {
+            m_prevPressure = outputPressure;
+        }
+    }
+
     // ── Internal state ──
     bool m_initialized = false;
 

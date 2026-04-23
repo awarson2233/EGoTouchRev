@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 
+#include "StylusFrameState.hpp"
 
 namespace Asa {
 
@@ -97,6 +98,38 @@ public:
     };
 
     static constexpr int kHistoryCapacity = 400;
+
+    inline PenUpdateResult Process(const PenFrameEvidence& evidence) {
+        return Update(evidence);
+    }
+
+    inline PenUpdateResult Process(Solvers::StylusFrameState& state,
+                                   const PenFrameEvidence& evidence) {
+        const auto result = Update(evidence);
+        ApplyUpdateToState(state, result);
+        return result;
+    }
+
+    inline MotionProfile Process(bool coordValid, uint16_t pressure,
+                                 int32_t curDim1, int32_t curDim2) {
+        return Update(coordValid, pressure, curDim1, curDim2);
+    }
+
+    inline void ApplyUpdateToState(Solvers::StylusFrameState& state,
+                                   const PenUpdateResult& result) const {
+        state.lifecycle.outputPressure = result.output.outputPressure;
+        state.lifecycle.tipSwitchActive = result.output.tipSwitchActive;
+        state.lifecycle.keepPreviousCoordinate = result.output.keepPreviousCoordinate;
+        state.lifecycle.keepInRangeOnReleaseFrame = result.output.keepInRangeOnReleaseFrame;
+        state.lifecycle.applyExitEdgeSnap = result.output.applyExitEdgeSnap;
+        state.lifecycle.enableLinearFilter = result.motion.enableLinearFilter;
+        state.lifecycle.enableCoorReviser = result.motion.enableCoorReviser;
+        state.lifecycle.iirCoef = result.motion.iirCoef;
+        state.lifecycle.iirDivisorN = result.motion.iirDivisorN;
+        state.lifecycle.skipIIR = result.motion.skipIIR;
+        state.lifecycle.jitterStrength = result.motion.jitterStrength;
+        state.lifecycle.currentlyWriting = (m_state == State::Writing);
+    }
 
     inline PenUpdateResult Update(const PenFrameEvidence& evidence) {
         float rawSpeedThisFrame = 0.0f;

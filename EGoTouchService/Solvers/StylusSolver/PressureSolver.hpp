@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "BtPressBuffer.hpp"
+#include "StylusFrameState.hpp"
 
 namespace Asa {
 
@@ -38,6 +39,49 @@ struct PressureStageResult {
 class PressureSolver {
 public:
     static constexpr int kHistorySize = 6;
+
+    inline PressureStageResult Process(Solvers::StylusFrameState& state, bool active) {
+        const bool isEdge = state.signal.dim1EdgeActive || state.signal.dim2EdgeActive;
+        const EdgeSignalInputs edgeSignals{
+            state.signal.dim1EdgeActive,
+            state.signal.dim2EdgeActive,
+            static_cast<int>(state.signal.dim1EdgeSignal),
+            static_cast<int>(state.signal.dim2EdgeSignal),
+        };
+        const auto result = SolveStage(
+            state.lifecycle.btSample,
+            active,
+            static_cast<int>(state.signal.signalX),
+            isEdge,
+            edgeSignals);
+        ApplyStageToState(state, result);
+        return result;
+    }
+
+    inline PressureStageResult Process(Solvers::StylusFrameState& state) {
+        return Process(state, state.lifecycle.pressureGateOpen);
+    }
+
+    inline PressureStageResult Process(uint16_t rawPressure, bool active,
+                                       int signalStrength = 0, bool isEdge = false,
+                                       const EdgeSignalInputs& edgeSignals = {}) {
+        return SolveStage(rawPressure, active, signalStrength, isEdge, edgeSignals);
+    }
+
+    inline PressureStageResult Process(const BtPressureSample& sample, bool active,
+                                       int signalStrength = 0, bool isEdge = false,
+                                       const EdgeSignalInputs& edgeSignals = {}) {
+        return SolveStage(sample, active, signalStrength, isEdge, edgeSignals);
+    }
+
+    static inline void ApplyStageToState(Solvers::StylusFrameState& state,
+                                         const PressureStageResult& result) {
+        state.lifecycle.mappedPressure = result.mappedPressure;
+        state.lifecycle.realPressure = result.realPressure;
+        state.lifecycle.pressureIsReal = result.isRealMeasurement;
+        state.lifecycle.btSeq = result.btSeq;
+        state.lifecycle.predictedAgeFrames = static_cast<int>(result.predictedAgeFrames);
+    }
 
     inline PressureStageResult SolveStage(uint16_t rawPressure, bool active,
                                           int signalStrength = 0, bool isEdge = false,

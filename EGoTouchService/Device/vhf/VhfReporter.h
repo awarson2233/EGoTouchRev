@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <mutex>
 
+#include "StylusSolver/PacketBuilder.hpp"
 #include "SolverTypes.h"
 
 #ifndef _WINDOWS_
@@ -26,11 +27,15 @@ public:
     /// 主入口 (legacy, 后向兼容)
     void Dispatch(Solvers::HeatmapFrame& frame);
 
-    /// 独立手写笔写入
-    void DispatchStylus(const Solvers::StylusPacket& packet);
+    /// 独立手写笔写入；writeEnabled=false 时只回填 packet/diag，不写 VHF
+    void DispatchStylus(Solvers::HeatmapFrame& frame, bool writeEnabled = true);
 
     /// 独立手指写入 (含 BuildTouchReports)
     void DispatchTouch(Solvers::HeatmapFrame& frame);
+
+    void SetStylusPacketSensorRows(int rows);
+    void SetStylusPacketSensorCols(int cols);
+    void SetStylusPacketEmitWhenInvalid(bool v);
 
     // 开关
     void SetEnabled(bool v) { m_enabled.store(v, std::memory_order_relaxed); }
@@ -52,6 +57,7 @@ public:
 
 private:
     bool UpdateTouchState(bool hasTouch);
+    void BuildStylusPacket(Solvers::HeatmapFrame& frame);
 
     void WriteTouchPacketsLocked(
         const std::array<Solvers::TouchPacket, 2>& packets);
@@ -72,6 +78,8 @@ private:
     std::atomic<uint8_t> m_eraserState{0};
 
     mutable std::mutex m_mu;
+    Solvers::PacketBuilder m_stylusPackets{};
+    bool m_emitStylusPacketWhenInvalid = true;
     HANDLE m_handle = INVALID_HANDLE_VALUE;
     std::chrono::steady_clock::time_point m_nextOpenAttempt{};
 

@@ -1,5 +1,7 @@
 #pragma once
+#include <algorithm>
 #include "AsaTypes.hpp"
+#include "StylusFrameState.hpp"
 #include <cstdint>
 
 namespace Asa {
@@ -10,8 +12,121 @@ namespace Asa {
 ///   1. ApplyHpp3NoisePost: Detects large coordinate jumps and triggers frame freeze
 ///   2. HandlePenExitSmooth: On pen lift while inking, outputs one frozen frame
 ///      with edge coordinate snapping (TSACore: ReleaseASAReportExitStylus)
+struct StylusExitSnapContext {
+    bool hasCommittedFrame = false;
+    float committedPointX = 0.0f;
+    float committedPointY = 0.0f;
+    float previousPointX = 0.0f;
+    float previousPointY = 0.0f;
+
+    template <typename CommitterLike>
+    static inline StylusExitSnapContext FromCommitter(const CommitterLike& committer) {
+        StylusExitSnapContext ctx{};
+        ctx.hasCommittedFrame = committer.HasCommittedFrame();
+        if (!ctx.hasCommittedFrame) {
+            return ctx;
+        }
+
+        ctx.committedPointX = committer.GetCommittedFrame().point.x;
+        ctx.committedPointY = committer.GetCommittedFrame().point.y;
+        ctx.previousPointX = committer.GetPreviousPointX();
+        ctx.previousPointY = committer.GetPreviousPointY();
+        return ctx;
+    }
+
+    inline bool CanApply(const Solvers::StylusFrameState& state) const {
+        return hasCommittedFrame &&
+               state.lifecycle.applyExitEdgeSnap &&
+               state.lifecycle.keepPreviousCoordinate;
+    }
+};
+
 class NoiseGate {
 public:
+    inline bool Process(const AsaCoorResult& coor) {
+        return DetectNoiseJump(coor);
+    }
+
+    inline bool ProcessJump(Solvers::StylusFrameState& state) {
+        const bool detected = DetectNoiseJump(state.tx1.globalCoor);
+        if (detected) {
+            state.flow.terminal = true;
+            state.flow.pipelineStage = 5;
+            state.flow.packetRoute = Solvers::StylusPacketRoute::InvalidZeroState;
+            state.flow.clearCommitted = false;
+            state.flow.resetPost = true;
+            state.flow.resetNoise = false;
+        }
+        return detected;
+    }
+
+    inline bool Process(Solvers::StylusSignalState& signal) const {
+        return ProcessRecheck(signal);
+    }
+
+    inline bool Process(Solvers::StylusFrameState& state) const {
+        return ProcessRecheck(state);
+    }
+
+    inline AsaCoorResult Process(Solvers::StylusFrameState& state,
+                                 const StylusExitSnapContext& ctx) const {
+        return ProcessExitSnap(state, ctx);
+    }
+
+    inline bool Process(uint16_t signalX, uint16_t signalY,
+                        uint16_t maxRawPeak, uint16_t baseThreshold,
+                        uint16_t sustainThreshold,
+                        bool overlapLike) const {
+        return EvaluateRecheck(signalX, signalY, maxRawPeak, baseThreshold, sustainThreshold, overlapLike);
+    }
+
+    inline void Process(float lastX, float lastY,
+                        float prevX, float prevY,
+                        int sensorRows, int sensorCols,
+                        float& outX, float& outY) const {
+        ApplyExitEdgeSnap(lastX, lastY, prevX, prevY, sensorRows, sensorCols, outX, outY);
+    }
+
+    inline bool ProcessRecheck(Solvers::StylusSignalState& signal) const {
+        signal.recheckPassed = EvaluateRecheck(
+            signal.signalX,
+            signal.signalY,
+            signal.maxRawPeak,
+            signal.recheckThreshold,
+            signal.recheckThresholdMulti,
+            signal.overlapLike);
+        return signal.recheckPassed;
+    }
+
+    inline bool ProcessRecheck(Solvers::StylusFrameState& state) const {
+        const bool passed = ProcessRecheck(state.signal);
+        state.stylus.recheckEnabled = recheckEnabled;
+        state.stylus.recheckPassed = state.signal.recheckPassed;
+        return passed;
+    }
+
+    inline AsaCoorResult ProcessExitSnap(Solvers::StylusFrameState& state,
+                                         const StylusExitSnapContext& ctx) const {
+        if (!ctx.CanApply(state)) {
+            return state.output.finalCoor;
+        }
+
+        float snappedX = static_cast<float>(state.output.finalCoor.dim1);
+        float snappedY = static_cast<float>(state.output.finalCoor.dim2);
+        ApplyExitEdgeSnap(
+            ctx.committedPointX,
+            ctx.committedPointY,
+            ctx.previousPointX,
+            ctx.previousPointY,
+            state.sensorRows,
+            state.sensorCols,
+            snappedX,
+            snappedY);
+        state.output.finalCoor.dim1 = static_cast<int32_t>(snappedX);
+        state.output.finalCoor.dim2 = static_cast<int32_t>(snappedY);
+        return state.output.finalCoor;
+    }
+
     /// Detect coordinate jump noise.
     /// @param coor  Current coordinate
     /// @return true if noise jump detected (caller should freeze output)

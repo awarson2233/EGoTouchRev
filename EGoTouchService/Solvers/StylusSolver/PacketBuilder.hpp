@@ -1,6 +1,7 @@
 #pragma once
 #include "AsaTypes.hpp"
 #include "SolverTypes.h"
+#include "StylusFrameState.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -24,23 +25,100 @@ namespace Solvers {
 ///   b[11..12] : Y Tilt (int16 LE, -9000..+9000 centidegrees)
 class PacketBuilder {
 public:
-    /// Build a StylusPacket from frame data.
-    /// @param result    Current frame results
-    /// @param emitWhenInvalid  If true, emit a zero-state packet even for invalid coords
-    /// @param[out] pkt  Output packet
+    enum class PacketKind : uint8_t {
+        Valid,
+        InvalidZeroState,
+        ParseFailure13,
+    };
+
+    inline StylusPacket Build(const StylusFrameData& result,
+                              StylusPacketRoute route) const {
+        return BuildPacket(result, ToPacketKind(route));
+    }
+
+    inline StylusPacket Build(const StylusFrameData& result,
+                              StylusPacketRoute route,
+                              bool emitWhenInvalid) const {
+        if (route != StylusPacketRoute::Valid && !emitWhenInvalid) {
+            StylusPacket pkt{};
+            pkt.reportId = 0x08;
+            pkt.length = 13;
+            return pkt;
+        }
+        return Build(result, route);
+    }
+
+    inline StylusPacket Build(const StylusFrameState& state) const {
+        return Build(state.stylus, state.flow.packetRoute);
+    }
+
+    inline StylusPacket Build(const StylusFrameState& state,
+                              StylusPacketRoute route) const {
+        return Build(state.stylus, route);
+    }
+
     inline void Build(const StylusFrameData& result,
-                      bool emitWhenInvalid, StylusPacket& pkt) const {
-        pkt = StylusPacket{};
+                      StylusPacketRoute route,
+                      StylusPacket& pkt) const {
+        pkt = Build(result, route);
+    }
+
+    inline void Build(StylusFrameState& state) const {
+        state.stylus.packet = Build(static_cast<const StylusFrameState&>(state));
+    }
+
+    inline void Build(StylusFrameState& state,
+                      StylusPacketRoute route) const {
+        state.flow.packetRoute = route;
+        state.stylus.packet = Build(state.stylus, route);
+    }
+
+    inline StylusPacket Process(const StylusFrameData& result,
+                                StylusPacketRoute route) const {
+        return Build(result, route);
+    }
+
+    inline StylusPacket Process(const StylusFrameState& state) const {
+        return Build(state);
+    }
+
+    inline void Process(StylusFrameState& state) const {
+        Build(state);
+    }
+
+    inline void Process(StylusFrameState& state,
+                        StylusPacketRoute route) const {
+        Build(state, route);
+    }
+
+    inline StylusPacket Process(const StylusFrameData& result,
+                                PacketKind kind) const {
+        return BuildPacket(result, kind);
+    }
+
+    inline void Process(const StylusFrameData& result,
+                        bool emitWhenInvalid, StylusPacket& pkt) const {
+        Build(result, emitWhenInvalid, pkt);
+    }
+
+    inline StylusPacket BuildPacket(const StylusFrameData& result,
+                                    PacketKind kind) const {
+        StylusPacket pkt{};
         pkt.reportId = 0x08;
         pkt.length = 13;
-        if (!result.point.valid && !emitWhenInvalid) {
-            pkt.valid = false;
-            return;
+
+        if (kind == PacketKind::Valid && !result.point.valid) {
+            return pkt;
         }
+
         pkt.valid = true;
         auto& b = pkt.bytes;
         b.fill(0);
         b[0] = 0x08;
+
+        if (kind != PacketKind::Valid) {
+            return pkt;
+        }
 
         // Status byte
         {
@@ -71,15 +149,13 @@ public:
             float gx = std::clamp(result.point.x - offsetCol, 0.0f,
                                   std::max(1.0f, activeCol));
 
-            // Row → HID X (16000): no inversion
             const float normHidX = activeRow > 0.0f ? (gy / activeRow) : 0.5f;
-            // Col → HID Y (25600): invert
             const float normHidY = activeCol > 0.0f ? (1.0f - gx / activeCol) : 0.5f;
 
-            uint16_t vx = static_cast<uint16_t>(std::clamp(
+            const uint16_t vx = static_cast<uint16_t>(std::clamp(
                 static_cast<int32_t>(std::lround(normHidX * kHidMaxX)),
                 0, static_cast<int32_t>(kHidMaxX)));
-            uint16_t vy = static_cast<uint16_t>(std::clamp(
+            const uint16_t vy = static_cast<uint16_t>(std::clamp(
                 static_cast<int32_t>(std::lround(normHidY * kHidMaxY)),
                 0, static_cast<int32_t>(kHidMaxY)));
 
@@ -87,22 +163,43 @@ public:
             WriteU16Le(b, 5, vy);
         }
 
-        // Pressure (0..4095)
-        uint16_t press = static_cast<uint16_t>(
+        const uint16_t press = static_cast<uint16_t>(
             std::min(static_cast<uint32_t>(result.pressure), 4095u));
         WriteU16Le(b, 7, press);
 
-        // Tilt (centidegrees)
-        int16_t tiltXCdeg = static_cast<int16_t>(std::clamp(
+        const int16_t tiltXCdeg = static_cast<int16_t>(std::clamp(
             static_cast<int32_t>(result.point.tiltX) * 100,
             static_cast<int32_t>(-kTiltMax),
             static_cast<int32_t>(kTiltMax)));
-        int16_t tiltYCdeg = static_cast<int16_t>(std::clamp(
+        const int16_t tiltYCdeg = static_cast<int16_t>(std::clamp(
             static_cast<int32_t>(result.point.tiltY) * 100,
             static_cast<int32_t>(-kTiltMax),
             static_cast<int32_t>(kTiltMax)));
-        WriteU16Le(b, 9,  static_cast<uint16_t>(tiltXCdeg));
+        WriteU16Le(b, 9, static_cast<uint16_t>(tiltXCdeg));
         WriteU16Le(b, 11, static_cast<uint16_t>(tiltYCdeg));
+        return pkt;
+    }
+
+    /// Build a StylusPacket from frame data.
+    /// @param result    Current frame results
+    /// @param emitWhenInvalid  If true, emit a zero-state packet even for invalid coords
+    /// @param[out] pkt  Output packet
+    inline void Build(const StylusFrameData& result,
+                      bool emitWhenInvalid, StylusPacket& pkt) const {
+        if (!result.point.valid && !emitWhenInvalid) {
+            pkt = StylusPacket{};
+            pkt.reportId = 0x08;
+            pkt.length = 13;
+            return;
+        }
+        pkt = BuildPacket(result,
+                          result.point.valid
+                              ? PacketKind::Valid
+                              : PacketKind::InvalidZeroState);
+    }
+
+    inline void BuildParseFailurePacket(StylusPacket& pkt) const {
+        pkt = BuildPacket(StylusFrameData{}, PacketKind::ParseFailure13);
     }
 
     // ── Configuration ──
@@ -117,6 +214,18 @@ private:
     static constexpr float kHidMaxX = 16000.0f;
     static constexpr float kHidMaxY = 25600.0f;
     static constexpr int16_t kTiltMax = 9000;
+
+    static inline PacketKind ToPacketKind(StylusPacketRoute route) {
+        switch (route) {
+        case StylusPacketRoute::Valid:
+            return PacketKind::Valid;
+        case StylusPacketRoute::ParseFailure13:
+            return PacketKind::ParseFailure13;
+        case StylusPacketRoute::InvalidZeroState:
+        default:
+            return PacketKind::InvalidZeroState;
+        }
+    }
 
     static inline void WriteU16Le(std::array<uint8_t, 17>& b,
                                    size_t off, uint16_t v) {

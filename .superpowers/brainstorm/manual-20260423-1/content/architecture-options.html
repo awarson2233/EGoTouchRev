@@ -1,0 +1,140 @@
+<h2>Stylus Rebuild Options</h2>
+<p class="subtitle">基于你刚才确认的边界：单大帧加工、BT pressure 外部输入、VHF 后置组包、debug-only 诊断、删除 pen state machine。</p>
+
+<div class="section">
+  <div class="split">
+    <div class="mockup">
+      <div class="mockup-header">Current Stylus</div>
+      <div class="mockup-body">
+        <div style="display:grid;gap:10px">
+          <div class="placeholder">StylusPipeline orchestrator</div>
+          <div class="placeholder">StylusFrameState</div>
+          <div class="placeholder">Input / Signal / State / Post / Packet / Diag</div>
+          <div class="placeholder">PenStateMachine + Output commit semantics</div>
+        </div>
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">Touch-Style Target</div>
+      <div class="mockup-body">
+        <div style="display:grid;gap:10px">
+          <div class="placeholder">StylusPipeline orchestrator only</div>
+          <div class="placeholder">One HeatmapFrame as shared work frame</div>
+          <div class="placeholder">Phase modules mutate frame.stylus directly</div>
+          <div class="placeholder">VhfReporter builds packet later</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-body">
+      <div class="label">Recommended</div>
+      <h3>A. Full Touch-Mirror Pipeline</h3>
+      <p>`StylusPipeline` 只保留 phase member、线性 `Process(frame)`、config、少量 diag cache accessor。</p>
+      <div class="pros-cons">
+        <div class="pros">
+          <h4>Pros</h4>
+          <ul>
+            <li>结构和 `TouchPipeline` 最接近</li>
+            <li>彻底消灭 `StylusFrameState` / `PacketBuilder` 主线职责</li>
+            <li>后续维护和 touch 的心智模型统一</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <h4>Cons</h4>
+          <ul>
+            <li>改动面最大</li>
+            <li>需要重做 `HeatmapFrame` / `StylusFrameData` 边界</li>
+          </ul>
+        </div>
+      </div>
+      <div class="mockup">
+        <div class="mockup-header">Flow</div>
+        <div class="mockup-body">
+          <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;text-align:center">
+            <div class="placeholder">Parse</div>
+            <div class="placeholder">Condition</div>
+            <div class="placeholder">Extract</div>
+            <div class="placeholder">Solve</div>
+            <div class="placeholder">Post</div>
+            <div class="placeholder">Diag Cache</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-body">
+      <h3>B. Touch-Like Surface, Stylus-Like Internals</h3>
+      <p>表面变成 `Process(frame)` 顺排，但内部还保留轻量 scratch/state 聚合对象，由模块共享。</p>
+      <div class="pros-cons">
+        <div class="pros">
+          <h4>Pros</h4>
+          <ul>
+            <li>迁移难度低一些</li>
+            <li>能复用更多现有模块接口</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <h4>Cons</h4>
+          <ul>
+            <li>名义上像 touch，实质上仍保留 stylus 旧心智</li>
+            <li>后续还会继续被 scratch 层反噬</li>
+          </ul>
+        </div>
+      </div>
+      <div class="mockup">
+        <div class="mockup-header">Flow</div>
+        <div class="mockup-body">
+          <div style="display:grid;gap:8px">
+            <div class="placeholder">StylusPipeline</div>
+            <div class="placeholder">frame + stylusScratch</div>
+            <div class="placeholder">phase modules read/write scratch</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-body">
+      <h3>C. Mega-Module Collapse</h3>
+      <p>去掉多数小模块，直接压成少数几个大头文件，例如 `StylusParseStage`、`StylusSolveStage`、`StylusOutputStage`。</p>
+      <div class="pros-cons">
+        <div class="pros">
+          <h4>Pros</h4>
+          <ul>
+            <li>文件数锐减</li>
+            <li>主线接口干净</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <h4>Cons</h4>
+          <ul>
+            <li>会偏离 touch 的模块粒度</li>
+            <li>容易形成新的巨型文件</li>
+          </ul>
+        </div>
+      </div>
+      <div class="mockup">
+        <div class="mockup-header">Flow</div>
+        <div class="mockup-body">
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center">
+            <div class="placeholder">Parse Stage</div>
+            <div class="placeholder">Solve Stage</div>
+            <div class="placeholder">Output Stage</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Recommended Direction</h3>
+  <p>推荐选 <strong>A</strong>。它最符合你已经明确的目标：让 stylus 从“状态驱动的专用管线”改成和 touch 一样的“单大帧 + phase modules + reporter 后置组包”架构。B 会留下旧架构阴影，C 会把 stylus 做成另一套新的特例。</p>
+</div>

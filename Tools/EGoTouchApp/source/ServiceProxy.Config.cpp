@@ -86,6 +86,7 @@ void ServiceProxy::SaveConfig() {
     if (in.is_open()) {
         existingText.assign(std::istreambuf_iterator<char>(in),
                             std::istreambuf_iterator<char>());
+        in.close();
     }
 
     const TouchPipelineModuleEnableState* persistedModuleState = nullptr;

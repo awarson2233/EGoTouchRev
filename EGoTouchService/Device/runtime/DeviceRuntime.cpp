@@ -54,7 +54,11 @@ DeviceRuntime::DeviceRuntime(
         const std::wstring& master,
         const std::wstring& slave,
         const std::wstring& interrupt)
-    : m_chip(master, slave, interrupt) {}
+    : m_chip(master, slave, interrupt) {
+    m_vhfReporter.SetStylusPacketSensorRows(m_stylusPipeline.GetPacketSensorRows());
+    m_vhfReporter.SetStylusPacketSensorCols(m_stylusPipeline.GetPacketSensorCols());
+    m_vhfReporter.SetStylusPacketEmitWhenInvalid(m_stylusPipeline.GetEmitPacketWhenInvalid());
+}
 
 DeviceRuntime::~DeviceRuntime() { Stop(); }
 
@@ -115,6 +119,9 @@ void DeviceRuntime::LoadPipelineConfig(const std::string& key, const std::string
 
 void DeviceRuntime::LoadStylusPipelineConfig(const std::string& key, const std::string& value) {
     m_stylusPipeline.LoadConfig(key, value);
+    m_vhfReporter.SetStylusPacketSensorRows(m_stylusPipeline.GetPacketSensorRows());
+    m_vhfReporter.SetStylusPacketSensorCols(m_stylusPipeline.GetPacketSensorCols());
+    m_vhfReporter.SetStylusPacketEmitWhenInvalid(m_stylusPipeline.GetEmitPacketWhenInvalid());
 }
 
 void DeviceRuntime::SavePipelineConfig(std::ostream& out) const {
@@ -374,9 +381,9 @@ void DeviceRuntime::OnStreaming() {
 
     // 3. Stylus pipeline — reads rawPtr, writes frame.stylus
     m_stylusPipeline.Process(touchFrame);
-    if (m_stylusVhfEnabled.load(std::memory_order_relaxed)) {
-        m_vhfReporter.DispatchStylus(touchFrame.stylus.packet);
-    }
+    m_vhfReporter.DispatchStylus(
+        touchFrame,
+        m_stylusVhfEnabled.load(std::memory_order_relaxed));
 
     // 4. Touch pipeline — reads frame, writes contacts/packets
     m_touchPipeline.Process(touchFrame);

@@ -1,6 +1,9 @@
 #pragma once
 #include "AsaTypes.hpp"
+#include "StylusFrameState.hpp"
+
 #include <algorithm>
+#include <array>
 
 namespace Asa {
 
@@ -22,10 +25,91 @@ struct TriangleEdgeParams {
     int sumThresholdIdx0 = 5000;
 };
 
+struct CoordinateProcessOptions {
+    bool pitchMapEnabled = false;
+    const double* pitchTableDim1 = nullptr;
+    const double* pitchTableDim2 = nullptr;
+};
+
 /// CoordinateSolver — Triangle/Gravity interpolation on 1D projections
 /// Mirrors TX1CoordinateProcess + GetCoordinateByTriangleOf
 class CoordinateSolver {
 public:
+    inline void Process(Solvers::StylusFrameState& state) const {
+        Process(
+            state,
+            pitchMapEnabled,
+            pitchTableDim1.data(),
+            pitchTableDim2.data());
+    }
+
+    inline void Process(Solvers::StylusFrameState& state,
+                        const CoordinateProcessOptions& options) const {
+        Process(
+            state,
+            options.pitchMapEnabled,
+            options.pitchTableDim1,
+            options.pitchTableDim2);
+    }
+
+    inline void Process(Solvers::StylusFrameState& state,
+                        bool pitchMapEnabled,
+                        const double* pitchTableDim1,
+                        const double* pitchTableDim2) const {
+        ResetPointOutputs(state);
+
+        SolveIntoState(
+            state.tx1,
+            state.parse.gridData.tx1.anchorRow,
+            state.parse.gridData.tx1.anchorCol,
+            state.sensorRows,
+            state.sensorCols,
+            state.anchorCenterOffset,
+            pitchMapEnabled,
+            pitchTableDim1,
+            pitchTableDim2);
+
+        if (!state.tx1.globalCoor.valid) {
+            state.flow.terminal = true;
+            state.flow.pipelineStage = 4;
+            state.flow.packetRoute = Solvers::StylusPacketRoute::InvalidZeroState;
+            state.flow.clearCommitted = false;
+            state.flow.resetPost = false;
+            state.flow.resetNoise = false;
+            return;
+        }
+
+        state.stylus.point.tx1X = static_cast<float>(state.tx1.localCoor.dim1) / Asa::kCoorUnit;
+        state.stylus.point.tx1Y = static_cast<float>(state.tx1.localCoor.dim2) / Asa::kCoorUnit;
+
+        if (state.parse.gridData.tx2.valid && state.tx2.peak.valid) {
+            SolveIntoState(
+                state.tx2,
+                state.parse.gridData.tx2.anchorRow,
+                state.parse.gridData.tx2.anchorCol,
+                state.sensorRows,
+                state.sensorCols,
+                state.anchorCenterOffset,
+                pitchMapEnabled,
+                pitchTableDim1,
+                pitchTableDim2);
+
+            if (state.tx2.localCoor.valid) {
+                state.stylus.point.tx2X = static_cast<float>(state.tx2.localCoor.dim1) / Asa::kCoorUnit;
+                state.stylus.point.tx2Y = static_cast<float>(state.tx2.localCoor.dim2) / Asa::kCoorUnit;
+            }
+        }
+    }
+
+    inline AsaCoorResult Process(const AsaProjection& proj,
+                                 int anchorRow,
+                                 int anchorCol,
+                                 int sensorRows,
+                                 int sensorCols,
+                                 int centerIndex = kGridDim / 2) const {
+        return Solve(proj, anchorRow, anchorCol, sensorRows, sensorCols, centerIndex);
+    }
+
     /// Solve coordinates from 1D projection signals
     /// @param proj  1D projections from GridPeakDetector::ProjectTo1D
     /// @param anchorRow  Window center anchor on the physical row axis
@@ -39,7 +123,7 @@ public:
                                int anchorCol,
                                int sensorRows,
                                int sensorCols,
-                               int centerIndex = kGridDim / 2) {
+                               int centerIndex = kGridDim / 2) const {
         AsaCoorResult result{};
 
         int32_t coorDim1, coorDim2;
@@ -107,7 +191,92 @@ public:
     // edge-biased centroid shift (mirrors GetFictiousEdge).
     bool gravityFictitiousEdge = true;
 
+    // ── Post-solve pitch map compensation ──
+    bool pitchMapEnabled = false;
+    std::array<double, Asa::kMaxSensorDim + 1> pitchTableDim1 =
+        [] {
+            std::array<double, Asa::kMaxSensorDim + 1> table{};
+            table.fill(100.0);
+            return table;
+        }();
+    std::array<double, Asa::kMaxSensorDim + 1> pitchTableDim2 =
+        [] {
+            std::array<double, Asa::kMaxSensorDim + 1> table{};
+            table.fill(100.0);
+            return table;
+        }();
+
 private:
+    inline void SolveIntoState(Solvers::StylusProjectionState& state,
+                               int anchorRow,
+                               int anchorCol,
+                               int sensorRows,
+                               int sensorCols,
+                               int anchorCenterOffset,
+                               bool pitchMapEnabled,
+                               const double* pitchTableDim1,
+                               const double* pitchTableDim2) const {
+        state.localCoor = Solve(
+            state.projection,
+            anchorRow,
+            anchorCol,
+            sensorRows,
+            sensorCols,
+            anchorCenterOffset);
+
+        state.globalCoor = state.localCoor;
+        if (!state.globalCoor.valid) {
+            return;
+        }
+
+        if (pitchMapEnabled && pitchTableDim1 && pitchTableDim2) {
+            ApplyPitchMap(
+                state.globalCoor,
+                true,
+                pitchTableDim1,
+                pitchTableDim2);
+        }
+        LocalToGlobal(
+            state.globalCoor,
+            anchorRow,
+            anchorCol,
+            anchorCenterOffset);
+    }
+
+    static inline void ResetPointOutputs(Solvers::StylusFrameState& state) {
+        state.stylus.point.tx1X = 0.0f;
+        state.stylus.point.tx1Y = 0.0f;
+        state.stylus.point.tx2X = 0.0f;
+        state.stylus.point.tx2Y = 0.0f;
+        state.tx1.localCoor = {};
+        state.tx1.globalCoor = {};
+        state.tx2.localCoor = {};
+        state.tx2.globalCoor = {};
+    }
+
+    static inline void ApplyPitchMap(AsaCoorResult& coor,
+                                     bool enabled,
+                                     const double* pitchTableDim1,
+                                     const double* pitchTableDim2) {
+        if (enabled && coor.valid) {
+            coor.dim1 = Asa::SensorPitchSizeMap(coor.dim1, pitchTableDim1, Asa::kCoorUnit);
+            coor.dim2 = Asa::SensorPitchSizeMap(coor.dim2, pitchTableDim2, Asa::kCoorUnit);
+        }
+    }
+
+    static inline void LocalToGlobal(AsaCoorResult& coor,
+                                     int anchorRow,
+                                     int anchorCol,
+                                     int anchorCenterOffset) {
+        if (!coor.valid) {
+            return;
+        }
+
+        const int32_t centerOff = anchorCenterOffset * Asa::kCoorUnit;
+        coor.dim1 += static_cast<int32_t>(anchorCol) * Asa::kCoorUnit - centerOff;
+        coor.dim2 += static_cast<int32_t>(anchorRow) * Asa::kCoorUnit - centerOff;
+    }
+
     struct ValidRange {
         int begin = 0;
         int end = -1;
@@ -139,7 +308,7 @@ private:
     /// Edge compensation: creates virtual neighbor for edge interpolation
     /// Mirrors TSACore EdgeCompensating exactly
     inline int32_t EdgeCompensating(int peak, int n1, int n2,
-                                    int param1, int param5) {
+                                    int param1, int param5) const {
         int edgeParam = (param1 == 0) ? 1 : param1;
 
         int virtualNeighbor = ((peak - n1) * 10) / edgeParam;
@@ -168,7 +337,7 @@ private:
 
     /// Triangle interpolation at grid edge
     inline int32_t TriangleAlgEdge(int peak, int n1, int n2,
-                                   int param1, int param2) {
+                                   int param1, int param2) const {
         int virtualNeighbor = EdgeCompensating(peak, n1, n2, param1, param2);
         int result = TriangleAlgUsing3Point(virtualNeighbor, peak, n1);
 
@@ -198,7 +367,7 @@ private:
     inline int32_t SolveByTriangle(
             const int32_t* signal, int peakIdx, int len,
             const TriangleEdgeParams& edgeParam,
-            int anchor, int sensorDim, int centerIndex) {
+            int anchor, int sensorDim, int centerIndex) const {
         if (peakIdx < 0 || peakIdx >= len) return 0x7FFFFFFF;
 
         // TSACore uses MOVZX word ptr [RAX], meaning signals are treated as uint16
@@ -249,7 +418,7 @@ private:
     }
 
     /// Gravity (centroid) interpolation on 1D signal
-    inline int32_t SolveByGravity(const int32_t* signal, int len, int peakIdx) {
+    inline int32_t SolveByGravity(const int32_t* signal, int len, int peakIdx) const {
         if (peakIdx < 0 || peakIdx >= len) return 0x7FFFFFFF;
 
         // ── Build narrow-window buffer with baseline subtraction ──

@@ -1,5 +1,7 @@
 #pragma once
 #include "AsaTypes.hpp"
+#include "StylusFrameState.hpp"
+
 #include <algorithm>
 #include <array>
 
@@ -12,7 +14,35 @@ public:
     struct PeakProjectionAnalysis {
         GridPeakUnit peak{};
         AsaProjection projection{};
+        uint16_t peakSignal = 0;
     };
+
+    inline PeakProjectionAnalysis Process(
+            Solvers::StylusFrameState& state) const {
+        ResetProjectionState(state.tx1);
+        ResetProjectionState(state.tx2);
+
+        auto tx1Analysis = AnalyzePeakAndProjection(state.parse.gridData.tx1.grid);
+        AssignAnalysis(state.tx1, tx1Analysis);
+
+        if (!state.tx1.peak.valid) {
+            SetInvalidTx1Terminal(state);
+            return tx1Analysis;
+        }
+
+        if (state.parse.gridData.tx2.valid) {
+            AssignAnalysis(
+                state.tx2,
+                AnalyzePeakAndProjection(state.parse.gridData.tx2.grid));
+        }
+
+        return tx1Analysis;
+    }
+
+    inline PeakProjectionAnalysis Process(
+            const int16_t grid[kGridDim][kGridDim]) const {
+        return AnalyzePeakAndProjection(grid);
+    }
 
     inline PeakProjectionAnalysis AnalyzePeakAndProjection(
             const int16_t grid[kGridDim][kGridDim]) const {
@@ -42,6 +72,8 @@ public:
 
         if (analysis.peak.valid) {
             analysis.projection = ProjectTo1DFlat(flat, analysis.peak);
+            analysis.peakSignal = ClampGridSignal(
+                grid[analysis.peak.peakRow][analysis.peak.peakCol]);
         }
         return analysis;
     }
@@ -68,6 +100,38 @@ public:
     int   projRadius     = 1;      // rows/cols around peak for projection
 
 private:
+    static inline uint16_t ClampGridSignal(int16_t value) {
+        return static_cast<uint16_t>(std::clamp(
+            value,
+            static_cast<int16_t>(0),
+            static_cast<int16_t>(0x7FFF)));
+    }
+
+    static inline void ResetProjectionState(Solvers::StylusProjectionState& state) {
+        state.peak = {};
+        state.projection.Clear();
+        state.peakSignal = 0;
+        state.localCoor = {};
+        state.globalCoor = {};
+    }
+
+    static inline void AssignAnalysis(
+            Solvers::StylusProjectionState& state,
+            const PeakProjectionAnalysis& analysis) {
+        state.peak = analysis.peak;
+        state.projection = analysis.projection;
+        state.peakSignal = analysis.peakSignal;
+    }
+
+    static inline void SetInvalidTx1Terminal(Solvers::StylusFrameState& state) {
+        state.flow.terminal = true;
+        state.flow.pipelineStage = 3;
+        state.flow.packetRoute = Solvers::StylusPacketRoute::InvalidZeroState;
+        state.flow.clearCommitted = false;
+        state.flow.resetPost = false;
+        state.flow.resetNoise = false;
+    }
+
     struct FourNeighborList {
         std::array<uint8_t, 4> indices{};
         uint8_t count = 0;

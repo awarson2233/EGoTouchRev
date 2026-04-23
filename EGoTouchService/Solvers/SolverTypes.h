@@ -117,6 +117,12 @@ struct StylusPacket {
     std::array<uint8_t, 17> bytes{};
 };
 
+enum class StylusPacketRoute : uint8_t {
+    Valid,
+    InvalidZeroState,
+    ParseFailure13,
+};
+
 struct StylusFrameData {
     bool slaveValid = false;
     bool checksumOk = false;
@@ -165,6 +171,7 @@ struct StylusFrameData {
 
     StylusSolvePoint point{};
     StylusPacket packet{};
+    StylusPacketRoute packetRoute = StylusPacketRoute::Valid;
 
     // Phase 6: AnimationProcess state output (Idle/PenDown/Writing/Lifting)
     uint8_t animState = 0;

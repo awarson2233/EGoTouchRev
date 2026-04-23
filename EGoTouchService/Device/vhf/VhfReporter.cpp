@@ -162,6 +162,21 @@ void ApplyStylusPostTransform(std::array<uint8_t, 17>& bytes,
 VhfReporter::VhfReporter() = default;
 VhfReporter::~VhfReporter() { Close(); }
 
+void VhfReporter::SetStylusPacketSensorRows(int rows) {
+    std::lock_guard<std::mutex> lk(m_mu);
+    m_stylusPackets.sensorRows = std::max(rows, 1);
+}
+
+void VhfReporter::SetStylusPacketSensorCols(int cols) {
+    std::lock_guard<std::mutex> lk(m_mu);
+    m_stylusPackets.sensorCols = std::max(cols, 1);
+}
+
+void VhfReporter::SetStylusPacketEmitWhenInvalid(bool v) {
+    std::lock_guard<std::mutex> lk(m_mu);
+    m_emitStylusPacketWhenInvalid = v;
+}
+
 void VhfReporter::Close() {
     std::lock_guard<std::mutex> lk(m_mu);
     CloseDeviceLocked();
@@ -182,9 +197,27 @@ bool VhfReporter::UpdateTouchState(bool hasTouch) {
                                          std::memory_order_relaxed);
 }
 
+void VhfReporter::BuildStylusPacket(Solvers::HeatmapFrame& frame) {
+    Solvers::PacketBuilder builder;
+    bool emitWhenInvalid = true;
+    {
+        std::lock_guard<std::mutex> lk(m_mu);
+        builder = m_stylusPackets;
+        emitWhenInvalid = m_emitStylusPacketWhenInvalid;
+    }
+
+    frame.stylus.packet = builder.Build(
+        frame.stylus,
+        frame.stylus.packetRoute,
+        emitWhenInvalid);
+    frame.stylus.diag.vhfPenState =
+        frame.stylus.packet.valid ? frame.stylus.packet.bytes[1] : 0;
+}
+
 // ── 主入口 (legacy) ──
 
 void VhfReporter::Dispatch(Solvers::HeatmapFrame& frame) {
+    BuildStylusPacket(frame);
     if (!m_enabled.load(std::memory_order_relaxed)) {
         return;
     }
@@ -223,17 +256,21 @@ void VhfReporter::Dispatch(Solvers::HeatmapFrame& frame) {
 
 // ── 独立手写笔写入 ──
 
-void VhfReporter::DispatchStylus(const Solvers::StylusPacket& packet) {
-    if (!m_enabled.load(std::memory_order_relaxed) || !packet.valid) {
+void VhfReporter::DispatchStylus(Solvers::HeatmapFrame& frame,
+                                 bool writeEnabled) {
+    BuildStylusPacket(frame);
+    if (!writeEnabled ||
+        !m_enabled.load(std::memory_order_relaxed) ||
+        !frame.stylus.packet.valid) {
         return;
     }
 
     const auto bytes = MakeStylusBytes(
-        packet,
+        frame.stylus.packet,
         m_eraserState.load(std::memory_order_relaxed));
 
     std::lock_guard<std::mutex> lk(m_mu);
-    WriteStylusPacketLocked(bytes.data(), packet.length);
+    WriteStylusPacketLocked(bytes.data(), frame.stylus.packet.length);
 }
 
 // ── 独立手指写入 ──

@@ -1,8 +1,13 @@
 #pragma once
 #include "AsaTypes.hpp"
+#include "CoorReviser.hpp"
+#include "LinearFilter.hpp"
+#include "NoiseGate.hpp"
+#include "StylusFrameState.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <utility>
 
 namespace Asa {
 
@@ -20,6 +25,95 @@ namespace Asa {
 class CoorPostProcessor {
 public:
     static constexpr int kCoorUnit = 0x400;
+
+    template <typename FinalizeFn>
+    inline AsaCoorResult Process(Solvers::StylusFrameState& state,
+                                 LinearFilter& linearFilter,
+                                 const PenStateMachine& historyOwner,
+                                 CoorReviser& coorReviser,
+                                 NoiseGate& noiseGate,
+                                 const StylusExitSnapContext& exitCtx,
+                                 FinalizeFn&& finalizeFinalCoor) {
+        ApplyLinearFilter(state, linearFilter, historyOwner);
+        coorReviser.Process(state);
+        ApplyMotionFilters(state);
+        state.output.finalCoor = finalizeFinalCoor(state);
+        return noiseGate.Process(state, exitCtx);
+    }
+
+    template <typename CommitterLike, typename FinalizeFn>
+    inline AsaCoorResult Process(Solvers::StylusFrameState& state,
+                                 LinearFilter& linearFilter,
+                                 const PenStateMachine& historyOwner,
+                                 CoorReviser& coorReviser,
+                                 NoiseGate& noiseGate,
+                                 const CommitterLike& committer,
+                                 FinalizeFn&& finalizeFinalCoor) {
+        return Process(
+            state,
+            linearFilter,
+            historyOwner,
+            coorReviser,
+            noiseGate,
+            StylusExitSnapContext::FromCommitter(committer),
+            std::forward<FinalizeFn>(finalizeFinalCoor));
+    }
+
+    template <typename CommitterLike>
+    inline AsaCoorResult Process(Solvers::StylusFrameState& state,
+                                 LinearFilter& linearFilter,
+                                 const PenStateMachine& historyOwner,
+                                 CoorReviser& coorReviser,
+                                 NoiseGate& noiseGate,
+                                 const CommitterLike& committer) {
+        ApplyLinearFilter(state, linearFilter, historyOwner);
+        coorReviser.Process(state);
+        ApplyMotionFilters(state);
+        committer.Process(state);
+        return noiseGate.Process(state, StylusExitSnapContext::FromCommitter(committer));
+    }
+
+    inline AsaCoorResult ProcessLinear(Solvers::StylusFrameState& state,
+                                       LinearFilter& linearFilter,
+                                       const PenStateMachine& historyOwner) {
+        state.output.postCoor = linearFilter.Process(
+            state.tx1.globalCoor,
+            state.lifecycle.enableLinearFilter,
+            historyOwner);
+        return state.output.postCoor;
+    }
+
+    inline AsaCoorResult ApplyLinearFilter(Solvers::StylusFrameState& state,
+                                           LinearFilter& linearFilter,
+                                           const PenStateMachine& historyOwner) {
+        return ProcessLinear(state, linearFilter, historyOwner);
+    }
+
+    inline AsaCoorResult ApplyMotionFilters(Solvers::StylusFrameState& state) {
+        if (filterMode == 0 || filterMode == 1) {
+            state.output.postCoor = StepIIR(
+                state.output.postCoor,
+                state.lifecycle.iirCoef,
+                state.lifecycle.iirDivisorN,
+                state.lifecycle.skipIIR);
+        }
+
+        state.output.postCoor = StepJitter(
+            state.output.postCoor,
+            state.lifecycle.jitterStrength,
+            state.signal.dim1EdgeActive || state.signal.dim2EdgeActive);
+        return state.output.postCoor;
+    }
+
+    inline AsaCoorResult Process(const AsaCoorResult& cur,
+                                 int coefInt, int divisorN, bool skipIIR) {
+        return StepIIR(cur, coefInt, divisorN, skipIIR);
+    }
+
+    inline AsaCoorResult Process(const AsaCoorResult& cur,
+                                 int strength, bool isEdge) {
+        return StepJitter(cur, strength, isEdge);
+    }
 
     inline void Reset() {
         m_initialized = false;
@@ -154,6 +248,7 @@ public:
     int  jitterEdgeParamDim2   = 3;   // TSACore: flash[0xa67]
     int  jitterCenterParamDim1 = 2;   // TSACore: flash[0xa64]
     int  jitterCenterParamDim2 = 2;   // TSACore: flash[0xa65]
+    int  filterMode = 0;              // 0=IIR, 1=1-Euro alias, 2=Off
     int  screenDimDim1 = 16000;       // HID X resolution
     int  screenDimDim2 = 25600;       // HID Y resolution
     int  sensorDimCols = 60;          // Total sensor columns (dim1/X)

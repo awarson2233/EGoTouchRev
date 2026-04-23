@@ -231,6 +231,16 @@ if (EGO_BUILD_TESTS)
     )
     target_link_libraries(StylusPipelineFastInkTest PRIVATE Solvers Common)
 
+    add_executable(StylusPipelineModulesTest
+        Tools/tests/StylusPipelineModulesTest.cpp
+    )
+    target_link_libraries(StylusPipelineModulesTest PRIVATE Solvers Common)
+
+    add_executable(VhfReporterStylusPacketTest
+        Tools/tests/VhfReporterStylusPacketTest.cpp
+    )
+    target_link_libraries(VhfReporterStylusPacketTest PRIVATE Device Solvers Common)
+
     add_test(NAME CommonLoggerTest COMMAND CommonLoggerTest)
     add_test(NAME HostSystemStateMonitorTest COMMAND HostSystemStateMonitorTest)
     add_test(NAME TouchTrackerSilentGapTest COMMAND TouchTrackerSilentGapTest)
@@ -238,6 +248,8 @@ if (EGO_BUILD_TESTS)
     add_test(NAME TouchPipelineConfigRoundTripTest COMMAND TouchPipelineConfigRoundTripTest)
     add_test(NAME ServiceProxyConfigMergeTest COMMAND ServiceProxyConfigMergeTest)
     add_test(NAME StylusPipelineFastInkTest COMMAND StylusPipelineFastInkTest)
+    add_test(NAME StylusPipelineModulesTest COMMAND StylusPipelineModulesTest)
+    add_test(NAME VhfReporterStylusPacketTest COMMAND VhfReporterStylusPacketTest)
 endif()
 
 
