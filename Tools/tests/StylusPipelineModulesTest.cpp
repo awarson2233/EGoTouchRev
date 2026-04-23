@@ -1,7 +1,7 @@
 #include "SolverTypes.h"
 #include "StylusSolver/NoiseGate.hpp"
 #include "StylusSolver/StylusCoordinateFilter.hpp"
-#include "StylusSolver/StylusInputParser.hpp"
+#include "StylusSolver/StylusFrameParser.hpp"
 #include "StylusSolver/StylusOutputGate.hpp"
 
 #include <array>
@@ -13,15 +13,15 @@
 namespace {
 
 using Asa::StylusFrameClass;
-using Asa::StylusInputParser;
+using Asa::StylusFrameParser;
 using Solvers::HeatmapFrame;
 using Solvers::StylusFrameData;
 using Solvers::StylusFrameState;
 
-constexpr size_t kSlaveHeaderBytes = StylusInputParser::kSlaveHeaderBytes;
-constexpr size_t kSlaveWordCount = StylusInputParser::kSlaveWordCount;
+constexpr size_t kSlaveHeaderBytes = StylusFrameParser::kSlaveHeaderBytes;
+constexpr size_t kSlaveWordCount = StylusFrameParser::kSlaveWordCount;
 constexpr size_t kSlaveFrameBytes = kSlaveHeaderBytes + kSlaveWordCount * 2;
-constexpr size_t kFrameRawOffset = StylusInputParser::kFrameRawOffset;
+constexpr size_t kFrameRawOffset = StylusFrameParser::kFrameRawOffset;
 constexpr int kGridDim = 9;
 
 void Require(bool condition, const char* message) {
@@ -106,35 +106,35 @@ StylusFrameData ContractView(const StylusFrameData& stylus) {
     return view;
 }
 
-void TestStylusInputParserClassifiesShortFrame() {
+void TestStylusFrameParserClassifiesShortFrame() {
     const std::vector<uint8_t> raw(6, 0xAB);
-    const auto parsed = StylusInputParser::Parse(raw, false);
+    const auto parsed = StylusFrameParser::Parse(raw, false);
     Require(parsed.frameClass == StylusFrameClass::ShortFrame,
             "short raw data should classify as short frame");
     Require(!parsed.valid, "short frame should not be valid");
     Require(!parsed.slaveValid, "short frame should not claim slave validity");
 }
 
-void TestStylusInputParserClassifiesNoSignalFrame() {
+void TestStylusFrameParserClassifiesNoSignalFrame() {
     const auto raw = BuildSlaveFrame(0x1234, 0x00FF, 0x00FF, {});
-    const auto parsed = StylusInputParser::Parse(raw, false);
+    const auto parsed = StylusFrameParser::Parse(raw, false);
     Require(parsed.frameClass == StylusFrameClass::NoSignal,
             "sentinel anchors should classify as no-signal");
     Require(parsed.slaveValid, "full no-signal frame should still report slave validity");
     Require(parsed.status == 0x1234, "parser should preserve raw status");
 }
 
-void TestStylusInputParserClassifiesChecksumFail() {
+void TestStylusFrameParserClassifiesChecksumFail() {
     std::vector<uint8_t> raw(kSlaveFrameBytes, 0xFF);
     raw[0] = 0x78;
     raw[1] = 0x56;
-    const auto parsed = StylusInputParser::Parse(raw, true);
+    const auto parsed = StylusFrameParser::Parse(raw, true);
     Require(parsed.frameClass == StylusFrameClass::ParseFail,
             "checksum failure should classify as parse fail");
     Require(parsed.checksumFailed, "checksum-fail classification should preserve checksum flag");
 }
 
-void TestStylusInputParserClassifiesValidFrame() {
+void TestStylusFrameParserClassifiesValidFrame() {
     const auto raw = BuildSlaveFrame(
         0x4321,
         10,
@@ -144,14 +144,14 @@ void TestStylusInputParserClassifiesValidFrame() {
         12,
         MakeCrossGrid(6000, 5000, 4000, 3000));
 
-    const auto parsed = StylusInputParser::Parse(raw, false);
+    const auto parsed = StylusFrameParser::Parse(raw, false);
     Require(parsed.frameClass == StylusFrameClass::Valid,
             "full frame with TX1 data should classify as valid");
     Require(parsed.valid, "valid frame should set valid=true");
     Require(parsed.gridData.tx1.valid, "valid frame should decode TX1 grid");
 }
 
-void TestStylusInputParserProcessSeedsContractInputView() {
+void TestStylusFrameParserProcessSeedsContractInputView() {
     const auto raw = BuildCombinedFrameFromSlave(
         BuildSlaveFrame(0x4321,
                         10,
@@ -166,7 +166,7 @@ void TestStylusInputParserProcessSeedsContractInputView() {
     frame.rawLen = raw.size();
     StylusFrameState state(frame, /*sensorRows=*/40, /*sensorCols=*/60, /*anchorCenterOffset=*/4);
 
-    const auto parsed = StylusInputParser{}.Process(state, false);
+    const auto parsed = StylusFrameParser{}.Process(state, false);
     const auto stylus = ContractView(state.stylus);
 
     Require(parsed.frameClass == StylusFrameClass::Valid,
@@ -432,11 +432,11 @@ void TestNoiseGateMirrorsOwnedRecheckEnabledIntoContractInterop() {
 
 int main() {
     try {
-        TestStylusInputParserClassifiesShortFrame();
-        TestStylusInputParserClassifiesNoSignalFrame();
-        TestStylusInputParserClassifiesChecksumFail();
-        TestStylusInputParserClassifiesValidFrame();
-        TestStylusInputParserProcessSeedsContractInputView();
+        TestStylusFrameParserClassifiesShortFrame();
+        TestStylusFrameParserClassifiesNoSignalFrame();
+        TestStylusFrameParserClassifiesChecksumFail();
+        TestStylusFrameParserClassifiesValidFrame();
+        TestStylusFrameParserProcessSeedsContractInputView();
         TestStylusFrameDataSyncContractFromLegacyFields();
         TestStylusFrameDataSyncLegacyFieldsFromContract();
         TestStylusCoordinateFilterProjectsLegacyOutputIntoContract();
