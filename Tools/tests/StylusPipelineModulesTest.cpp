@@ -14,14 +14,11 @@ namespace {
 
 using Asa::StylusFrameClass;
 using Asa::StylusFrameParser;
-using Solvers::HeatmapFrame;
 using Solvers::StylusFrameData;
-using Solvers::StylusFrameState;
 
 constexpr size_t kSlaveHeaderBytes = StylusFrameParser::kSlaveHeaderBytes;
 constexpr size_t kSlaveWordCount = StylusFrameParser::kSlaveWordCount;
 constexpr size_t kSlaveFrameBytes = kSlaveHeaderBytes + kSlaveWordCount * 2;
-constexpr size_t kFrameRawOffset = StylusFrameParser::kFrameRawOffset;
 constexpr int kGridDim = 9;
 
 void Require(bool condition, const char* message) {
@@ -92,20 +89,6 @@ std::vector<uint8_t> BuildSlaveFrame(
     return raw;
 }
 
-std::vector<uint8_t> BuildCombinedFrameFromSlave(const std::vector<uint8_t>& slaveRaw) {
-    std::vector<uint8_t> raw(kFrameRawOffset + slaveRaw.size(), 0);
-    std::copy(slaveRaw.begin(), slaveRaw.end(), raw.begin() + static_cast<std::ptrdiff_t>(kFrameRawOffset));
-    return raw;
-}
-
-// The current rollout still finalizes through legacy mirrors, so tests project
-// the returned stylus state into the target contract before asserting on it.
-StylusFrameData ContractView(const StylusFrameData& stylus) {
-    StylusFrameData view = stylus;
-    view.SyncContractFromLegacyFields();
-    return view;
-}
-
 void TestStylusFrameParserClassifiesShortFrame() {
     const std::vector<uint8_t> raw(6, 0xAB);
     const auto parsed = StylusFrameParser::Parse(raw, false);
@@ -152,22 +135,24 @@ void TestStylusFrameParserClassifiesValidFrame() {
 }
 
 void TestStylusFrameParserProcessSeedsContractInputView() {
-    const auto raw = BuildCombinedFrameFromSlave(
-        BuildSlaveFrame(0x4321,
-                        10,
-                        12,
-                        MakeCrossGrid(16000, 14000, 12000, 10000),
-                        10,
-                        12,
-                        MakeCrossGrid(6000, 5000, 4000, 3000)));
+    const auto raw = BuildSlaveFrame(0x4321,
+                                     10,
+                                     12,
+                                     MakeCrossGrid(16000, 14000, 12000, 10000),
+                                     10,
+                                     12,
+                                     MakeCrossGrid(6000, 5000, 4000, 3000));
 
-    HeatmapFrame frame{};
-    frame.rawPtr = raw.data();
-    frame.rawLen = raw.size();
-    StylusFrameState state(frame, /*sensorRows=*/40, /*sensorCols=*/60, /*anchorCenterOffset=*/4);
-
-    const auto parsed = StylusFrameParser{}.Process(state, false);
-    const auto stylus = ContractView(state.stylus);
+    const auto parsed = StylusFrameParser::Parse(raw, false);
+    StylusFrameData stylus{};
+    stylus.slaveValid = parsed.slaveValid;
+    stylus.checksumOk = !parsed.checksumFailed;
+    stylus.slaveWordOffset = static_cast<uint8_t>(StylusFrameParser::kSlaveWordOffset);
+    stylus.checksum16 = parsed.checksumValue;
+    stylus.tx1BlockValid = parsed.gridData.tx1.valid;
+    stylus.tx2BlockValid = parsed.gridData.tx2.valid;
+    stylus.status = parsed.status;
+    stylus.SyncContractFromLegacyFields();
 
     Require(parsed.frameClass == StylusFrameClass::Valid,
             "state parser should still classify valid frame");
@@ -402,26 +387,29 @@ void TestStylusOutputGateProjectsLegacyInteropIntoContract() {
 }
 
 void TestNoiseGateMirrorsOwnedRecheckEnabledIntoContractInterop() {
-    HeatmapFrame frame{};
-    StylusFrameState state(frame, /*sensorRows=*/40, /*sensorCols=*/60, /*anchorCenterOffset=*/4);
-    Asa::NoiseGate gate;
+    Solvers::StylusSignalState signal{};
+    signal.signalX = 1200;
+    signal.signalY = 400;
+    signal.maxRawPeak = 1200;
+    signal.recheckThreshold = 800;
+    signal.recheckThresholdMulti = 1200;
+    signal.overlapLike = false;
 
-    state.signal.signalX = 1200;
-    state.signal.signalY = 400;
-    state.signal.maxRawPeak = 1200;
-    state.signal.recheckThreshold = 800;
-    state.signal.recheckThresholdMulti = 1200;
-    state.signal.overlapLike = false;
+    Asa::NoiseGate gate;
+    Asa::StylusOutputGate outputGate;
+    StylusFrameData stylus{};
 
     gate.recheckEnabled = false;
-    gate.Process(state);
-    auto stylus = ContractView(state.stylus);
+    stylus.recheckEnabled = gate.recheckEnabled;
+    stylus.recheckPassed = gate.Process(signal);
+    outputGate.Process(stylus);
     Require(!stylus.interop.recheckEnabled,
             "noise gate should project disabled recheck into interop");
 
     gate.recheckEnabled = true;
-    gate.Process(state);
-    stylus = ContractView(state.stylus);
+    stylus.recheckEnabled = gate.recheckEnabled;
+    stylus.recheckPassed = gate.Process(signal);
+    outputGate.Process(stylus);
     Require(stylus.interop.recheckEnabled,
             "noise gate should project enabled recheck into interop");
     Require(stylus.interop.recheckPassed,
