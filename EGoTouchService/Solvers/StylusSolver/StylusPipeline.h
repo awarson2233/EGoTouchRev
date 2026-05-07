@@ -1,112 +1,58 @@
 #pragma once
 
-#include "AsaTypes.hpp"
-#include "BtPressBuffer.hpp"
-#include "CommonModeFilter.hpp"
 #include "ConfigSchema.h"
+#include "CommonModeFilter.hpp"
 #include "CoordinateSolver.hpp"
-#include "StylusCoordinateFilter.hpp"
-#include "CoorPostProcessor.hpp"
-#include "CoorReviser.hpp"
 #include "GridPeakDetector.hpp"
-#include "LinearFilter.hpp"
-#include "NoiseGate.hpp"
-#include "PenStateMachine.hpp"
-#include "PipelineUtils.hpp"
 #include "PressureSolver.hpp"
 #include "SolverTypes.h"
 #include "StylusFrameParser.hpp"
-#include "StylusOutputGate.hpp"
-#include "StylusSignalAnalyzer.hpp"
-#include "StylusStateController.hpp"
+#include "StylusPostProcessor.hpp"
+#include "StylusRuntimeCommit.hpp"
 
-#include <algorithm>
-#include <iosfwd>
-#include <memory>
+#include <mutex>
+#include <ostream>
 #include <string>
 #include <vector>
 
 namespace Solvers {
 
-class StylusPipeline {
+class StylusPipeline : public IConfigProvider {
 public:
-    StylusPipeline();
-    ~StylusPipeline();
+    StylusPipeline() = default;
 
     bool Process(HeatmapFrame& frame);
 
-    void SetBtMcuPressure(uint16_t pressure) {
-        m_btPressBuf.Push(pressure);
-    }
+    std::vector<ConfigParam> GetConfigSchema() const override;
+    void SaveConfig(std::ostream& out) const override;
+    void LoadConfig(const std::string& key, const std::string& value) override;
 
-    const StylusFrameData& GetLastResult() const;
+    void SetBtMcuPressure(uint16_t pressure);
 
-    std::vector<ConfigParam> GetConfigSchema() const;
-    void SaveConfig(std::ostream& out) const;
-    void LoadConfig(const std::string& key, const std::string& value);
+    int GetPacketSensorRows() const { return m_packetSensorRows; }
+    int GetPacketSensorCols() const { return m_packetSensorCols; }
+    bool GetEmitPacketWhenInvalid() const { return m_emitPacketWhenInvalid; }
 
-    int GetFilterMode() const {
-        return m_postProcessor.filterMode;
-    }
+    int GetFilterMode() const { return m_post.m_filterMode; }
+    void SetFilterMode(int mode);
 
-    void SetFilterMode(int mode) {
-        m_postProcessor.filterMode = std::clamp(mode, 0, 2);
-    }
-
-    using DbgCoordBreakdown = StylusFrameData::StylusDiagnostics;
-    const DbgCoordBreakdown& GetDebugCoord() const;
-
-    int GetPacketSensorRows() const {
-        return m_sensorRows;
-    }
-
-    int GetPacketSensorCols() const {
-        return m_sensorCols;
-    }
-
-    bool GetEmitPacketWhenInvalid() const {
-        return m_emitPacketWhenInvalid;
-    }
-
-    // Parse
-    Asa::StylusFrameParser m_frameParser;
-
-    // Conditioning
-    Asa::CommonModeFilter m_cmfFilter;
-
-    // Extraction
-    Asa::GridPeakDetector m_peakDetector;
-
-    // Solve
-    Asa::CoordinateSolver m_coordSolver;
-    Asa::StylusSignalAnalyzer m_signalAnalyzer;
-    Asa::PressureSolver m_pressureSolver;
-    Asa::PenStateMachine m_penStateMachine;
-    Asa::StylusStateController m_penState;
-    Asa::StylusOutputGate m_outputGate;
-    Asa::BtPressBuffer m_btPressBuf;
-    Asa::NoiseGate m_noiseGate;
-    Asa::SignalRatioTracker m_signalRatioTracker;
-
-    // Post
-    Asa::LinearFilter m_linearFilter;
-    Asa::StylusCoordinateFilter m_coordFilter;
-    Asa::CoorReviser m_coorReviser;
-    Asa::CoorPostProcessor m_postProcessor;
-    Asa::EdgeCoorPost m_edgeCoorPost;
+    Stylus::StylusFrameParser m_frameParser;
+    Stylus::CommonModeFilter m_cmf;
+    Stylus::GridPeakDetector m_peakDetector;
+    Stylus::CoordinateSolver m_coordinateSolver;
+    Stylus::PressureSolver m_pressureSolver;
+    Stylus::StylusPostProcessor m_post;
+    Stylus::StylusRuntimeCommit m_commit;
 
 private:
-    class OutputState;
+    StylusBtInputSnapshot ReadLatestBtSample() const;
 
-    static constexpr size_t kMasterBytes = 5063;
-    static constexpr size_t kSlaveFrameBytes = 339;
+    mutable std::mutex m_btMutex;
+    StylusBtInputSnapshot m_btSample{};
 
-    int m_sensorRows = 40;
-    int m_sensorCols = 60;
-    int m_anchorCenterOffset = 4;
+    int m_packetSensorRows = 40;
+    int m_packetSensorCols = 60;
     bool m_emitPacketWhenInvalid = true;
-    std::unique_ptr<OutputState> m_output;
-    DbgCoordBreakdown m_debugCoord{};
 };
 
 } // namespace Solvers
