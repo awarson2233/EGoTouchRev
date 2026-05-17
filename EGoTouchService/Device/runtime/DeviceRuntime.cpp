@@ -377,10 +377,10 @@ void DeviceRuntime::OnStreaming() {
     // 0. Build frame (zero-copy from Chip)
     Solvers::HeatmapFrame touchFrame;
     touchFrame.rawPtr = rawData.data();
-    touchFrame.rawLen = rawData.size();
+    touchFrame.rawLen = Frame::kTotalFrameSize;
 #if EGOTOUCH_DIAG
     // Debug/App 模式: 拷贝完整帧数据供 IPC 帧推送
-    touchFrame.rawData.assign(rawData.begin(), rawData.end());
+    touchFrame.rawData.assign(rawData.begin(), rawData.begin() + Frame::kTotalFrameSize);
 #endif
     touchFrame.masterWasRead = m_chip.GetLastMasterWasRead();
     touchFrame.timestamp = m_chip.GetLastFrameTimestamp();

@@ -118,6 +118,7 @@ public:
     void SetSrvAutoMode(bool enabled);
 
     // PenBridge status (polled from Service)
+    bool SetPenPressureMode(uint8_t mode);
     PenBridgeStatus GetPenBridgeStatus() const {
         std::lock_guard<std::mutex> lk(m_penMutex);
         return m_penStatus;

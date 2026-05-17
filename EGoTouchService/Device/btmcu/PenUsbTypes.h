@@ -48,6 +48,11 @@ enum class PenCurrentMode : uint8_t {
     Eraser = 3,
 };
 
+enum class PenPressureRangeMode : uint8_t {
+    Raw12Bit4096 = 0,
+    Raw14Bit16382 = 1,
+};
+
 constexpr PenCurrentMode PenCurrentModeFromRaw(uint8_t raw) noexcept {
     switch (raw) {
     case 1: return PenCurrentMode::Writing;

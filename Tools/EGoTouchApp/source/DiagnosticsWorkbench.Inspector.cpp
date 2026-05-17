@@ -11,6 +11,7 @@
 #endif
 #include <windows.h>
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -70,10 +71,6 @@ void DiagnosticsWorkbench::DrawInspectorPanel() {
         }
         if (ImGui::BeginTabItem("BT MCU")) {
             DrawBtMcuPanel();
-            ImGui::EndTabItem();
-        }
-        if (ImGui::BeginTabItem("Dynamic Debug")) {
-            DrawDynamicDebugPanel();
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("System Events")) {
@@ -166,6 +163,7 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
     if (ImGui::BeginTabBar("StylusSubTabs")) {
         auto schema = m_proxy->GetStylusPipeline().GetConfigSchema();
         const auto& sd = m_currentFrame.stylus;
+        const auto& diag = sd.debug.coord;
 
         if (ImGui::BeginTabItem("Solver (Coordinate)")) {
             ConfigUIRenderer::RenderConfigSchema(schema, "Stylus Solver", Solvers::ConfigParam::Solver);
@@ -173,23 +171,23 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
             ImGui::Separator();
             ImGui::TextColored(ImVec4(0.4f,0.85f,1.0f,1.f), "[Coord Breakdown] (dim1=Col=X, dim2=Row=Y)");
             ImGui::Text("  anchorCol(X) = %u   (%u * %.1f = %.1f)",
-                sd.diag.anchorCol, sd.diag.anchorCol,
+                diag.anchorCol, diag.anchorCol,
                 static_cast<float>(Asa::kCoorUnit),
-                static_cast<float>(sd.diag.anchorCol) * Asa::kCoorUnit);
+                static_cast<float>(diag.anchorCol) * Asa::kCoorUnit);
             ImGui::Text("  anchorRow(Y) = %u   (%u * %.1f = %.1f)",
-                sd.diag.anchorRow, sd.diag.anchorRow,
+                diag.anchorRow, diag.anchorRow,
                 static_cast<float>(Asa::kCoorUnit),
-                static_cast<float>(sd.diag.anchorRow) * Asa::kCoorUnit);
-            ImGui::Text("  rawDim1(X)   = %d", sd.diag.rawDim1);
-            ImGui::Text("  rawDim2(Y)   = %d", sd.diag.rawDim2);
-            ImGui::Text("  finalDim1(X) = %d", sd.diag.finalDim1);
-            ImGui::Text("  finalDim2(Y) = %d", sd.diag.finalDim2);
-            ImGui::Text("  centerOff    = %.1f", sd.diag.centerOff);
-            if (sd.diag.valid) {
+                static_cast<float>(diag.anchorRow) * Asa::kCoorUnit);
+            ImGui::Text("  rawDim1(X)   = %d", diag.rawDim1);
+            ImGui::Text("  rawDim2(Y)   = %d", diag.rawDim2);
+            ImGui::Text("  finalDim1(X) = %d", diag.finalDim1);
+            ImGui::Text("  finalDim2(Y) = %d", diag.finalDim2);
+            ImGui::Text("  centerOff    = %.1f", diag.centerOff);
+            if (diag.valid) {
                 ImGui::TextColored(ImVec4(0.2f,0.9f,0.4f,1),
-                    "  point.X = anchorCol*kU + finalDim1 - cOff = %.2f", sd.diag.pointX);
+                    "  point.X = anchorCol*kU + finalDim1 - cOff = %.2f", diag.pointX);
                 ImGui::TextColored(ImVec4(0.4f,0.7f,1.0f,1),
-                    "  point.Y = anchorRow*kU + finalDim2 - cOff = %.2f", sd.diag.pointY);
+                    "  point.Y = anchorRow*kU + finalDim2 - cOff = %.2f", diag.pointY);
             } else {
                 ImGui::TextColored(ImVec4(0.7f,0.7f,0.0f,1), "  [coord invalid this frame]");
             }
@@ -197,35 +195,24 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
         }
 
         if (ImGui::BeginTabItem("Filters (Smoothing)")) {
-            // ── Filter mode dropdown ──
-            auto& pipeline = m_proxy->GetStylusPipeline();
-            {
-                static const char* filterModes[] = { "IIR (TSACore Q8)", "1-Euro Adaptive", "None (Bypass)" };
-                int mode = pipeline.GetFilterMode();
-                if (ImGui::Combo("Smoothing Filter##sp_filter_mode", &mode, filterModes, 3)) {
-                    pipeline.SetFilterMode(mode);
-                }
-            }
-
-            ImGui::Separator();
             // ── Render all 'Filter' category params (auto-generated) ──
             ConfigUIRenderer::RenderConfigSchema(schema, "Stylus Filters", Solvers::ConfigParam::Filter);
 
             ImGui::Separator();
             ImGui::TextColored(ImVec4(1.0f,0.85f,0.4f,1.f), "[Post-Processing]");
             ImGui::Text("  Speed: instant=%.1f  short=%.1f  full=%.1f",
-                sd.diag.speedInstant, sd.diag.speedShortAvg, sd.diag.speedFullAvg);
+                diag.speedInstant, diag.speedShortAvg, diag.speedFullAvg);
             ImGui::Text("  IIR Coef: %.3f  %s",
-                sd.diag.iirCoef,
-                sd.diag.iirCoef < 0.3f ? "(strong smooth)" :
-                (sd.diag.iirCoef > 0.8f ? "(fast track)" : "(moderate)"));
+                diag.iirCoef,
+                diag.iirCoef < 0.3f ? "(strong smooth)" :
+                (diag.iirCoef > 0.8f ? "(fast track)" : "(moderate)"));
 
             ImGui::Separator();
             ImGui::TextColored(ImVec4(0.9f,0.9f,0.5f,1.f), "[Linear Filter]");
             const char* lfStates[] = {
                 "Init","Wait","Collect","CurveLine",
                 "EnterStraight","StraightLine","ExitStraight"};
-            int lfs = std::clamp(static_cast<int>(sd.diag.linearFilterState), 0, 6);
+            int lfs = std::clamp(static_cast<int>(diag.linearFilterState), 0, 6);
             ImGui::Text("  State: %d (%s)", lfs, lfStates[lfs]);
             ImGui::EndTabItem();
         }
@@ -235,38 +222,38 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
 
             ImGui::Separator();
             ImGui::TextColored(ImVec4(0.8f,0.6f,1.0f,1.f), "[Tilt Diagnostics]");
-            ImGui::Text("  TX1-TX2 Diff: dX=%.1f  dY=%.1f", sd.diag.tiltDiffX, sd.diag.tiltDiffY);
-            if (sd.diag.tiltAnomalyDamped)
+            ImGui::Text("  TX1-TX2 Diff: dX=%.1f  dY=%.1f", diag.tiltDiffX, diag.tiltDiffY);
+            if (diag.tiltAnomalyDamped)
                 ImGui::TextColored(ImVec4(1.0f,0.4f,0.4f,1), "  !! Tilt anomaly damping active");
-            ImGui::Text("  Signal Ratio (TX2/TX1): %u%%", sd.diag.signalRatio);
+            ImGui::Text("  Signal Ratio (TX2/TX1): %u%%", diag.signalRatio);
 
             ImGui::Separator();
             ImGui::TextColored(ImVec4(1.0f,0.85f,0.4f,1.f), "[Edge/Hover]");
             ImGui::Text("  Mode: %s%s",
-                sd.diag.isHover ? "Hover" : "Write",
-                sd.diag.isEdge  ? " + Edge" : "");
+                diag.isHover ? "Hover" : "Write",
+                diag.isEdge  ? " + Edge" : "");
             const char* lifecycleLabels[] = {"Leave","Hover","Contact","Lifting"};
-            int li = std::clamp(static_cast<int>(sd.diag.penLifecycle), 0, 3);
+            int li = std::clamp(static_cast<int>(diag.penLifecycle), 0, 3);
             ImGui::Text("  Lifecycle: %s", lifecycleLabels[li]);
 
             ImGui::Separator();
             ImGui::TextColored(ImVec4(0.5f,0.9f,1.0f,1.f), "[P3/P4 Pipeline State]");
             {
                 const char* lcLabels[] = {"Leave","Hover","Contact","Lifting"};
-                int pi = std::clamp(static_cast<int>(sd.diag.penLifecycle), 0, 3);
+                int pi = std::clamp(static_cast<int>(diag.penLifecycle), 0, 3);
                 ImGui::Text("  Pen Lifecycle (diag): %s", lcLabels[pi]);
             }
-            ImGui::Text("  Was Inking: %s", sd.diag.wasInking ? "YES" : "no");
-            ImGui::Text("  Exit Smoothed: %s", sd.diag.exitSmoothed ? "YES" : "no");
-            ImGui::Text("  CMF Enabled: %s", sd.diag.cmfEnabled ? "YES" : "no");
-            if (sd.diag.coorReviserActive) {
+            ImGui::Text("  Was Inking: %s", diag.wasInking ? "YES" : "no");
+            ImGui::Text("  Exit Smoothed: %s", diag.exitSmoothed ? "YES" : "no");
+            ImGui::Text("  CMF Enabled: %s", diag.cmfEnabled ? "YES" : "no");
+            if (diag.coorReviserActive) {
                 ImGui::TextColored(ImVec4(0.4f,1.0f,0.6f,1),
                     "  CoorReviser: ON (dX=%.1f dY=%.1f)",
-                    sd.diag.coorRevDeltaX, sd.diag.coorRevDeltaY);
+                    diag.coorRevDeltaX, diag.coorRevDeltaY);
             } else {
                 ImGui::Text("  CoorReviser: OFF");
             }
-            ImGui::Text("  3Pt Avg: dim1=%d  dim2=%d", sd.diag.avg3PtDim1, sd.diag.avg3PtDim2);
+            ImGui::Text("  3Pt Avg: dim1=%d  dim2=%d", diag.avg3PtDim1, diag.avg3PtDim2);
 
             ImGui::EndTabItem();
         }
@@ -277,13 +264,13 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
 
             ImGui::Separator();
             ImGui::TextColored(ImVec4(1.0f,0.5f,0.3f,1.f), "[Pressure Chain]");
-            ImGui::Text("  Peak Signal: %u", sd.diag.peakSignal);
-            ImGui::Text("  Raw Pressure (BT MCU): %u", sd.diag.rawPressure);
-            ImGui::Text("  Mapped Pressure: %u", sd.diag.mappedPressure);
+            ImGui::Text("  Peak Signal: %u", diag.peakSignal);
+            ImGui::Text("  Raw Pressure (BT MCU): %u", diag.rawPressure);
+            ImGui::Text("  Mapped Pressure: %u", diag.mappedPressure);
 
             ImGui::Separator();
             ImGui::TextColored(ImVec4(0.3f,1.0f,0.8f,1.f), "[VHF Pen State]");
-            uint8_t ps = sd.diag.vhfPenState;
+            uint8_t ps = diag.vhfPenState;
             bool inRange   = (ps >> 5) & 1;
             bool tipSwitch = (ps >> 0) & 1;
             bool barrel    = (ps >> 1) & 1;
@@ -298,15 +285,32 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
                 ImGui::TextColored(ImVec4(0.5f,0.5f,0.5f,1), "  => Out of range");
 
             ImGui::Separator();
+            ImGui::TextColored(ImVec4(0.4f,0.85f,1.0f,1.f), "[Full Screen Coordinate]");
+            const auto& point = sd.output.point;
+            const float activeRows = std::max(1.0f, static_cast<float>(std::max(m_proxy->GetStylusPipeline().GetPacketSensorRows(), 1)) * static_cast<float>(Asa::kCoorUnit));
+            const float activeCols = std::max(1.0f, static_cast<float>(std::max(m_proxy->GetStylusPipeline().GetPacketSensorCols(), 1)) * static_cast<float>(Asa::kCoorUnit));
+            const float clampedY = std::clamp(point.y, 0.0f, activeRows);
+            const float clampedX = std::clamp(point.x, 0.0f, activeCols);
+            const uint16_t screenX = static_cast<uint16_t>(std::clamp(static_cast<int>(std::lround((clampedY / activeRows) * 16000.0f)), 0, 65535));
+            const uint16_t screenY = static_cast<uint16_t>(std::clamp(static_cast<int>(std::lround((1.0f - (clampedX / activeCols)) * 25600.0f)), 0, 65535));
+            ImGui::Text("  Sensor: X=%.1f / %.1f  Y=%.1f / %.1f", point.x, activeCols, point.y, activeRows);
+            ImGui::Text("  Full Screen: X=%u / 16000  Y=%u / 25600", static_cast<unsigned int>(screenX), static_cast<unsigned int>(screenY));
+
+            ImGui::Separator();
             const char* stageNames[] = {
                 "OK", "SlaveParseErr", "TX1Invalid", "NoPeak",
                 "CoordFail", "NoiseReject"};
-            int si = std::clamp(static_cast<int>(sd.pipelineStage), 0, 5);
-            if (sd.pipelineStage == 0)
+            int si = std::clamp(static_cast<int>(sd.output.pipelineStage), 0, 5);
+            if (sd.output.pipelineStage == 0)
                 ImGui::TextColored(ImVec4(0.2f,0.9f,0.3f,1), "Pipeline Status: %s", stageNames[si]);
             else
                 ImGui::TextColored(ImVec4(1.0f,0.3f,0.3f,1), "Pipeline Status: %s (%d)", stageNames[si], si);
 
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Pipeline Internals")) {
+            DrawDynamicDebugPanel();
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();
@@ -408,6 +412,14 @@ void DiagnosticsWorkbench::DrawBtMcuPanel() {
         ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "STOPPED");
 
     ImGui::Separator();
+    ImGui::Text("Pressure Range Mode");
+    int pressureMode = ps.pressureMode == 0 ? 0 : 1;
+    const char* pressureModes[] = {"4096 raw12", "16382 raw14 / 4"};
+    if (ImGui::Combo("##PenPressureMode", &pressureMode, pressureModes, 2) && m_proxy) {
+        m_proxy->SetPenPressureMode(static_cast<uint8_t>(pressureMode));
+    }
+
+    ImGui::Separator();
     ImGui::Text("Live Pressure Data");
     ImGui::SameLine();
     ImGui::TextDisabled("(polled every ~500ms)");
@@ -420,8 +432,9 @@ void DiagnosticsWorkbench::DrawBtMcuPanel() {
     for (int k = 0; k < 4; ++k) {
         ImGui::PushID(k);
         char overlay[32];
-        snprintf(overlay, sizeof(overlay), "P%d: %u", k, ps.press[k]);
-        ImGui::ProgressBar(static_cast<float>(ps.press[k]) / 8192.0f,
+        snprintf(overlay, sizeof(overlay), "P%d: %u raw:%u", k, ps.press[k], ps.rawPress[k]);
+        const float denom = static_cast<float>(std::max<uint16_t>(ps.pressureMax, 1));
+        ImGui::ProgressBar(static_cast<float>(ps.press[k]) / denom,
                            ImVec2(-1, 18), overlay);
         ImGui::PopID();
     }

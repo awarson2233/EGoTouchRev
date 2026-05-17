@@ -116,6 +116,14 @@ public:
     bool Active() const { return m_active; }
     int LastDeltaDim1() const { return m_lastDeltaDim1; }
     int LastDeltaDim2() const { return m_lastDeltaDim2; }
+#if EGOTOUCH_DIAG
+    double LineFitSlopeA() const { return m_curLineFit.slopeA; }
+    double LineFitInterceptB() const { return m_curLineFit.interceptB; }
+    bool LineFitValid() const { return m_curLineFit.valid; }
+    int32_t LastCos1000() const { return m_lastCos1000; }
+    int32_t StraightBufCount() const { return m_straightCount; }
+    int32_t LastDragApplied() const { return m_lastDragApplied; }
+#endif
 
 private:
     struct LinearPoint {
@@ -163,6 +171,10 @@ private:
     bool m_active = false;
     int m_lastDeltaDim1 = 0;
     int m_lastDeltaDim2 = 0;
+#if EGOTOUCH_DIAG
+    int32_t m_lastCos1000 = 0;
+    int32_t m_lastDragApplied = 0;
+#endif
 
     static inline int AbsDiff(int32_t a, int32_t b) {
         return static_cast<int>(std::abs(static_cast<int64_t>(a) - static_cast<int64_t>(b)));
@@ -220,6 +232,9 @@ private:
 
         const double distSq = m_curLineFit.valid ? GetPoint2LineDisSquare(m_curLineFit, m_current) : 0.0;
         const int cos1000 = GetCurrentLineAngleCos1000();
+#if EGOTOUCH_DIAG
+        m_lastCos1000 = static_cast<int32_t>(cos1000);
+#endif
         if (cos1000 < m_exitCos1000 || distSq > static_cast<double>(m_exitDistSq)) {
             m_anchor = m_segLast;
             m_state = 6;
@@ -244,6 +259,9 @@ private:
         }
         if (m_exitCnt != 0 && MovedFrom(m_anchor, m_anchorMoveThreshold)) {
             const int cos1000 = GetCurrentLineAngleCos1000();
+#if EGOTOUCH_DIAG
+            m_lastCos1000 = static_cast<int32_t>(cos1000);
+#endif
             --m_exitCnt;
             if (m_exitCnt != 0 && cos1000 < m_reverseCos1000) {
                 --m_exitCnt;
@@ -446,6 +464,9 @@ private:
         }
 
         distance = std::clamp(distance, -static_cast<double>(maxDrag), static_cast<double>(maxDrag));
+#if EGOTOUCH_DIAG
+        m_lastDragApplied = static_cast<int32_t>(std::abs(distance));
+#endif
         const int32_t nextX = static_cast<int32_t>(deltaXScale * distance + static_cast<double>(m_output.x));
         const int32_t nextY = static_cast<int32_t>(deltaYScale * distance + static_cast<double>(m_output.y));
         m_active = m_active || nextX != m_output.x || nextY != m_output.y;

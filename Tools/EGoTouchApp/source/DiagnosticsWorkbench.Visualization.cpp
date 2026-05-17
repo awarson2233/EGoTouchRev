@@ -239,7 +239,12 @@ void DiagnosticsWorkbench::DrawHeatmap() {
 
 void DiagnosticsWorkbench::DrawSlaveHeatmap() {
     const auto& stylus = m_currentFrame.stylus;
-    const auto& point = stylus.point;
+    const auto& point = stylus.output.point;
+    const auto& input = stylus.input;
+    const auto& interop = stylus.interop;
+#if EGOTOUCH_DIAG
+    const auto& diag = stylus.debug.coord;
+#endif
 
     if (m_currentFrame.slaveSuffixValid) {
         Asa::AsaGridData gridData = Asa::ExtractGridFromSlaveWords(m_currentFrame.slaveSuffix.words, Frame::kSlaveSuffixWords);
@@ -298,16 +303,37 @@ void DiagnosticsWorkbench::DrawSlaveHeatmap() {
                 }
             }
 
-            if (ptX >= 0.0f && ptY >= 0.0f) {
-                float cx = canvas_p.x + (9.0f - ptX) * cell_w;
-                float cy = canvas_p.y + (9.0f - ptY) * cell_h;
+            float markerX = ptX;
+            float markerY = ptY;
+            if (markerX < 0.0f || markerY < 0.0f) {
+                int peakRow = -1;
+                int peakCol = -1;
+                int16_t peakValue = 0;
+                for (int r = 0; r < 9; ++r) {
+                    for (int c = 0; c < 9; ++c) {
+                        if (grid.grid[r][c] > peakValue) {
+                            peakValue = grid.grid[r][c];
+                            peakRow = r;
+                            peakCol = c;
+                        }
+                    }
+                }
+                if (peakRow >= 0 && peakCol >= 0) {
+                    markerX = static_cast<float>(peakCol) + 0.5f;
+                    markerY = static_cast<float>(peakRow) + 0.5f;
+                }
+            }
+
+            if (markerX >= 0.0f && markerY >= 0.0f) {
+                float cx = canvas_p.x + (9.0f - markerX) * cell_w;
+                float cy = canvas_p.y + (9.0f - markerY) * cell_h;
                 ImU32 markerColor = IM_COL32(0, 255, 0, 255);
                 float crossSize = cell_w * 0.4f;
                 draw_list->AddLine(ImVec2(cx - crossSize, cy - crossSize), ImVec2(cx + crossSize, cy + crossSize), markerColor, 2.5f);
                 draw_list->AddLine(ImVec2(cx - crossSize, cy + crossSize), ImVec2(cx + crossSize, cy - crossSize), markerColor, 2.5f);
 
                 char coordBuf[32];
-                snprintf(coordBuf, sizeof(coordBuf), "(%.2f, %.2f)", ptX, ptY);
+                snprintf(coordBuf, sizeof(coordBuf), "(%.2f, %.2f)", markerX, markerY);
                 ImVec2 textPos(cx + crossSize + 2.0f, cy - crossSize - 12.0f);
                 draw_list->AddText(ImVec2(textPos.x - 1, textPos.y - 1), IM_COL32(0, 0, 0, 255), coordBuf);
                 draw_list->AddText(ImVec2(textPos.x + 1, textPos.y + 1), IM_COL32(0, 0, 0, 255), coordBuf);
@@ -319,15 +345,18 @@ void DiagnosticsWorkbench::DrawSlaveHeatmap() {
         base_cp.x += 20.0f;
         base_cp.y += 10.0f;
 
+        const float tx1LocalX = diag.localCoorDim1 > 0 ? static_cast<float>(diag.localCoorDim1) / Asa::kCoorUnit : -1.0f;
+        const float tx1LocalY = diag.localCoorDim2 > 0 ? static_cast<float>(diag.localCoorDim2) / Asa::kCoorUnit : -1.0f;
+
         if (gridData.tx1.valid) {
-            draw_grid(gridData.tx1, base_cp.x, base_cp.y + 35.0f, "TX1 Grid", point.tx1X, point.tx1Y);
+            draw_grid(gridData.tx1, base_cp.x, base_cp.y + 35.0f, "TX1 Grid", tx1LocalX, tx1LocalY);
         } else {
             ImGui::SetCursorScreenPos(base_cp);
             ImGui::Text("TX1 Grid Invalid");
         }
 
         if (gridData.tx2.valid) {
-            draw_grid(gridData.tx2, base_cp.x + draw_width + 50.0f, base_cp.y + 35.0f, "TX2 Grid", point.tx2X, point.tx2Y);
+            draw_grid(gridData.tx2, base_cp.x + draw_width + 50.0f, base_cp.y + 35.0f, "TX2 Grid", -1.0f, -1.0f);
         } else {
             ImGui::SetCursorScreenPos(ImVec2(base_cp.x + draw_width + 50.0f, base_cp.y));
             ImGui::Text("TX2 Grid Invalid");
@@ -349,9 +378,9 @@ void DiagnosticsWorkbench::DrawSlaveHeatmap() {
         ImGui::Text("Confidence: %.3f", point.confidence);
         ImGui::Text("TX1: %.3f, %.3f", point.tx1X, point.tx1Y);
         ImGui::Text("TX2: %.3f, %.3f", point.tx2X, point.tx2Y);
-        ImGui::Text("Peak TX1/TX2 (Raw): %u / %u", stylus.signalX, stylus.signalY);
+        ImGui::Text("Peak TX1/TX2 (Raw): %u / %u", interop.signalX, interop.signalY);
         ImGui::Text("Signal TX1/TX2 (Composite): %u / %u", point.peakTx1, point.peakTx2);
-        ImGui::Text("Max Raw Peak: %u", stylus.maxRawPeak);
+        ImGui::Text("Max Raw Peak: %u", interop.maxRawPeak);
         if (m_currentFrame.masterSuffixValid) {
             ImGui::Text("Master Noise F0/F1: %u / %u", m_currentFrame.masterSuffix.penF0NoiseCount(), m_currentFrame.masterSuffix.penF1NoiseCount());
             ImGui::Text("Master TP Freq1/Timestamp: %u / %u", m_currentFrame.masterSuffix.tpFreq1(), m_currentFrame.masterSuffix.timestamp());
@@ -360,27 +389,23 @@ void DiagnosticsWorkbench::DrawSlaveHeatmap() {
 
         ImGui::TableNextColumn();
         ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.8f, 1.0f), "Status / Output");
-        ImGui::Text("Slave Valid: %s", stylus.slaveValid ? "Y" : "N");
-        ImGui::Text("Checksum: %s (0x%04X)", stylus.checksumOk ? "OK" : "FAIL", stylus.checksum16);
-        ImGui::Text("TX1/TX2 Block: %s / %s", stylus.tx1BlockValid ? "Y" : "N", stylus.tx2BlockValid ? "Y" : "N");
-        ImGui::Text("Pressure: %u (Raw:%u Mapped:%u)", stylus.pressure, point.rawPressure, point.mappedPressure);
+        ImGui::Text("Slave Valid: %s", input.slaveValid ? "Y" : "N");
+        ImGui::Text("Checksum: %s (0x%04X)", input.checksumOk ? "OK" : "FAIL", input.checksum16);
+        ImGui::Text("TX1/TX2 Block: %s / %s", input.tx1BlockValid ? "Y" : "N", input.tx2BlockValid ? "Y" : "N");
+        ImGui::Text("Pressure: %u (Raw:%u Mapped:%u)", stylus.output.pressure, point.rawPressure, point.mappedPressure);
 #if EGOTOUCH_DIAG
         ImGui::Text("BT Seq: %u  PredAge: %u  Real: %s",
-                    static_cast<unsigned int>(stylus.diag.btSeq),
-                    static_cast<unsigned int>(stylus.diag.predictedAgeFrames),
-                    stylus.diag.pressureIsReal ? "Y" : "N");
-        ImGui::Text("ASA/DataType: %u / %u", static_cast<unsigned int>(stylus.asaMode), static_cast<unsigned int>(stylus.dataType));
-        ImGui::Text("Process Result: %u  Valid: %s", static_cast<unsigned int>(stylus.processResult), stylus.validJudgmentPassed ? "Y" : "N");
-        ImGui::Text("HPP3 Noise: %s / %s", stylus.hpp3NoiseInvalid ? "Invalid" : "OK", stylus.hpp3NoiseDebounce ? "Debounce" : "Stable");
-        ImGui::Text("HPP3 SigValid D1/D2: %s / %s", stylus.hpp3Dim1SignalValid ? "Y" : "N", stylus.hpp3Dim2SignalValid ? "Y" : "N");
+                    static_cast<unsigned int>(diag.btSeq),
+                    static_cast<unsigned int>(diag.predictedAgeFrames),
+                    diag.pressureIsReal ? "Y" : "N");
 #endif
-        ImGui::Text("Status: 0x%08X", static_cast<unsigned int>(stylus.status));
+        ImGui::Text("Status: 0x%08X", static_cast<unsigned int>(input.status));
         ImGui::Text("Pipeline Stage: %u  Pressure Source: %s",
-                    static_cast<unsigned int>(stylus.pipelineStage),
-                    stylus.diag.pressureIsReal ? "Real(BT)" : "Predicted/Synth");
-        ImGui::Text("Recheck: %s / %s / %s", stylus.recheckEnabled ? "Enabled" : "Disabled", stylus.recheckPassed ? "Pass" : "Fail", stylus.recheckOverlap ? "Overlap" : "NoOverlap");
-        ImGui::Text("Recheck Threshold: %u", stylus.recheckThreshold);
-        ImGui::Text("Touch Suppress: %s  NullLike: %s  Remain: %u", stylus.touchSuppressActive ? "Y" : "N", stylus.touchNullLike ? "Y" : "N", static_cast<unsigned int>(stylus.touchSuppressFrames));
+                    static_cast<unsigned int>(stylus.output.pipelineStage),
+                    diag.pressureIsReal ? "Real(BT)" : "Predicted/Synth");
+        ImGui::Text("Recheck: %s / %s / %s", interop.recheckEnabled ? "Enabled" : "Disabled", interop.recheckPassed ? "Pass" : "Fail", interop.recheckOverlap ? "Overlap" : "NoOverlap");
+        ImGui::Text("Recheck Threshold: %u", interop.recheckThreshold);
+        ImGui::Text("Touch Suppress: %s  NullLike: %s  Remain: %u", interop.touchSuppressActive ? "Y" : "N", interop.touchNullLike ? "Y" : "N", static_cast<unsigned int>(interop.touchSuppressFrames));
         ImGui::EndTable();
     }
 }
@@ -513,87 +538,75 @@ void DiagnosticsWorkbench::DrawStylusPanel() {
     ImGui::Begin("Stylus Debug (ASA/HPP2/HPP3-lite)");
 
     const auto& stylus = m_currentFrame.stylus;
-    ImGui::Text("Slave Valid: %s", stylus.slaveValid ? "Y" : "N");
+    const auto& input = stylus.input;
+    const auto& output = stylus.output;
+    const auto& point = output.point;
+    const auto& interop = stylus.interop;
+#if EGOTOUCH_DIAG
+    const auto& diag = stylus.debug.coord;
+#endif
+    ImGui::Text("Slave Valid: %s", input.slaveValid ? "Y" : "N");
     ImGui::Text("Slave Offset: %u  Checksum16: 0x%04X (%s)",
-                static_cast<unsigned int>(stylus.slaveWordOffset),
-                static_cast<unsigned int>(stylus.checksum16),
-                stylus.checksumOk ? "OK" : "FAIL");
+                static_cast<unsigned int>(input.slaveWordOffset),
+                static_cast<unsigned int>(input.checksum16),
+                input.checksumOk ? "OK" : "FAIL");
     ImGui::Text("TX1 Block: %s | TX2 Block: %s",
-                stylus.tx1BlockValid ? "Y" : "N",
-                stylus.tx2BlockValid ? "Y" : "N");
+                input.tx1BlockValid ? "Y" : "N",
+                input.tx2BlockValid ? "Y" : "N");
     ImGui::Text("MasterSuffix: %s  F0Noise=%u F1Noise=%u",
                 m_currentFrame.masterSuffixValid ? "Y" : "N",
                 m_currentFrame.masterSuffixValid ? static_cast<unsigned int>(m_currentFrame.masterSuffix.penF0NoiseCount()) : 0u,
                 m_currentFrame.masterSuffixValid ? static_cast<unsigned int>(m_currentFrame.masterSuffix.penF1NoiseCount()) : 0u);
-    ImGui::Text("Status: 0x%08X", static_cast<unsigned int>(stylus.status));
-#if EGOTOUCH_DIAG
-    ImGui::Text("ASA Mode/DataType: %u / %u  Result:%u  Valid:%s",
-                static_cast<unsigned int>(stylus.asaMode),
-                static_cast<unsigned int>(stylus.dataType),
-                static_cast<unsigned int>(stylus.processResult),
-                stylus.validJudgmentPassed ? "Y" : "N");
-    ImGui::Text("HPP3 Noise: Invalid=%s Debounce=%s",
-                stylus.hpp3NoiseInvalid ? "Y" : "N",
-                stylus.hpp3NoiseDebounce ? "Y" : "N");
-    ImGui::Text("HPP3 SigValid D1/D2: %s / %s  RatioWarn X/Y: %u / %u",
-                stylus.hpp3Dim1SignalValid ? "Y" : "N",
-                stylus.hpp3Dim2SignalValid ? "Y" : "N",
-                static_cast<unsigned int>(stylus.hpp3RatioWarnCountX),
-                static_cast<unsigned int>(stylus.hpp3RatioWarnCountY));
-    ImGui::Text("HPP3 SigAvg X/Y: %u / %u  Samples: %u",
-                static_cast<unsigned int>(stylus.hpp3SignalAvgX),
-                static_cast<unsigned int>(stylus.hpp3SignalAvgY),
-                static_cast<unsigned int>(stylus.hpp3SignalSampleCount));
-#endif
+    ImGui::Text("Status: 0x%08X", static_cast<unsigned int>(input.status));
     ImGui::Text("Recheck: En=%s Pass=%s Overlap=%s Th=%u",
-                stylus.recheckEnabled ? "Y" : "N",
-                stylus.recheckPassed ? "Y" : "N",
-                stylus.recheckOverlap ? "Y" : "N",
-                static_cast<unsigned int>(stylus.recheckThreshold));
+                interop.recheckEnabled ? "Y" : "N",
+                interop.recheckPassed ? "Y" : "N",
+                interop.recheckOverlap ? "Y" : "N",
+                static_cast<unsigned int>(interop.recheckThreshold));
     ImGui::Text("TouchSuppress: Active=%s NullLike=%s Remain=%u",
-                stylus.touchSuppressActive ? "Y" : "N",
-                stylus.touchNullLike ? "Y" : "N",
-                static_cast<unsigned int>(stylus.touchSuppressFrames));
+                interop.touchSuppressActive ? "Y" : "N",
+                interop.touchNullLike ? "Y" : "N",
+                static_cast<unsigned int>(interop.touchSuppressFrames));
     ImGui::Text("Pressure: %u (Raw:%u Mapped:%u)",
-                stylus.pressure,
-                static_cast<unsigned int>(stylus.point.rawPressure),
-                static_cast<unsigned int>(stylus.point.mappedPressure));
+                stylus.output.pressure,
+                static_cast<unsigned int>(point.rawPressure),
+                static_cast<unsigned int>(point.mappedPressure));
 #if EGOTOUCH_DIAG
     ImGui::Text("BT Seq: %u  PredAge: %u  Real: %s",
-                static_cast<unsigned int>(stylus.diag.btSeq),
-                static_cast<unsigned int>(stylus.diag.predictedAgeFrames),
-                stylus.diag.pressureIsReal ? "Y" : "N");
+                static_cast<unsigned int>(diag.btSeq),
+                static_cast<unsigned int>(diag.predictedAgeFrames),
+                diag.pressureIsReal ? "Y" : "N");
 #endif
     ImGui::Text("Peak TX1/TX2 (Raw): %u / %u  MaxPeak: %u",
-                static_cast<unsigned int>(stylus.signalX),
-                static_cast<unsigned int>(stylus.signalY),
-                static_cast<unsigned int>(stylus.maxRawPeak));
+                static_cast<unsigned int>(interop.signalX),
+                static_cast<unsigned int>(interop.signalY),
+                static_cast<unsigned int>(interop.maxRawPeak));
     ImGui::Text("Pressure Source: %s  PredAge=%u",
-                stylus.diag.pressureIsReal ? "Real(BT)" : "Predicted/Synth",
-                static_cast<unsigned int>(stylus.diag.predictedAgeFrames));
+                diag.pressureIsReal ? "Real(BT)" : "Predicted/Synth",
+                static_cast<unsigned int>(diag.predictedAgeFrames));
 
-    if (stylus.point.valid) {
+    if (point.valid) {
         ImGui::Text("Point: X=%.3f  Y=%.3f  Confidence=%.3f",
-                    stylus.point.x,
-                    stylus.point.y,
-                    stylus.point.confidence);
+                    point.x,
+                    point.y,
+                    point.confidence);
         ImGui::Text("Report Coord: X=%u  Y=%u",
-                    static_cast<unsigned int>(stylus.point.reportX),
-                    static_cast<unsigned int>(stylus.point.reportY));
+                    static_cast<unsigned int>(point.reportX),
+                    static_cast<unsigned int>(point.reportY));
         ImGui::Text("TX1/TX2 Coord: (%.3f,%.3f) / (%.3f,%.3f)",
-                    stylus.point.tx1X,
-                    stylus.point.tx1Y,
-                    stylus.point.tx2X,
-                    stylus.point.tx2Y);
-        ImGui::Text("Signal TX1/TX2 (Composite): %u / %u", stylus.point.peakTx1, stylus.point.peakTx2);
+                    point.tx1X,
+                    point.tx1Y,
+                    point.tx2X,
+                    point.tx2Y);
+        ImGui::Text("Signal TX1/TX2 (Composite): %u / %u", point.peakTx1, point.peakTx2);
         ImGui::Text("Tilt: Valid=%s Pre(%d,%d) Out(%d,%d) |Mag|=%.2f Az=%.1f",
-                    stylus.point.tiltValid ? "Y" : "N",
-                    static_cast<int>(stylus.point.preTiltX),
-                    static_cast<int>(stylus.point.preTiltY),
-                    static_cast<int>(stylus.point.tiltX),
-                    static_cast<int>(stylus.point.tiltY),
-                    stylus.point.tiltMagnitude,
-                    stylus.point.tiltAzimuthDeg);
+                    point.tiltValid ? "Y" : "N",
+                    static_cast<int>(point.preTiltX),
+                    static_cast<int>(point.preTiltY),
+                    static_cast<int>(point.tiltX),
+                    static_cast<int>(point.tiltY),
+                    point.tiltMagnitude,
+                    point.tiltAzimuthDeg);
     } else {
         ImGui::TextUnformatted("Point: Invalid");
     }
@@ -601,13 +614,13 @@ void DiagnosticsWorkbench::DrawStylusPanel() {
     ImGui::Separator();
     if (ImGui::CollapsingHeader("Legacy Stylus Packet (optional)")) {
 #if EGOTOUCH_DIAG
-        if (stylus.packet.valid) {
-            ImGui::Text("Packet (RID=0x%02X, Len=%u):", stylus.packet.reportId, stylus.packet.length);
+        if (output.packet.valid) {
+            ImGui::Text("Packet (RID=0x%02X, Len=%u):", output.packet.reportId, output.packet.length);
             std::ostringstream oss;
             oss << std::hex << std::setfill('0');
-            for (size_t i = 0; i < stylus.packet.bytes.size(); ++i) {
-                oss << std::setw(2) << static_cast<unsigned int>(stylus.packet.bytes[i]);
-                if (i + 1 < stylus.packet.bytes.size()) {
+            for (size_t i = 0; i < output.packet.bytes.size(); ++i) {
+                oss << std::setw(2) << static_cast<unsigned int>(output.packet.bytes[i]);
+                if (i + 1 < output.packet.bytes.size()) {
                     oss << " ";
                 }
             }

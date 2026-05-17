@@ -43,6 +43,7 @@ enum class IpcCommand : uint8_t {
     // Dynamic debug metadata + values
     GetDebugSchema   = 61,
     GetDebugSnapshot = 62,
+    SetPenPressureMode = 63,  // param[0]: 0=4096 raw12, 1=16382 raw14 divided by 4
 };
 
 enum class IpcStatusCode : uint8_t {

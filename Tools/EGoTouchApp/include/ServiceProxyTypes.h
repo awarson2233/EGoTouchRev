@@ -16,6 +16,9 @@ struct PenBridgeStatus {
     uint8_t  freq1        = 0;
     uint8_t  freq2        = 0;
     uint16_t press[4]     = {0,0,0,0};
+    uint16_t rawPress[4]  = {0,0,0,0};
+    uint8_t  pressureMode = 1;
+    uint16_t pressureMax  = 4095;
 };
 
 struct DynamicDebugField {

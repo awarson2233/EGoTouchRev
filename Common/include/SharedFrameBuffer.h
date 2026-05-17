@@ -127,6 +127,43 @@ struct SharedStylusDiagnostics {
     bool     wasInking = false;
     int32_t  avg3PtDim1 = 0;
     int32_t  avg3PtDim2 = 0;
+
+    uint16_t tx1PeakValue = 0;
+    uint16_t tx1Sum3x3 = 0;
+    uint16_t tx2PeakValue = 0;
+    uint16_t tx2Sum3x3 = 0;
+    bool tx2Valid = false;
+
+    uint16_t triDim1Left = 0;
+    uint16_t triDim1Center = 0;
+    uint16_t triDim1Right = 0;
+    int16_t pitchCompApplied = 0;
+    int32_t localCoorDim1 = 0;
+    int32_t localCoorDim2 = 0;
+    bool dim1Edge = false;
+    bool dim2Edge = false;
+
+    uint16_t tiltLenLimit = 0;
+    int32_t tiltRawDiffDim1 = 0;
+    int32_t tiltRawDiffDim2 = 0;
+
+    uint16_t btRawPressure = 0;
+    uint16_t preIirPressure = 0;
+    bool btPressSuppressActive = false;
+    uint8_t polySegment = 0;
+
+    bool edgeSignalTooLowLatched = false;
+    bool fakePressureDecreaseActive = false;
+    uint8_t fakePressureDecreaseFramesLeft = 0;
+    uint8_t btFreqShiftDebounceFramesLeft = 0;
+
+    uint8_t lfStateMachine = 0;
+    float lfLineFitSlopeA = 0.f;
+    float lfLineFitInterceptB = 0.f;
+    bool lfLineFitValid = false;
+    int32_t lfCos1000 = 0;
+    int32_t lfStraightBufCount = 0;
+    int32_t lfDragApplied = 0;
 };
 
 // ───────────────────────────────────────────────────────────
@@ -254,22 +291,22 @@ template <typename StylusType>
 inline void PopulateLegacyStylusPacketForSharedFrame(SharedStylusPacket& dst,
                                                      const StylusType& stylus) {
     dst = SharedStylusPacket{};
-    if constexpr (requires { stylus.packet.valid; stylus.packet.reportId; stylus.packet.length; stylus.packet.bytes.data(); }) {
-        dst.valid = stylus.packet.valid;
-        dst.reportId = stylus.packet.reportId;
-        dst.length = stylus.packet.length;
-        std::memcpy(dst.bytes, stylus.packet.bytes.data(), sizeof(dst.bytes));
+    if constexpr (requires { stylus.output.packet.valid; stylus.output.packet.reportId; stylus.output.packet.length; stylus.output.packet.bytes.data(); }) {
+        dst.valid = stylus.output.packet.valid;
+        dst.reportId = stylus.output.packet.reportId;
+        dst.length = stylus.output.packet.length;
+        std::memcpy(dst.bytes, stylus.output.packet.bytes.data(), sizeof(dst.bytes));
     }
 }
 
 template <typename StylusType>
 inline void PopulateStylusPacketFromLegacySharedFrame(StylusType& stylus,
                                                       const SharedStylusPacket& src) {
-    if constexpr (requires { stylus.packet.valid = false; stylus.packet.reportId = uint8_t{}; stylus.packet.length = uint8_t{}; stylus.packet.bytes.data(); }) {
-        stylus.packet.valid = src.valid;
-        stylus.packet.reportId = src.reportId;
-        stylus.packet.length = src.length;
-        std::memcpy(stylus.packet.bytes.data(), src.bytes, sizeof(src.bytes));
+    if constexpr (requires { stylus.output.packet.valid = false; stylus.output.packet.reportId = uint8_t{}; stylus.output.packet.length = uint8_t{}; stylus.output.packet.bytes.data(); }) {
+        stylus.output.packet.valid = src.valid;
+        stylus.output.packet.reportId = src.reportId;
+        stylus.output.packet.length = src.length;
+        std::memcpy(stylus.output.packet.bytes.data(), src.bytes, sizeof(src.bytes));
     } else {
         (void)stylus;
         (void)src;
@@ -325,7 +362,7 @@ inline void PopulateSharedFrameDataFromSolverFrame(SharedFrameData& dst,
         std::memcpy(dst.touchPackets[i].bytes, src.touchPackets[i].bytes.data(), sizeof(dst.touchPackets[i].bytes));
     }
 
-    const auto& srcPoint = src.stylus.point;
+    const auto& srcPoint = src.stylus.output.point;
     auto& dstPoint = dst.stylusPoint;
     dstPoint.valid = srcPoint.valid;
     dstPoint.x = srcPoint.x;
@@ -353,60 +390,29 @@ inline void PopulateSharedFrameDataFromSolverFrame(SharedFrameData& dst,
     PopulateLegacyStylusPacketForSharedFrame(dst.stylusPacket, src.stylus);
 
     const auto& stylus = src.stylus;
-    dst.stylusSlaveValid = stylus.slaveValid;
-    dst.stylusChecksumOk = stylus.checksumOk;
-    dst.stylusSlaveOffset = stylus.slaveWordOffset;
-    dst.stylusChecksum16 = stylus.checksum16;
-    dst.stylusTx1Valid = stylus.tx1BlockValid;
-    dst.stylusTx2Valid = stylus.tx2BlockValid;
-    dst.stylusStatus = stylus.status;
-    dst.stylusPressure = stylus.pressure;
-    dst.stylusRecheckEnabled = stylus.recheckEnabled;
-    dst.stylusRecheckPassed = stylus.recheckPassed;
-    dst.stylusRecheckOverlap = stylus.recheckOverlap;
-    dst.stylusRecheckThreshold = stylus.recheckThreshold;
-    dst.stylusTouchNullLike = stylus.touchNullLike;
-    dst.stylusTouchSuppressActive = stylus.touchSuppressActive;
-    dst.stylusTouchSuppressFrames = stylus.touchSuppressFrames;
-    dst.stylusSignalX = stylus.signalX;
-    dst.stylusSignalY = stylus.signalY;
-    dst.stylusMaxRawPeak = stylus.maxRawPeak;
-    // Deprecated legacy mirror. Keep ABI field stable, but stop exporting semantics.
+    dst.stylusSlaveValid = stylus.input.slaveValid;
+    dst.stylusChecksumOk = stylus.input.checksumOk;
+    dst.stylusSlaveOffset = stylus.input.slaveWordOffset;
+    dst.stylusChecksum16 = stylus.input.checksum16;
+    dst.stylusTx1Valid = stylus.input.tx1BlockValid;
+    dst.stylusTx2Valid = stylus.input.tx2BlockValid;
+    dst.stylusStatus = stylus.input.status;
+    dst.stylusPressure = stylus.output.pressure;
+    dst.stylusRecheckEnabled = stylus.interop.recheckEnabled;
+    dst.stylusRecheckPassed = stylus.interop.recheckPassed;
+    dst.stylusRecheckOverlap = stylus.interop.recheckOverlap;
+    dst.stylusRecheckThreshold = stylus.interop.recheckThreshold;
+    dst.stylusTouchNullLike = stylus.interop.touchNullLike;
+    dst.stylusTouchSuppressActive = stylus.interop.touchSuppressActive;
+    dst.stylusTouchSuppressFrames = stylus.interop.touchSuppressFrames;
+    dst.stylusSignalX = stylus.interop.signalX;
+    dst.stylusSignalY = stylus.interop.signalY;
+    dst.stylusMaxRawPeak = stylus.interop.maxRawPeak;
     dst.stylusNoPressInk = false;
-    dst.stylusPipelineStage = stylus.pipelineStage;
-
-    if constexpr (requires {
-        stylus.asaMode;
-        stylus.dataType;
-        stylus.processResult;
-        stylus.validJudgmentPassed;
-        stylus.hpp3NoiseInvalid;
-        stylus.hpp3NoiseDebounce;
-        stylus.hpp3Dim1SignalValid;
-        stylus.hpp3Dim2SignalValid;
-        stylus.hpp3RatioWarnCountX;
-        stylus.hpp3RatioWarnCountY;
-        stylus.hpp3SignalAvgX;
-        stylus.hpp3SignalAvgY;
-        stylus.hpp3SignalSampleCount;
-    }) {
-        dst.stylusAsaMode = stylus.asaMode;
-        dst.stylusDataType = stylus.dataType;
-        dst.stylusProcessResult = stylus.processResult;
-        dst.stylusValidJudgment = stylus.validJudgmentPassed;
-        dst.stylusHpp3NoiseInvalid = stylus.hpp3NoiseInvalid;
-        dst.stylusHpp3NoiseDebounce = stylus.hpp3NoiseDebounce;
-        dst.stylusHpp3Dim1Valid = stylus.hpp3Dim1SignalValid;
-        dst.stylusHpp3Dim2Valid = stylus.hpp3Dim2SignalValid;
-        dst.stylusHpp3WarnX = stylus.hpp3RatioWarnCountX;
-        dst.stylusHpp3WarnY = stylus.hpp3RatioWarnCountY;
-        dst.stylusHpp3AvgX = stylus.hpp3SignalAvgX;
-        dst.stylusHpp3AvgY = stylus.hpp3SignalAvgY;
-        dst.stylusHpp3Samples = stylus.hpp3SignalSampleCount;
-    }
+    dst.stylusPipelineStage = stylus.output.pipelineStage;
 
     auto& diag = dst.diag;
-    const auto& srcDiag = stylus.diag;
+    const auto& srcDiag = stylus.debug.coord;
     diag.anchorRow = srcDiag.anchorRow;
     diag.anchorCol = srcDiag.anchorCol;
     diag.rawDim1 = srcDiag.rawDim1;
@@ -445,6 +451,37 @@ inline void PopulateSharedFrameDataFromSolverFrame(SharedFrameData& dst,
     diag.wasInking = srcDiag.wasInking;
     diag.avg3PtDim1 = srcDiag.avg3PtDim1;
     diag.avg3PtDim2 = srcDiag.avg3PtDim2;
+    diag.tx1PeakValue = srcDiag.tx1PeakValue;
+    diag.tx1Sum3x3 = srcDiag.tx1Sum3x3;
+    diag.tx2PeakValue = srcDiag.tx2PeakValue;
+    diag.tx2Sum3x3 = srcDiag.tx2Sum3x3;
+    diag.tx2Valid = srcDiag.tx2Valid;
+    diag.triDim1Left = srcDiag.triDim1Left;
+    diag.triDim1Center = srcDiag.triDim1Center;
+    diag.triDim1Right = srcDiag.triDim1Right;
+    diag.pitchCompApplied = srcDiag.pitchCompApplied;
+    diag.localCoorDim1 = srcDiag.localCoorDim1;
+    diag.localCoorDim2 = srcDiag.localCoorDim2;
+    diag.dim1Edge = srcDiag.dim1Edge;
+    diag.dim2Edge = srcDiag.dim2Edge;
+    diag.tiltLenLimit = srcDiag.tiltLenLimit;
+    diag.tiltRawDiffDim1 = srcDiag.tiltRawDiffDim1;
+    diag.tiltRawDiffDim2 = srcDiag.tiltRawDiffDim2;
+    diag.btRawPressure = srcDiag.btRawPressure;
+    diag.preIirPressure = srcDiag.preIirPressure;
+    diag.btPressSuppressActive = srcDiag.btPressSuppressActive;
+    diag.polySegment = srcDiag.polySegment;
+    diag.edgeSignalTooLowLatched = srcDiag.edgeSignalTooLowLatched;
+    diag.fakePressureDecreaseActive = srcDiag.fakePressureDecreaseActive;
+    diag.fakePressureDecreaseFramesLeft = srcDiag.fakePressureDecreaseFramesLeft;
+    diag.btFreqShiftDebounceFramesLeft = srcDiag.btFreqShiftDebounceFramesLeft;
+    diag.lfStateMachine = srcDiag.lfStateMachine;
+    diag.lfLineFitSlopeA = srcDiag.lfLineFitSlopeA;
+    diag.lfLineFitInterceptB = srcDiag.lfLineFitInterceptB;
+    diag.lfLineFitValid = srcDiag.lfLineFitValid;
+    diag.lfCos1000 = srcDiag.lfCos1000;
+    diag.lfStraightBufCount = srcDiag.lfStraightBufCount;
+    diag.lfDragApplied = srcDiag.lfDragApplied;
 
     dst.masterSuffix = src.masterSuffix;
     dst.masterSuffixValid = src.masterSuffixValid;
@@ -502,7 +539,7 @@ inline void PopulateSolverFrameFromSharedFrameData(HeatmapFrame& out,
     }
 
     const auto& srcPoint = src.stylusPoint;
-    auto& dstPoint = out.stylus.point;
+    auto& dstPoint = out.stylus.output.point;
     dstPoint.valid = srcPoint.valid;
     dstPoint.x = srcPoint.x;
     dstPoint.y = srcPoint.y;
@@ -529,57 +566,27 @@ inline void PopulateSolverFrameFromSharedFrameData(HeatmapFrame& out,
     PopulateStylusPacketFromLegacySharedFrame(out.stylus, src.stylusPacket);
 
     auto& stylus = out.stylus;
-    stylus.slaveValid = src.stylusSlaveValid;
-    stylus.checksumOk = src.stylusChecksumOk;
-    stylus.slaveWordOffset = src.stylusSlaveOffset;
-    stylus.checksum16 = src.stylusChecksum16;
-    stylus.tx1BlockValid = src.stylusTx1Valid;
-    stylus.tx2BlockValid = src.stylusTx2Valid;
-    stylus.status = src.stylusStatus;
-    stylus.pressure = src.stylusPressure;
-    stylus.recheckEnabled = src.stylusRecheckEnabled;
-    stylus.recheckPassed = src.stylusRecheckPassed;
-    stylus.recheckOverlap = src.stylusRecheckOverlap;
-    stylus.recheckThreshold = src.stylusRecheckThreshold;
-    stylus.touchNullLike = src.stylusTouchNullLike;
-    stylus.touchSuppressActive = src.stylusTouchSuppressActive;
-    stylus.touchSuppressFrames = src.stylusTouchSuppressFrames;
-    stylus.signalX = src.stylusSignalX;
-    stylus.signalY = src.stylusSignalY;
-    stylus.maxRawPeak = src.stylusMaxRawPeak;
-    stylus.pipelineStage = src.stylusPipelineStage;
+    stylus.input.slaveValid = src.stylusSlaveValid;
+    stylus.input.checksumOk = src.stylusChecksumOk;
+    stylus.input.slaveWordOffset = src.stylusSlaveOffset;
+    stylus.input.checksum16 = src.stylusChecksum16;
+    stylus.input.tx1BlockValid = src.stylusTx1Valid;
+    stylus.input.tx2BlockValid = src.stylusTx2Valid;
+    stylus.input.status = src.stylusStatus;
+    stylus.output.pressure = src.stylusPressure;
+    stylus.interop.recheckEnabled = src.stylusRecheckEnabled;
+    stylus.interop.recheckPassed = src.stylusRecheckPassed;
+    stylus.interop.recheckOverlap = src.stylusRecheckOverlap;
+    stylus.interop.recheckThreshold = src.stylusRecheckThreshold;
+    stylus.interop.touchNullLike = src.stylusTouchNullLike;
+    stylus.interop.touchSuppressActive = src.stylusTouchSuppressActive;
+    stylus.interop.touchSuppressFrames = src.stylusTouchSuppressFrames;
+    stylus.interop.signalX = src.stylusSignalX;
+    stylus.interop.signalY = src.stylusSignalY;
+    stylus.interop.maxRawPeak = src.stylusMaxRawPeak;
+    stylus.output.pipelineStage = src.stylusPipelineStage;
 
-    if constexpr (requires {
-        stylus.asaMode = uint8_t{};
-        stylus.dataType = uint8_t{};
-        stylus.processResult = uint8_t{};
-        stylus.validJudgmentPassed = false;
-        stylus.hpp3NoiseInvalid = false;
-        stylus.hpp3NoiseDebounce = false;
-        stylus.hpp3Dim1SignalValid = false;
-        stylus.hpp3Dim2SignalValid = false;
-        stylus.hpp3RatioWarnCountX = uint8_t{};
-        stylus.hpp3RatioWarnCountY = uint8_t{};
-        stylus.hpp3SignalAvgX = uint16_t{};
-        stylus.hpp3SignalAvgY = uint16_t{};
-        stylus.hpp3SignalSampleCount = uint8_t{};
-    }) {
-        stylus.asaMode = src.stylusAsaMode;
-        stylus.dataType = src.stylusDataType;
-        stylus.processResult = src.stylusProcessResult;
-        stylus.validJudgmentPassed = src.stylusValidJudgment;
-        stylus.hpp3NoiseInvalid = src.stylusHpp3NoiseInvalid;
-        stylus.hpp3NoiseDebounce = src.stylusHpp3NoiseDebounce;
-        stylus.hpp3Dim1SignalValid = src.stylusHpp3Dim1Valid;
-        stylus.hpp3Dim2SignalValid = src.stylusHpp3Dim2Valid;
-        stylus.hpp3RatioWarnCountX = src.stylusHpp3WarnX;
-        stylus.hpp3RatioWarnCountY = src.stylusHpp3WarnY;
-        stylus.hpp3SignalAvgX = src.stylusHpp3AvgX;
-        stylus.hpp3SignalAvgY = src.stylusHpp3AvgY;
-        stylus.hpp3SignalSampleCount = src.stylusHpp3Samples;
-    }
-
-    auto& diag = stylus.diag;
+    auto& diag = stylus.debug.coord;
     diag.anchorRow = src.diag.anchorRow;
     diag.anchorCol = src.diag.anchorCol;
     diag.rawDim1 = src.diag.rawDim1;
@@ -618,6 +625,37 @@ inline void PopulateSolverFrameFromSharedFrameData(HeatmapFrame& out,
     diag.wasInking = src.diag.wasInking;
     diag.avg3PtDim1 = src.diag.avg3PtDim1;
     diag.avg3PtDim2 = src.diag.avg3PtDim2;
+    diag.tx1PeakValue = src.diag.tx1PeakValue;
+    diag.tx1Sum3x3 = src.diag.tx1Sum3x3;
+    diag.tx2PeakValue = src.diag.tx2PeakValue;
+    diag.tx2Sum3x3 = src.diag.tx2Sum3x3;
+    diag.tx2Valid = src.diag.tx2Valid;
+    diag.triDim1Left = src.diag.triDim1Left;
+    diag.triDim1Center = src.diag.triDim1Center;
+    diag.triDim1Right = src.diag.triDim1Right;
+    diag.pitchCompApplied = src.diag.pitchCompApplied;
+    diag.localCoorDim1 = src.diag.localCoorDim1;
+    diag.localCoorDim2 = src.diag.localCoorDim2;
+    diag.dim1Edge = src.diag.dim1Edge;
+    diag.dim2Edge = src.diag.dim2Edge;
+    diag.tiltLenLimit = src.diag.tiltLenLimit;
+    diag.tiltRawDiffDim1 = src.diag.tiltRawDiffDim1;
+    diag.tiltRawDiffDim2 = src.diag.tiltRawDiffDim2;
+    diag.btRawPressure = src.diag.btRawPressure;
+    diag.preIirPressure = src.diag.preIirPressure;
+    diag.btPressSuppressActive = src.diag.btPressSuppressActive;
+    diag.polySegment = src.diag.polySegment;
+    diag.edgeSignalTooLowLatched = src.diag.edgeSignalTooLowLatched;
+    diag.fakePressureDecreaseActive = src.diag.fakePressureDecreaseActive;
+    diag.fakePressureDecreaseFramesLeft = src.diag.fakePressureDecreaseFramesLeft;
+    diag.btFreqShiftDebounceFramesLeft = src.diag.btFreqShiftDebounceFramesLeft;
+    diag.lfStateMachine = src.diag.lfStateMachine;
+    diag.lfLineFitSlopeA = src.diag.lfLineFitSlopeA;
+    diag.lfLineFitInterceptB = src.diag.lfLineFitInterceptB;
+    diag.lfLineFitValid = src.diag.lfLineFitValid;
+    diag.lfCos1000 = src.diag.lfCos1000;
+    diag.lfStraightBufCount = src.diag.lfStraightBufCount;
+    diag.lfDragApplied = src.diag.lfDragApplied;
 
     out.masterSuffix = src.masterSuffix;
     out.masterSuffixValid = src.masterSuffixValid;

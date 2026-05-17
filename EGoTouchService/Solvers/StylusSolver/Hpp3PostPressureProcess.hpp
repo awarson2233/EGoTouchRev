@@ -32,6 +32,9 @@ public:
             decision.tipDownCandidate = false;
             decision.authoritativeDown = false;
             UpdatePrevious(coor, 0);
+#if EGOTOUCH_DIAG
+            CaptureDebugState(pressure);
+#endif
             return true;
         }
 
@@ -66,11 +69,17 @@ public:
             decision.tipDownCandidate = false;
             decision.authoritativeDown = false;
             UpdatePrevious(coor, pressure.outputPressure);
+#if EGOTOUCH_DIAG
+            CaptureDebugState(pressure);
+#endif
             return true;
         }
 
         ApplyEdgeSignalSuppression(runtime.signal, pressure, decision);
         UpdatePrevious(coor, pressure.outputPressure);
+#if EGOTOUCH_DIAG
+        CaptureDebugState(pressure);
+#endif
         return true;
     }
 
@@ -193,6 +202,15 @@ private:
         m_fakePressureDecreaseArmed = false;
         m_fakePressureDecreaseFramesLeft = 0;
     }
+
+#if EGOTOUCH_DIAG
+    inline void CaptureDebugState(StylusRuntimePressure& pressure) const {
+        pressure.edgeSignalTooLowLatched = m_edgeSignalTooLowLatched;
+        pressure.fakePressureDecreaseActive = m_fakePressureDecreaseArmed;
+        pressure.fakePressureDecreaseFramesLeft = m_fakePressureDecreaseFramesLeft;
+        pressure.btFreqShiftDebounceFramesLeft = m_btFreqShiftDebounceFramesLeft;
+    }
+#endif
 
     static inline uint16_t Dim1SelectedPeakSignal(const StylusRuntimeSignal& signal) {
         return signal.dim1EdgeSignal != 0 ? signal.dim1EdgeSignal : signal.signalX;

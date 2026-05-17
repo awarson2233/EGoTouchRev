@@ -17,7 +17,6 @@ bool StylusPipeline::Process(HeatmapFrame& frame) {
         return true;
     }
 
-    m_cmf.Process(frame);
     m_featureExtractor.Process(frame);
     if (frame.stylus.runtime.flow.terminal) {
         m_tiltProcess.Reset();
@@ -37,9 +36,6 @@ bool StylusPipeline::Process(HeatmapFrame& frame) {
     m_tiltProcess.Process(frame);
     m_pressureSolver.Process(frame);
     m_postPressure.Process(frame);
-    m_post.m_sensorRows = m_packetSensorRows;
-    m_post.m_sensorCols = m_packetSensorCols;
-    m_post.Process(frame);
     m_commit.Commit(frame);
     return true;
 }
@@ -49,9 +45,6 @@ std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
     schema.emplace_back("sp.frameParserEnabled", "Frame Parser Enabled",
                         ConfigParam::Bool, const_cast<bool*>(&m_frameParser.m_enabled))
         .Module("Frame Parser");
-    schema.emplace_back("sp.cmfEnabled", "Common Mode Filter Enabled",
-                        ConfigParam::Bool, const_cast<bool*>(&m_cmf.m_enabled))
-        .Module("Signal Conditioning");
     schema.emplace_back("sp.peakDetectorEnabled", "Peak Detector Enabled",
                         ConfigParam::Bool, const_cast<bool*>(&m_featureExtractor.m_enabled))
         .Module("Data Solve");
@@ -79,39 +72,6 @@ std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
     schema.emplace_back("sp.pressureEdgeExitThreshold", "Pressure Edge Exit Threshold",
                         ConfigParam::Int, const_cast<uint16_t*>(&m_postPressure.m_pressureEdgeExitThreshold), 0.0f, 65535.0f)
         .Module("Pressure");
-    schema.emplace_back("sp.postEnabled", "Post Process Enabled",
-                        ConfigParam::Bool, const_cast<bool*>(&m_post.m_enabled))
-        .Module("Post Process");
-    schema.emplace_back("sp.enableSlaveChecksum", "Enable Slave Checksum",
-                        ConfigParam::Bool, const_cast<bool*>(&m_frameParser.m_enableSlaveChecksum))
-        .Module("Frame Parser");
-    schema.emplace_back("sp.filterMode", "Filter Mode",
-                        ConfigParam::Int, const_cast<int*>(&m_post.m_filterMode), 0.0f, 2.0f)
-        .Module("Post Process");
-    schema.emplace_back("sp.linearFilterEnabled", "Linear Filter Enabled",
-                        ConfigParam::Bool, const_cast<bool*>(&m_post.m_linearFilter.m_enabled))
-        .Module("Post Process");
-    schema.emplace_back("sp.linearFilterDragLimit", "Linear Filter Drag Limit",
-                        ConfigParam::Int, const_cast<int*>(&m_post.m_linearFilter.m_dragLimit), 0.0f, 4096.0f)
-        .Module("Post Process");
-    schema.emplace_back("sp.linearFilterEnterMaxDistSq", "Linear Filter Enter Max Dist Sq",
-                        ConfigParam::Int, const_cast<int*>(&m_post.m_linearFilter.m_enterMaxDistSq), 0.0f, 1048576.0f)
-        .Module("Post Process");
-    schema.emplace_back("sp.linearFilterExitDistSq", "Linear Filter Exit Dist Sq",
-                        ConfigParam::Int, const_cast<int*>(&m_post.m_linearFilter.m_exitDistSq), 0.0f, 1048576.0f)
-        .Module("Post Process");
-    schema.emplace_back("sp.linearFilterSparseMoveThreshold", "Linear Filter Sparse Move Threshold",
-                        ConfigParam::Int, const_cast<int*>(&m_post.m_linearFilter.m_sparseMoveThreshold), 0.0f, 4096.0f)
-        .Module("Post Process");
-    schema.emplace_back("sp.linearFilterShortMoveThreshold", "Linear Filter Short Move Threshold",
-                        ConfigParam::Int, const_cast<int*>(&m_post.m_linearFilter.m_shortMoveThreshold), 0.0f, 4096.0f)
-        .Module("Post Process");
-    schema.emplace_back("sp.linearFilterAnchorMoveThreshold", "Linear Filter Anchor Move Threshold",
-                        ConfigParam::Int, const_cast<int*>(&m_post.m_linearFilter.m_anchorMoveThreshold), 0.0f, 4096.0f)
-        .Module("Post Process");
-    schema.emplace_back("sp.linearFilterMinFitPoints", "Linear Filter Min Fit Points",
-                        ConfigParam::Int, const_cast<int*>(&m_post.m_linearFilter.m_minFitPoints), 2.0f, 400.0f)
-        .Module("Post Process");
     schema.emplace_back("sp.packetSensorRows", "Packet Sensor Rows",
                         ConfigParam::Int, const_cast<int*>(&m_packetSensorRows), 1.0f, 200.0f)
         .Module("Output");
@@ -138,7 +98,6 @@ std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
 
 void StylusPipeline::SaveConfig(std::ostream& out) const {
     out << "sp.frameParserEnabled=" << (m_frameParser.m_enabled ? "1" : "0") << "\n";
-    out << "sp.cmfEnabled=" << (m_cmf.m_enabled ? "1" : "0") << "\n";
     out << "sp.peakDetectorEnabled=" << (m_featureExtractor.m_enabled ? "1" : "0") << "\n";
     out << "sp.coordinateSolverEnabled=" << (m_coordinateSolver.m_enabled ? "1" : "0") << "\n";
     out << "sp.tiltProcessEnabled=" << (m_tiltProcess.m_enabled ? "1" : "0") << "\n";
@@ -148,17 +107,6 @@ void StylusPipeline::SaveConfig(std::ostream& out) const {
     out << "sp.btFreqShiftDebounceFrames=" << m_postPressure.m_btFreqShiftDebounceFrames << "\n";
     out << "sp.pressureEdgeEnterThreshold=" << m_postPressure.m_pressureEdgeEnterThreshold << "\n";
     out << "sp.pressureEdgeExitThreshold=" << m_postPressure.m_pressureEdgeExitThreshold << "\n";
-    out << "sp.postEnabled=" << (m_post.m_enabled ? "1" : "0") << "\n";
-    out << "sp.enableSlaveChecksum=" << (m_frameParser.m_enableSlaveChecksum ? "1" : "0") << "\n";
-    out << "sp.filterMode=" << m_post.m_filterMode << "\n";
-    out << "sp.linearFilterEnabled=" << (m_post.m_linearFilter.m_enabled ? "1" : "0") << "\n";
-    out << "sp.linearFilterDragLimit=" << m_post.m_linearFilter.m_dragLimit << "\n";
-    out << "sp.linearFilterEnterMaxDistSq=" << m_post.m_linearFilter.m_enterMaxDistSq << "\n";
-    out << "sp.linearFilterExitDistSq=" << m_post.m_linearFilter.m_exitDistSq << "\n";
-    out << "sp.linearFilterSparseMoveThreshold=" << m_post.m_linearFilter.m_sparseMoveThreshold << "\n";
-    out << "sp.linearFilterShortMoveThreshold=" << m_post.m_linearFilter.m_shortMoveThreshold << "\n";
-    out << "sp.linearFilterAnchorMoveThreshold=" << m_post.m_linearFilter.m_anchorMoveThreshold << "\n";
-    out << "sp.linearFilterMinFitPoints=" << m_post.m_linearFilter.m_minFitPoints << "\n";
     out << "sp.packetSensorRows=" << m_packetSensorRows << "\n";
     out << "sp.packetSensorCols=" << m_packetSensorCols << "\n";
     out << "sp.emitPacketWhenInvalid=" << (m_emitPacketWhenInvalid ? "1" : "0") << "\n";
@@ -173,8 +121,6 @@ void StylusPipeline::LoadConfig(const std::string& key, const std::string& value
 
     if (key == "sp.preEnabled" || key == "sp.frameParserEnabled") {
         m_frameParser.m_enabled = toBool(value);
-    } else if (key == "sp.cmfEnabled") {
-        m_cmf.m_enabled = toBool(value);
     } else if (key == "sp.solveEnabled" || key == "sp.peakDetectorEnabled") {
         m_featureExtractor.m_enabled = toBool(value);
     } else if (key == "sp.coordinateSolverEnabled") {
@@ -201,28 +147,6 @@ void StylusPipeline::LoadConfig(const std::string& key, const std::string& value
     } else if (key == "sp.pressureEdgeExitThreshold") {
         m_postPressure.m_pressureEdgeExitThreshold =
             static_cast<uint16_t>(std::clamp(std::stoi(value), 0, 0xFFFF));
-    } else if (key == "sp.postEnabled") {
-        m_post.m_enabled = toBool(value);
-    } else if (key == "sp.enableSlaveChecksum") {
-        m_frameParser.m_enableSlaveChecksum = toBool(value);
-    } else if (key == "sp.filterMode") {
-        SetFilterMode(std::stoi(value));
-    } else if (key == "sp.linearFilterEnabled") {
-        m_post.m_linearFilter.m_enabled = toBool(value);
-    } else if (key == "sp.linearFilterDragLimit") {
-        m_post.m_linearFilter.m_dragLimit = std::clamp(std::stoi(value), 0, 4096);
-    } else if (key == "sp.linearFilterEnterMaxDistSq") {
-        m_post.m_linearFilter.m_enterMaxDistSq = std::clamp(std::stoi(value), 0, 1048576);
-    } else if (key == "sp.linearFilterExitDistSq") {
-        m_post.m_linearFilter.m_exitDistSq = std::clamp(std::stoi(value), 0, 1048576);
-    } else if (key == "sp.linearFilterSparseMoveThreshold") {
-        m_post.m_linearFilter.m_sparseMoveThreshold = std::clamp(std::stoi(value), 0, 4096);
-    } else if (key == "sp.linearFilterShortMoveThreshold") {
-        m_post.m_linearFilter.m_shortMoveThreshold = std::clamp(std::stoi(value), 0, 4096);
-    } else if (key == "sp.linearFilterAnchorMoveThreshold") {
-        m_post.m_linearFilter.m_anchorMoveThreshold = std::clamp(std::stoi(value), 0, 4096);
-    } else if (key == "sp.linearFilterMinFitPoints") {
-        m_post.m_linearFilter.m_minFitPoints = std::clamp(std::stoi(value), 2, 400);
     } else if (key == "sp.packetSensorRows") {
         m_packetSensorRows = std::max(1, std::stoi(value));
     } else if (key == "sp.packetSensorCols") {
@@ -263,13 +187,6 @@ void StylusPipeline::SetBtMcuPressurePacket(const std::array<uint16_t, 4>& press
     m_btSample.seq += 1;
     m_btSample.hasSample = true;
     m_btSample.hasFreq = true;
-}
-
-void StylusPipeline::SetFilterMode(int mode) {
-    m_post.m_filterMode = std::clamp(
-        mode,
-        static_cast<int>(Stylus::StylusPostProcessor::IirQ8),
-        static_cast<int>(Stylus::StylusPostProcessor::Bypass));
 }
 
 StylusBtInputSnapshot StylusPipeline::ReadLatestBtSample() const {

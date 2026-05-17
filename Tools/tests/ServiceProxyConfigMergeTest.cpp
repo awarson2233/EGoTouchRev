@@ -120,7 +120,7 @@ void TestMergePreservesUnrelatedSectionsAndReplacesTouchSections() {
     touchPipeline.m_baseline.m_enabled = false;
     touchPipeline.m_tracker.m_enabled = true;
     Solvers::StylusPipeline stylusPipeline;
-    stylusPipeline.SetFilterMode(2);
+    stylusPipeline.m_postPressure.m_btFreqShiftDebounceFrames = 2;
 
     const std::string existing =
         "; keep header comment\n"
@@ -176,7 +176,7 @@ void TestMergePreservesUnrelatedSectionsAndReplacesTouchSections() {
             "merge should write service stylus setting");
     Require(merged.find("BaselineEnabled=0") != std::string::npos,
             "merge should write canonical touch pipeline content");
-    Require(merged.find("sp.filterMode=2") != std::string::npos,
+    Require(merged.find("sp.btFreqShiftDebounceFrames=2") != std::string::npos,
             "merge should write canonical stylus pipeline content");
 }
 

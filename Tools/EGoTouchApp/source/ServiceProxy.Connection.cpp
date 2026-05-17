@@ -133,6 +133,19 @@ bool ServiceProxy::StopRemoteRuntime() {
     return resp.success;
 }
 
+bool ServiceProxy::SetPenPressureMode(uint8_t mode) {
+    if (!IsLiveControlAllowed()) return false;
+    Ipc::IpcRequest req{};
+    req.command = Ipc::IpcCommand::SetPenPressureMode;
+    req.param[0] = mode == 0 ? 0 : 1;
+    req.paramLen = 1;
+    const auto resp = m_client.Send(req);
+    if (!resp.success) {
+        LOG_WARN("App", __func__, "IPC", "SetPenPressureMode request failed.");
+    }
+    return resp.success;
+}
+
 // ── VHF control ──
 bool ServiceProxy::SetVhfEnabled(bool enabled) {
     if (!IsLiveControlAllowed()) return false;

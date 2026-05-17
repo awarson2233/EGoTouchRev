@@ -38,27 +38,11 @@ HeatmapFrame MakeOutputDrivenStylusFrame() {
     frame.stylus.output.point.tiltX = 7;
     frame.stylus.output.point.tiltY = -3;
     frame.stylus.output.point.pressure = frame.stylus.output.pressure;
-
-    // Stale legacy mirrors should not affect reporter-side packet assembly.
-    frame.stylus.point.valid = true;
-    frame.stylus.point.x = 1.0f * 1024.0f;
-    frame.stylus.point.y = 2.0f * 1024.0f;
-    frame.stylus.point.tiltX = -9;
-    frame.stylus.point.tiltY = 11;
-    frame.stylus.pressure = 17;
-    frame.stylus.tipSwitchActive = false;
     return frame;
 }
 
 HeatmapFrame MakeInvalidOutputFrameWithStaleLegacyValidData() {
     HeatmapFrame frame{};
-    frame.stylus.point.valid = true;
-    frame.stylus.point.x = 20.0f * 1024.0f;
-    frame.stylus.point.y = 30.0f * 1024.0f;
-    frame.stylus.point.tiltX = 5;
-    frame.stylus.point.tiltY = 6;
-    frame.stylus.pressure = 777;
-    frame.stylus.tipSwitchActive = true;
     return frame;
 }
 
@@ -141,7 +125,7 @@ void TestDispatchStylusPublishesRawPenStateToDiagnostics() {
     auto frame = MakeOutputDrivenStylusFrame();
     reporter.DispatchStylus(frame);
 
-    Require(frame.stylus.diag.vhfPenState == 0x21,
+    Require(frame.stylus.debug.coord.vhfPenState == 0x21,
             "diagnostics should reflect the raw packet, not the transformed write buffer");
 }
 
@@ -152,7 +136,7 @@ void TestDispatchStylusPublishesDiagnosticsEvenWhenWriteDisabled() {
     auto frame = MakeOutputDrivenStylusFrame();
     reporter.DispatchStylus(frame, false);
 
-    Require(frame.stylus.diag.vhfPenState == 0x21,
+    Require(frame.stylus.debug.coord.vhfPenState == 0x21,
             "write-disabled dispatch should still publish diagnostics state");
 }
 

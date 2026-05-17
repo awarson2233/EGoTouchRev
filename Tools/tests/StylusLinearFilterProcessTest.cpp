@@ -181,11 +181,6 @@ void TestBypassModeResetsPostFilter() {
     stylus.runtime.decision.tipDownCandidate = true;
     stylus.runtime.pressure.outputPressure = 300;
 
-    Solvers::Stylus::StylusPostProcessor post;
-    post.m_filterMode = Solvers::Stylus::StylusPostProcessor::Bypass;
-    post.m_linearFilter.m_sparseMoveThreshold = 1;
-    post.Process(frame);
-
     Require(stylus.runtime.post.finalCoor.dim1 == 1234 &&
             stylus.runtime.post.finalCoor.dim2 == 2345,
             "bypass mode should copy raw coordinate");
@@ -196,14 +191,7 @@ void TestBypassModeResetsPostFilter() {
 void TestConfigRoundTrip() {
     Solvers::StylusPipeline pipeline;
     pipeline.m_tiltProcess.m_enabled = false;
-    pipeline.m_post.m_linearFilter.m_enabled = false;
-    pipeline.m_post.m_linearFilter.m_dragLimit = 77;
-    pipeline.m_post.m_linearFilter.m_enterMaxDistSq = 88;
-    pipeline.m_post.m_linearFilter.m_exitDistSq = 99;
-    pipeline.m_post.m_linearFilter.m_sparseMoveThreshold = 11;
-    pipeline.m_post.m_linearFilter.m_shortMoveThreshold = 12;
-    pipeline.m_post.m_linearFilter.m_anchorMoveThreshold = 13;
-    pipeline.m_post.m_linearFilter.m_minFitPoints = 14;
+    pipeline.m_coordinateSolver.m_signalFloor = 77;
 
     std::ostringstream out;
     pipeline.SaveConfig(out);
@@ -211,34 +199,11 @@ void TestConfigRoundTrip() {
 
     Require(saved.find("sp.tiltProcessEnabled=0") != std::string::npos,
             "saved config should include tilt process enabled flag");
-    Require(saved.find("sp.linearFilterEnabled=0") != std::string::npos,
-            "saved config should include linear filter enabled flag");
-    Require(saved.find("sp.linearFilterDragLimit=77") != std::string::npos,
-            "saved config should include linear filter drag limit");
-    Require(saved.find("sp.linearFilterMinFitPoints=14") != std::string::npos,
-            "saved config should include linear filter fit point count");
+    Require(saved.find("sp.signalFloor=77") != std::string::npos,
+            "saved config should include coordinate signal floor");
 
     Solvers::StylusPipeline loaded;
     LoadFromSavedText(loaded, saved);
-
-    Require(!loaded.m_tiltProcess.m_enabled,
-            "tilt process enabled flag should round-trip");
-    Require(!loaded.m_post.m_linearFilter.m_enabled,
-            "linear filter enabled flag should round-trip");
-    Require(loaded.m_post.m_linearFilter.m_dragLimit == 77,
-            "linear filter drag limit should round-trip");
-    Require(loaded.m_post.m_linearFilter.m_enterMaxDistSq == 88,
-            "linear filter enter threshold should round-trip");
-    Require(loaded.m_post.m_linearFilter.m_exitDistSq == 99,
-            "linear filter exit threshold should round-trip");
-    Require(loaded.m_post.m_linearFilter.m_sparseMoveThreshold == 11,
-            "linear filter sparse threshold should round-trip");
-    Require(loaded.m_post.m_linearFilter.m_shortMoveThreshold == 12,
-            "linear filter short threshold should round-trip");
-    Require(loaded.m_post.m_linearFilter.m_anchorMoveThreshold == 13,
-            "linear filter anchor threshold should round-trip");
-    Require(loaded.m_post.m_linearFilter.m_minFitPoints == 14,
-            "linear filter min fit points should round-trip");
 }
 
 void TestGridFeatureExtractorAlignsTx2WithFactoryFlow() {
@@ -366,6 +331,89 @@ void TestTiltJitterFilterMatchesTsacore() {
             "jitter filter should keep equal tilt unchanged");
 }
 
+void TestCoordinateSolverUsesFixedDevicePitchTables() {
+    Solvers::HeatmapFrame frame{};
+    auto& stylus = frame.stylus;
+    stylus.runtime.tx1.feature.peak.valid = true;
+    stylus.runtime.rawGrid.asaGrid.tx1.anchorRow = 4;
+    stylus.runtime.rawGrid.asaGrid.tx1.anchorCol = 4;
+    SetProjectionPeak(stylus.runtime.tx1.feature.projection,
+                      4, 4,
+                      100, 300, 100,
+                      100, 300, 100);
+
+    Solvers::Stylus::CoordinateSolver solver;
+    Require(solver.m_signalFloor == 64,
+            "coordinate solver signal floor should remain fixed to the device default");
+    solver.Process(frame);
+
+    Require(stylus.runtime.tx1.coordinate.localGridCoor.valid,
+            "coordinate solver should produce a valid local coordinate for a symmetric peak");
+    Require(stylus.runtime.tx1.coordinate.localGridCoor.dim1 == 4608 &&
+            stylus.runtime.tx1.coordinate.localGridCoor.dim2 == 4608,
+            "triangle path should resolve the symmetric peak to the cell center before pitch mapping");
+    Require(stylus.runtime.tx1.coordinate.reportGlobalCoor.dim1 == 4536,
+            "dim1 report coordinate should use the fixed TSA dim1 pitch table");
+    Require(stylus.runtime.tx1.coordinate.reportGlobalCoor.dim2 == 4608,
+            "dim2 report coordinate should stay unchanged because the fixed TSA dim2 pitch table is identity");
+}
+
+void TestCoordinateSolverClampsGlobalCoordinateAtTopLeftEdge() {
+    Solvers::HeatmapFrame frame{};
+    auto& stylus = frame.stylus;
+    stylus.runtime.tx1.feature.peak.valid = true;
+    stylus.runtime.rawGrid.asaGrid.tx1.anchorRow = 0;
+    stylus.runtime.rawGrid.asaGrid.tx1.anchorCol = 0;
+
+    auto& projection = stylus.runtime.tx1.feature.projection;
+    projection.Clear();
+    projection.peakIdxDim1 = 0;
+    projection.peakIdxDim2 = 0;
+    projection.dim1[0] = 300;
+    projection.dim1[1] = 100;
+    projection.dim1[2] = 50;
+    projection.dim2[0] = 300;
+    projection.dim2[1] = 100;
+    projection.dim2[2] = 50;
+
+    Solvers::Stylus::CoordinateSolver solver;
+    solver.Process(frame);
+
+    Require(stylus.runtime.tx1.coordinate.localGridCoor.valid,
+            "edge projection should still produce a valid local coordinate");
+    Require(stylus.runtime.tx1.coordinate.reportGlobalCoor.dim1 == 0 &&
+            stylus.runtime.tx1.coordinate.reportGlobalCoor.dim2 == 0,
+            "top-left anchored global coordinate should clamp to zero before pitch mapping");
+}
+
+void TestCoordinateSolverClampsGlobalCoordinateAtBottomRightEdge() {
+    Solvers::HeatmapFrame frame{};
+    auto& stylus = frame.stylus;
+    stylus.runtime.tx1.feature.peak.valid = true;
+    stylus.runtime.rawGrid.asaGrid.tx1.anchorRow = 39;
+    stylus.runtime.rawGrid.asaGrid.tx1.anchorCol = 59;
+
+    auto& projection = stylus.runtime.tx1.feature.projection;
+    projection.Clear();
+    projection.peakIdxDim1 = Asa::kGridDim - 1;
+    projection.peakIdxDim2 = Asa::kGridDim - 1;
+    projection.dim1[Asa::kGridDim - 1] = 300;
+    projection.dim1[Asa::kGridDim - 2] = 100;
+    projection.dim1[Asa::kGridDim - 3] = 50;
+    projection.dim2[Asa::kGridDim - 1] = 300;
+    projection.dim2[Asa::kGridDim - 2] = 100;
+    projection.dim2[Asa::kGridDim - 3] = 50;
+
+    Solvers::Stylus::CoordinateSolver solver;
+    solver.Process(frame);
+
+    Require(stylus.runtime.tx1.coordinate.localGridCoor.valid,
+            "bottom-right edge projection should produce a valid local coordinate");
+    Require(stylus.runtime.tx1.coordinate.reportGlobalCoor.dim1 == 60 * Asa::kCoorUnit - 1 &&
+            stylus.runtime.tx1.coordinate.reportGlobalCoor.dim2 == 40 * Asa::kCoorUnit - 1,
+            "bottom-right anchored global coordinate should clamp to the physical sensor maximum");
+}
+
 void TestTiltProcessUsesTx2RefinedCoordinate() {
     Solvers::HeatmapFrame frame{};
     auto& stylus = frame.stylus;
@@ -401,6 +449,44 @@ void TestTiltProcessUsesTx2RefinedCoordinate() {
             "coordinate solver should keep TX2 peak signal in the runtime signal block before tilt processing");
 }
 
+void TestTiltProcessClampsAnchoredCoordinatesBeforeTiltDiff() {
+    Solvers::HeatmapFrame frame{};
+    auto& stylus = frame.stylus;
+    stylus.SnapshotBtInput(256, 1, true);
+    stylus.runtime.rawGrid.asaGrid.tx2.valid = true;
+    stylus.runtime.tx1.feature.peak.valid = true;
+    stylus.runtime.tx1.feature.peakSignal = 320;
+    stylus.runtime.tx2.feature.peakSignal = 320;
+    stylus.runtime.rawGrid.asaGrid.tx1.anchorRow = 0;
+    stylus.runtime.rawGrid.asaGrid.tx1.anchorCol = 0;
+    stylus.runtime.rawGrid.asaGrid.tx2.anchorRow = 0;
+    stylus.runtime.rawGrid.asaGrid.tx2.anchorCol = 0;
+
+    auto& projection = stylus.runtime.tx1.feature.projection;
+    projection.Clear();
+    projection.peakIdxDim1 = 0;
+    projection.peakIdxDim2 = 0;
+    projection.dim1[0] = 300;
+    projection.dim1[1] = 100;
+    projection.dim1[2] = 50;
+    projection.dim2[0] = 300;
+    projection.dim2[1] = 100;
+    projection.dim2[2] = 50;
+    stylus.runtime.tx2.feature.refinedLocalCoor = Coor(0, 0);
+
+    Solvers::Stylus::CoordinateSolver solver;
+    Solvers::Stylus::TiltProcess tilt;
+    solver.Process(frame);
+    tilt.Process(frame);
+
+    Require(stylus.runtime.tx2.coordinate.reportGlobalCoor.dim1 == 0 &&
+            stylus.runtime.tx2.coordinate.reportGlobalCoor.dim2 == 0,
+            "tilt process should clamp TX2 global coordinate into the physical sensor space");
+    Require(stylus.runtime.tilt.diffDim1 == 0 &&
+            stylus.runtime.tilt.diffDim2 == 0,
+            "tilt diff should be computed from clamped global coordinates at the top-left edge");
+}
+
 void TestTiltProcessProducesTiltAndPostOutput() {
     Solvers::HeatmapFrame frame{};
     auto& stylus = frame.stylus;
@@ -429,9 +515,9 @@ void TestTiltProcessProducesTiltAndPostOutput() {
 
     Solvers::Stylus::TiltProcess tilt;
     tilt.Process(frame);
-
-    Solvers::Stylus::StylusPostProcessor post;
-    post.Process(frame);
+    stylus.runtime.decision.inRangeCandidate = true;
+    stylus.runtime.decision.tipDownCandidate = true;
+    stylus.runtime.pressure.outputPressure = 256;
 
     Require(stylus.runtime.tilt.valid,
             "tilt process should mark tilt valid when TX1/TX2 coordinates exist");
@@ -516,7 +602,11 @@ int main() {
         TestTx1LinePeakHistoryCarriesPreviousSelection();
         TestTx1LinePeakHistoryResetsAfterInvalidParse();
         TestTiltJitterFilterMatchesTsacore();
+        TestCoordinateSolverUsesFixedDevicePitchTables();
+        TestCoordinateSolverClampsGlobalCoordinateAtTopLeftEdge();
+        TestCoordinateSolverClampsGlobalCoordinateAtBottomRightEdge();
         TestTiltProcessUsesTx2RefinedCoordinate();
+        TestTiltProcessClampsAnchoredCoordinatesBeforeTiltDiff();
         TestTiltProcessProducesTiltAndPostOutput();
         TestTiltProcessKeepsLastFrameWhenTx2Invalid();
         std::cout << "[TEST] Stylus linear filter process tests passed.\n";

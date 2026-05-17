@@ -769,25 +769,26 @@ uint64_t ServiceHost::EncodeDebugValue(const Solvers::HeatmapFrame& frame,
         return EncodeU32(frame.slaveSuffix.words[def.sourceIndex]);
     case Ipc::DebugSourceKind::StylusField: {
         const auto& s = frame.stylus;
+        const auto& point = s.output.point;
+        const auto& diag = s.debug.coord;
         switch (static_cast<Ipc::DebugStylusSourceIndex>(def.sourceIndex)) {
-        case Ipc::DebugStylusSourceIndex::Pressure: return EncodeU32(s.pressure);
-        case Ipc::DebugStylusSourceIndex::SignalX: return EncodeU32(s.signalX);
-        case Ipc::DebugStylusSourceIndex::SignalY: return EncodeU32(s.signalY);
-        case Ipc::DebugStylusSourceIndex::MaxRawPeak: return EncodeU32(s.maxRawPeak);
-        case Ipc::DebugStylusSourceIndex::Status: return EncodeU32(s.status);
-        case Ipc::DebugStylusSourceIndex::PipelineStage: return EncodeU32(s.pipelineStage);
-        case Ipc::DebugStylusSourceIndex::PointX: return EncodeF32(s.point.x);
-        case Ipc::DebugStylusSourceIndex::PointY: return EncodeF32(s.point.y);
-        case Ipc::DebugStylusSourceIndex::RawPressure: return EncodeU32(s.point.rawPressure);
-        case Ipc::DebugStylusSourceIndex::MappedPressure: return EncodeU32(s.point.mappedPressure);
+        case Ipc::DebugStylusSourceIndex::Pressure: return EncodeU32(s.output.pressure);
+        case Ipc::DebugStylusSourceIndex::SignalX: return EncodeU32(s.interop.signalX);
+        case Ipc::DebugStylusSourceIndex::SignalY: return EncodeU32(s.interop.signalY);
+        case Ipc::DebugStylusSourceIndex::MaxRawPeak: return EncodeU32(s.interop.maxRawPeak);
+        case Ipc::DebugStylusSourceIndex::Status: return EncodeU32(s.input.status);
+        case Ipc::DebugStylusSourceIndex::PipelineStage: return EncodeU32(s.output.pipelineStage);
+        case Ipc::DebugStylusSourceIndex::PointX: return EncodeF32(point.x);
+        case Ipc::DebugStylusSourceIndex::PointY: return EncodeF32(point.y);
+        case Ipc::DebugStylusSourceIndex::RawPressure: return EncodeU32(point.rawPressure);
+        case Ipc::DebugStylusSourceIndex::MappedPressure: return EncodeU32(point.mappedPressure);
         case Ipc::DebugStylusSourceIndex::NoPressInkActive:
-            // Legacy field deprecated: no equivalent contract field available.
             valid = false;
             return 0;
-        case Ipc::DebugStylusSourceIndex::TouchSuppressActive: return EncodeBool(s.touchSuppressActive);
-        case Ipc::DebugStylusSourceIndex::BtSeq: return EncodeU32(s.diag.btSeq);
-        case Ipc::DebugStylusSourceIndex::PredictedAgeFrames: return EncodeU32(s.diag.predictedAgeFrames);
-        case Ipc::DebugStylusSourceIndex::PressureIsReal: return EncodeBool(s.diag.pressureIsReal);
+        case Ipc::DebugStylusSourceIndex::TouchSuppressActive: return EncodeBool(s.interop.touchSuppressActive);
+        case Ipc::DebugStylusSourceIndex::BtSeq: return EncodeU32(diag.btSeq);
+        case Ipc::DebugStylusSourceIndex::PredictedAgeFrames: return EncodeU32(diag.predictedAgeFrames);
+        case Ipc::DebugStylusSourceIndex::PressureIsReal: return EncodeBool(diag.pressureIsReal);
         default:
             valid = false;
             return 0;
@@ -1204,9 +1205,9 @@ void ServiceHost::HandleIpcGetLogs(Ipc::IpcResponse& resp) {
 
 void ServiceHost::HandleIpcGetPenBridgeStatus(Ipc::IpcResponse& resp) {
     // Pack: [evtRunning:1][pressRunning:1][reportType:1][freq1:1][freq2:1]
-    //       [p0L:1][p0H:1][p1L:1][p1H:1][p2L:1][p2H:1][p3L:1][p3H:1]
-    // Total: 13 bytes
-    uint8_t buf[13] = {};
+    //       [p0..p3 u16 scaled][mode:1][max u16][raw0..raw3 u16]
+    // Total: 24 bytes
+    uint8_t buf[24] = {};
     buf[0] = (m_impl->m_penEventBridge && m_impl->m_penEventBridge->IsRunning()) ? 1 : 0;
     buf[1] = (m_impl->m_penPressureReader && m_impl->m_penPressureReader->IsRunning()) ? 1 : 0;
     if (m_impl->m_penPressureReader) {
@@ -1217,6 +1218,13 @@ void ServiceHost::HandleIpcGetPenBridgeStatus(Ipc::IpcResponse& resp) {
         for (int k = 0; k < 4; ++k) {
             buf[5 + k * 2] = static_cast<uint8_t>(s.press[k] & 0xFF);
             buf[5 + k * 2 + 1] = static_cast<uint8_t>(s.press[k] >> 8);
+        }
+        buf[13] = static_cast<uint8_t>(s.pressureMode);
+        buf[14] = static_cast<uint8_t>(s.pressureMax & 0xFF);
+        buf[15] = static_cast<uint8_t>(s.pressureMax >> 8);
+        for (int k = 0; k < 4; ++k) {
+            buf[16 + k * 2] = static_cast<uint8_t>(s.rawPress[k] & 0xFF);
+            buf[16 + k * 2 + 1] = static_cast<uint8_t>(s.rawPress[k] >> 8);
         }
     }
 
@@ -1415,6 +1423,19 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(const Ipc::IpcRequest& req) {
 
     case Ipc::IpcCommand::GetPenBridgeStatus:
         HandleIpcGetPenBridgeStatus(resp);
+        break;
+
+    case Ipc::IpcCommand::SetPenPressureMode:
+        if (req.paramLen >= 1 && m_impl->m_penPressureReader) {
+            const auto mode = req.param[0] == 0
+                ? Himax::Pen::PenPressureRangeMode::Raw12Bit4096
+                : Himax::Pen::PenPressureRangeMode::Raw14Bit16382;
+            m_impl->m_penPressureReader->SetPressureRangeMode(mode);
+            Ipc::MarkSuccess(resp);
+            LOG_INFO("Service", __func__, "MCU", "Pen pressure mode set to {}.", req.param[0] == 0 ? "4096" : "16382/4");
+        } else {
+            Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidState);
+        }
         break;
 
     case Ipc::IpcCommand::GetDebugSchema:

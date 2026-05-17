@@ -22,29 +22,6 @@ class CoordinateSolver {
 public:
     bool m_enabled = true;
     uint16_t m_signalFloor = 64;
-    bool m_useTriangle = true; // Deprecated: factory coordinate mode is fixed to triangle.
-    bool m_triEdgeSecondaryBlend = true; // Deprecated: factory edge secondary blend is fixed on.
-    bool m_pitchMapEnabled = false; // Deprecated: factory pitch map application is fixed.
-    bool m_gravityFictitiousEdge = true; // Deprecated: gravity path is unused by the factory configuration.
-    int32_t m_gravityNoiseFloor = 0; // Deprecated: gravity path is unused by the factory configuration.
-
-    TriangleEdgeParams m_triEdgeDim1 = {50, 5000, 5000}; // Deprecated: factory constants are used directly.
-    TriangleEdgeParams m_triEdgeDim2 = {50, 4500, 3700}; // Deprecated: factory constants are used directly.
-
-    PitchCompensation m_pitchCompDim1{}; // Deprecated: factory polynomial compensation is used directly.
-    PitchCompensation m_pitchCompDim2{}; // Deprecated: factory polynomial compensation is used directly.
-
-    std::array<double, Asa::kMaxSensorDim + 1> m_pitchTableDim1 = [] { // Deprecated: factory pitch table is used directly.
-        std::array<double, Asa::kMaxSensorDim + 1> table{};
-        table.fill(100.0);
-        return table;
-    }();
-
-    std::array<double, Asa::kMaxSensorDim + 1> m_pitchTableDim2 = [] { // Deprecated: factory pitch table is used directly.
-        std::array<double, Asa::kMaxSensorDim + 1> table{};
-        table.fill(100.0);
-        return table;
-    }();
 
     inline bool Process(HeatmapFrame& frame) const {
         auto& runtime = frame.stylus.runtime;
@@ -60,11 +37,30 @@ public:
 
         tx1.coordinate.localGridCoor = Solve(tx1.feature.projection);
         tx1.coordinate.reportGlobalCoor = tx1.coordinate.localGridCoor;
+#if EGOTOUCH_DIAG
+        {
+            const auto& proj = tx1.feature.projection;
+            const int peakIdx = proj.peakIdxDim1;
+            if (peakIdx >= 0 && peakIdx < Asa::kGridDim) {
+                const int leftIdx = peakIdx > 0 ? peakIdx - 1 : 0;
+                const int rightIdx = peakIdx + 1 < Asa::kGridDim ? peakIdx + 1 : Asa::kGridDim - 1;
+                tx1.triLeft = static_cast<uint16_t>(std::clamp(proj.dim1[leftIdx], 0, 65535));
+                tx1.triCenter = static_cast<uint16_t>(std::clamp(proj.dim1[peakIdx], 0, 65535));
+                tx1.triRight = static_cast<uint16_t>(std::clamp(proj.dim1[rightIdx], 0, 65535));
+            }
+            int32_t rawDim1 = SolveByTriangle(proj.dim1, proj.peakIdxDim1, kFactoryTriEdgeDim1);
+            if (rawDim1 != kInvalidCoor) {
+                int32_t compDim1 = ApplyPitchCompensation(rawDim1, kFactoryPitchCompDim1);
+                tx1.pitchComp = static_cast<int16_t>(compDim1 - rawDim1);
+            }
+        }
+#endif
         if (tx1.coordinate.reportGlobalCoor.valid) {
             LocalToGlobal(tx1.coordinate.reportGlobalCoor,
                           runtime.rawGrid.asaGrid.tx1.anchorRow,
                           runtime.rawGrid.asaGrid.tx1.anchorCol,
                           kAnchorCenterOffset);
+            CoordinateSolver::ClampToSensorBounds(tx1.coordinate.reportGlobalCoor);
             ApplyPitchMap(tx1.coordinate.reportGlobalCoor);
         }
 
@@ -103,8 +99,12 @@ public:
 
 private:
     static constexpr int kAnchorCenterOffset = Asa::kGridDim / 2;
+    static constexpr int kSensorCols = 60;
+    static constexpr int kSensorRows = 40;
     static constexpr int kInvalidCoor = 0x7FFFFFFF;
-    static constexpr bool kFactoryTriEdgeSecondaryBlend = true;
+    static constexpr uint8_t kFactoryCoordCompFlags = 0x0E;
+    static constexpr bool kFactoryUseTriangle = (kFactoryCoordCompFlags & 0x01) == 0;
+    static constexpr bool kFactoryTriEdgeSecondaryBlend = (kFactoryCoordCompFlags & 0x08) != 0;
     static constexpr TriangleEdgeParams kFactoryTriEdgeDim1 = {50, 5000, 5000};
     static constexpr TriangleEdgeParams kFactoryTriEdgeDim2 = {50, 4500, 3700};
     static constexpr PitchCompensation kFactoryPitchCompDim1 = {
@@ -125,6 +125,7 @@ private:
 
     inline Asa::AsaCoorResult Solve(const Asa::AsaProjection& proj) const {
         Asa::AsaCoorResult result{};
+        if (!kFactoryUseTriangle) return result;
         int32_t dim1 = SolveByTriangle(proj.dim1, proj.peakIdxDim1, kFactoryTriEdgeDim1);
         int32_t dim2 = SolveByTriangle(proj.dim2, proj.peakIdxDim2, kFactoryTriEdgeDim2);
 
@@ -218,6 +219,12 @@ private:
         const int32_t centerOff = anchorCenterOffset * Asa::kCoorUnit;
         coor.dim1 += static_cast<int32_t>(anchorCol) * Asa::kCoorUnit - centerOff;
         coor.dim2 += static_cast<int32_t>(anchorRow) * Asa::kCoorUnit - centerOff;
+    }
+
+    static inline void ClampToSensorBounds(Asa::AsaCoorResult& coor) {
+        if (!coor.valid) return;
+        coor.dim1 = std::clamp(coor.dim1, 0, kSensorCols * Asa::kCoorUnit - 1);
+        coor.dim2 = std::clamp(coor.dim2, 0, kSensorRows * Asa::kCoorUnit - 1);
     }
 };
 

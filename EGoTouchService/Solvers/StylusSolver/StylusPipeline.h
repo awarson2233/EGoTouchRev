@@ -1,7 +1,6 @@
 #pragma once
 
 #include "ConfigSchema.h"
-#include "CommonModeFilter.hpp"
 #include "CoordinateSolver.hpp"
 #include "GridFeatureExtractor.hpp"
 #include "Hpp3PostPressureProcess.hpp"
@@ -9,7 +8,6 @@
 #include "TiltProcess.hpp"
 #include "SolverTypes.h"
 #include "StylusFrameParser.hpp"
-#include "StylusPostProcessor.hpp"
 #include "StylusRuntimeCommit.hpp"
 
 #include <array>
@@ -39,17 +37,12 @@ public:
     int GetPacketSensorCols() const { return m_packetSensorCols; }
     bool GetEmitPacketWhenInvalid() const { return m_emitPacketWhenInvalid; }
 
-    int GetFilterMode() const { return m_post.m_filterMode; }
-    void SetFilterMode(int mode);
-
     Stylus::StylusFrameParser m_frameParser;
-    Stylus::CommonModeFilter m_cmf;
     Stylus::GridFeatureExtractor m_featureExtractor;
     Stylus::CoordinateSolver m_coordinateSolver;
     Stylus::TiltProcess m_tiltProcess;
     Stylus::PressureSolver m_pressureSolver;
     Stylus::Hpp3PostPressureProcess m_postPressure;
-    Stylus::StylusPostProcessor m_post;
     Stylus::StylusRuntimeCommit m_commit;
 
 private:

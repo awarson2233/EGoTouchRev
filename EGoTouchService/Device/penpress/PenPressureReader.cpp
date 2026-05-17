@@ -22,6 +22,35 @@ PenPressureStats PenPressureReader::GetPressureStats() const {
     return m_stats;
 }
 
+void PenPressureReader::SetPressureRangeMode(PenPressureRangeMode mode) {
+    std::lock_guard<std::mutex> lk(m_statsMutex);
+    ApplyPressureModeLocked(mode);
+}
+
+PenPressureRangeMode PenPressureReader::GetPressureRangeMode() const {
+    std::lock_guard<std::mutex> lk(m_statsMutex);
+    return m_stats.pressureMode;
+}
+
+uint16_t PenPressureReader::ScalePressure(uint16_t raw, PenPressureRangeMode mode) {
+    if (mode == PenPressureRangeMode::Raw14Bit16382) {
+        return static_cast<uint16_t>(raw / 4u);
+    }
+    return raw;
+}
+
+uint16_t PenPressureReader::PressureMax(PenPressureRangeMode) {
+    return 4095;
+}
+
+void PenPressureReader::ApplyPressureModeLocked(PenPressureRangeMode mode) {
+    m_stats.pressureMode = mode;
+    m_stats.pressureMax = PressureMax(mode);
+    for (int k = 0; k < 4; ++k) {
+        m_stats.press[k] = ScalePressure(m_stats.rawPress[k], mode);
+    }
+}
+
 // ── 设备路径发现 ───────────────────────────────────────────────────────────
 std::optional<std::wstring> PenPressureReader::FindDevicePath() {
     GUID hidGuid{};
@@ -73,11 +102,16 @@ void PenPressureReader::OnPacketReceived(const std::vector<uint8_t>& packet) {
         s.freq1      = packet[1];
         s.freq2      = packet[2];
         for (int k = 0; k < 4; ++k) {
-            s.press[k] = (static_cast<uint16_t>(packet[3 + k * 2]) |
-                         (static_cast<uint16_t>(packet[4 + k * 2]) << 8)) / 4;
+            s.rawPress[k] = static_cast<uint16_t>(packet[3 + k * 2]) |
+                            (static_cast<uint16_t>(packet[4 + k * 2]) << 8);
         }
         {
             std::lock_guard<std::mutex> lk(m_statsMutex);
+            s.pressureMode = m_stats.pressureMode;
+            s.pressureMax = PressureMax(s.pressureMode);
+            for (int k = 0; k < 4; ++k) {
+                s.press[k] = ScalePressure(s.rawPress[k], s.pressureMode);
+            }
             m_stats = s;
         }
         PressureCallback cb;

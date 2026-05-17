@@ -40,12 +40,6 @@ struct StylusPacket {
     std::array<uint8_t, 17> bytes{};
 };
 
-enum class StylusPacketRoute : uint8_t {
-    Valid,
-    InvalidZeroState,
-    ParseFailure13,
-};
-
 struct StylusBtInputSnapshot {
     std::array<uint16_t, 4> pressure{};
     uint32_t seq = 0;
@@ -74,6 +68,7 @@ struct StylusOutputState {
     float confidence = 0.0f;
     uint8_t pipelineStage = 0;
     StylusSolvePoint point{};
+    StylusPacket packet{};
 };
 
 struct StylusTouchInterop {
@@ -130,6 +125,12 @@ struct StylusCoordinateResult {
 struct StylusTxRuntime {
     StylusGridFeature feature{};
     StylusCoordinateResult coordinate{};
+#if EGOTOUCH_DIAG
+    uint16_t triLeft = 0;
+    uint16_t triCenter = 0;
+    uint16_t triRight = 0;
+    int16_t pitchComp = 0;
+#endif
 };
 
 struct StylusRuntimeSignal {
@@ -160,6 +161,10 @@ struct StylusRuntimeTilt {
     int16_t preTiltDim2 = 0;
     int16_t reportTiltDim1 = 0;
     int16_t reportTiltDim2 = 0;
+#if EGOTOUCH_DIAG
+    int32_t rawDiffDim1 = 0;
+    int32_t rawDiffDim2 = 0;
+#endif
 };
 
 struct StylusRuntimePressure {
@@ -171,6 +176,15 @@ struct StylusRuntimePressure {
     uint16_t outputPressure = 0;
     uint32_t btSeq = 0;
     uint8_t predictedAgeFrames = 0;
+#if EGOTOUCH_DIAG
+    uint16_t preIirPressure = 0;
+    uint8_t polySegment = 0;
+    bool btPressSuppressActive = false;
+    bool edgeSignalTooLowLatched = false;
+    bool fakePressureDecreaseActive = false;
+    uint8_t fakePressureDecreaseFramesLeft = 0;
+    uint8_t btFreqShiftDebounceFramesLeft = 0;
+#endif
 };
 
 struct StylusRuntimeDecision {
@@ -197,6 +211,14 @@ struct StylusRuntimePost {
     bool linearFilterActive = false;
     int32_t linearFilterDeltaDim1 = 0;
     int32_t linearFilterDeltaDim2 = 0;
+#if EGOTOUCH_DIAG
+    float lfLineFitSlopeA = 0.f;
+    float lfLineFitInterceptB = 0.f;
+    bool lfLineFitValid = false;
+    int32_t lfCos1000 = 0;
+    int32_t lfStraightBufCount = 0;
+    int32_t lfDragApplied = 0;
+#endif
 };
 
 struct StylusRuntimeFrame {
@@ -268,6 +290,49 @@ struct StylusDebugFrame {
         bool wasInking = false;
         int32_t avg3PtDim1 = 0;
         int32_t avg3PtDim2 = 0;
+
+        // ── GridFeatureExtractor ──
+        uint16_t tx1PeakValue = 0;
+        uint16_t tx1Sum3x3 = 0;
+        uint16_t tx2PeakValue = 0;
+        uint16_t tx2Sum3x3 = 0;
+        bool tx2Valid = false;
+
+        // ── CoordinateSolver ──
+        uint16_t triDim1Left = 0;
+        uint16_t triDim1Center = 0;
+        uint16_t triDim1Right = 0;
+        int16_t pitchCompApplied = 0;
+        int32_t localCoorDim1 = 0;
+        int32_t localCoorDim2 = 0;
+        bool dim1Edge = false;
+        bool dim2Edge = false;
+
+        // ── TiltProcess ──
+        uint16_t tiltLenLimit = 0;
+        int32_t tiltRawDiffDim1 = 0;
+        int32_t tiltRawDiffDim2 = 0;
+
+        // ── PressureSolver ──
+        uint16_t btRawPressure = 0;
+        uint16_t preIirPressure = 0;
+        bool btPressSuppressActive = false;
+        uint8_t polySegment = 0;
+
+        // ── PostPressure ──
+        bool edgeSignalTooLowLatched = false;
+        bool fakePressureDecreaseActive = false;
+        uint8_t fakePressureDecreaseFramesLeft = 0;
+        uint8_t btFreqShiftDebounceFramesLeft = 0;
+
+        // ── LinearFilterProcess ──
+        uint8_t lfStateMachine = 0;
+        float lfLineFitSlopeA = 0.f;
+        float lfLineFitInterceptB = 0.f;
+        bool lfLineFitValid = false;
+        int32_t lfCos1000 = 0;
+        int32_t lfStraightBufCount = 0;
+        int32_t lfDragApplied = 0;
     };
 
     ParseSnapshot parse{};
@@ -284,54 +349,6 @@ struct StylusFrameData {
 #if EGOTOUCH_DIAG
     StylusDebugFrame debug{};
 #endif
-
-    bool slaveValid = false;
-    bool checksumOk = false;
-    uint8_t slaveWordOffset = 0;
-    uint16_t checksum16 = 0;
-    bool tx1BlockValid = false;
-    bool tx2BlockValid = false;
-
-    uint32_t status = 0;
-    uint16_t pressure = 0;
-    bool tipSwitchActive = false;
-
-    bool recheckEnabled = false;
-    bool recheckPassed = true;
-    bool recheckOverlap = false;
-    uint16_t recheckThreshold = 0;
-    uint16_t recheckThresholdMulti = 0;
-    bool touchNullLike = false;
-    bool touchSuppressActive = false;
-    uint8_t touchSuppressFrames = 0;
-
-    uint16_t signalX = 0;
-    uint16_t signalY = 0;
-    uint16_t maxRawPeak = 0;
-
-#if EGOTOUCH_DIAG
-    uint8_t asaMode = 0;
-    uint8_t dataType = 0;
-    uint8_t processResult = 5;
-    bool validJudgmentPassed = false;
-    bool modeExitRelease = false;
-    bool hpp3NoiseInvalid = false;
-    bool hpp3NoiseDebounce = false;
-    bool hpp3Dim1SignalValid = false;
-    bool hpp3Dim2SignalValid = false;
-    uint8_t hpp3RatioWarnCountX = 0;
-    uint8_t hpp3RatioWarnCountY = 0;
-    uint16_t hpp3SignalAvgX = 0;
-    uint16_t hpp3SignalAvgY = 0;
-    uint8_t hpp3SignalSampleCount = 0;
-
-    StylusPacket packet{};
-    StylusPacketRoute packetRoute = StylusPacketRoute::Valid;
-#endif
-
-    StylusSolvePoint point{};
-    uint8_t pipelineStage = 0;
-    StylusDiagnostics diag{};
 
     inline void SnapshotBtInput(uint16_t btPressure, uint32_t btSeq, bool hasBtSample) {
         input.btSample.pressure.fill(0);
@@ -356,77 +373,6 @@ struct StylusFrameData {
 
     inline void ResetRuntime() {
         runtime.Reset();
-    }
-
-    inline void SyncContractFromLegacyFields() {
-        input.slaveValid = slaveValid;
-        input.checksumOk = checksumOk;
-        input.slaveWordOffset = slaveWordOffset;
-        input.checksum16 = checksum16;
-        input.tx1BlockValid = tx1BlockValid;
-        input.tx2BlockValid = tx2BlockValid;
-        input.status = status;
-
-        output.valid = point.valid;
-        output.inRange = point.valid;
-        output.tipDown = tipSwitchActive || pressure > 0;
-        output.pressure = pressure;
-        output.confidence = point.confidence;
-        output.pipelineStage = pipelineStage;
-        output.point = point;
-        output.point.valid = output.valid;
-        output.point.pressure = pressure;
-
-        interop.recheckEnabled = recheckEnabled;
-        interop.recheckPassed = recheckPassed;
-        interop.recheckOverlap = recheckOverlap;
-        interop.recheckThreshold = recheckThreshold;
-        interop.recheckThresholdMulti = recheckThresholdMulti;
-        interop.touchNullLike = touchNullLike;
-        interop.touchSuppressActive = touchSuppressActive;
-        interop.touchSuppressFrames = touchSuppressFrames;
-        interop.signalX = signalX;
-        interop.signalY = signalY;
-        interop.maxRawPeak = maxRawPeak;
-#if EGOTOUCH_DIAG
-        debug.parse.slaveValid = slaveValid;
-        debug.parse.checksumOk = checksumOk;
-        debug.parse.status = status;
-        debug.parse.pipelineStage = pipelineStage;
-        debug.coord = diag;
-#endif
-    }
-
-    inline void SyncLegacyFieldsFromContract() {
-        slaveValid = input.slaveValid;
-        checksumOk = input.checksumOk;
-        slaveWordOffset = input.slaveWordOffset;
-        checksum16 = input.checksum16;
-        tx1BlockValid = input.tx1BlockValid;
-        tx2BlockValid = input.tx2BlockValid;
-        status = input.status;
-
-        pressure = output.pressure;
-        tipSwitchActive = output.tipDown;
-        point = output.point;
-        point.valid = output.valid;
-        point.pressure = output.pressure;
-        pipelineStage = output.pipelineStage;
-
-        recheckEnabled = interop.recheckEnabled;
-        recheckPassed = interop.recheckPassed;
-        recheckOverlap = interop.recheckOverlap;
-        recheckThreshold = interop.recheckThreshold;
-        recheckThresholdMulti = interop.recheckThresholdMulti;
-        touchNullLike = interop.touchNullLike;
-        touchSuppressActive = interop.touchSuppressActive;
-        touchSuppressFrames = interop.touchSuppressFrames;
-        signalX = interop.signalX;
-        signalY = interop.signalY;
-        maxRawPeak = interop.maxRawPeak;
-#if EGOTOUCH_DIAG
-        diag = debug.coord;
-#endif
     }
 };
 

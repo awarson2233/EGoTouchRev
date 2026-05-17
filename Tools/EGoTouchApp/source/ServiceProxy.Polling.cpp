@@ -193,6 +193,15 @@ void ServiceProxy::PollLoop() {
                 for (int k = 0; k < 4; ++k)
                     s.press[k] = static_cast<uint16_t>(d[5 + k * 2]) |
                                  (static_cast<uint16_t>(d[6 + k * 2]) << 8);
+                if (penResp.dataLen >= 24) {
+                    s.pressureMode = d[13];
+                    s.pressureMax = static_cast<uint16_t>(d[14]) |
+                                    (static_cast<uint16_t>(d[15]) << 8);
+                    for (int k = 0; k < 4; ++k) {
+                        s.rawPress[k] = static_cast<uint16_t>(d[16 + k * 2]) |
+                                        (static_cast<uint16_t>(d[17 + k * 2]) << 8);
+                    }
+                }
                 std::lock_guard<std::mutex> lk(m_penMutex);
                 m_penStatus = s;
             }

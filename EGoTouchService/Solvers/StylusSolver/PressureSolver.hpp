@@ -64,6 +64,10 @@ public:
             pressure.rawPressure = GetPressureInMapOrder();
             pressure.mappedPressure = static_cast<uint16_t>(MapPressure(pressure.rawPressure));
             pressure.outputPressure = pressure.mappedPressure;
+#if EGOTOUCH_DIAG
+            pressure.preIirPressure = pressure.mappedPressure;
+            pressure.polySegment = DeterminePolySegment(pressure.rawPressure);
+#endif
 
             if (pressure.outputPressure != 0 && m_prevOutputPressure != 0) {
                 pressure.outputPressure = ApplyIir(pressure.outputPressure, m_prevOutputPressure);
@@ -73,6 +77,9 @@ public:
         if (m_haveBtPacket) {
             SuppressBtPressBySignal(stylus.runtime.signal, pressure);
         }
+#if EGOTOUCH_DIAG
+        pressure.btPressSuppressActive = m_btPressSignalSuppressLatched;
+#endif
 
         decision.tipDownCandidate =
             decision.inRangeCandidate &&
@@ -227,6 +234,14 @@ private:
         const double d = static_cast<double>(x);
         const double result = (((c[4] * d + c[3]) * d + c[2]) * d + c[1]) * d + c[0];
         return static_cast<int>(result);
+    }
+
+    inline uint8_t DeterminePolySegment(uint16_t rawPressure) const {
+        const int x = static_cast<int>(rawPressure);
+        if (x <= 1) return 0;
+        if (x <= m_seg1Threshold) return 1;
+        if (!m_polyEnabled || x <= m_seg2Threshold) return 2;
+        return 3;
     }
 };
 

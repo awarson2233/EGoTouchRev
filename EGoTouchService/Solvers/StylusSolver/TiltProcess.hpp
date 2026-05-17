@@ -72,12 +72,14 @@ public:
                       runtime.rawGrid.asaGrid.tx2.anchorRow,
                       runtime.rawGrid.asaGrid.tx2.anchorCol,
                       kAnchorCenterOffset);
+        TiltProcess::ClampToSensorBounds(tx2.coordinate.reportGlobalCoor);
 
         Asa::AsaCoorResult tx1Global = tx1.coordinate.localGridCoor;
         LocalToGlobal(tx1Global,
                       runtime.rawGrid.asaGrid.tx1.anchorRow,
                       runtime.rawGrid.asaGrid.tx1.anchorCol,
                       kAnchorCenterOffset);
+        TiltProcess::ClampToSensorBounds(tx1Global);
 
         const uint16_t signalRatio = GetSignalRatio(runtime.signal.signalX, runtime.signal.signalY);
         PushSignalRatio(signalRatio);
@@ -88,6 +90,10 @@ public:
                                     static_cast<int32_t>(tx1Global.dim1);
         const int32_t rawDiffDim2 = static_cast<int32_t>(tx2.coordinate.reportGlobalCoor.dim2) -
                                     static_cast<int32_t>(tx1Global.dim2);
+#if EGOTOUCH_DIAG
+        tilt.rawDiffDim1 = rawDiffDim1;
+        tilt.rawDiffDim2 = rawDiffDim2;
+#endif
 
         int32_t diffDim1 = rawDiffDim1;
         int32_t diffDim2 = rawDiffDim2;
@@ -108,11 +114,13 @@ public:
                 diffDim2 = -static_cast<int32_t>(lenLimit);
                 anomalyDamped = true;
             }
-        } else if (diffDim1 > static_cast<int32_t>(lenLimit) || diffDim1 < -static_cast<int32_t>(lenLimit) ||
-                   diffDim2 > static_cast<int32_t>(lenLimit) || diffDim2 < -static_cast<int32_t>(lenLimit)) {
-            diffDim1 = m_lastCoordDiffDim1;
-            diffDim2 = m_lastCoordDiffDim2;
-            anomalyDamped = true;
+        } else {
+            if (rawDiffDim1 > static_cast<int32_t>(lenLimit) || rawDiffDim1 < -static_cast<int32_t>(lenLimit) ||
+                rawDiffDim2 > static_cast<int32_t>(lenLimit) || rawDiffDim2 < -static_cast<int32_t>(lenLimit)) {
+                diffDim1 = (rawDiffDim1 + m_lastCoordDiffDim1 * 7) / 8;
+                diffDim2 = (rawDiffDim2 + m_lastCoordDiffDim2 * 7) / 8;
+                anomalyDamped = true;
+            }
         }
 
         PushCoordinateDiff(diffDim1, diffDim2);
@@ -124,12 +132,10 @@ public:
         int16_t preTiltDim1 = GetTiltByCoorDif(diffDim1, 0);
         int16_t preTiltDim2 = GetTiltByCoorDif(diffDim2, 1);
 
-        const uint16_t diffLen = static_cast<uint16_t>(std::sqrt(
-            static_cast<double>(diffDim1) * static_cast<double>(diffDim1) +
-            static_cast<double>(diffDim2) * static_cast<double>(diffDim2)));
-        if (diffLen > lenLimit && diffLen != 0) {
-            diffDim1 = static_cast<int32_t>((static_cast<int64_t>(lenLimit) * diffDim1) / diffLen);
-            diffDim2 = static_cast<int32_t>((static_cast<int64_t>(lenLimit) * diffDim2) / diffLen);
+        if (diffDim1 > static_cast<int32_t>(lenLimit) || diffDim1 < -static_cast<int32_t>(lenLimit) ||
+            diffDim2 > static_cast<int32_t>(lenLimit) || diffDim2 < -static_cast<int32_t>(lenLimit)) {
+            diffDim1 = m_coordDifDim1Buf[0];
+            diffDim2 = m_coordDifDim2Buf[0];
             preTiltDim1 = GetTiltByCoorDif(diffDim1, 0);
             preTiltDim2 = GetTiltByCoorDif(diffDim2, 1);
             anomalyDamped = true;
@@ -198,6 +204,12 @@ private:
         const int32_t centerOff = static_cast<int32_t>(anchorCenterOffset) * Asa::kCoorUnit;
         coor.dim1 += static_cast<int32_t>(anchorCol) * Asa::kCoorUnit - centerOff;
         coor.dim2 += static_cast<int32_t>(anchorRow) * Asa::kCoorUnit - centerOff;
+    }
+
+    static inline void ClampToSensorBounds(Asa::AsaCoorResult& coor) {
+        if (!coor.valid) return;
+        coor.dim1 = std::clamp(coor.dim1, 0, kDim1Length * Asa::kCoorUnit - 1);
+        coor.dim2 = std::clamp(coor.dim2, 0, kDim2Length * Asa::kCoorUnit - 1);
     }
 
     static inline uint16_t GetSignalRatio(uint16_t tx1Signal, uint16_t tx2Signal) {
