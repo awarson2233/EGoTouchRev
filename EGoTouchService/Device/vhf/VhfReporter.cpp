@@ -219,8 +219,8 @@ VhfReporter::StylusDispatchPacket VhfReporter::BuildStylusPacket(
 void VhfReporter::MirrorLegacyStylusPacket(
         Solvers::HeatmapFrame& frame,
         const StylusDispatchPacket& built) {
-#if EGOTOUCH_DIAG
     frame.stylus.output.packet = built.packet;
+#if EGOTOUCH_DIAG
     frame.stylus.debug.coord.vhfPenState = built.penState;
 #endif
 }

@@ -125,7 +125,7 @@ void TestDispatchStylusPublishesRawPenStateToDiagnostics() {
     auto frame = MakeOutputDrivenStylusFrame();
     reporter.DispatchStylus(frame);
 
-    Require(frame.stylus.debug.coord.vhfPenState == 0x21,
+    Require(VhfStylusPacket::ExtractPenState(frame.stylus.output.packet) == 0x21,
             "diagnostics should reflect the raw packet, not the transformed write buffer");
 }
 
@@ -136,7 +136,7 @@ void TestDispatchStylusPublishesDiagnosticsEvenWhenWriteDisabled() {
     auto frame = MakeOutputDrivenStylusFrame();
     reporter.DispatchStylus(frame, false);
 
-    Require(frame.stylus.debug.coord.vhfPenState == 0x21,
+    Require(VhfStylusPacket::ExtractPenState(frame.stylus.output.packet) == 0x21,
             "write-disabled dispatch should still publish diagnostics state");
 }
 

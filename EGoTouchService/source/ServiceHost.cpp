@@ -812,7 +812,7 @@ uint64_t ServiceHost::EncodeDebugValue(const Solvers::HeatmapFrame& frame,
     case Ipc::DebugSourceKind::StylusField: {
         const auto& s = frame.stylus;
         const auto& point = s.output.point;
-        const auto& diag = s.debug.coord;
+        const auto& press = s.runtime.pressure;
         switch (static_cast<Ipc::DebugStylusSourceIndex>(def.sourceIndex)) {
         case Ipc::DebugStylusSourceIndex::Pressure: return EncodeU32(s.output.pressure);
         case Ipc::DebugStylusSourceIndex::SignalX: return EncodeU32(s.interop.signalX);
@@ -828,9 +828,9 @@ uint64_t ServiceHost::EncodeDebugValue(const Solvers::HeatmapFrame& frame,
             valid = false;
             return 0;
         case Ipc::DebugStylusSourceIndex::TouchSuppressActive: return EncodeBool(s.interop.touchSuppressActive);
-        case Ipc::DebugStylusSourceIndex::BtSeq: return EncodeU32(diag.btSeq);
-        case Ipc::DebugStylusSourceIndex::PredictedAgeFrames: return EncodeU32(diag.predictedAgeFrames);
-        case Ipc::DebugStylusSourceIndex::PressureIsReal: return EncodeBool(diag.pressureIsReal);
+        case Ipc::DebugStylusSourceIndex::BtSeq: return EncodeU32(press.btSeq);
+        case Ipc::DebugStylusSourceIndex::PredictedAgeFrames: return EncodeU32(press.predictedAgeFrames);
+        case Ipc::DebugStylusSourceIndex::PressureIsReal: return EncodeBool(press.pressureIsReal);
         default:
             valid = false;
             return 0;
