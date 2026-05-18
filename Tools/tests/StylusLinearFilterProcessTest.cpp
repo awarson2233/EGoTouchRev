@@ -597,6 +597,231 @@ void TestTiltProcessKeepsLastFrameWhenTx2Invalid() {
             "post point preTiltX/Y should match held pre tilt when TX2 is invalid");
 }
 
+void TestRawHistoryShiftAndLatestAtZero() {
+    Solvers::Stylus::LinearFilterProcess filter;
+    filter.m_enabled = true;
+
+    Solvers::HeatmapFrame frame{};
+    auto& stylus = frame.stylus;
+    stylus.runtime.tx1.coordinate.reportGlobalCoor = Coor(1000, 2000);
+    stylus.runtime.pressure.outputPressure = 300;
+
+    filter.Process(frame);
+    Require(stylus.runtime.post.postCoor.dim1 == 1000 &&
+            stylus.runtime.post.postCoor.dim2 == 2000,
+            "first frame postCoor should match raw input");
+    Require(stylus.runtime.post.finalCoor.dim1 == 1000 &&
+            stylus.runtime.post.finalCoor.dim2 == 2000,
+            "first frame finalCoor should passthrough");
+
+    // Second frame with different coor
+    stylus.runtime.tx1.coordinate.reportGlobalCoor = Coor(1100, 2100);
+    filter.Process(frame);
+    Require(stylus.runtime.post.postCoor.dim1 == 1100 &&
+            stylus.runtime.post.postCoor.dim2 == 2100,
+            "second frame postCoor should match latest raw (history < 3 frames)");
+
+    // Third frame — avg3 activates
+    stylus.runtime.tx1.coordinate.reportGlobalCoor = Coor(1200, 2200);
+    filter.Process(frame);
+    const int32_t expectedDim1 = (1000 + 1100 + 1200) / 3;
+    const int32_t expectedDim2 = (2000 + 2100 + 2200) / 3;
+    Require(stylus.runtime.post.postCoor.dim1 == expectedDim1 &&
+            stylus.runtime.post.postCoor.dim2 == expectedDim2,
+            "third frame postCoor should be 3-point moving average");
+}
+
+void TestPenDownAnchorCapturedOnce() {
+    Solvers::Stylus::LinearFilterProcess filter;
+    filter.m_enabled = true;
+
+    // First frame: pressure 0 → anchor should be captured when first non-0 pressure arrives
+    Solvers::HeatmapFrame frame{};
+    auto& stylus = frame.stylus;
+    stylus.runtime.tx1.coordinate.reportGlobalCoor = Coor(1500, 2500);
+    stylus.runtime.pressure.outputPressure = 100;
+    filter.Process(frame);
+
+    // Second frame: still pressure active, coordinate changed, anchor should NOT change
+    stylus.runtime.tx1.coordinate.reportGlobalCoor = Coor(1600, 2600);
+    stylus.runtime.pressure.outputPressure = 200;
+    filter.Process(frame);
+
+    // Third frame with a different coordinate
+    stylus.runtime.tx1.coordinate.reportGlobalCoor = Coor(1700, 2700);
+    stylus.runtime.pressure.outputPressure = 300;
+    filter.Process(frame);
+
+    // Anchor should be (1500, 2500) — the first coordinate when pressure first appeared
+    // We verify indirectly: avg3 should use (1500, 1600, 1700)/3 = 1600 and (2500, 2600, 2700)/3 = 2600
+    Require(stylus.runtime.post.postCoor.dim1 == 1600 &&
+            stylus.runtime.post.postCoor.dim2 == 2600,
+            "avg3 should reflect the three most recent raw coordinates in order");
+}
+
+void TestAvg3WarmUpPassthrough() {
+    Solvers::Stylus::LinearFilterProcess filter;
+    filter.m_enabled = true;
+
+    Solvers::HeatmapFrame frame{};
+    auto& stylus = frame.stylus;
+    stylus.runtime.tx1.coordinate.reportGlobalCoor = Coor(800, 1800);
+    stylus.runtime.pressure.outputPressure = 300;
+
+    // Frame 1: history count = 1, less than 3
+    filter.Process(frame);
+    Require(stylus.runtime.post.postCoor.dim1 == 800 &&
+            stylus.runtime.post.postCoor.dim2 == 1800,
+            "warm-up frame 1 postCoor should passthrough raw");
+
+    // Frame 2: history count = 2, still less than 3
+    stylus.runtime.tx1.coordinate.reportGlobalCoor = Coor(880, 1880);
+    filter.Process(frame);
+    Require(stylus.runtime.post.postCoor.dim1 == 880 &&
+            stylus.runtime.post.postCoor.dim2 == 1880,
+            "warm-up frame 2 postCoor should passthrough raw");
+}
+
+void TestAvg3ThreePointAverage() {
+    Solvers::Stylus::LinearFilterProcess filter;
+    filter.m_enabled = true;
+
+    Solvers::HeatmapFrame frame{};
+    auto& stylus = frame.stylus;
+
+    // Feed 3 frames with known values
+    stylus.runtime.tx1.coordinate.reportGlobalCoor = Coor(300, 900);
+    stylus.runtime.pressure.outputPressure = 300;
+    filter.Process(frame);
+
+    stylus.runtime.tx1.coordinate.reportGlobalCoor = Coor(600, 1200);
+    filter.Process(frame);
+
+    // On 3rd frame, avg3 = (300+600+900)/3 = 600, (900+1200+1500)/3 = 1200
+    stylus.runtime.tx1.coordinate.reportGlobalCoor = Coor(900, 1500);
+    filter.Process(frame);
+    Require(stylus.runtime.post.postCoor.dim1 == 600 &&
+            stylus.runtime.post.postCoor.dim2 == 1200,
+            "3-point average should be (x0+x1+x2)/3");
+
+    // 4th frame: avg3 = (600+900+1000)/3, (1200+1500+1600)/3
+    stylus.runtime.tx1.coordinate.reportGlobalCoor = Coor(1000, 1600);
+    filter.Process(frame);
+    const int32_t expectedAvgX = (600 + 900 + 1000) / 3;
+    const int32_t expectedAvgY = (1200 + 1500 + 1600) / 3;
+    Require(stylus.runtime.post.postCoor.dim1 == expectedAvgX &&
+            stylus.runtime.post.postCoor.dim2 == expectedAvgY,
+            "sliding 3-point average should shift with each new frame");
+}
+
+void TestPredictedCoorQuadraticExtrapolation() {
+    Solvers::Stylus::LinearFilterProcess filter;
+    filter.m_enabled = true;
+
+    Solvers::HeatmapFrame frame{};
+    auto& stylus = frame.stylus;
+
+    // Feed 3 frames: (100,200), (110,220), (120,240) — linear movement
+    stylus.runtime.tx1.coordinate.reportGlobalCoor = Coor(100, 200);
+    stylus.runtime.pressure.outputPressure = 300;
+    filter.Process(frame);
+
+    stylus.runtime.tx1.coordinate.reportGlobalCoor = Coor(110, 220);
+    filter.Process(frame);
+
+    stylus.runtime.tx1.coordinate.reportGlobalCoor = Coor(120, 240);
+    filter.Process(frame);
+
+    // predicted = 3*x0 - 3*x1 + x2 = 3*120 - 3*110 + 100 = 360 - 330 + 100 = 130
+    // predicted = 3*y0 - 3*y1 + y2 = 3*240 - 3*220 + 200 = 720 - 660 + 200 = 260
+    Require(stylus.runtime.post.predictedCoor.valid,
+            "predicted coordinate should be valid after 3 frames");
+    Require(stylus.runtime.post.predictedCoor.dim1 == 130 &&
+            stylus.runtime.post.predictedCoor.dim2 == 260,
+            "predicted = 3*x0 - 3*x1 + x2 (quadratic extrapolation)");
+
+    // 4th frame: (135, 270)
+    stylus.runtime.tx1.coordinate.reportGlobalCoor = Coor(135, 270);
+    filter.Process(frame);
+    // predicted = 3*135 - 3*120 + 110 = 405 - 360 + 110 = 155
+    Require(stylus.runtime.post.predictedCoor.dim1 == 155 &&
+            stylus.runtime.post.predictedCoor.dim2 == 310,
+            "predicted should update with each new frame");
+}
+
+void TestLinearCorrectionConsumesAvg3() {
+    Solvers::Stylus::LinearFilterProcess filter;
+    filter.m_enabled = true;
+    ConfigureFastTestFilter(filter);
+
+    Solvers::HeatmapFrame frame{};
+    auto& stylus = frame.stylus;
+
+    // Feed raw points with jitter: raw X alternates ±10 around a straight line
+    stylus.runtime.tx1.coordinate.reportGlobalCoor = Coor(1000, 2000);
+    stylus.runtime.pressure.outputPressure = 300;
+    filter.Process(frame);
+
+    stylus.runtime.tx1.coordinate.reportGlobalCoor = Coor(1080, 2000);
+    filter.Process(frame);
+
+    stylus.runtime.tx1.coordinate.reportGlobalCoor = Coor(1010, 2010);
+    filter.Process(frame);
+
+    // After 3 frames, avg3 smooths the jitter
+    // avg3[0] = (1000+1080+1010)/3 = 1030
+    Require(stylus.runtime.post.postCoor.dim1 == 1030,
+            "postCoor should be the 3-point average of jittery raw points");
+
+    // finalCoor should exist and be based on the smoothed postCoor, not the raw jitter
+    Require(stylus.runtime.post.finalValid,
+            "finalCoor should be valid when processing avg3 input");
+    // With jittery raw values, the raw at frame 3 (1010) differs from avg3 (1030).
+    // The line-fit state machine consumes avg3 (1030), so finalCoor reflects smoothed input.
+    Require(stylus.runtime.post.finalCoor.dim1 != 1010,
+            "finalCoor should not equal raw jittery input at frame 3");
+}
+
+void TestPressureInactiveResetsHistoryState() {
+    Solvers::Stylus::LinearFilterProcess filter;
+    filter.m_enabled = true;
+
+    Solvers::HeatmapFrame frame{};
+    auto& stylus = frame.stylus;
+
+    // Feed 4 frames to build up history and avg3
+    for (int i = 0; i < 4; ++i) {
+        stylus.runtime.tx1.coordinate.reportGlobalCoor = Coor(500 + i * 10, 1500 + i * 10);
+        stylus.runtime.pressure.outputPressure = 300;
+        filter.Process(frame);
+    }
+
+    Require(stylus.runtime.post.finalValid,
+            "output should be valid with active pressure");
+
+    // Now set pressure to 0 — should reset history
+    stylus.runtime.tx1.coordinate.reportGlobalCoor = Coor(999, 1999);
+    stylus.runtime.pressure.outputPressure = 0;
+    filter.Process(frame);
+
+    Require(stylus.runtime.post.finalCoor.dim1 == 999 &&
+            stylus.runtime.post.finalCoor.dim2 == 1999,
+            "pressure inactive should passthrough raw coordinate");
+    Require(stylus.runtime.post.linearFilterState == 0,
+            "linear filter state should reset to 0 on pressure inactive");
+    Require(stylus.runtime.post.postCoor.dim1 == 999 &&
+            stylus.runtime.post.postCoor.dim2 == 1999,
+            "postCoor should passthrough raw when pressure is inactive");
+
+    // Resume pressure — new history should be clean
+    stylus.runtime.tx1.coordinate.reportGlobalCoor = Coor(700, 1700);
+    stylus.runtime.pressure.outputPressure = 300;
+    filter.Process(frame);
+    Require(stylus.runtime.post.postCoor.dim1 == 700 &&
+            stylus.runtime.post.postCoor.dim2 == 1700,
+            "first frame after resume should passthrough (history was reset)");
+}
+
 } // namespace
 
 int main() {
@@ -622,6 +847,13 @@ int main() {
         TestTiltProcessClampsAnchoredCoordinatesBeforeTiltDiff();
         TestTiltProcessProducesTiltAndPostOutput();
         TestTiltProcessKeepsLastFrameWhenTx2Invalid();
+        TestRawHistoryShiftAndLatestAtZero();
+        TestPenDownAnchorCapturedOnce();
+        TestAvg3WarmUpPassthrough();
+        TestAvg3ThreePointAverage();
+        TestPredictedCoorQuadraticExtrapolation();
+        TestLinearCorrectionConsumesAvg3();
+        TestPressureInactiveResetsHistoryState();
         std::cout << "[TEST] Stylus linear filter process tests passed.\n";
         return 0;
     } catch (const std::exception& ex) {

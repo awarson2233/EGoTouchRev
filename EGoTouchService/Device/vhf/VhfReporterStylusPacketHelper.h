@@ -95,10 +95,10 @@ inline Solvers::StylusPacket Build(const Solvers::StylusFrameData& stylus,
     detail::WriteU16Le(packet.bytes, 7,
                        static_cast<uint16_t>(std::min<uint32_t>(stylus.output.pressure, 4095u)));
 
-    const int32_t tiltX = std::clamp(static_cast<int32_t>(stylus.output.point.tiltX) * 100,
+    const int32_t tiltX = std::clamp(static_cast<int32_t>(stylus.output.point.tiltX),
                                      static_cast<int32_t>(-detail::kTiltMax),
                                      static_cast<int32_t>(detail::kTiltMax));
-    const int32_t tiltY = std::clamp(static_cast<int32_t>(stylus.output.point.tiltY) * 100,
+    const int32_t tiltY = std::clamp(static_cast<int32_t>(stylus.output.point.tiltY),
                                      static_cast<int32_t>(-detail::kTiltMax),
                                      static_cast<int32_t>(detail::kTiltMax));
     detail::WriteU16Le(packet.bytes, 9, static_cast<uint16_t>(static_cast<int16_t>(tiltX)));

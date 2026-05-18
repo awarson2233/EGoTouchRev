@@ -197,8 +197,10 @@ private:
     static constexpr int kDim2Length = 40;
     static constexpr int kDim1PitchSize = 0x102C;
     static constexpr int kDim2PitchSize = 0x0A50;
-    static constexpr int kAntennaSpacing = 144;
-    static constexpr std::array<uint16_t, 4> kRatioThresholds{{40, 90, 155, 200}};
+    static constexpr int kTxPitch = 250;
+    static constexpr int kRxPitch = 200;
+    static constexpr int kStylusTiltParam = 5;
+    static constexpr std::array<uint16_t, 4> kRatioThresholds{{20, 90, 155, 200}};
     static constexpr std::array<uint16_t, 4> kRatioScales{{0, 850, 950, 1000}};
 
     std::array<uint16_t, kHistorySize> m_signalRatioBuf{};
@@ -260,8 +262,8 @@ private:
 
     inline uint16_t GetTX1TX2LenLimit(uint16_t signalRatio) const {
         const int base = kAxisRotated
-            ? (kDim1Length * kAntennaSpacing * Asa::kCoorUnit) / kDim2PitchSize
-            : (kDim1Length * kAntennaSpacing * Asa::kCoorUnit) / kDim1PitchSize;
+            ? (kTxPitch * kStylusTiltParam * Asa::kCoorUnit) / kDim2PitchSize
+            : (kTxPitch * kStylusTiltParam * Asa::kCoorUnit) / kDim1PitchSize;
 
         if (signalRatio <= kRatioThresholds[0]) {
             return 0;
@@ -323,14 +325,14 @@ private:
     inline int GetTiltAxisLength(int axis) const {
         if (!kAxisRotated) {
             if (axis == 0) {
-                return (kDim1Length * kAntennaSpacing * Asa::kCoorUnit) / kDim1PitchSize;
+                return (kTxPitch * kStylusTiltParam * Asa::kCoorUnit) / kDim1PitchSize;
             }
-            return (kDim2Length * kAntennaSpacing * Asa::kCoorUnit) / kDim2PitchSize;
+            return (kRxPitch * kStylusTiltParam * Asa::kCoorUnit) / kDim2PitchSize;
         }
         if (axis == 0) {
-            return (kDim1Length * kAntennaSpacing * Asa::kCoorUnit) / kDim2PitchSize;
+            return (kTxPitch * kStylusTiltParam * Asa::kCoorUnit) / kDim2PitchSize;
         }
-        return (kDim2Length * kAntennaSpacing * Asa::kCoorUnit) / kDim1PitchSize;
+        return (kRxPitch * kStylusTiltParam * Asa::kCoorUnit) / kDim1PitchSize;
     }
 
     static inline int32_t IntSqrtU32(uint32_t x) {

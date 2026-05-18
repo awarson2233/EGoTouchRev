@@ -73,10 +73,10 @@ void TestStylusPacketHelperBuildsValidPacketFromOutput() {
             "VHF-built stylus packet should map output X into HID Y");
     Require(ReadU16Le(packet, 7) == 321,
             "VHF-built stylus packet should encode output pressure");
-    Require(ReadI16Le(packet, 9) == 700,
-            "VHF-built stylus packet should encode output tiltX in centidegrees");
-    Require(ReadI16Le(packet, 11) == -300,
-            "VHF-built stylus packet should encode output tiltY in centidegrees");
+    Require(ReadI16Le(packet, 9) == 7,
+            "VHF-built stylus packet should encode output tiltX in degrees (scaled down by 100)");
+    Require(ReadI16Le(packet, 11) == -3,
+            "VHF-built stylus packet should encode output tiltY in degrees (scaled down by 100)");
     Require(VhfStylusPacket::ExtractPenState(packet) == 0x21,
             "helper pen state extraction should match raw packet");
 }

@@ -13,6 +13,7 @@ bool StylusPipeline::Process(HeatmapFrame& frame) {
     if (frame.stylus.runtime.flow.terminal) {
         m_tiltProcess.Reset();
         m_postPressure.Reset();
+        m_linearFilterProcess.Reset();
         m_coorReviseProcess.Reset();
         m_commit.Commit(frame);
         return true;
@@ -22,6 +23,7 @@ bool StylusPipeline::Process(HeatmapFrame& frame) {
     if (frame.stylus.runtime.flow.terminal) {
         m_tiltProcess.Reset();
         m_postPressure.Reset();
+        m_linearFilterProcess.Reset();
         m_coorReviseProcess.Reset();
         m_commit.Commit(frame);
         return true;
@@ -31,6 +33,7 @@ bool StylusPipeline::Process(HeatmapFrame& frame) {
     if (frame.stylus.runtime.flow.terminal) {
         m_tiltProcess.Reset();
         m_postPressure.Reset();
+        m_linearFilterProcess.Reset();
         m_coorReviseProcess.Reset();
         m_commit.Commit(frame);
         return true;
@@ -98,6 +101,9 @@ std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
     schema.emplace_back("sp.signalFloor", "Signal Floor",
                         ConfigParam::Int, const_cast<uint16_t*>(&m_coordinateSolver.m_signalFloor), 0.0f, 65535.0f)
         .Module("Coordinate");
+    schema.emplace_back("sp.linearFilterEnabled", "Linear Filter Enabled",
+                        ConfigParam::Bool, const_cast<bool*>(&m_linearFilterProcess.m_enabled))
+        .Module("Data Solve");
     schema.emplace_back("sp.coorReviseEnabled", "CoorRevise Enabled",
                         ConfigParam::Bool, const_cast<bool*>(&m_coorReviseProcess.m_enabled))
         .Module("Data Solve");
@@ -128,6 +134,7 @@ void StylusPipeline::SaveConfig(std::ostream& out) const {
     out << "sp.btPressSignalSuppressEnterThreshold=" << m_pressureSolver.m_btPressSignalSuppressEnterThreshold << "\n";
     out << "sp.btPressSignalSuppressExitThreshold=" << m_pressureSolver.m_btPressSignalSuppressExitThreshold << "\n";
     out << "sp.signalFloor=" << m_coordinateSolver.m_signalFloor << "\n";
+    out << "sp.linearFilterEnabled=" << (m_linearFilterProcess.m_enabled ? "1" : "0") << "\n";
     out << "sp.coorReviseEnabled=" << (m_coorReviseProcess.m_enabled ? "1" : "0") << "\n";
     out << "sp.coorReviseFactorDim1=" << m_coorReviseProcess.m_factorDim1 << "\n";
     out << "sp.coorReviseFactorDim2=" << m_coorReviseProcess.m_factorDim2 << "\n";
@@ -180,6 +187,11 @@ void StylusPipeline::LoadConfig(const std::string& key, const std::string& value
             static_cast<uint16_t>(std::clamp(std::stoi(value), 0, 0xFFFF));
     } else if (key == "sp.signalFloor") {
         m_coordinateSolver.m_signalFloor = static_cast<uint16_t>(std::clamp(std::stoi(value), 0, 0xFFFF));
+    } else if (key == "sp.linearFilterEnabled") {
+        m_linearFilterProcess.m_enabled = toBool(value);
+        if (!m_linearFilterProcess.m_enabled) {
+            m_linearFilterProcess.Reset();
+        }
     } else if (key == "sp.coorReviseEnabled") {
         m_coorReviseProcess.m_enabled = toBool(value);
         if (!m_coorReviseProcess.m_enabled) {

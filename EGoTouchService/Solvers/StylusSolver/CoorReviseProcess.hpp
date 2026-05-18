@@ -82,8 +82,8 @@ public:
         const int32_t maxDim1 = m_sensorDim1Count * Asa::kCoorUnit;
         const int32_t maxDim2 = m_sensorDim2Count * Asa::kCoorUnit;
 
-        int32_t correctedDim1 = finalCoor.dim1 - m_smoothedOffsetDim1;
-        int32_t correctedDim2 = finalCoor.dim2 - m_smoothedOffsetDim2;
+        int32_t correctedDim1 = finalCoor.dim1 + m_smoothedOffsetDim1;
+        int32_t correctedDim2 = finalCoor.dim2 + m_smoothedOffsetDim2;
         correctedDim1 = std::clamp(correctedDim1, 0, maxDim1);
         correctedDim2 = std::clamp(correctedDim2, 0, maxDim2);
 

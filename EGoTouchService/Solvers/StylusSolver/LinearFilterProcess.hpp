@@ -48,15 +48,112 @@ public:
         m_lastDeltaDim1 = 0;
         m_lastDeltaDim2 = 0;
         m_frame = 0;
+
+        m_rawX.fill(kInvalidCoord);
+        m_rawY.fill(kInvalidCoord);
+        m_filtX.fill(kInvalidCoord);
+        m_filtY.fill(kInvalidCoord);
+        m_anchorX = 0;
+        m_anchorY = 0;
+        m_prevPressureActive = false;
+        m_historyCount = 0;
     }
 
     inline void Process(HeatmapFrame& frame) {
         auto& runtime = frame.stylus.runtime;
+        const auto& raw = runtime.tx1.coordinate.reportGlobalCoor;
+        const bool pressureActive = runtime.pressure.outputPressure > 0;
+
+        if (!m_enabled || !raw.valid || !pressureActive) {
+            Reset();
+            runtime.post.postCoor = raw;
+            runtime.post.predictedCoor = raw;
+            runtime.post.finalCoor = raw;
+            runtime.post.finalValid = raw.valid;
+            runtime.post.point.x = static_cast<float>(raw.dim1);
+            runtime.post.point.y = static_cast<float>(raw.dim2);
+            runtime.post.linearFilterState = 0;
+            runtime.post.linearFilterActive = false;
+            runtime.post.linearFilterDeltaDim1 = 0;
+            runtime.post.linearFilterDeltaDim2 = 0;
+#if EGOTOUCH_DIAG
+            runtime.post.lfLineFitSlopeA = 0.f;
+            runtime.post.lfLineFitInterceptB = 0.f;
+            runtime.post.lfLineFitValid = false;
+            runtime.post.lfCos1000 = 0;
+            runtime.post.lfStraightBufCount = 0;
+            runtime.post.lfDragApplied = 0;
+#endif
+            return;
+        }
+
+        // ── GetRealTimeCoor2Buf ──
+        // Detect pen-down (pressure 0→non-0 transition) and capture anchor
+        if (!m_prevPressureActive) {
+            m_anchorX = raw.dim1;
+            m_anchorY = raw.dim2;
+        }
+        m_prevPressureActive = pressureActive;
+
+        // Shift raw history right and push the latest coordinate to index 0
+        for (int i = kRawHistorySize - 1; i > 0; --i) {
+            m_rawX[i] = m_rawX[i - 1];
+            m_rawY[i] = m_rawY[i - 1];
+        }
+        m_rawX[0] = raw.dim1;
+        m_rawY[0] = raw.dim2;
+
+        if (m_historyCount < kRawHistorySize) {
+            ++m_historyCount;
+        }
+
+        // ── Get3PointAvgFilter ──
+        // Shift filtered output history
+        for (int i = kRawHistorySize - 1; i > 0; --i) {
+            m_filtX[i] = m_filtX[i - 1];
+            m_filtY[i] = m_filtY[i - 1];
+        }
+
+        // 3-point moving average with sentinel guard (INT32_MAX = invalid/missing data)
+        Asa::AsaCoorResult avg3{};
+        if (m_historyCount >= 3) {
+            const bool x2Valid = m_rawX[2] != kInvalidCoord;
+            const bool y2Valid = m_rawY[2] != kInvalidCoord;
+            avg3.valid = true;
+
+            if (x2Valid) {
+                avg3.dim1 = (m_rawX[0] + m_rawX[1] + m_rawX[2]) / 3;
+            } else {
+                avg3.dim1 = m_rawX[0];
+            }
+
+            if (y2Valid) {
+                avg3.dim2 = (m_rawY[0] + m_rawY[1] + m_rawY[2]) / 3;
+            } else {
+                avg3.dim2 = m_rawY[0];
+            }
+        } else {
+            avg3 = raw;
+        }
+
+        m_filtX[0] = avg3.dim1;
+        m_filtY[0] = avg3.dim2;
+        runtime.post.postCoor = avg3;
+
+        // Quadratic extrapolation prediction: 3*x0 − 3*x1 + x2
+        Asa::AsaCoorResult predicted;
+        if (m_historyCount >= 3) {
+            predicted.valid = true;
+            predicted.dim1 = 3 * m_rawX[0] - 3 * m_rawX[1] + m_rawX[2];
+            predicted.dim2 = 3 * m_rawY[0] - 3 * m_rawY[1] + m_rawY[2];
+        } else {
+            predicted = avg3;
+        }
+        runtime.post.predictedCoor = predicted;
+
+        // ── Linear correction (existing state machine) consuming the 3-point avg ──
         const Asa::AsaCoorResult result = Process(
-            runtime.tx1.coordinate.reportGlobalCoor,
-            runtime.pressure.outputPressure > 0,
-            m_sensorDim1Limit,
-            m_sensorDim2Limit);
+            avg3, pressureActive, m_sensorDim1Limit, m_sensorDim2Limit);
 
         runtime.post.finalCoor = result;
         runtime.post.finalValid = result.valid;
@@ -200,6 +297,20 @@ private:
     bool m_active = false;
     int m_lastDeltaDim1 = 0;
     int m_lastDeltaDim2 = 0;
+
+    // ── TSACore GetRealTimeCoor2Buf / Get3PointAvgFilter state ──
+    static constexpr int kRawHistorySize = 24;
+    static constexpr int32_t kInvalidCoord = 0x7FFFFFFF;
+
+    std::array<int32_t, kRawHistorySize> m_rawX{};
+    std::array<int32_t, kRawHistorySize> m_rawY{};
+    std::array<int32_t, kRawHistorySize> m_filtX{};
+    std::array<int32_t, kRawHistorySize> m_filtY{};
+    int32_t m_anchorX = 0;
+    int32_t m_anchorY = 0;
+    bool m_prevPressureActive = false;
+    int m_historyCount = 0;
+
 #if EGOTOUCH_DIAG
     int32_t m_lastCos1000 = 0;
     int32_t m_lastDragApplied = 0;

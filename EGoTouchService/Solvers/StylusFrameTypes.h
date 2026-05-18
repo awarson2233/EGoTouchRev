@@ -204,6 +204,7 @@ struct StylusRuntimeDecision {
 struct StylusRuntimePost {
     Asa::AsaCoorResult postCoor{};
     Asa::AsaCoorResult finalCoor{};
+    Asa::AsaCoorResult predictedCoor{};
     StylusSolvePoint point{};
     bool finalValid = false;
     uint16_t finalPressure = 0;
