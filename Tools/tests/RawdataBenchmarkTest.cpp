@@ -1,5 +1,6 @@
 #include "TouchSolver/TouchPipeline.h"
 #include "StylusPipeline.h"
+#include "FrameLayout.h"
 
 #include <algorithm>
 #include <array>
@@ -9,15 +10,18 @@
 #include <cstdint>
 #include <cstdlib>
 #include <ctime>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -32,9 +36,18 @@ namespace {
 
 constexpr int kRows = 40;
 constexpr int kCols = 60;
-constexpr int kDefaultBenchmarkFrames = 5000;
+constexpr int kDefaultBenchmarkFrames = 5000000;
 constexpr int kDefaultStylusPressure = 512;
 constexpr double kTouchSampleRateHz = 120.0;
+constexpr int kDvrMaxContacts = 10;
+constexpr int kDvrMaxPeaks = 30;
+
+const std::filesystem::path kDefaultDatasetPath = std::filesystem::path("../Tools/tests/dataset.dvrbin");
+
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4324)
+#endif
 
 enum class BenchmarkMode {
     Linked,
@@ -42,22 +55,145 @@ enum class BenchmarkMode {
     Both,
 };
 
+enum class Dvr2SectionType : uint32_t {
+    Meta = 1,
+    Index = 2,
+    Frames = 3,
+    DynamicDebugSchema = 4,
+    DynamicDebugValues = 5,
+};
+
 struct Options {
-    std::filesystem::path dataRoot = std::filesystem::path("Tools/data");
+    std::filesystem::path datasetPath = kDefaultDatasetPath;
     std::filesystem::path configPath;
     int frames = kDefaultBenchmarkFrames;
     int stylusPressure = kDefaultStylusPressure;
     BenchmarkMode mode = BenchmarkMode::Linked;
 };
 
-struct MasterDataset {
-    std::vector<Solvers::HeatmapFrame> frames;
-    std::filesystem::path rootDir;
+struct Dvr2FileHeader {
+    char magic[8];
+    uint16_t formatVersion = 0;
+    uint16_t headerSize = sizeof(Dvr2FileHeader);
+    uint32_t sectionCount = 0;
+    uint64_t tocOffset = 0;
+    uint32_t flags = 0;
+    uint32_t reserved = 0;
 };
 
-struct SlaveDataset {
-    std::vector<std::vector<uint8_t>> rawFrames;
-    std::filesystem::path csvPath;
+struct Dvr2SectionEntry {
+    uint32_t type = 0;
+    uint32_t version = 0;
+    uint64_t offset = 0;
+    uint64_t size = 0;
+};
+
+struct Dvr2MetaSectionV1 {
+    uint32_t frameCount = 0;
+    uint32_t frameRecordVersion = 0;
+    uint32_t flags = 0;
+    uint32_t reserved = 0;
+};
+
+struct Dvr2IndexEntryV1 {
+    uint64_t timestamp = 0;
+    uint64_t receiveSystemEpochUs = 0;
+    uint64_t frameOffset = 0;
+    uint32_t frameSize = 0;
+    uint32_t reserved = 0;
+};
+
+struct Dvr2ContactRecordV1 {
+    int32_t id = 0;
+    float x = 0.0f;
+    float y = 0.0f;
+    int32_t state = 0;
+    int32_t area = 0;
+    int32_t signalSum = 0;
+};
+
+struct Dvr2PeakRecordV1 {
+    int32_t r = 0;
+    int32_t c = 0;
+    int16_t z = 0;
+    uint8_t id = 0;
+    uint8_t reserved = 0;
+};
+
+struct Dvr2StylusPointRecordV1 {
+    uint8_t valid = 0;
+    uint8_t reserved0[3]{};
+    float x = 0.0f;
+    float y = 0.0f;
+    uint16_t reportX = 0;
+    uint16_t reportY = 0;
+    uint16_t pressure = 0;
+    uint16_t rawPressure = 0;
+    uint16_t mappedPressure = 0;
+    uint16_t peakTx1 = 0;
+    uint16_t peakTx2 = 0;
+    uint16_t reserved1 = 0;
+    float tx1X = 0.0f;
+    float tx1Y = 0.0f;
+    float tx2X = 0.0f;
+    float tx2Y = 0.0f;
+    float confidence = 0.0f;
+};
+
+struct Dvr2StylusDataRecordV1 {
+    uint8_t slaveValid = 0;
+    uint8_t checksumOk = 0;
+    uint8_t tx1BlockValid = 0;
+    uint8_t tx2BlockValid = 0;
+    uint32_t status = 0;
+    uint16_t pressure = 0;
+    uint16_t signalX = 0;
+    uint16_t signalY = 0;
+    uint16_t maxRawPeak = 0;
+    uint8_t pipelineStage = 0;
+    uint8_t reserved[5]{};
+    Dvr2StylusPointRecordV1 point{};
+};
+
+struct Dvr2FrameRecordV1 {
+    uint64_t timestamp = 0;
+    uint64_t receiveSystemEpochUs = 0;
+    uint64_t dvrSeq = 0;
+    uint8_t masterWasRead = 1;
+    uint8_t masterSuffixValid = 0;
+    uint8_t slaveSuffixValid = 0;
+    uint8_t reserved0 = 0;
+    int16_t heatmapMatrix[kRows][kCols]{};
+    uint16_t masterSuffix[Frame::kMasterSuffixWords]{};
+    uint16_t slaveSuffix[Frame::kSlaveSuffixWords]{};
+    Dvr2StylusDataRecordV1 stylus{};
+    Dvr2ContactRecordV1 contacts[kDvrMaxContacts]{};
+    uint32_t contactCount = 0;
+    Dvr2PeakRecordV1 peaks[kDvrMaxPeaks]{};
+    uint32_t peakCount = 0;
+};
+
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+
+static_assert(sizeof(Dvr2FileHeader) == 32);
+static_assert(sizeof(Dvr2SectionEntry) == 24);
+static_assert(sizeof(Dvr2IndexEntryV1) == 32);
+static_assert(sizeof(Dvr2FrameRecordV1) == 6096);
+static_assert(std::is_trivially_copyable_v<Dvr2FrameRecordV1>);
+static_assert(std::is_standard_layout_v<Dvr2FrameRecordV1>);
+
+struct DvrDatasetFrame {
+    Solvers::HeatmapFrame touchFrame;
+    std::vector<uint8_t> rawFrame;
+};
+
+struct DvrDataset {
+    std::vector<DvrDatasetFrame> frames;
+    std::filesystem::path filePath;
+    int formatVersion = 0;
+    uint32_t flags = 0;
 };
 
 struct RunStats {
@@ -65,8 +201,9 @@ struct RunStats {
     std::string runStart;
     std::string runEnd;
     int benchmarkFrames = 0;
-    size_t sourceMasterFrames = 0;
-    size_t sourceSlaveFrames = 0;
+    size_t sourceFrames = 0;
+    int dvrFormatVersion = 0;
+    uint32_t dvrFlags = 0;
     int stylusPressure = 0;
     int masterProcessedFrames = 0;
     int slaveProcessedFrames = 0;
@@ -116,20 +253,6 @@ bool TryParseInt(const std::string& text, int& valueOut) {
     } catch (...) {
         return false;
     }
-}
-
-std::vector<std::string> SplitCsvLine(const std::string& line) {
-    std::vector<std::string> parts;
-    std::stringstream ss(line);
-    std::string part;
-    while (std::getline(ss, part, ',')) {
-        parts.push_back(Trim(part));
-    }
-
-    if (!line.empty() && line.back() == ',') {
-        parts.emplace_back();
-    }
-    return parts;
 }
 
 bool IsLegacyTouchConfigSection(const std::string& section) {
@@ -183,123 +306,183 @@ std::optional<std::string> MapLegacyTouchConfigKey(const std::string& section,
     return std::nullopt;
 }
 
-bool ParseCsvRow60(const std::string& line, std::array<int16_t, kCols>& rowOut) {
-    const auto cells = SplitCsvLine(line);
-    if (static_cast<int>(cells.size()) != kCols) {
-        return false;
-    }
-
-    for (int i = 0; i < kCols; ++i) {
-        int value = 0;
-        if (!TryParseInt(cells[static_cast<size_t>(i)], value)) {
-            return false;
-        }
-        value = std::clamp(value, -32768, 32767);
-        rowOut[static_cast<size_t>(i)] = static_cast<int16_t>(value);
-    }
-    return true;
+bool ReadAll(std::ifstream& in, void* data, size_t bytes) {
+    in.read(reinterpret_cast<char*>(data), static_cast<std::streamsize>(bytes));
+    return static_cast<bool>(in);
 }
 
-bool LoadCsvHeatmapFrame(const std::filesystem::path& path, Solvers::HeatmapFrame& frameOut) {
-    std::ifstream in(path);
-    if (!in.is_open()) {
-        return false;
-    }
+std::array<char, 8> MakeDvr2Magic() {
+    return {'E', 'G', 'O', 'D', 'V', 'R', '2', '\0'};
+}
 
-    std::vector<std::array<int16_t, kCols>> rows;
-    rows.reserve(kRows);
+bool RangeWithinFile(uint64_t offset, uint64_t size, uint64_t fileSize) {
+    return offset <= fileSize && size <= fileSize - offset;
+}
 
-    std::string line;
-    while (std::getline(in, line)) {
-        std::array<int16_t, kCols> row{};
-        if (!ParseCsvRow60(line, row)) {
-            continue;
-        }
-
-        rows.push_back(row);
-        if (static_cast<int>(rows.size()) == kRows) {
-            break;
+const Dvr2SectionEntry* FindSection(const std::vector<Dvr2SectionEntry>& sections,
+                                    Dvr2SectionType type) {
+    for (const auto& section : sections) {
+        if (section.type == static_cast<uint32_t>(type)) {
+            return &section;
         }
     }
+    return nullptr;
+}
 
-    if (static_cast<int>(rows.size()) != kRows) {
-        return false;
-    }
+void WriteLe16(std::vector<uint8_t>& raw, size_t offset, uint16_t value) {
+    raw[offset] = static_cast<uint8_t>(value & 0xFFu);
+    raw[offset + 1] = static_cast<uint8_t>((value >> 8) & 0xFFu);
+}
+
+std::vector<uint8_t> BuildRawFrameBytes(const Solvers::HeatmapFrame& frame) {
+    std::vector<uint8_t> raw(static_cast<size_t>(Frame::kTotalFrameSize), 0);
 
     for (int r = 0; r < kRows; ++r) {
         for (int c = 0; c < kCols; ++c) {
-            frameOut.heatmapMatrix[r][c] = rows[static_cast<size_t>(r)][static_cast<size_t>(c)];
+            const size_t offset = static_cast<size_t>(Frame::kMatrixOffset + (r * kCols + c) * 2);
+            WriteLe16(raw, offset, static_cast<uint16_t>(frame.heatmapMatrix[r][c]));
         }
     }
-    return true;
-}
 
-std::optional<size_t> ParseFrameIndex(const std::string& text) {
-    int value = 0;
-    if (!TryParseInt(text, value) || value < 0) {
-        return std::nullopt;
+    for (int word = 0; word < Frame::kMasterSuffixWords; ++word) {
+        const size_t offset = static_cast<size_t>(Frame::kMasterSuffixOffset + word * 2);
+        WriteLe16(raw, offset, frame.masterSuffix.words[word]);
     }
-    return static_cast<size_t>(value);
-}
 
-std::optional<size_t> ParseFrameIndexFromPath(const std::filesystem::path& path) {
-    const std::string stem = path.stem().string();
-    constexpr std::string_view prefix = "frame_";
-    if (!stem.starts_with(prefix)) {
-        return std::nullopt;
+    for (int word = 0; word < Frame::kSlaveSuffixWords; ++word) {
+        const size_t offset = static_cast<size_t>(Frame::kSlaveSuffixOffset + word * 2);
+        WriteLe16(raw, offset, frame.slaveSuffix.words[word]);
     }
-    return ParseFrameIndex(stem.substr(prefix.size()));
+
+    return raw;
 }
 
-std::vector<size_t> ParseIndexedCsvFirstColumn(const std::filesystem::path& path,
-                                               const std::string& datasetName) {
-    std::ifstream in(path);
+Solvers::HeatmapFrame PopulateHeatmapFrameFromRecord(const Dvr2FrameRecordV1& record) {
+    Solvers::HeatmapFrame frame;
+    frame.timestamp = record.timestamp;
+    frame.receiveSystemEpochUs = record.receiveSystemEpochUs;
+    frame.masterWasRead = record.masterWasRead != 0;
+    frame.masterSuffixValid = record.masterSuffixValid != 0;
+    frame.slaveSuffixValid = record.slaveSuffixValid != 0;
+    std::memcpy(frame.heatmapMatrix, record.heatmapMatrix, sizeof(frame.heatmapMatrix));
+    std::memcpy(frame.masterSuffix.words, record.masterSuffix, sizeof(record.masterSuffix));
+    std::memcpy(frame.slaveSuffix.words, record.slaveSuffix, sizeof(record.slaveSuffix));
+    return frame;
+}
+
+DvrDataset LoadDvrDataset(const std::filesystem::path& filePath) {
+    std::error_code ec;
+    if (!std::filesystem::exists(filePath, ec) || !std::filesystem::is_regular_file(filePath, ec)) {
+        throw std::runtime_error("DVR input file not found: " + filePath.string());
+    }
+
+    const auto fileSizeValue = std::filesystem::file_size(filePath, ec);
+    if (ec || fileSizeValue > std::numeric_limits<uint64_t>::max()) {
+        throw std::runtime_error("Failed to inspect DVR file size: " + filePath.string());
+    }
+    const uint64_t fileSize = static_cast<uint64_t>(fileSizeValue);
+
+    std::ifstream in(filePath, std::ios::binary);
     if (!in.is_open()) {
-        throw std::runtime_error("Failed to open CSV: " + path.string());
+        throw std::runtime_error("Failed to open DVR file: " + filePath.string());
     }
 
-    std::vector<size_t> indices;
-    std::string line;
-    bool sawHeader = false;
-    while (std::getline(in, line)) {
-        if (!line.empty() && line.back() == '\r') {
-            line.pop_back();
-        }
-
-        const std::string trimmed = Trim(line);
-        if (trimmed.empty() || trimmed[0] == '#') {
-            continue;
-        }
-
-        if (!sawHeader) {
-            sawHeader = true;
-            continue;
-        }
-
-        const auto cells = SplitCsvLine(trimmed);
-        if (cells.empty()) {
-            continue;
-        }
-
-        const auto index = ParseFrameIndex(cells.front());
-        if (!index.has_value()) {
-            throw std::runtime_error("Invalid frame index in " + datasetName + ": " + path.string());
-        }
-        indices.push_back(*index);
+    Dvr2FileHeader header{};
+    if (!ReadAll(in, &header, sizeof(header))) {
+        throw std::runtime_error("Failed to read DVR2 header: " + filePath.string());
     }
 
-    if (!sawHeader) {
-        throw std::runtime_error("Missing CSV header in " + datasetName + ": " + path.string());
+    const auto dvr2Magic = MakeDvr2Magic();
+    if (!std::equal(dvr2Magic.begin(), dvr2Magic.end(), header.magic)) {
+        throw std::runtime_error("Invalid DVR2 magic: " + filePath.string());
+    }
+    if (header.headerSize != sizeof(Dvr2FileHeader)) {
+        throw std::runtime_error("Unsupported DVR2 header size: " + filePath.string());
+    }
+    if (header.sectionCount == 0 || header.sectionCount > 16) {
+        throw std::runtime_error("Unsupported DVR2 section count: " + filePath.string());
+    }
+    const uint64_t tocBytes = static_cast<uint64_t>(header.sectionCount) * sizeof(Dvr2SectionEntry);
+    if (!RangeWithinFile(header.tocOffset, tocBytes, fileSize)) {
+        throw std::runtime_error("Invalid DVR2 TOC range: " + filePath.string());
     }
 
-    for (size_t i = 0; i < indices.size(); ++i) {
-        if (indices[i] != i) {
-            throw std::runtime_error("Frame column is not contiguous 0..N-1 in " + datasetName +
-                                     ": " + path.string());
+    std::vector<Dvr2SectionEntry> sections(header.sectionCount);
+    in.seekg(static_cast<std::streamoff>(header.tocOffset), std::ios::beg);
+    if (!ReadAll(in, sections.data(), sections.size() * sizeof(Dvr2SectionEntry))) {
+        throw std::runtime_error("Failed to read DVR2 TOC: " + filePath.string());
+    }
+
+    const auto* metaSection = FindSection(sections, Dvr2SectionType::Meta);
+    const auto* indexSection = FindSection(sections, Dvr2SectionType::Index);
+    const auto* framesSection = FindSection(sections, Dvr2SectionType::Frames);
+    if (!metaSection || !indexSection || !framesSection) {
+        throw std::runtime_error("DVR2 file is missing required sections: " + filePath.string());
+    }
+    if (metaSection->version != 1 || indexSection->version != 1 || framesSection->version != 1) {
+        throw std::runtime_error("Unsupported DVR2 section version: " + filePath.string());
+    }
+    if (metaSection->size != sizeof(Dvr2MetaSectionV1) ||
+        !RangeWithinFile(metaSection->offset, metaSection->size, fileSize)) {
+        throw std::runtime_error("Invalid DVR2 meta section: " + filePath.string());
+    }
+
+    Dvr2MetaSectionV1 meta{};
+    in.seekg(static_cast<std::streamoff>(metaSection->offset), std::ios::beg);
+    if (!ReadAll(in, &meta, sizeof(meta))) {
+        throw std::runtime_error("Failed to read DVR2 meta section: " + filePath.string());
+    }
+    if (meta.frameRecordVersion != 1) {
+        throw std::runtime_error("Unsupported DVR2 frame record version: " + filePath.string());
+    }
+    if (meta.flags != header.flags) {
+        throw std::runtime_error("DVR2 header/meta flags mismatch: " + filePath.string());
+    }
+    if (meta.frameCount == 0) {
+        throw std::runtime_error("DVR2 dataset contains no frames: " + filePath.string());
+    }
+
+    const uint64_t expectedIndexSize = static_cast<uint64_t>(meta.frameCount) * sizeof(Dvr2IndexEntryV1);
+    const uint64_t expectedFramesSize = static_cast<uint64_t>(meta.frameCount) * sizeof(Dvr2FrameRecordV1);
+    if (indexSection->size != expectedIndexSize || !RangeWithinFile(indexSection->offset, indexSection->size, fileSize)) {
+        throw std::runtime_error("Invalid DVR2 index section: " + filePath.string());
+    }
+    if (framesSection->size != expectedFramesSize || !RangeWithinFile(framesSection->offset, framesSection->size, fileSize)) {
+        throw std::runtime_error("Invalid DVR2 frame section: " + filePath.string());
+    }
+
+    std::vector<Dvr2IndexEntryV1> index(meta.frameCount);
+    in.seekg(static_cast<std::streamoff>(indexSection->offset), std::ios::beg);
+    if (!ReadAll(in, index.data(), index.size() * sizeof(Dvr2IndexEntryV1))) {
+        throw std::runtime_error("Failed to read DVR2 index section: " + filePath.string());
+    }
+
+    DvrDataset dataset;
+    dataset.filePath = filePath;
+    dataset.formatVersion = static_cast<int>(header.formatVersion);
+    dataset.flags = header.flags;
+    dataset.frames.reserve(meta.frameCount);
+
+    for (uint32_t i = 0; i < meta.frameCount; ++i) {
+        const uint64_t expectedFrameOffset = framesSection->offset +
+            static_cast<uint64_t>(i) * sizeof(Dvr2FrameRecordV1);
+        if (index[i].frameOffset != expectedFrameOffset || index[i].frameSize != sizeof(Dvr2FrameRecordV1)) {
+            throw std::runtime_error("Invalid DVR2 frame index entry: " + filePath.string());
         }
+
+        Dvr2FrameRecordV1 record{};
+        in.seekg(static_cast<std::streamoff>(index[i].frameOffset), std::ios::beg);
+        if (!ReadAll(in, &record, sizeof(record))) {
+            throw std::runtime_error("Failed to read DVR2 frame record: " + filePath.string());
+        }
+
+        DvrDatasetFrame sample;
+        sample.touchFrame = PopulateHeatmapFrameFromRecord(record);
+        sample.rawFrame = BuildRawFrameBytes(sample.touchFrame);
+        dataset.frames.push_back(std::move(sample));
     }
 
-    return indices;
+    return dataset;
 }
 
 void LoadConfigFromFile(Solvers::TouchPipeline& touchPipeline,
@@ -373,19 +556,17 @@ std::filesystem::path ResolveConfigPath(const std::filesystem::path& explicitPat
     return {};
 }
 
-std::filesystem::path ResolveDataRootPath(const std::filesystem::path& configuredPath,
-                                          const std::filesystem::path& argv0Path) {
-    auto isValidDataRoot = [](const std::filesystem::path& candidate) {
-        std::error_code ec;
-        return std::filesystem::exists(candidate / "master", ec) &&
-               std::filesystem::is_directory(candidate / "master", ec) &&
-               std::filesystem::exists(candidate / "slave", ec) &&
-               std::filesystem::is_directory(candidate / "slave", ec);
-    };
-
+std::filesystem::path ResolveDatasetPath(const std::filesystem::path& configuredPath,
+                                         const std::filesystem::path& argv0Path) {
     if (configuredPath.is_absolute()) {
         return configuredPath;
     }
+
+    auto isValidDataset = [](const std::filesystem::path& candidate) {
+        std::error_code ec;
+        return std::filesystem::exists(candidate, ec) &&
+               std::filesystem::is_regular_file(candidate, ec);
+    };
 
     const std::filesystem::path cwd = std::filesystem::current_path();
     const std::filesystem::path exeDir = std::filesystem::absolute(argv0Path).parent_path();
@@ -396,12 +577,12 @@ std::filesystem::path ResolveDataRootPath(const std::filesystem::path& configure
         exeDir / configuredPath,
         exeDir / ".." / configuredPath,
         exeDir / ".." / ".." / configuredPath,
-        std::filesystem::path("Tools/data"),
+        kDefaultDatasetPath,
         configuredPath
     };
 
     for (const auto& candidate : candidates) {
-        if (isValidDataRoot(candidate)) {
+        if (isValidDataset(candidate)) {
             return candidate;
         }
     }
@@ -442,7 +623,7 @@ void PrintUsage() {
         << "  --frames <N>             Total replay steps (default 5000)\n"
         << "  --mode <linked|independent|both>\n"
         << "                           Benchmark mode (default linked)\n"
-        << "  --data-root <path>       Root containing master/ and slave/ (default Tools/data)\n"
+        << "  --dataset <path>         DVR2 .dvrbin input (default Tools/tests/dataset.dvrbin)\n"
         << "  --config <path>          Explicit config.ini path\n"
         << "  --stylus-pressure <N>    Fixed stylus pressure (default 512)\n"
         << "  --help                   Show this help\n";
@@ -471,8 +652,8 @@ Options ParseOptions(int argc, char** argv) {
             options.frames = value;
         } else if (arg == "--mode") {
             options.mode = ParseBenchmarkMode(requireValue("--mode"));
-        } else if (arg == "--data-root") {
-            options.dataRoot = requireValue("--data-root");
+        } else if (arg == "--dataset") {
+            options.datasetPath = requireValue("--dataset");
         } else if (arg == "--config") {
             options.configPath = requireValue("--config");
         } else if (arg == "--stylus-pressure") {
@@ -487,132 +668,6 @@ Options ParseOptions(int argc, char** argv) {
     }
 
     return options;
-}
-
-MasterDataset LoadMasterDataset(const std::filesystem::path& rootDir) {
-    if (!std::filesystem::exists(rootDir) || !std::filesystem::is_directory(rootDir)) {
-        throw std::runtime_error("Master input directory not found: " + rootDir.string());
-    }
-
-    const auto statusIndices = ParseIndexedCsvFirstColumn(rootDir / "master_status.csv", "master_status");
-
-    std::vector<std::pair<size_t, Solvers::HeatmapFrame>> indexedFrames;
-    for (const auto& entry : std::filesystem::directory_iterator(rootDir)) {
-        if (!entry.is_regular_file()) {
-            continue;
-        }
-
-        const auto index = ParseFrameIndexFromPath(entry.path());
-        if (!index.has_value()) {
-            continue;
-        }
-
-        Solvers::HeatmapFrame frame;
-        if (!LoadCsvHeatmapFrame(entry.path(), frame)) {
-            throw std::runtime_error("Failed to load master heatmap frame: " + entry.path().string());
-        }
-        indexedFrames.emplace_back(*index, std::move(frame));
-    }
-
-    if (indexedFrames.empty()) {
-        throw std::runtime_error("No master heatmap frames found under: " + rootDir.string());
-    }
-
-    std::sort(indexedFrames.begin(), indexedFrames.end(), [](const auto& a, const auto& b) {
-        return a.first < b.first;
-    });
-
-    for (size_t i = 0; i < indexedFrames.size(); ++i) {
-        if (indexedFrames[i].first != i) {
-            throw std::runtime_error("Master frame files are not contiguous frame_0..frame_N under: " +
-                                     rootDir.string());
-        }
-    }
-
-    if (indexedFrames.size() != statusIndices.size()) {
-        throw std::runtime_error("Master heatmap frame count does not match master_status.csv under: " +
-                                 rootDir.string());
-    }
-
-    MasterDataset dataset;
-    dataset.rootDir = rootDir;
-    dataset.frames.reserve(indexedFrames.size());
-    for (auto& entry : indexedFrames) {
-        dataset.frames.push_back(std::move(entry.second));
-    }
-    return dataset;
-}
-
-SlaveDataset LoadSlaveDataset(const std::filesystem::path& rootDir) {
-    if (!std::filesystem::exists(rootDir) || !std::filesystem::is_directory(rootDir)) {
-        throw std::runtime_error("Slave input directory not found: " + rootDir.string());
-    }
-
-    const std::filesystem::path csvPath = rootDir / "slave_suffix.csv";
-    std::ifstream in(csvPath);
-    if (!in.is_open()) {
-        throw std::runtime_error("Failed to open slave CSV: " + csvPath.string());
-    }
-
-    SlaveDataset dataset;
-    dataset.csvPath = csvPath;
-
-    std::string line;
-    bool sawHeader = false;
-    while (std::getline(in, line)) {
-        if (!line.empty() && line.back() == '\r') {
-            line.pop_back();
-        }
-
-        const std::string trimmed = Trim(line);
-        if (trimmed.empty() || trimmed[0] == '#') {
-            continue;
-        }
-
-        if (!sawHeader) {
-            const auto headerCells = SplitCsvLine(trimmed);
-            if (headerCells.size() < static_cast<size_t>(2 + Frame::kSlaveSuffixWords) ||
-                headerCells.front() != "Frame") {
-                throw std::runtime_error("Unexpected slave CSV header: " + csvPath.string());
-            }
-            sawHeader = true;
-            continue;
-        }
-
-        const auto cells = SplitCsvLine(trimmed);
-        if (cells.size() < static_cast<size_t>(2 + Frame::kSlaveSuffixWords)) {
-            throw std::runtime_error("Slave CSV row has insufficient columns: " + csvPath.string());
-        }
-
-        const auto frameIndex = ParseFrameIndex(cells[0]);
-        if (!frameIndex.has_value() || *frameIndex != dataset.rawFrames.size()) {
-            throw std::runtime_error("Slave CSV Frame column is not contiguous 0..N-1: " + csvPath.string());
-        }
-
-        std::vector<uint8_t> rawFrame(static_cast<size_t>(Frame::kSlaveFrameSize), 0);
-        for (int word = 0; word < Frame::kSlaveSuffixWords; ++word) {
-            int value = 0;
-            if (!TryParseInt(cells[static_cast<size_t>(word + 2)], value)) {
-                throw std::runtime_error("Invalid slave suffix value in " + csvPath.string());
-            }
-
-            const uint16_t wordValue = static_cast<uint16_t>(std::clamp(value, 0, 0xFFFF));
-            const size_t byteOffset = static_cast<size_t>(Frame::kHeaderBytes + word * 2);
-            rawFrame[byteOffset] = static_cast<uint8_t>(wordValue & 0xFFu);
-            rawFrame[byteOffset + 1] = static_cast<uint8_t>((wordValue >> 8) & 0xFFu);
-        }
-
-        dataset.rawFrames.push_back(std::move(rawFrame));
-    }
-
-    if (!sawHeader) {
-        throw std::runtime_error("Missing slave CSV header: " + csvPath.string());
-    }
-    if (dataset.rawFrames.empty()) {
-        throw std::runtime_error("No slave frames found in: " + csvPath.string());
-    }
-
-    return dataset;
 }
 
 std::vector<size_t> BuildReplaySequence(size_t frameCount) {
@@ -641,6 +696,8 @@ Solvers::HeatmapFrame PrepareTouchFrame(const Solvers::HeatmapFrame& sourceFrame
     frame.contacts.clear();
     frame.touchPackets = {};
     frame.stylus = Solvers::StylusFrameData{};
+    frame.rawPtr = nullptr;
+    frame.rawLen = 0;
     frame.masterWasRead = true;
     return frame;
 }
@@ -698,29 +755,23 @@ void PrintPriorityStatus(const PriorityStatus& status) {
 RunStats RunBenchmark(BenchmarkMode mode,
                       const Options& options,
                       const std::filesystem::path& configPath,
-                      const MasterDataset& masterDataset,
-                      const SlaveDataset& slaveDataset) {
+                      const DvrDataset& dataset) {
     if (mode == BenchmarkMode::Both) {
         throw std::runtime_error("RunBenchmark does not accept mode=both");
-    }
-
-    if (mode == BenchmarkMode::Linked &&
-        masterDataset.frames.size() != slaveDataset.rawFrames.size()) {
-        throw std::runtime_error("linked mode requires master/slave frame counts to match");
     }
 
     Solvers::TouchPipeline touchPipeline;
     Solvers::StylusPipeline stylusPipeline;
     LoadConfigFromFile(touchPipeline, stylusPipeline, configPath);
 
-    const std::vector<size_t> masterSequence = BuildReplaySequence(masterDataset.frames.size());
-    const std::vector<size_t> slaveSequence = BuildReplaySequence(slaveDataset.rawFrames.size());
+    const std::vector<size_t> sequence = BuildReplaySequence(dataset.frames.size());
 
     RunStats stats;
     stats.modeName = BenchmarkModeName(mode);
     stats.benchmarkFrames = options.frames;
-    stats.sourceMasterFrames = masterDataset.frames.size();
-    stats.sourceSlaveFrames = slaveDataset.rawFrames.size();
+    stats.sourceFrames = dataset.frames.size();
+    stats.dvrFormatVersion = dataset.formatVersion;
+    stats.dvrFlags = dataset.flags;
     stats.stylusPressure = options.stylusPressure;
 
     const auto wallStart = std::chrono::steady_clock::now();
@@ -728,81 +779,40 @@ RunStats RunBenchmark(BenchmarkMode mode,
     stats.runStart = FormatWallClock(runStart);
 
     for (int step = 0; step < options.frames; ++step) {
-        if (mode == BenchmarkMode::Linked) {
-            const size_t replayIndex = masterSequence[static_cast<size_t>(step) % masterSequence.size()];
-            const auto& slaveRaw = slaveDataset.rawFrames[replayIndex];
+        const size_t replayIndex = sequence[static_cast<size_t>(step) % sequence.size()];
+        const auto& sample = dataset.frames[replayIndex];
 
-            // Build a synthetic combined frame: kMasterBytes zeros + slave raw data
-            static constexpr size_t kMasterBytes = 5063;
-            std::vector<uint8_t> combined(kMasterBytes + slaveRaw.size(), 0);
-            std::memcpy(combined.data() + kMasterBytes, slaveRaw.data(), slaveRaw.size());
+        Solvers::HeatmapFrame stylusFrame;
+        stylusFrame.rawPtr = sample.rawFrame.data();
+        stylusFrame.rawLen = sample.rawFrame.size();
 
-            Solvers::HeatmapFrame stylusFrame;
-            stylusFrame.rawPtr = combined.data();
-            stylusFrame.rawLen = combined.size();
+        const auto slaveBegin = std::chrono::steady_clock::now();
+        stylusPipeline.SetBtMcuPressure(static_cast<uint16_t>(options.stylusPressure));
+        const bool slaveOk = stylusPipeline.Process(stylusFrame);
+        const auto slaveEnd = std::chrono::steady_clock::now();
 
-            const auto slaveBegin = std::chrono::steady_clock::now();
-            stylusPipeline.SetBtMcuPressure(static_cast<uint16_t>(options.stylusPressure));
-            const bool slaveOk = stylusPipeline.Process(stylusFrame);
-            const auto slaveEnd = std::chrono::steady_clock::now();
-
-            stats.slaveProcessedFrames++;
-            if (!slaveOk) {
-                stats.slaveFailedFrames++;
-            }
-            stats.slaveTotalMs +=
-                std::chrono::duration<double, std::milli>(slaveEnd - slaveBegin).count();
-
-            Solvers::HeatmapFrame touchFrame = PrepareTouchFrame(masterDataset.frames[replayIndex], step);
-            touchFrame.stylus = stylusFrame.stylus;
-
-            const auto masterBegin = std::chrono::steady_clock::now();
-            const bool masterOk = touchPipeline.Process(touchFrame);
-            const auto masterEnd = std::chrono::steady_clock::now();
-
-            stats.masterProcessedFrames++;
-            if (!masterOk) {
-                stats.masterFailedFrames++;
-            }
-            stats.masterTotalMs +=
-                std::chrono::duration<double, std::milli>(masterEnd - masterBegin).count();
-        } else {
-            const size_t masterIndex = masterSequence[static_cast<size_t>(step) % masterSequence.size()];
-            const size_t slaveIndex = slaveSequence[static_cast<size_t>(step) % slaveSequence.size()];
-
-            const auto& slaveRaw = slaveDataset.rawFrames[slaveIndex];
-            static constexpr size_t kMasterBytes = 5063;
-            std::vector<uint8_t> combined(kMasterBytes + slaveRaw.size(), 0);
-            std::memcpy(combined.data() + kMasterBytes, slaveRaw.data(), slaveRaw.size());
-
-            Solvers::HeatmapFrame stylusFrame;
-            stylusFrame.rawPtr = combined.data();
-            stylusFrame.rawLen = combined.size();
-
-            const auto slaveBegin = std::chrono::steady_clock::now();
-            stylusPipeline.SetBtMcuPressure(static_cast<uint16_t>(options.stylusPressure));
-            const bool slaveOk = stylusPipeline.Process(stylusFrame);
-            const auto slaveEnd = std::chrono::steady_clock::now();
-
-            stats.slaveProcessedFrames++;
-            if (!slaveOk) {
-                stats.slaveFailedFrames++;
-            }
-            stats.slaveTotalMs +=
-                std::chrono::duration<double, std::milli>(slaveEnd - slaveBegin).count();
-
-            Solvers::HeatmapFrame touchFrame = PrepareTouchFrame(masterDataset.frames[masterIndex], step);
-            const auto masterBegin = std::chrono::steady_clock::now();
-            const bool masterOk = touchPipeline.Process(touchFrame);
-            const auto masterEnd = std::chrono::steady_clock::now();
-
-            stats.masterProcessedFrames++;
-            if (!masterOk) {
-                stats.masterFailedFrames++;
-            }
-            stats.masterTotalMs +=
-                std::chrono::duration<double, std::milli>(masterEnd - masterBegin).count();
+        stats.slaveProcessedFrames++;
+        if (!slaveOk) {
+            stats.slaveFailedFrames++;
         }
+        stats.slaveTotalMs +=
+            std::chrono::duration<double, std::milli>(slaveEnd - slaveBegin).count();
+
+        Solvers::HeatmapFrame touchFrame = PrepareTouchFrame(sample.touchFrame, step);
+        if (mode == BenchmarkMode::Linked) {
+            touchFrame.stylus = stylusFrame.stylus;
+        }
+
+        const auto masterBegin = std::chrono::steady_clock::now();
+        const bool masterOk = touchPipeline.Process(touchFrame);
+        const auto masterEnd = std::chrono::steady_clock::now();
+
+        stats.masterProcessedFrames++;
+        if (!masterOk) {
+            stats.masterFailedFrames++;
+        }
+        stats.masterTotalMs +=
+            std::chrono::duration<double, std::milli>(masterEnd - masterBegin).count();
     }
 
     const auto runEnd = std::chrono::system_clock::now();
@@ -827,14 +837,15 @@ void PrintStats(const RunStats& stats,
 
     std::cout << std::fixed << std::setprecision(3);
     std::cout << "[RawdataBenchmarkTest] mode=" << stats.modeName << "\n";
-    std::cout << "[RawdataBenchmarkTest] data_root=" << options.dataRoot.string() << "\n";
+    std::cout << "[RawdataBenchmarkTest] dataset=" << options.datasetPath.string() << "\n";
     std::cout << "[RawdataBenchmarkTest] config_ini=" << configPath.string() << "\n";
+    std::cout << "[RawdataBenchmarkTest] dvr_format_version=" << stats.dvrFormatVersion << "\n";
+    std::cout << "[RawdataBenchmarkTest] dvr_flags=" << stats.dvrFlags << "\n";
     std::cout << "[RawdataBenchmarkTest] stylus_pressure=" << stats.stylusPressure << "\n";
     std::cout << "[RawdataBenchmarkTest] run_start=" << stats.runStart << "\n";
     std::cout << "[RawdataBenchmarkTest] run_end=" << stats.runEnd << "\n";
     std::cout << "[RawdataBenchmarkTest] benchmark_frames=" << stats.benchmarkFrames << "\n";
-    std::cout << "[RawdataBenchmarkTest] source_master_frames=" << stats.sourceMasterFrames << "\n";
-    std::cout << "[RawdataBenchmarkTest] source_slave_frames=" << stats.sourceSlaveFrames << "\n";
+    std::cout << "[RawdataBenchmarkTest] source_frames=" << stats.sourceFrames << "\n";
     std::cout << "[RawdataBenchmarkTest] wall_total_ms=" << stats.wallTotalMs << "\n";
     std::cout << "[RawdataBenchmarkTest] master_total_ms=" << stats.masterTotalMs << "\n";
     std::cout << "[RawdataBenchmarkTest] master_avg_ms_per_frame=" << masterAvgMs << "\n";
@@ -853,7 +864,7 @@ int main(int argc, char** argv) {
 
         const Options options = ParseOptions(argc, argv);
         const std::filesystem::path configPath = ResolveConfigPath(options.configPath);
-        const std::filesystem::path dataRoot = ResolveDataRootPath(options.dataRoot, argv[0]);
+        const std::filesystem::path datasetPath = ResolveDatasetPath(options.datasetPath, argv[0]);
         if (configPath.empty()) {
             std::cerr << "[RawdataBenchmarkTest] config.ini not found.\n";
             PrintUsage();
@@ -861,12 +872,11 @@ int main(int argc, char** argv) {
         }
 
         Options resolvedOptions = options;
-        resolvedOptions.dataRoot = dataRoot;
+        resolvedOptions.datasetPath = datasetPath;
 
-        const MasterDataset masterDataset = LoadMasterDataset(dataRoot / "master");
-        const SlaveDataset slaveDataset = LoadSlaveDataset(dataRoot / "slave");
+        const DvrDataset dataset = LoadDvrDataset(datasetPath);
 
-        if (masterDataset.frames.size() == 480 && slaveDataset.rawFrames.size() == 480) {
+        if (dataset.frames.size() == 480) {
             const auto replay480 = BuildReplaySequence(480);
             if (replay480.size() != 960 || replay480[479] != 479 || replay480[480] != 479 ||
                 replay480[481] != 478) {
@@ -877,16 +887,16 @@ int main(int argc, char** argv) {
 
         if (options.mode == BenchmarkMode::Both) {
             const RunStats linkedStats = RunBenchmark(
-                BenchmarkMode::Linked, resolvedOptions, configPath, masterDataset, slaveDataset);
+                BenchmarkMode::Linked, resolvedOptions, configPath, dataset);
             PrintStats(linkedStats, resolvedOptions, configPath);
             std::cout << "\n";
 
             const RunStats independentStats = RunBenchmark(
-                BenchmarkMode::Independent, resolvedOptions, configPath, masterDataset, slaveDataset);
+                BenchmarkMode::Independent, resolvedOptions, configPath, dataset);
             PrintStats(independentStats, resolvedOptions, configPath);
         } else {
             const RunStats stats = RunBenchmark(
-                options.mode, resolvedOptions, configPath, masterDataset, slaveDataset);
+                options.mode, resolvedOptions, configPath, dataset);
             PrintStats(stats, resolvedOptions, configPath);
         }
 

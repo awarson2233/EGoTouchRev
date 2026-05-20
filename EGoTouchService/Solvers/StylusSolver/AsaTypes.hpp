@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 
@@ -104,6 +105,43 @@ struct AsaCoorResult {
     int32_t dim2 = 0;
     bool valid = false;
 };
+
+inline uint16_t ReadLe16(const uint8_t* ptr) {
+    return static_cast<uint16_t>(
+        static_cast<uint16_t>(ptr[0]) |
+        (static_cast<uint16_t>(ptr[1]) << 8));
+}
+
+inline AsaGridData ExtractGridFromSlavePayloadBytes(const uint8_t* bytes, std::size_t byteCount) {
+    AsaGridData out;
+    if (!bytes || byteCount < static_cast<std::size_t>(kBlockWords * 2 * sizeof(uint16_t))) {
+        return out;
+    }
+
+    out.tx1.anchorRow = ReadLe16(bytes);
+    out.tx1.anchorCol = ReadLe16(bytes + sizeof(uint16_t));
+    for (int r = 0; r < kGridDim; ++r) {
+        for (int c = 0; c < kGridDim; ++c) {
+            const std::size_t wordIndex = static_cast<std::size_t>(2 + r * kGridDim + c);
+            out.tx1.grid[r][c] = static_cast<int16_t>(ReadLe16(bytes + wordIndex * sizeof(uint16_t)));
+        }
+    }
+    out.tx1.valid = (out.tx1.anchorRow != kAnchorInvalid) ||
+                    (out.tx1.anchorCol != kAnchorInvalid);
+
+    const uint8_t* tx2 = bytes + static_cast<std::size_t>(kBlockWords * sizeof(uint16_t));
+    out.tx2.anchorRow = ReadLe16(tx2);
+    out.tx2.anchorCol = ReadLe16(tx2 + sizeof(uint16_t));
+    for (int r = 0; r < kGridDim; ++r) {
+        for (int c = 0; c < kGridDim; ++c) {
+            const std::size_t wordIndex = static_cast<std::size_t>(2 + r * kGridDim + c);
+            out.tx2.grid[r][c] = static_cast<int16_t>(ReadLe16(tx2 + wordIndex * sizeof(uint16_t)));
+        }
+    }
+    out.tx2.valid = out.tx1.valid;
+
+    return out;
+}
 
 inline AsaGridData ExtractGridFromSlaveWords(const uint16_t* words, int wordCount) {
     AsaGridData out;

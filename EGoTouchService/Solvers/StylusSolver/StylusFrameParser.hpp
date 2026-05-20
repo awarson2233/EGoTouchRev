@@ -101,13 +101,9 @@ public:
             return true;
         }
 
-        std::array<uint16_t, kSlaveWordCount> words{};
         const uint8_t* wordPtr = slave + Asa::kSlaveHeaderBytes;
-        for (std::size_t i = 0; i < kSlaveWordCount; ++i) {
-            words[i] = ReadLe16(wordPtr + i * sizeof(uint16_t));
-        }
-
-        rawGrid.asaGrid = Asa::ExtractGridFromSlaveWords(words.data(), static_cast<int>(words.size()));
+        rawGrid.asaGrid = Asa::ExtractGridFromSlavePayloadBytes(
+            wordPtr, kSlaveWordCount * sizeof(uint16_t));
         parse.hasCurrentStylusSignal = true;
         stylus.input.tx1BlockValid = rawGrid.asaGrid.tx1.valid;
         stylus.input.tx2BlockValid = rawGrid.asaGrid.tx2.valid;

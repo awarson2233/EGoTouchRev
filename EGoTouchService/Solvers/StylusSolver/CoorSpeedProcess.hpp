@@ -16,6 +16,7 @@ public:
     inline void Reset() {
         m_xHistory.fill(kInvalidCoord);
         m_yHistory.fill(kInvalidCoord);
+        m_historyHead = 0;
         m_historyCount = 0;
         m_prevPressureActive = false;
     }
@@ -33,30 +34,20 @@ public:
         // Mirror TSACore GetRealTimeCoor2Buf/GetCoorSpeed: speed is derived from the
         // raw mapped coordinate history, not from the already filtered post chain.
         // That keeps IIR coefficient selection from being biased by earlier smoothing.
-        for (int i = kHistorySize - 1; i > 0; --i) {
-            m_xHistory[static_cast<std::size_t>(i)] = m_xHistory[static_cast<std::size_t>(i - 1)];
-            m_yHistory[static_cast<std::size_t>(i)] = m_yHistory[static_cast<std::size_t>(i - 1)];
-        }
-        m_xHistory[0] = coor.dim1;
-        m_yHistory[0] = coor.dim2;
-        if (m_historyCount < kHistorySize) {
-            ++m_historyCount;
-        }
+        PushHistory(coor.dim1, coor.dim2);
 
         // ── Pairwise distance accumulation (TSACore GetCoorSpeed loop) ──
         int cumulativeDistX10 = 0;  // local_14: sum of sqrt(dx²+dy²)*100, scaled x10
         int lastValidIdx = 0;
 
         for (int c = 1; c < m_historyCount; ++c) {
-            if (m_xHistory[static_cast<std::size_t>(c)] == kInvalidCoord) {
+            if (HistoryX(c) == kInvalidCoord) {
                 continue;  // skip invalid sentinel
             }
             lastValidIdx = c;
 
-            const int32_t dx = m_xHistory[static_cast<std::size_t>(c - 1)] -
-                               m_xHistory[static_cast<std::size_t>(c)];
-            const int32_t dy = m_yHistory[static_cast<std::size_t>(c - 1)] -
-                               m_yHistory[static_cast<std::size_t>(c)];
+            const int32_t dx = HistoryX(c - 1) - HistoryX(c);
+            const int32_t dy = HistoryY(c - 1) - HistoryY(c);
 
             // sqrt((dx² + dy²) * 100)
             const double dist = std::sqrt(static_cast<double>(
@@ -74,14 +65,8 @@ public:
             return;
         }
 
-        // First-to-current distance
-        const int32_t dxFirst = m_xHistory[0] - m_xHistory[static_cast<std::size_t>(lastValidIdx)];
-        const int32_t dyFirst = m_yHistory[0] - m_yHistory[static_cast<std::size_t>(lastValidIdx)];
-        int instantDist = static_cast<int>(
-            std::sqrt(static_cast<double>(
-                static_cast<int64_t>(dxFirst) * dxFirst +
-                static_cast<int64_t>(dyFirst) * dyFirst) * 100.0));
-        if (instantDist == 0) instantDist = 1;
+        const int32_t dxFirst = HistoryX(0) - HistoryX(lastValidIdx);
+        const int32_t dyFirst = HistoryY(0) - HistoryY(lastValidIdx);
 
         // Cumulative distance (÷10)
         const int cumDist = (cumulativeDistX10 > 0) ? cumulativeDistX10 / 10 : 1;
@@ -93,10 +78,8 @@ public:
         if (lastValidIdx > 3) {
             int dist3X10 = 0;
             for (int c = 1; c <= 3; ++c) {
-                const int32_t dx = m_xHistory[static_cast<std::size_t>(c - 1)] -
-                                   m_xHistory[static_cast<std::size_t>(c)];
-                const int32_t dy = m_yHistory[static_cast<std::size_t>(c - 1)] -
-                                   m_yHistory[static_cast<std::size_t>(c)];
+                const int32_t dx = HistoryX(c - 1) - HistoryX(c);
+                const int32_t dy = HistoryY(c - 1) - HistoryY(c);
                 dist3X10 += static_cast<int>(std::sqrt(static_cast<double>(
                     static_cast<int64_t>(dx) * dx + static_cast<int64_t>(dy) * dy) * 100.0));
             }
@@ -110,9 +93,9 @@ public:
 
         // Speed value: 1-frame instant distance (drives IIR coefficient selection)
         int speedInstant = 0;
-        if (m_historyCount >= 2 && m_xHistory[1] != kInvalidCoord) {
-            const int32_t dx = m_xHistory[0] - m_xHistory[1];
-            const int32_t dy = m_yHistory[0] - m_yHistory[1];
+        if (m_historyCount >= 2 && HistoryX(1) != kInvalidCoord) {
+            const int32_t dx = HistoryX(0) - HistoryX(1);
+            const int32_t dy = HistoryY(0) - HistoryY(1);
             speedInstant = static_cast<int>(std::sqrt(static_cast<double>(
                 static_cast<int64_t>(dx) * dx + static_cast<int64_t>(dy) * dy) * 100.0)) / 10;
         }
@@ -127,8 +110,32 @@ private:
 
     std::array<int32_t, kHistorySize> m_xHistory{};
     std::array<int32_t, kHistorySize> m_yHistory{};
+    int m_historyHead = 0;
     int m_historyCount = 0;
     bool m_prevPressureActive = false;
+
+    inline void PushHistory(int32_t x, int32_t y) {
+        if (m_historyCount != 0) {
+            m_historyHead = (m_historyHead + kHistorySize - 1) % kHistorySize;
+        }
+        m_xHistory[static_cast<std::size_t>(m_historyHead)] = x;
+        m_yHistory[static_cast<std::size_t>(m_historyHead)] = y;
+        if (m_historyCount < kHistorySize) {
+            ++m_historyCount;
+        }
+    }
+
+    inline std::size_t HistoryIndex(int logicalIndex) const {
+        return static_cast<std::size_t>((m_historyHead + logicalIndex) % kHistorySize);
+    }
+
+    inline int32_t HistoryX(int logicalIndex) const {
+        return m_xHistory[HistoryIndex(logicalIndex)];
+    }
+
+    inline int32_t HistoryY(int logicalIndex) const {
+        return m_yHistory[HistoryIndex(logicalIndex)];
+    }
 };
 
 } // namespace Solvers::Stylus

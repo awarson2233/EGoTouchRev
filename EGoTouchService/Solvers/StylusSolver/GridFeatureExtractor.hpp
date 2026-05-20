@@ -50,12 +50,16 @@ private:
     using Axis = int32_t[Asa::kGridDim];
     static constexpr int kFactoryTx2SeedThreshold = 99; // Original GetGridTx2Peaks accepts reduced TX2 cells only when value > 99.
     static constexpr int kFactoryTx2RegionFloor = 100;
-    struct FourNeighborList { std::array<uint8_t, 4> indices{}; uint8_t count = 0; };
+    struct FourNeighborList { std::array<uint8_t, 4> indices; uint8_t count; };
     struct PeakRegion {
         int peakRow = -1, peakCol = -1, minRow = 0, maxRow = 0, minCol = 0, maxCol = 0, cellCount = 0;
         int32_t peakValue = 0, regionSum = 0, sum3x3 = 0, refinedDim1 = 0, refinedDim2 = 0;
         bool valid = false;
         std::array<uint8_t, Asa::kGridSize> cells{};
+    };
+
+    struct ProjectionBounds {
+        int minRow = 0, maxRow = 0, minCol = 0, maxCol = 0;
     };
 
     struct LinePeakCandidate { int peakIdx = -1, leftBoundary = 0, rightBoundary = 0, age = 0; int32_t netSignal = 0, regionEnergy = 0; };
@@ -66,15 +70,19 @@ private:
 
     LinePeakTable m_prevLinePeaksDim1{};
     LinePeakTable m_prevLinePeaksDim2{};
-    static inline FourNeighborList GetFourNeighbors(int idx) {
-        FourNeighborList list{};
-        const int r = idx / Asa::kGridDim, c = idx % Asa::kGridDim;
-        if (r > 0) list.indices[list.count++] = static_cast<uint8_t>(idx - Asa::kGridDim);
-        if (r + 1 < Asa::kGridDim) list.indices[list.count++] = static_cast<uint8_t>(idx + Asa::kGridDim);
-        if (c > 0) list.indices[list.count++] = static_cast<uint8_t>(idx - 1);
-        if (c + 1 < Asa::kGridDim) list.indices[list.count++] = static_cast<uint8_t>(idx + 1);
-        return list;
-    }
+
+    static constexpr std::array<FourNeighborList, Asa::kGridSize> kFourNeighbors = [] {
+        std::array<FourNeighborList, Asa::kGridSize> table{};
+        for (int idx = 0; idx < Asa::kGridSize; ++idx) {
+            auto& list = table[static_cast<std::size_t>(idx)];
+            const int r = idx / Asa::kGridDim, c = idx % Asa::kGridDim;
+            if (r > 0) list.indices[list.count++] = static_cast<uint8_t>(idx - Asa::kGridDim);
+            if (r + 1 < Asa::kGridDim) list.indices[list.count++] = static_cast<uint8_t>(idx + Asa::kGridDim);
+            if (c > 0) list.indices[list.count++] = static_cast<uint8_t>(idx - 1);
+            if (c + 1 < Asa::kGridDim) list.indices[list.count++] = static_cast<uint8_t>(idx + 1);
+        }
+        return table;
+    }();
 
     static inline int32_t NonNegative(int32_t value) { return std::max<int32_t>(value, 0); }
     static inline std::size_t GridIndex(int row, int col) { return static_cast<std::size_t>(row * Asa::kGridDim + col); }
@@ -115,7 +123,8 @@ private:
         uint16_t peakIndex = 1;
         for (int idx = 0; idx < Asa::kGridSize; ++idx) {
             if (shouldSkip(idx) || !IsGridPeak(searchGrid, peakFlags, idx, seedThreshold)) continue;
-            PeakRegion region = SeedPeakRegion(searchGrid, idx);
+            PeakRegion region;
+            InitPeakRegion(region, searchGrid, idx);
             peakFlags[static_cast<std::size_t>(idx)] = peakIndex;
             GrowPeakRegion(searchGrid, peakFlags, peakIndex, regionFloor, region);
             onRegion(region, peakIndex);
@@ -132,7 +141,8 @@ private:
         }
         Grid searchGrid{};
         CopyGrid(block, searchGrid, out.grid);
-        PeakRegion best{};
+        PeakRegion best;
+        best.valid = false;
         ScanPeakRegions(searchGrid, peakFlagsOut, m_tx1PeakSeedThreshold, m_peakRegionFloor, [](int) { return false; },
                         [&](PeakRegion& region, uint16_t) {
                             if (region.cellCount >= m_maxConnected) {
@@ -140,7 +150,7 @@ private:
                                 return;
                             }
                             region.sum3x3 = Calc3x3Sum(searchGrid, region.peakRow, region.peakCol);
-                            if (!best.valid || region.peakValue >= best.peakValue) best = region;
+                            if (!best.valid || region.peakValue >= best.peakValue) CopyPeakRegionSummary(best, region);
                         });
         CopyGrid(searchGrid, out.grid);
         if (!best.valid) {
@@ -159,17 +169,36 @@ private:
         CopyGrid(tx1SearchGrid, tx1Linear);
         CopyGrid(block, tx2Search, out.grid);
         ReduceTx2DataByTx1Peaks(tx1Linear, tx2Search);
-        PeakFlags peakFlags{};
-        ScanPeakRegions(tx2Search, peakFlags, kFactoryTx2SeedThreshold, kFactoryTx2RegionFloor,
-                        [&](int idx) { return tx1PeakFlags[static_cast<std::size_t>(idx)] >= 0x81; },
-                        [&](PeakRegion& region, uint16_t peakIndex) {
-                            UpdatePeakData(region, tx2Search);
-                            UpdateRefinedPos(region, tx2Search);
-                            region.sum3x3 = Calc3x3Sum(tx2Search, region.peakRow, region.peakCol);
-                            UpdateTx2PeakTable(region, peakIndex, out.peakTable);
-                        });
+        ScanTx2PeakRegions(tx2Search, tx1PeakFlags, out.peakTable);
         CopyGrid(tx2Search, out.grid);
         ExportStrongestTx2Peak(out);
+    }
+
+    inline void ScanTx2PeakRegions(Grid& tx2Search,
+                                   const PeakFlags& tx1PeakFlags,
+                                   Asa::GridPeakTable& peakTable) const {
+        PeakFlags peakFlags{};
+        uint16_t peakIndex = 1;
+        for (int idx = 0; idx < Asa::kGridSize; ++idx) {
+            const std::size_t uidx = static_cast<std::size_t>(idx);
+            if (peakFlags[uidx] != 0) continue;
+
+            const int32_t value = tx2Search[uidx];
+            if (value <= kFactoryTx2SeedThreshold) continue;
+            if (tx1PeakFlags[uidx] >= 0x81) continue;
+            if (!IsGridPeakNeighborMax(tx2Search, idx, value)) continue;
+
+            PeakRegion region;
+            InitPeakRegion(region, tx2Search, idx);
+            peakFlags[uidx] = peakIndex;
+            GrowPeakRegion(tx2Search, peakFlags, peakIndex, kFactoryTx2RegionFloor, region);
+            UpdatePeakData(region, tx2Search);
+            UpdateRefinedPos(region, tx2Search);
+            region.sum3x3 = Calc3x3Sum(tx2Search, region.peakRow, region.peakCol);
+            UpdateTx2PeakTable(region, peakIndex, peakTable);
+
+            if (peakIndex < 0x7fff) ++peakIndex;
+        }
     }
 
     static inline void ReduceTx2DataByTx1Peaks(const Grid& tx1Search, Grid& tx2Search) {
@@ -181,10 +210,15 @@ private:
     }
 
     inline bool IsGridPeak(const Grid& grid, const PeakFlags& peakFlags, int idx, int seedThreshold) const {
+        const std::size_t uidx = static_cast<std::size_t>(idx);
+        const int32_t value = grid[uidx];
+        if (peakFlags[uidx] != 0 || value <= seedThreshold) return false;
+        return IsGridPeakNeighborMax(grid, idx, value);
+    }
+
+    inline bool IsGridPeakNeighborMax(const Grid& grid, int idx, int32_t value) const {
         const int row = idx / Asa::kGridDim, col = idx % Asa::kGridDim;
-        const int32_t value = grid[static_cast<std::size_t>(idx)];
         const auto at = [&](int offset) { return grid[static_cast<std::size_t>(idx + offset)]; };
-        if (peakFlags[static_cast<std::size_t>(idx)] != 0 || value <= seedThreshold) return false;
         if (col > 0 && (at(-1) >= value || (row > 0 && at(-Asa::kGridDim - 1) >= value) ||
                         (row + 1 < Asa::kGridDim && at(Asa::kGridDim - 1) >= value))) return false;
         if (col + 1 < Asa::kGridDim && (at(1) > value || (row > 0 && at(-Asa::kGridDim + 1) > value) ||
@@ -192,15 +226,33 @@ private:
         return !(row > 0 && at(-Asa::kGridDim) >= value) && !(row + 1 < Asa::kGridDim && at(Asa::kGridDim) > value);
     }
 
-    static inline PeakRegion SeedPeakRegion(const Grid& grid, int idx) {
-        PeakRegion region{};
+    static inline void InitPeakRegion(PeakRegion& region, const Grid& grid, int idx) {
         region.valid = true;
         region.peakRow = region.minRow = region.maxRow = idx / Asa::kGridDim;
         region.peakCol = region.minCol = region.maxCol = idx % Asa::kGridDim;
-        region.peakValue = region.regionSum = grid[static_cast<std::size_t>(idx)];
-        region.cells[0] = static_cast<uint8_t>(idx);
         region.cellCount = 1;
-        return region;
+        region.peakValue = grid[static_cast<std::size_t>(idx)];
+        region.regionSum = region.peakValue;
+        region.sum3x3 = 0;
+        region.refinedDim1 = 0;
+        region.refinedDim2 = 0;
+        region.cells[0] = static_cast<uint8_t>(idx);
+    }
+
+    static inline void CopyPeakRegionSummary(PeakRegion& dst, const PeakRegion& src) {
+        dst.peakRow = src.peakRow;
+        dst.peakCol = src.peakCol;
+        dst.minRow = src.minRow;
+        dst.maxRow = src.maxRow;
+        dst.minCol = src.minCol;
+        dst.maxCol = src.maxCol;
+        dst.cellCount = src.cellCount;
+        dst.peakValue = src.peakValue;
+        dst.regionSum = src.regionSum;
+        dst.sum3x3 = src.sum3x3;
+        dst.refinedDim1 = src.refinedDim1;
+        dst.refinedDim2 = src.refinedDim2;
+        dst.valid = src.valid;
     }
 
     inline bool InPeak(const Grid& grid, const PeakFlags& peakFlags, int idx, int32_t centerValue,
@@ -218,7 +270,7 @@ private:
         while (stackSize > 0) {
             const uint8_t cell = stack[static_cast<std::size_t>(--stackSize)];
             const int32_t centerValue = grid[cell];
-            const FourNeighborList neighbors = GetFourNeighbors(cell);
+            const FourNeighborList& neighbors = kFourNeighbors[cell];
             for (uint8_t i = 0; i < neighbors.count; ++i) {
                 const uint8_t next = neighbors.indices[i];
                 if (!InPeak(grid, peakFlags, next, centerValue, regionFloor, region)) continue;
@@ -369,26 +421,27 @@ private:
     }
 
     inline void ProjectTx1To1D(const Grid& grid, const PeakRegion& region, StylusGridFeature& out) {
-        PeakRegion projectionRegion = BuildProjectionRegion(region);
-        out.projection.spanDim1 = projectionRegion.maxRow - projectionRegion.minRow + 1;
-        out.projection.spanDim2 = projectionRegion.maxCol - projectionRegion.minCol + 1;
-        FillProjectionAxis(out.projection.dim1, projectionRegion.minRow, projectionRegion.maxRow,
+        const ProjectionBounds projectionBounds = BuildProjectionBounds(region);
+        out.projection.spanDim1 = projectionBounds.maxRow - projectionBounds.minRow + 1;
+        out.projection.spanDim2 = projectionBounds.maxCol - projectionBounds.minCol + 1;
+        FillProjectionAxis(out.projection.dim1, projectionBounds.minRow, projectionBounds.maxRow,
                            [&](int c, int r) { return GridAt(grid, r, c); });
-        FillProjectionAxis(out.projection.dim2, projectionRegion.minCol, projectionRegion.maxCol,
+        FillProjectionAxis(out.projection.dim2, projectionBounds.minCol, projectionBounds.maxCol,
                            [&](int r, int c) { return GridAt(grid, r, c); });
         ProcessTx1LinePeaks(out.projection);
     }
 
-    static inline PeakRegion BuildProjectionRegion(PeakRegion region) {
-        if (region.minCol == 0 || region.maxCol == Asa::kGridDim - 1) {
-            if (region.peakRow != 0) region.minRow = region.peakRow - 1;
-            if (region.peakRow != Asa::kGridDim - 1) region.maxRow = region.peakRow + 1;
+    static inline ProjectionBounds BuildProjectionBounds(const PeakRegion& region) {
+        ProjectionBounds bounds{region.minRow, region.maxRow, region.minCol, region.maxCol};
+        if (bounds.minCol == 0 || bounds.maxCol == Asa::kGridDim - 1) {
+            if (region.peakRow != 0) bounds.minRow = region.peakRow - 1;
+            if (region.peakRow != Asa::kGridDim - 1) bounds.maxRow = region.peakRow + 1;
         }
-        if (region.minRow == 0 || region.maxRow == Asa::kGridDim - 1) {
-            if (region.peakCol != 0) region.minCol = region.peakCol - 1;
-            if (region.peakCol != Asa::kGridDim - 1) region.maxCol = region.peakCol + 1;
+        if (bounds.minRow == 0 || bounds.maxRow == Asa::kGridDim - 1) {
+            if (region.peakCol != 0) bounds.minCol = region.peakCol - 1;
+            if (region.peakCol != Asa::kGridDim - 1) bounds.maxCol = region.peakCol + 1;
         }
-        return region;
+        return bounds;
     }
 
     static inline int AbsDiff(int lhs, int rhs) { return lhs > rhs ? lhs - rhs : rhs - lhs; }

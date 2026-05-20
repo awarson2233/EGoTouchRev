@@ -6,6 +6,7 @@
 #include "StylusSolver/TiltProcess.hpp"
 #include "StylusSolver/StylusPipeline.h"
 
+#include <array>
 #include <cmath>
 #include <iostream>
 #include <sstream>
@@ -62,6 +63,61 @@ void LoadFromSavedText(Solvers::StylusPipeline& pipeline, const std::string& sav
         const size_t eq = line.find('=');
         if (eq == std::string::npos) continue;
         pipeline.LoadConfig(line.substr(0, eq), line.substr(eq + 1));
+    }
+}
+
+template <std::size_t N>
+void WriteLe16(std::array<uint8_t, N>& bytes, std::size_t wordIndex, uint16_t value) {
+    bytes[wordIndex * sizeof(uint16_t)] = static_cast<uint8_t>(value & 0xFFu);
+    bytes[wordIndex * sizeof(uint16_t) + 1] = static_cast<uint8_t>(value >> 8);
+}
+
+void TestExtractGridFromSlavePayloadBytesMatchesWords() {
+    static constexpr std::size_t wordCount = static_cast<std::size_t>(Asa::kBlockWords * 2);
+    std::array<uint16_t, wordCount> words{};
+    std::array<uint8_t, wordCount * sizeof(uint16_t)> bytes{};
+
+    words[0] = 3;
+    words[1] = 4;
+    for (int r = 0; r < Asa::kGridDim; ++r) {
+        for (int c = 0; c < Asa::kGridDim; ++c) {
+            words[static_cast<std::size_t>(2 + r * Asa::kGridDim + c)] =
+                static_cast<uint16_t>(100 + r * Asa::kGridDim + c);
+        }
+    }
+
+    const std::size_t tx2Base = static_cast<std::size_t>(Asa::kBlockWords);
+    words[tx2Base] = 7;
+    words[tx2Base + 1] = 8;
+    for (int r = 0; r < Asa::kGridDim; ++r) {
+        for (int c = 0; c < Asa::kGridDim; ++c) {
+            words[tx2Base + static_cast<std::size_t>(2 + r * Asa::kGridDim + c)] =
+                static_cast<uint16_t>(1000 + r * Asa::kGridDim + c);
+        }
+    }
+
+    for (std::size_t i = 0; i < words.size(); ++i) {
+        WriteLe16(bytes, i, words[i]);
+    }
+
+    const Asa::AsaGridData fromWords = Asa::ExtractGridFromSlaveWords(words.data(), static_cast<int>(words.size()));
+    const Asa::AsaGridData fromBytes = Asa::ExtractGridFromSlavePayloadBytes(bytes.data(), bytes.size());
+
+    Require(fromBytes.tx1.valid == fromWords.tx1.valid &&
+            fromBytes.tx2.valid == fromWords.tx2.valid,
+            "byte and word grid extractors should agree on validity");
+    Require(fromBytes.tx1.anchorRow == fromWords.tx1.anchorRow &&
+            fromBytes.tx1.anchorCol == fromWords.tx1.anchorCol &&
+            fromBytes.tx2.anchorRow == fromWords.tx2.anchorRow &&
+            fromBytes.tx2.anchorCol == fromWords.tx2.anchorCol,
+            "byte and word grid extractors should agree on anchors");
+
+    for (int r = 0; r < Asa::kGridDim; ++r) {
+        for (int c = 0; c < Asa::kGridDim; ++c) {
+            Require(fromBytes.tx1.grid[r][c] == fromWords.tx1.grid[r][c] &&
+                    fromBytes.tx2.grid[r][c] == fromWords.tx2.grid[r][c],
+                    "byte and word grid extractors should agree on grid values");
+        }
     }
 }
 
@@ -942,6 +998,7 @@ int main() {
         TestClampToSensorBounds();
         TestBypassModeResetsPostFilter();
         TestConfigRoundTrip();
+        TestExtractGridFromSlavePayloadBytesMatchesWords();
         TestGridFeatureExtractorAlignsTx2WithFactoryFlow();
         TestTx2SeedThresholdIsGreaterThanNinetyNine();
         TestTx1LinePeakFirstFrameUsesStrongestCurrentPeak();

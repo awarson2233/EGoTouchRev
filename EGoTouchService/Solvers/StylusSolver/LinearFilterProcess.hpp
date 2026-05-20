@@ -34,6 +34,8 @@ public:
         m_rawY.fill(kInvalidCoord);
         m_filtX.fill(kInvalidCoord);
         m_filtY.fill(kInvalidCoord);
+        m_rawHistoryHead = 0;
+        m_filtHistoryHead = 0;
         m_anchorX = 0;
         m_anchorY = 0;
         m_prevPressureActive = false;
@@ -46,6 +48,8 @@ public:
         m_exitCnt = 0;
         m_straightCount = 0;
         m_shortCount = 0;
+        m_straightStart = 0;
+        m_shortStart = 0;
         m_shortTotalCount = 0;
         m_hasStraightLast = false;
         m_hasShortLast = false;
@@ -100,57 +104,40 @@ public:
             m_anchorY = raw.dim2;
         }
 
-        // Shift raw history right and push the latest coordinate to index 0
-        for (int i = kRawHistorySize - 1; i > 0; --i) {
-            m_rawX[i] = m_rawX[i - 1];
-            m_rawY[i] = m_rawY[i - 1];
-        }
-        m_rawX[0] = raw.dim1;
-        m_rawY[0] = raw.dim2;
-
-        if (m_historyCount < kRawHistorySize) {
-            ++m_historyCount;
-        }
+        PushRawHistory(raw.dim1, raw.dim2);
 
         // ── Get3PointAvgFilter ──
-        // Shift filtered output history
-        for (int i = kRawHistorySize - 1; i > 0; --i) {
-            m_filtX[i] = m_filtX[i - 1];
-            m_filtY[i] = m_filtY[i - 1];
-        }
-
         // 3-point moving average with sentinel guard (INT32_MAX = invalid/missing data)
         Asa::AsaCoorResult avg3{};
         if (m_historyCount >= 3) {
-            const bool x2Valid = m_rawX[2] != kInvalidCoord;
-            const bool y2Valid = m_rawY[2] != kInvalidCoord;
+            const bool x2Valid = RawX(2) != kInvalidCoord;
+            const bool y2Valid = RawY(2) != kInvalidCoord;
             avg3.valid = true;
 
             if (x2Valid) {
-                avg3.dim1 = (m_rawX[0] + m_rawX[1] + m_rawX[2]) / 3;
+                avg3.dim1 = (RawX(0) + RawX(1) + RawX(2)) / 3;
             } else {
-                avg3.dim1 = m_rawX[0];
+                avg3.dim1 = RawX(0);
             }
 
             if (y2Valid) {
-                avg3.dim2 = (m_rawY[0] + m_rawY[1] + m_rawY[2]) / 3;
+                avg3.dim2 = (RawY(0) + RawY(1) + RawY(2)) / 3;
             } else {
-                avg3.dim2 = m_rawY[0];
+                avg3.dim2 = RawY(0);
             }
         } else {
             avg3 = raw;
         }
 
-        m_filtX[0] = avg3.dim1;
-        m_filtY[0] = avg3.dim2;
+        PushFilteredHistory(avg3.dim1, avg3.dim2);
         runtime.post.postCoor = avg3;
 
         // Quadratic extrapolation prediction: 3*x0 − 3*x1 + x2
         Asa::AsaCoorResult predicted;
         if (m_historyCount >= 3) {
             predicted.valid = true;
-            predicted.dim1 = 3 * m_rawX[0] - 3 * m_rawX[1] + m_rawX[2];
-            predicted.dim2 = 3 * m_rawY[0] - 3 * m_rawY[1] + m_rawY[2];
+            predicted.dim1 = 3 * RawX(0) - 3 * RawX(1) + RawX(2);
+            predicted.dim2 = 3 * RawY(0) - 3 * RawY(1) + RawY(2);
         } else {
             predicted = avg3;
         }
@@ -302,6 +289,8 @@ private:
 
     std::array<LinearPoint, kStraightCapacity> m_straightBuf{};
     std::array<LinearPoint, kShortCapacity> m_shortBuf{};
+    int m_straightStart = 0;
+    int m_shortStart = 0;
     int m_straightCount = 0;
     int m_shortCount = 0;
     int m_shortTotalCount = 0;
@@ -334,6 +323,8 @@ private:
     std::array<int32_t, kRawHistorySize> m_rawY{};
     std::array<int32_t, kRawHistorySize> m_filtX{};
     std::array<int32_t, kRawHistorySize> m_filtY{};
+    int m_rawHistoryHead = 0;
+    int m_filtHistoryHead = 0;
     int32_t m_anchorX = 0;
     int32_t m_anchorY = 0;
     bool m_prevPressureActive = false;
@@ -359,6 +350,49 @@ private:
             return std::numeric_limits<int32_t>::max();
         }
         return static_cast<int32_t>(static_cast<int64_t>(value));
+    }
+
+    inline void PushRawHistory(int32_t x, int32_t y) {
+        if (m_historyCount != 0) {
+            m_rawHistoryHead = (m_rawHistoryHead + kRawHistorySize - 1) % kRawHistorySize;
+        }
+        m_rawX[static_cast<std::size_t>(m_rawHistoryHead)] = x;
+        m_rawY[static_cast<std::size_t>(m_rawHistoryHead)] = y;
+        if (m_historyCount < kRawHistorySize) {
+            ++m_historyCount;
+        }
+    }
+
+    inline void PushFilteredHistory(int32_t x, int32_t y) {
+        if (m_historyCount > 1) {
+            m_filtHistoryHead = (m_filtHistoryHead + kRawHistorySize - 1) % kRawHistorySize;
+        }
+        m_filtX[static_cast<std::size_t>(m_filtHistoryHead)] = x;
+        m_filtY[static_cast<std::size_t>(m_filtHistoryHead)] = y;
+    }
+
+    inline std::size_t RawHistoryIndex(int logicalIndex) const {
+        return static_cast<std::size_t>((m_rawHistoryHead + logicalIndex) % kRawHistorySize);
+    }
+
+    inline int32_t RawX(int logicalIndex) const {
+        return m_rawX[RawHistoryIndex(logicalIndex)];
+    }
+
+    inline int32_t RawY(int logicalIndex) const {
+        return m_rawY[RawHistoryIndex(logicalIndex)];
+    }
+
+    inline std::size_t StraightIndex(int logicalIndex) const {
+        return static_cast<std::size_t>((m_straightStart + logicalIndex) % kStraightCapacity);
+    }
+
+    inline const LinearPoint& StraightAt(int logicalIndex) const {
+        return m_straightBuf[StraightIndex(logicalIndex)];
+    }
+
+    inline std::size_t ShortIndex(int logicalIndex) const {
+        return static_cast<std::size_t>((m_shortStart + logicalIndex) % kShortCapacity);
     }
 
     inline void CurveLineProcess() {
@@ -394,8 +428,8 @@ private:
 
     inline void StraightLineProcess() {
         if (m_straightCount > 0) {
-            m_segStart = m_straightBuf[0];
-            m_segLast = m_straightBuf[m_straightCount - 1];
+            m_segStart = StraightAt(0);
+            m_segLast = StraightAt(m_straightCount - 1);
         }
 
         const double distSq = m_curLineFit.valid ? GetPoint2LineDisSquare(m_curLineFit, m_current) : 0.0;
@@ -465,12 +499,11 @@ private:
             return;
         }
         if (m_shortCount < kShortCapacity) {
-            m_shortBuf[m_shortCount++] = point;
+            m_shortBuf[ShortIndex(m_shortCount)] = point;
+            ++m_shortCount;
         } else {
-            for (int i = 1; i < kShortCapacity; ++i) {
-                m_shortBuf[i - 1] = m_shortBuf[i];
-            }
-            m_shortBuf[kShortCapacity - 1] = point;
+            m_shortStart = (m_shortStart + 1) % kShortCapacity;
+            m_shortBuf[ShortIndex(m_shortCount - 1)] = point;
         }
         m_shortTotalCount = std::min(m_shortTotalCount + 1, 100);
         m_prevShort = m_hasShortLast ? m_lastShort : point;
@@ -480,15 +513,15 @@ private:
 
     inline void AppendStraight(const LinearPoint& point, bool incrementCount) {
         if (m_straightCount == 0) {
+            m_straightStart = 0;
             m_straightBuf[0] = point;
             m_straightCount = 1;
         } else if (incrementCount && m_straightCount < kStraightCapacity) {
-            m_straightBuf[m_straightCount++] = point;
+            m_straightBuf[StraightIndex(m_straightCount)] = point;
+            ++m_straightCount;
         } else {
-            for (int i = 1; i < m_straightCount; ++i) {
-                m_straightBuf[i - 1] = m_straightBuf[i];
-            }
-            m_straightBuf[m_straightCount - 1] = point;
+            m_straightStart = (m_straightStart + 1) % kStraightCapacity;
+            m_straightBuf[StraightIndex(m_straightCount - 1)] = point;
         }
         RefreshStraightEndpoints();
     }
@@ -496,10 +529,13 @@ private:
     inline void TrimStraightTo(int count) {
         count = std::clamp(count, 0, kStraightCapacity);
         if (m_straightCount <= count) return;
-        const int start = m_straightCount - count;
-        for (int i = 0; i < count; ++i) {
-            m_straightBuf[i] = m_straightBuf[start + i];
+        if (count == 0) {
+            m_straightStart = 0;
+            m_straightCount = 0;
+            RefreshStraightEndpoints();
+            return;
         }
+        m_straightStart = static_cast<int>(StraightIndex(m_straightCount - count));
         m_straightCount = count;
         RefreshStraightEndpoints();
     }
@@ -509,9 +545,9 @@ private:
             m_hasStraightLast = false;
             return;
         }
-        m_prevStraight = m_straightCount > 1 ? m_straightBuf[m_straightCount - 2]
-                                             : m_straightBuf[m_straightCount - 1];
-        m_lastStraight = m_straightBuf[m_straightCount - 1];
+        m_prevStraight = m_straightCount > 1 ? StraightAt(m_straightCount - 2)
+                                             : StraightAt(m_straightCount - 1);
+        m_lastStraight = StraightAt(m_straightCount - 1);
         m_hasStraightLast = true;
     }
 
@@ -519,7 +555,7 @@ private:
         fit = {};
         if (m_straightCount <= 1) return;
 
-        const LinearPoint origin = m_straightBuf[m_straightCount - 1];
+        const LinearPoint origin = StraightAt(m_straightCount - 1);
         const int sampleCount = m_straightCount + (includeCurrentPoint ? 1 : 0);
         if (sampleCount <= 1) return;
 
@@ -540,7 +576,7 @@ private:
         };
 
         for (int i = 0; i < m_straightCount; ++i) {
-            addFitSample(m_straightBuf[i]);
+            addFitSample(StraightAt(i));
         }
         if (includeCurrentPoint) {
             addFitSample(m_current);
@@ -585,7 +621,7 @@ private:
         };
 
         for (int i = 0; i < m_straightCount; ++i) {
-            accumulateDistance(m_straightBuf[i]);
+            accumulateDistance(StraightAt(i));
         }
         if (includeCurrentPoint) {
             accumulateDistance(m_current);
@@ -646,12 +682,12 @@ private:
         if (m_straightCount < 2) {
             return std::numeric_limits<int32_t>::max();
         }
-        const LinearPoint start = m_straightBuf[0];
-        const LinearPoint last = m_straightBuf[m_straightCount - 1];
+        const LinearPoint start = StraightAt(0);
+        const LinearPoint last = StraightAt(m_straightCount - 1);
         LinearPoint second = last;
         if (AbsDiff(last.x, m_current.x) < 33 && AbsDiff(last.y, m_current.y) < 33 &&
             m_straightCount > 1) {
-            second = m_straightBuf[m_straightCount - 2];
+            second = StraightAt(m_straightCount - 2);
         }
         return GetTwoLineAngle(start, last, second, m_current);
     }
