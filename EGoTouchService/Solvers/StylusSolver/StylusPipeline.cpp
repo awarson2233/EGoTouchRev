@@ -15,6 +15,7 @@ bool StylusPipeline::Process(HeatmapFrame& frame) {
         m_postPressure.Reset();
         m_edgeCoorProcess.Reset();
         m_edgeCoorPostProcess.Reset();
+        m_noisePostProcess.Reset();
         m_linearFilterProcess.Reset();
         m_coorReviseProcess.Reset();
         m_coorSpeedProcess.Reset();
@@ -31,6 +32,7 @@ bool StylusPipeline::Process(HeatmapFrame& frame) {
         m_postPressure.Reset();
         m_edgeCoorProcess.Reset();
         m_edgeCoorPostProcess.Reset();
+        m_noisePostProcess.Reset();
         m_linearFilterProcess.Reset();
         m_coorReviseProcess.Reset();
         m_coorSpeedProcess.Reset();
@@ -47,6 +49,7 @@ bool StylusPipeline::Process(HeatmapFrame& frame) {
         m_postPressure.Reset();
         m_edgeCoorProcess.Reset();
         m_edgeCoorPostProcess.Reset();
+        m_noisePostProcess.Reset();
         m_linearFilterProcess.Reset();
         m_coorReviseProcess.Reset();
         m_coorSpeedProcess.Reset();
@@ -60,6 +63,7 @@ bool StylusPipeline::Process(HeatmapFrame& frame) {
     m_tiltProcess.Process(frame);
     m_pressureSolver.Process(frame);
     m_postPressure.Process(frame);
+    m_noisePostProcess.Process(frame);
     m_edgeCoorProcess.Process(frame);
     m_edgeCoorPostProcess.Process(frame);
     m_linearFilterProcess.Process(frame);
@@ -130,6 +134,15 @@ std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
         .Module("Data Solve");
     schema.emplace_back("sp.edgeCoorPostEnabled", "Edge Coor Post Process Enabled",
                         ConfigParam::Bool, const_cast<bool*>(&m_edgeCoorPostProcess.m_enabled))
+        .Module("Data Solve");
+    schema.emplace_back("sp.noisePostEnabled", "Noise Post Process Enabled",
+                        ConfigParam::Bool, const_cast<bool*>(&m_noisePostProcess.m_enabled))
+        .Module("Data Solve");
+    schema.emplace_back("sp.noiseSignalRatioThold", "Noise Signal Ratio Threshold",
+                        ConfigParam::Int, const_cast<int*>(reinterpret_cast<const int*>(&m_noisePostProcess.m_signalRatioThreshold)), 1.0f, 16.0f)
+        .Module("Data Solve");
+    schema.emplace_back("sp.noiseSignalDropRatio", "Noise Signal Magnitude Drop Ratio",
+                        ConfigParam::Int, const_cast<int*>(reinterpret_cast<const int*>(&m_noisePostProcess.m_signalMagnitudeDropRatio)), 1.0f, 16.0f)
         .Module("Data Solve");
     schema.emplace_back("sp.linearFilterEnabled", "Linear Filter Enabled",
                         ConfigParam::Bool, const_cast<bool*>(&m_linearFilterProcess.m_enabled))
@@ -226,6 +239,9 @@ void StylusPipeline::SaveConfig(std::ostream& out) const {
     out << "sp.signalFloor=" << m_coordinateSolver.m_signalFloor << "\n";
     out << "sp.edgeCoorEnabled=" << (m_edgeCoorProcess.m_enabled ? "1" : "0") << "\n";
     out << "sp.edgeCoorPostEnabled=" << (m_edgeCoorPostProcess.m_enabled ? "1" : "0") << "\n";
+    out << "sp.noisePostEnabled=" << (m_noisePostProcess.m_enabled ? "1" : "0") << "\n";
+    out << "sp.noiseSignalRatioThold=" << static_cast<int>(m_noisePostProcess.m_signalRatioThreshold) << "\n";
+    out << "sp.noiseSignalDropRatio=" << static_cast<int>(m_noisePostProcess.m_signalMagnitudeDropRatio) << "\n";
     out << "sp.linearFilterEnabled=" << (m_linearFilterProcess.m_enabled ? "1" : "0") << "\n";
     out << "sp.coorReviseEnabled=" << (m_coorReviseProcess.m_enabled ? "1" : "0") << "\n";
     out << "sp.coorReviseFactorDim1=" << m_coorReviseProcess.m_factorDim1 << "\n";
@@ -304,6 +320,17 @@ void StylusPipeline::LoadConfig(const std::string& key, const std::string& value
         }
     } else if (key == "sp.edgeCoorPostEnabled") {
         m_edgeCoorPostProcess.m_enabled = toBool(value);
+    } else if (key == "sp.noisePostEnabled") {
+        m_noisePostProcess.m_enabled = toBool(value);
+        if (!m_noisePostProcess.m_enabled) {
+            m_noisePostProcess.Reset();
+        }
+    } else if (key == "sp.noiseSignalRatioThold") {
+        m_noisePostProcess.m_signalRatioThreshold =
+            static_cast<uint8_t>(std::clamp(std::stoi(value), 1, 16));
+    } else if (key == "sp.noiseSignalDropRatio") {
+        m_noisePostProcess.m_signalMagnitudeDropRatio =
+            static_cast<uint8_t>(std::clamp(std::stoi(value), 1, 16));
     } else if (key == "sp.linearFilterEnabled") {
         m_linearFilterProcess.m_enabled = toBool(value);
         if (!m_linearFilterProcess.m_enabled) {

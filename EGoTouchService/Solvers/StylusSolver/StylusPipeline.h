@@ -9,6 +9,7 @@
 #include "EdgeCoorPostProcess.hpp"
 #include "EdgeCoorProcess.hpp"
 #include "GridFeatureExtractor.hpp"
+#include "Hpp3NoisePostProcess.hpp"
 #include "Hpp3PostPressureProcess.hpp"
 #include "LinearFilterProcess.hpp"
 #include "PressureSolver.hpp"
@@ -52,6 +53,7 @@ public:
     Stylus::Hpp3PostPressureProcess m_postPressure;
     Stylus::EdgeCoorProcess m_edgeCoorProcess;
     Stylus::EdgeCoorPostProcess m_edgeCoorPostProcess;
+    Stylus::Hpp3NoisePostProcess m_noisePostProcess;
     Stylus::LinearFilterProcess m_linearFilterProcess;
     Stylus::CoorReviseProcess m_coorReviseProcess;
     Stylus::CoorSpeedProcess m_coorSpeedProcess;

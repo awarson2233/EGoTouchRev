@@ -26,6 +26,9 @@ public:
     /// 注入一次橡皮擦脉冲
     bool InjectEraserPulse(POINT screenPt);
 
+    /// 注入 Win+F22 快捷键
+    bool InjectWinF22Shortcut();
+
     /// 设备是否已就绪
     bool IsReady() const { return m_device != nullptr; }
 

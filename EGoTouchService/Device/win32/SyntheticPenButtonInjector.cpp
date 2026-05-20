@@ -40,6 +40,37 @@ bool SyntheticPenButtonInjector::InjectEraserPulse(POINT screenPt) {
         0);
 }
 
+bool SyntheticPenButtonInjector::InjectWinF22Shortcut() {
+    INPUT inputs[4]{};
+
+    inputs[0].type = INPUT_KEYBOARD;
+    inputs[0].ki.wVk = VK_LWIN;
+
+    inputs[1].type = INPUT_KEYBOARD;
+    inputs[1].ki.wVk = VK_F22;
+
+    inputs[2].type = INPUT_KEYBOARD;
+    inputs[2].ki.wVk = VK_F22;
+    inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
+
+    inputs[3].type = INPUT_KEYBOARD;
+    inputs[3].ki.wVk = VK_LWIN;
+    inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
+
+    const UINT sent = SendInput(4, inputs, sizeof(INPUT));
+    if (sent != 4) {
+        const DWORD err = GetLastError();
+        LOG_WARN("SynthPenBtn", __func__, "Win32",
+                 "SendInput Win+F22 failed: sent={}, err={}",
+                 static_cast<unsigned>(sent), err);
+        return false;
+    }
+
+    LOG_INFO("SynthPenBtn", __func__, "Win32",
+             "Injected Win+F22 shortcut.");
+    return true;
+}
+
 bool SyntheticPenButtonInjector::InjectPenPulse(
         POINT screenPt, UINT32 penFlags, UINT32 extraPointerFlags) {
     if (!EnsureDevice()) return false;

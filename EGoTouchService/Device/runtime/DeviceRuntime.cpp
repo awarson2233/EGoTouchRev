@@ -501,49 +501,31 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent& ev) {
             func = m_penState.currentFunc;
         }
 
-        const auto mode = m_penButtonMode;
-        const auto route = m_penButtonRoute;
-        const bool useVhf = (route == PenButtonRoute::VhfOnly ||
-                             route == PenButtonRoute::VhfAndWin32);
-        const bool useWin32 = (route == PenButtonRoute::Win32Only ||
-                               route == PenButtonRoute::VhfAndWin32);
-
-        switch (mode) {
+        switch (m_penButtonMode) {
         case PenButtonMode::OemCustom:
-            if (useVhf) {
-                m_vhfReporter.SetBarrelButtonState(true);
-            }
+            m_vhfReporter.SetBarrelButtonState(true);
             LOG_INFO("Runtime", __func__, "MCU",
-                     "PenCurrentFunc: func={} mode=OEM route={} vhf={} win32=0",
-                     func, static_cast<int>(route), useVhf);
+                     "PenCurrentFunc: func={} mode=OEM vhf=1 win32=0",
+                     func);
             break;
 
-        case PenButtonMode::NativeBarrel:
-            if (useVhf) {
-                m_vhfReporter.SetBarrelButtonState(true);
-            }
-            if (useWin32) {
-                POINT pt{};
-                GetCursorPos(&pt);
-                m_synthPenButton.InjectBarrelPulse(pt);
-            }
+        case PenButtonMode::NativeBarrel: {
+            const bool ok = m_synthPenButton.InjectWinF22Shortcut();
             LOG_INFO("Runtime", __func__, "MCU",
-                     "PenCurrentFunc: func={} mode=Barrel route={} vhf={} win32={}",
-                     func, static_cast<int>(route), useVhf, useWin32);
+                     "PenCurrentFunc: func={} mode=Barrel shortcut=Win+F22 win32={}",
+                     func, ok ? 1 : 0);
             break;
+        }
 
-        case PenButtonMode::NativeEraser:
-            if (useWin32) {
-                POINT pt{};
-                GetCursorPos(&pt);
-                m_synthPenButton.InjectEraserPulse(pt);
-            }
-            int f = func;
-            int w32 = useWin32 ? 1 : 0;
+        case PenButtonMode::NativeEraser: {
+            POINT pt{};
+            GetCursorPos(&pt);
+            const bool ok = m_synthPenButton.InjectEraserPulse(pt);
             LOG_INFO("Runtime", __func__, "MCU",
                      "PenCurrentFunc: func={} mode=Eraser vhf=0 win32={}",
-                     f, w32);
+                     func, ok ? 1 : 0);
             break;
+        }
         }
         break;
     }

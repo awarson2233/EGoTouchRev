@@ -49,7 +49,7 @@ public:
         }
         m_prevPressure = runtime.pressure.outputPressure;
 
-        if (!tilt.valid || runtime.pressure.outputPressure == 0) {
+        if (!tilt.valid) {
 #if EGOTOUCH_DIAG
             runtime.post.coorReviseActive = false;
             runtime.post.coorReviseCorrectionDim1 = 0;
@@ -76,6 +76,12 @@ public:
             PushOffset(rawOffsetDim1, rawOffsetDim2);
             m_smoothedOffsetDim1 = GetAverage(5, 0);
             m_smoothedOffsetDim2 = GetAverage(5, 1);
+        } else {
+            // Hover: use raw tilt offset directly (no smoothing)
+            // TSACore CoorReviseCalculation stores raw values when pressure==0,
+            // and CoorReviseWork always applies g_coorReviseX/Y regardless.
+            m_smoothedOffsetDim1 = rawOffsetDim1;
+            m_smoothedOffsetDim2 = rawOffsetDim2;
         }
 
         const int32_t maxDim1 = m_sensorDim1Count * Asa::kCoorUnit;
