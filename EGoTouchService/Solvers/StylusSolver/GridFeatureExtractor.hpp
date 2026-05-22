@@ -72,7 +72,7 @@ private:
         int validMax = Asa::kGridDim - 1;
     };
 
-    struct LinePeakCandidate { int peakIdx = -1, leftBoundary = 0, rightBoundary = 0, age = 0; int32_t netSignal = 0, regionEnergy = 0; };
+    struct LinePeakCandidate { int peakIdx = -1, globalPeakIdx = -1, leftBoundary = 0, rightBoundary = 0, age = 0; int32_t netSignal = 0, regionEnergy = 0; };
     struct LinePeakTable {
         std::array<LinePeakCandidate, 4> peaks{};
         int count = 0, strongestByNet = -1, largestByEnergy = -1, weakestByNet = -1, selectedByRank = -1;
@@ -203,7 +203,9 @@ private:
             return;
         }
         ExportPrimaryPeak(best, out);
-        ProjectTx1To1D(searchGrid, best, out, dim2Edge, dim1Edge);
+        ProjectTx1To1D(searchGrid, best, out, dim2Edge, dim1Edge,
+                       static_cast<int>(block.anchorCol) - kAnchorCenterOffset,
+                       static_cast<int>(block.anchorRow) - kAnchorCenterOffset);
     }
 
     inline void AnalyzeTx2BlockFromTx1(const Grid2D& tx1SearchGrid, const PeakFlags& tx1PeakFlags,
@@ -508,7 +510,9 @@ private:
                                const PeakRegion& region,
                                StylusGridFeature& out,
                                const AxisEdgeGeometry& rowEdge,
-                               const AxisEdgeGeometry& colEdge) {
+                               const AxisEdgeGeometry& colEdge,
+                               int dim1GlobalOffset,
+                               int dim2GlobalOffset) {
         const ProjectionBounds projectionBounds = BuildProjectionBounds(region, rowEdge, colEdge);
         out.projection.spanDim1 = projectionBounds.maxRow - projectionBounds.minRow + 1;
         out.projection.spanDim2 = projectionBounds.maxCol - projectionBounds.minCol + 1;
@@ -516,7 +520,7 @@ private:
                            [&](int c, int r) { return GridAt(grid, r, c); });
         FillProjectionAxis(out.projection.dim2, projectionBounds.minCol, projectionBounds.maxCol,
                            [&](int r, int c) { return GridAt(grid, r, c); });
-        ProcessTx1LinePeaks(out, colEdge, rowEdge);
+        ProcessTx1LinePeaks(out, colEdge, rowEdge, dim1GlobalOffset, dim2GlobalOffset);
     }
 
     static inline ProjectionBounds BuildProjectionBounds(const PeakRegion& region,
@@ -546,11 +550,17 @@ private:
         return table.peaks[static_cast<std::size_t>(slot)].peakIdx;
     }
 
+    static inline int GetSelectedLinePeakGlobalIdx(const LinePeakTable& table) {
+        const int slot = table.selectedByRank >= 0 ? table.selectedByRank : table.strongestByNet;
+        if (slot < 0 || slot >= table.count) return -1;
+        return table.peaks[static_cast<std::size_t>(slot)].globalPeakIdx;
+    }
+
     static inline void ApplyLinePeakHistory(LinePeakTable& current, const LinePeakTable& previous) {
         current.selectedByRank = -1;
         if (current.count == 0) return;
         if (previous.count == 0) { current.selectedByRank = current.strongestByNet; return; }
-        const int previousSelectedIdx = GetSelectedLinePeakIdx(previous);
+        const int previousSelectedIdx = GetSelectedLinePeakGlobalIdx(previous);
         const int strongestNet = current.strongestByNet >= 0
                                       ? std::max(current.peaks[static_cast<std::size_t>(current.strongestByNet)].netSignal, 1)
                                       : 1;
@@ -559,12 +569,12 @@ private:
             auto& candidate = current.peaks[static_cast<std::size_t>(i)];
             candidate.age = 0;
             const int distanceFromPreviousSelection = previousSelectedIdx >= 0
-                                                          ? AbsDiff(candidate.peakIdx, previousSelectedIdx) * Asa::kCoorUnit
+                                                          ? AbsDiff(candidate.globalPeakIdx, previousSelectedIdx) * Asa::kCoorUnit
                                                           : 0;
             int matchedAge = 0;
             for (int j = 0; j < previous.count; ++j) {
                 const auto& prev = previous.peaks[static_cast<std::size_t>(j)];
-                if (AbsDiff(candidate.peakIdx, prev.peakIdx) > 2) continue;
+                if (AbsDiff(candidate.globalPeakIdx, prev.globalPeakIdx) > 2) continue;
                 matchedAge = std::max(matchedAge, prev.age + 1);
             }
             candidate.age = std::min(matchedAge, 0xFFF5);
@@ -579,8 +589,8 @@ private:
         if (current.selectedByRank < 0) current.selectedByRank = current.strongestByNet;
     }
     
-    inline LinePeakCandidate ProcessTx1LinePeakAxis(const Axis& signal, LinePeakTable& previous) {
-        LinePeakTable current = SearchLinePeaks(signal);
+    inline LinePeakCandidate ProcessTx1LinePeakAxis(const Axis& signal, LinePeakTable& previous, int globalOffset) {
+        LinePeakTable current = SearchLinePeaks(signal, globalOffset);
         ApplyLinePeakHistory(current, previous);
         LinePeakCandidate selected{};
         const int selectedSlot = current.selectedByRank >= 0 ? current.selectedByRank : current.strongestByNet;
@@ -593,9 +603,11 @@ private:
 
     inline void ProcessTx1LinePeaks(StylusGridFeature& out,
                                     const AxisEdgeGeometry& dim1Edge,
-                                    const AxisEdgeGeometry& dim2Edge) {
-        LinePeakCandidate dim1Peak = ProcessTx1LinePeakAxis(out.projection.dim1, m_prevLinePeaksDim1);
-        LinePeakCandidate dim2Peak = ProcessTx1LinePeakAxis(out.projection.dim2, m_prevLinePeaksDim2);
+                                    const AxisEdgeGeometry& dim2Edge,
+                                    int dim1GlobalOffset,
+                                    int dim2GlobalOffset) {
+        LinePeakCandidate dim1Peak = ProcessTx1LinePeakAxis(out.projection.dim1, m_prevLinePeaksDim1, dim1GlobalOffset);
+        LinePeakCandidate dim2Peak = ProcessTx1LinePeakAxis(out.projection.dim2, m_prevLinePeaksDim2, dim2GlobalOffset);
         out.projection.peakIdxDim1 = dim1Peak.peakIdx;
         out.projection.peakIdxDim2 = dim2Peak.peakIdx;
         out.dim1SelectedPeakNetSignal = static_cast<uint16_t>(std::clamp(dim1Peak.netSignal, 0, 0xFFFF));
@@ -604,7 +616,7 @@ private:
         out.dim2SelectedPeakOnEdge = IsPhysicalEdge(dim2Peak.peakIdx, dim2Edge);
     }
 
-    inline LinePeakTable SearchLinePeaks(const Axis& signal) const {
+    inline LinePeakTable SearchLinePeaks(const Axis& signal, int globalOffset) const {
         LinePeakTable table{};
         for (int i = 0; i < Asa::kGridDim; ++i) {
             const int32_t value = NonNegative(signal[i]);
@@ -613,16 +625,17 @@ private:
             if (i + 1 < Asa::kGridDim && NonNegative(signal[i + 1]) >= value) continue;
             if (i > 1 && NonNegative(signal[i - 2]) > value) continue;
             if (i + 2 < Asa::kGridDim && NonNegative(signal[i + 2]) >= value) continue;
-            LinePeakCandidate candidate = BuildLinePeakCandidate(signal, i);
+            LinePeakCandidate candidate = BuildLinePeakCandidate(signal, i, globalOffset);
             if (candidate.regionEnergy < m_lineRegionEnergyFloor) continue;
             UpdateLinePeakUnit(candidate, table);
         }
         return table;
     }
 
-    inline LinePeakCandidate BuildLinePeakCandidate(const Axis& signal, int peakIdx) const {
+    inline LinePeakCandidate BuildLinePeakCandidate(const Axis& signal, int peakIdx, int globalOffset) const {
         LinePeakCandidate candidate{};
         candidate.peakIdx = peakIdx;
+        candidate.globalPeakIdx = peakIdx + globalOffset;
         SearchPeakBoundary(signal, peakIdx, candidate.leftBoundary, candidate.rightBoundary);
         int32_t baselineMin = NonNegative(signal[candidate.leftBoundary]);
         int32_t regionSum = 0;

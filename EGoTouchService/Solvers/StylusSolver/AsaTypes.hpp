@@ -112,6 +112,11 @@ inline uint16_t ReadLe16(const uint8_t* ptr) {
         (static_cast<uint16_t>(ptr[1]) << 8));
 }
 
+inline bool IsAnchorValid(uint16_t anchorRow, uint16_t anchorCol) {
+    return !(((anchorRow & 0xFFu) == kAnchorInvalid) &&
+             ((anchorCol & 0xFFu) == kAnchorInvalid));
+}
+
 inline AsaGridData ExtractGridFromSlavePayloadBytes(const uint8_t* bytes, std::size_t byteCount) {
     AsaGridData out;
     if (!bytes || byteCount < static_cast<std::size_t>(kBlockWords * 2 * sizeof(uint16_t))) {
@@ -126,8 +131,7 @@ inline AsaGridData ExtractGridFromSlavePayloadBytes(const uint8_t* bytes, std::s
             out.tx1.grid[r][c] = static_cast<int16_t>(ReadLe16(bytes + wordIndex * sizeof(uint16_t)));
         }
     }
-    out.tx1.valid = (out.tx1.anchorRow != kAnchorInvalid) ||
-                    (out.tx1.anchorCol != kAnchorInvalid);
+    out.tx1.valid = IsAnchorValid(out.tx1.anchorRow, out.tx1.anchorCol);
 
     const uint8_t* tx2 = bytes + static_cast<std::size_t>(kBlockWords * sizeof(uint16_t));
     out.tx2.anchorRow = ReadLe16(tx2);
@@ -138,7 +142,7 @@ inline AsaGridData ExtractGridFromSlavePayloadBytes(const uint8_t* bytes, std::s
             out.tx2.grid[r][c] = static_cast<int16_t>(ReadLe16(tx2 + wordIndex * sizeof(uint16_t)));
         }
     }
-    out.tx2.valid = out.tx1.valid;
+    out.tx2.valid = IsAnchorValid(out.tx2.anchorRow, out.tx2.anchorCol);
 
     return out;
 }
@@ -157,8 +161,7 @@ inline AsaGridData ExtractGridFromSlaveWords(const uint16_t* words, int wordCoun
             out.tx1.grid[r][c] = static_cast<int16_t>(words[2 + r * kGridDim + c]);
         }
     }
-    out.tx1.valid = (out.tx1.anchorRow != kAnchorInvalid) ||
-                    (out.tx1.anchorCol != kAnchorInvalid);
+    out.tx1.valid = IsAnchorValid(out.tx1.anchorRow, out.tx1.anchorCol);
 
     const uint16_t* tx2 = words + kBlockWords;
     out.tx2.anchorRow = tx2[0];
@@ -168,7 +171,7 @@ inline AsaGridData ExtractGridFromSlaveWords(const uint16_t* words, int wordCoun
             out.tx2.grid[r][c] = static_cast<int16_t>(tx2[2 + r * kGridDim + c]);
         }
     }
-    out.tx2.valid = out.tx1.valid;
+    out.tx2.valid = IsAnchorValid(out.tx2.anchorRow, out.tx2.anchorCol);
 
     return out;
 }

@@ -101,8 +101,22 @@ public:
 
         // ═══════════════════════════════════════════════════════════
         // Gate 3 — Coordinate jump (TX1 vs TX2)
-        // Requires TX2 coordinate — skipped until TX2 solver is enabled.
         // ═══════════════════════════════════════════════════════════
+        const auto& tx2Coor = runtime.tx2.coordinate.reportGlobalCoor;
+        if (tx2Coor.valid) {
+            const uint32_t jumpDim1 = AbsDiff(coor.dim1, tx2Coor.dim1);
+            const uint32_t jumpDim2 = AbsDiff(coor.dim2, tx2Coor.dim2);
+#if EGOTOUCH_DIAG
+            runtime.post.coorJumpDim1 = static_cast<int32_t>(jumpDim1);
+            runtime.post.coorJumpDim2 = static_cast<int32_t>(jumpDim2);
+#endif
+            if (jumpDim1 > static_cast<uint32_t>(m_coorJumpThreshold) ||
+                jumpDim2 > static_cast<uint32_t>(m_coorJumpThreshold)) {
+                peakValidDim1 = false;
+                peakValidDim2 = false;
+                rejectReason |= 4;
+            }
+        }
 
         // ── Moderate asymmetry accumulator (diagnostic, not gating) ──
         // TSACore: signalY * 1.5 < signalX  ||  signalX * 1.5 < signalY
@@ -164,6 +178,12 @@ private:
         if (m_havePrevValidCoor) {
             coor = m_prevValidCoor;
         }
+    }
+
+    static inline uint32_t AbsDiff(int32_t a, int32_t b) {
+        return a > b
+            ? static_cast<uint32_t>(a - b)
+            : static_cast<uint32_t>(b - a);
     }
 };
 

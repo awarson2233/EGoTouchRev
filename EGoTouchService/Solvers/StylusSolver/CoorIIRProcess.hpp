@@ -52,30 +52,24 @@ public:
         }
 
         // ── Update TSACore-aligned static counters ──
-        const bool bHasPressure = runtime.pressure.pressureIsReal;
         const bool hasPressureValue = runtime.pressure.outputPressure > 0;
 
         // Default: EnterInRangeMode behavior
         ++m_counterC;
 
-        if (bHasPressure) {
-            m_counterC = 0;
-            ++m_counter8;
-        } else {
-            m_counter8 = 0;
-        }
-
         if (hasPressureValue) {
             m_counterC = 0;
+            ++m_counter8;
             ++m_counterA;
         } else {
+            m_counter8 = 0;
             m_counterA = 0;
         }
 
         // ── GetIIRCoef: speed-adaptive coefficient selection ──
         const bool edgeActive = runtime.signal.dim1EdgeActive ||
                                 runtime.signal.dim2EdgeActive;
-        const bool writingMode = bHasPressure || hasPressureValue;
+        const bool writingMode = hasPressureValue;
         m_currentCoef = SelectCoef(runtime.post.speedValue, writingMode, edgeActive);
         runtime.post.iirCoef = m_currentCoef;
 
