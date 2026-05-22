@@ -1,4 +1,5 @@
 #include "penevt/PenEventBridge.h"
+#include "btmcu/PenUsbPacketBuilder.h"
 #include "Logger.h"
 
 #include <Windows.h>
@@ -9,8 +10,6 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
-#include <cstdlib>
-#include <cstring>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -22,9 +21,12 @@
 
 namespace Himax::Pen {
 
-// ── 静态常量 ──────────────────────────────────────────────────────────────
-const GUID PenEventBridge::kEventDeviceGuid =
+namespace {
+
+const GUID kEventDeviceGuid =
     {0xdd0ebedb, 0xf1d6, 0x4cfa, {0xac, 0xca, 0x71, 0xe6, 0x6d, 0x31, 0x78, 0xca}};
+
+} // namespace
 
 // ── 回调设置 ───────────────────────────────────────────────────────────────
 void PenEventBridge::SetEventCallback(PenEventCallback cb) {
@@ -106,72 +108,10 @@ bool PenEventBridge::SendScanMode(uint8_t freq1, uint8_t freq2, uint8_t mode) {
         return false;
     }
 
-    // ── Type-3 编码 (完整版, 支持 len=1/2/3/4) ───────────────────────────
-    // HandleInitParamEvent 对每个 comma-separated token 的解码逻辑:
-    //   len=1: 1 byte  → strtol("0x" + [0])
-    //   len=2: 2 bytes → strtol("0x" + [1]),       strtol("0x" + [0])
-    //   len=3: 2 bytes → strtol("0x" + [1] + [2]), strtol("0x" + [0])
-    //   len=4: 2 bytes → strtol("0x" + [2] + [3]), strtol("0x" + [0] + [1])
-    auto encodeType3Token = [](const char* hex_str, uint8_t* out) -> int {
-        int n = static_cast<int>(strlen(hex_str));
-
-        if (n <= 1) {
-            char h[4] = {'0', 'x', hex_str[0], '\0'};
-            out[0] = static_cast<uint8_t>(strtol(h, nullptr, 0));
-            return 1;
-        }
-        if (n == 2) {
-            // high byte: "0x" + [1]
-            char ha[4] = {'0', 'x', hex_str[1], '\0'};
-            out[0] = static_cast<uint8_t>(strtol(ha, nullptr, 0));
-            // low byte: "0x" + [0]
-            char hb[4] = {'0', 'x', hex_str[0], '\0'};
-            out[1] = static_cast<uint8_t>(strtol(hb, nullptr, 0));
-            return 2;
-        }
-        if (n == 3) {
-            // high byte: "0x" + [1][2]
-            char ha[5] = {'0', 'x', hex_str[1], hex_str[2], '\0'};
-            out[0] = static_cast<uint8_t>(strtol(ha, nullptr, 0));
-            // low byte: "0x" + [0]
-            char hb[4] = {'0', 'x', hex_str[0], '\0'};
-            out[1] = static_cast<uint8_t>(strtol(hb, nullptr, 0));
-            return 2;
-        }
-        // len=4
-        // high byte: "0x" + [2][3]
-        char ha[5] = {'0', 'x', hex_str[2], hex_str[3], '\0'};
-        out[0] = static_cast<uint8_t>(strtol(ha, nullptr, 0));
-        // low byte: "0x" + [0][1]
-        char hb[5] = {'0', 'x', hex_str[0], hex_str[1], '\0'};
-        out[1] = static_cast<uint8_t>(strtol(hb, nullptr, 0));
-        return 2;
-    };
-
-    // 将 uint8_t freq 值转为十进制字符串再编码
-    char s_freq1[8], s_freq2[8], s_mode[8];
-    snprintf(s_freq1, sizeof(s_freq1), "%u", freq1);
-    snprintf(s_freq2, sizeof(s_freq2), "%u", freq2);
-    snprintf(s_mode,  sizeof(s_mode),  "%u", mode ? 3u : 0u);
-
-    uint8_t payload[0x20] = {};  // 32-byte binary payload (zero-init)
-    int off = 0;
-    off += encodeType3Token(s_freq1, payload + off);
-    off += encodeType3Token(s_freq2, payload + off);
-    off += encodeType3Token(s_mode,  payload + off);
-    (void)off;  // 实际总字节数
-
-    // ── 构建 USB 报文: 8-byte header + 32-byte binary payload ────────────
-    std::vector<uint8_t> pkt(8 + 0x20, 0);
-    pkt[0] = 0x07;   // report type
-    pkt[1] = 0x01;   // fixed (payload-present flag)
-    pkt[2] = 0x02;   // sub-group
-    pkt[3] = 0x00;
-    pkt[4] = 0x01;   // cmd_id low  (0x7D01)
-    pkt[5] = 0x7D;   // cmd_id high (0x7D01)
-    pkt[6] = 0x11;   // MCU protocol marker
-    pkt[7] = 0x20;   // payload tag (0x20 for payload-present commands)
-    std::copy(payload, payload + 0x20, pkt.begin() + 8);
+    const auto payload = BuildScanModePayload(freq1, freq2, mode);
+    const auto pkt = BuildPenUsbPayloadCommand(
+        PenUsbCommandId::InitParamSet,
+        std::span<const uint8_t>(payload.data(), payload.size()));
 
     if (!SendRawPacket(pkt)) {
         LOG_WARN("PenEvent", __func__, "MCU", "SetScanMode send failed.");
@@ -211,13 +151,7 @@ bool PenEventBridge::SendRawPacket(const std::vector<uint8_t>& pkt) {
 }
 
 void PenEventBridge::SendAck(uint8_t ackCode) {
-    // Header 验证: THP_Service BtPen_SendEventAck @ 0x180011d9d-0x180011dc3
-    //   MOV byte [RSP+0x20], 0x07    MOV word [RSP+0x21], 0x0201
-    //   MOV word [RSP+0x24], 0x8001  MOV byte [RSP+0x27], 0x20
-    const std::vector<uint8_t> pkt = {
-        0x07, 0x01, 0x02, 0x00,
-        0x01, 0x80, 0x11, 0x20, ackCode
-    };
+    const auto pkt = BuildPenUsbEventAck(ackCode);
     if (SendRawPacket(pkt)) {
         LOG_INFO("PenEvent", __func__, "MCU", "ACK sent: 0x{:02X}", ackCode);
     }
@@ -242,7 +176,7 @@ bool PenEventBridge::SendQueryPenStatus() {
         }
     }
 
-    const std::vector<uint8_t> query = {0x07, 0x00, 0x02, 0x00, 0x01, 0x71, 0x11, 0x00};
+    const auto query = BuildPenUsbCommand(PenUsbCommandId::QueryPenStatus);
     if (!SendRawPacket(query)) {
         LOG_WARN("PenEvent", __func__, "MCU", "Failed to send 0x7101 CheckPenStatus.");
         return false;
@@ -269,7 +203,7 @@ bool PenEventBridge::SendFirstMcuStatusQuery() {
         }
     }
 
-    const std::vector<uint8_t> query = {0x07, 0x00, 0x02, 0x00, 0x01, 0x77, 0x11, 0x00};
+    const auto query = BuildPenUsbCommand(PenUsbCommandId::QueryPenInfo);
     if (!SendRawPacket(query)) {
         LOG_WARN("PenEvent", __func__, "MCU", "Failed to send first 0x7701 CheckMcuStatus.");
         return false;
@@ -296,7 +230,7 @@ bool PenEventBridge::SendSecondMcuStatusQuery() {
         }
     }
 
-    const std::vector<uint8_t> query = {0x07, 0x00, 0x02, 0x00, 0x01, 0x77, 0x11, 0x00};
+    const auto query = BuildPenUsbCommand(PenUsbCommandId::QueryPenInfo);
     if (!SendRawPacket(query)) {
         LOG_WARN("PenEvent", __func__, "MCU", "Failed to send second 0x7701 CheckMcuStatus.");
         return false;
@@ -495,7 +429,7 @@ void PenEventBridge::OnPacketReceived(const std::vector<uint8_t>& packet) {
     }
 
     if (m_notifyEvent) {
-        SetEvent(m_notifyEvent);
+        SetEvent(static_cast<HANDLE>(m_notifyEvent));
     }
 }
 
@@ -536,20 +470,7 @@ bool PenEventBridge::SendInitProtocolParams() {
         return false;
     }
 
-    // ── 使用 API Monitor 抓包 (row #1022) 的完整 40 字节报文 ──
-    // exact factory capture:
-    //   header:  07 01 02 00 01 7D 11 20
-    //   payload: 33 33 33 33 E7 02 12 04 58 02 8D 20 0F 01 02 00
-    //            00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    const std::vector<uint8_t> pkt = {
-        // header (8 bytes)
-        0x07, 0x01, 0x02, 0x00, 0x01, 0x7D, 0x11, 0x20,
-        // payload (32 bytes) – exact factory capture
-        0x33, 0x33, 0x33, 0x33, 0xE7, 0x02, 0x12, 0x04,
-        0x58, 0x02, 0x8D, 0x20, 0x0F, 0x01, 0x02, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    };
+    const auto pkt = BuildFactoryInitProtocolParamsCommand();
 
     if (!SendRawPacket(pkt)) {
         LOG_WARN("PenEvent", __func__, "MCU", "Failed to send 0x7D01 InitProtocolParams.");

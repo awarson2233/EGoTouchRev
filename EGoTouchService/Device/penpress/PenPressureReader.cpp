@@ -1,4 +1,5 @@
 #include "penpress/PenPressureReader.h"
+#include "btmcu/PenPressurePacketParser.h"
 
 #include <Windows.h>
 #include <SetupAPI.h>
@@ -32,22 +33,11 @@ PenPressureRangeMode PenPressureReader::GetPressureRangeMode() const {
     return m_stats.pressureMode;
 }
 
-uint16_t PenPressureReader::ScalePressure(uint16_t raw, PenPressureRangeMode mode) {
-    if (mode == PenPressureRangeMode::Raw14Bit16382) {
-        return static_cast<uint16_t>(raw / 4u);
-    }
-    return raw;
-}
-
-uint16_t PenPressureReader::PressureMax(PenPressureRangeMode) {
-    return 4095;
-}
-
 void PenPressureReader::ApplyPressureModeLocked(PenPressureRangeMode mode) {
     m_stats.pressureMode = mode;
-    m_stats.pressureMax = PressureMax(mode);
+    m_stats.pressureMax = PenPressureMax(mode);
     for (int k = 0; k < 4; ++k) {
-        m_stats.press[k] = ScalePressure(m_stats.rawPress[k], mode);
+        m_stats.press[k] = ScalePenPressure(m_stats.rawPress[k], mode);
     }
 }
 
@@ -95,36 +85,29 @@ std::optional<std::wstring> PenPressureReader::FindDevicePath() {
 
 // ── BtHidChannel hook ─────────────────────────────────────────────────────
 void PenPressureReader::OnPacketReceived(const std::vector<uint8_t>& packet) {
-    // 解析 'U' 报文: [0x55][freq1][freq2][p0L][p0H][p1L][p1H][p2L][p2H][p3L][p3H]...
-    if (packet.size() >= 11 && packet[0] == 0x55) {
-        PenPressureStats s;
-        s.reportType = packet[0];
-        s.freq1      = packet[1];
-        s.freq2      = packet[2];
-        for (int k = 0; k < 4; ++k) {
-            s.rawPress[k] = static_cast<uint16_t>(packet[3 + k * 2]) |
-                            (static_cast<uint16_t>(packet[4 + k * 2]) << 8);
+    PenPressureStats stats;
+    {
+        std::lock_guard<std::mutex> lk(m_statsMutex);
+        auto parsed = TryParsePenPressurePacket(
+            std::span<const uint8_t>(packet.data(), packet.size()),
+            m_stats.pressureMode);
+        if (!parsed) {
+            return;
         }
-        {
-            std::lock_guard<std::mutex> lk(m_statsMutex);
-            s.pressureMode = m_stats.pressureMode;
-            s.pressureMax = PressureMax(s.pressureMode);
-            for (int k = 0; k < 4; ++k) {
-                s.press[k] = ScalePressure(s.rawPress[k], s.pressureMode);
-            }
-            m_stats = s;
-        }
-        PressureCallback cb;
-        {
-            std::lock_guard<std::mutex> lk(m_cbMutex);
-            cb = m_pressureCallback;
-        }
-        if (cb) {
-            cb(s);
-        }
-        if (m_notifyEvent) {
-            SetEvent(m_notifyEvent);
-        }
+        stats = *parsed;
+        m_stats = stats;
+    }
+
+    PressureCallback cb;
+    {
+        std::lock_guard<std::mutex> lk(m_cbMutex);
+        cb = m_pressureCallback;
+    }
+    if (cb) {
+        cb(stats);
+    }
+    if (m_notifyEvent) {
+        SetEvent(static_cast<HANDLE>(m_notifyEvent));
     }
 }
 

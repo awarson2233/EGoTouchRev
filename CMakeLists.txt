@@ -324,6 +324,11 @@ if (EGO_BUILD_TESTS)
     )
     target_link_libraries(PenFactoryStatusFlagsTest PRIVATE Device Common)
 
+    add_executable(PenPressurePacketParserTest
+        Tools/tests/PenPressurePacketParserTest.cpp
+    )
+    target_link_libraries(PenPressurePacketParserTest PRIVATE Device Common)
+
     add_test(NAME CommonLoggerTest COMMAND CommonLoggerTest)
     add_test(NAME HostSystemStateMonitorTest COMMAND HostSystemStateMonitorTest)
     add_test(NAME TouchTrackerSilentGapTest COMMAND TouchTrackerSilentGapTest)
@@ -335,6 +340,7 @@ if (EGO_BUILD_TESTS)
     add_test(NAME VhfReporterStylusPacketTest COMMAND VhfReporterStylusPacketTest)
     add_test(NAME PenUsbProtocolTest COMMAND PenUsbProtocolTest)
     add_test(NAME PenFactoryStatusFlagsTest COMMAND PenFactoryStatusFlagsTest)
+    add_test(NAME PenPressurePacketParserTest COMMAND PenPressurePacketParserTest)
 endif()
 
 

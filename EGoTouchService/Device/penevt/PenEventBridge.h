@@ -9,11 +9,6 @@
 #include <string>
 #include <vector>
 
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-
 namespace Himax::Pen {
 
 /// PenEventBridge — BT MCU 事件通道 (col00)
@@ -39,7 +34,7 @@ public:
     /// 设置 MCU 事件回调（线程安全）。回调从事件读取线程发起，不得长时间阻塞。
     void SetEventCallback(PenEventCallback cb);
     /// 设置状态事件句柄（用于通知 App 侧刷新状态）
-    void SetNotifyEvent(HANDLE h) { m_notifyEvent = h; }
+    void SetNotifyEvent(NativeEventHandle h) { m_notifyEvent = h; }
 
     /// 手动触发握手（0x7101 + 0x7701），通常无需手动调用。
     void RunHandshake();
@@ -58,7 +53,6 @@ private:
         Running,
     };
 
-    static const GUID kEventDeviceGuid;
     static int GetAckCode(uint8_t eventCode);
 
     bool SendRawPacket(const std::vector<uint8_t>& pkt);
@@ -75,7 +69,7 @@ private:
     mutable std::mutex m_sessionMutex;
     mutable std::mutex m_txMutex;
     PenEventCallback m_eventCallback;
-    HANDLE m_notifyEvent = nullptr;
+    NativeEventHandle m_notifyEvent = nullptr;
     SessionPhase m_sessionPhase = SessionPhase::AwaitingPenStatus;
     bool m_initParamSent = false;
     bool m_penStatusQuerySent = false;

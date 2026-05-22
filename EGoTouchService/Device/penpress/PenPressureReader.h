@@ -5,23 +5,8 @@
 #include <cstdint>
 #include <functional>
 #include <mutex>
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
 
 namespace Himax::Pen {
-
-/// 压力统计数据（从 'U' 报文解析）
-struct PenPressureStats {
-    uint16_t press[4] = {0, 0, 0, 0};     ///< 四通道压力值（按当前量程归一到 0..4095）
-    uint16_t rawPress[4] = {0, 0, 0, 0};  ///< 四通道原始压力值
-    uint8_t  freq1    = 0;                ///< BT 跳频频率1
-    uint8_t  freq2    = 0;                ///< BT 跳频频率2
-    uint8_t  reportType = 0;              ///< 报文类型（通常 'U' = 0x55）
-    PenPressureRangeMode pressureMode = PenPressureRangeMode::Raw12Bit4096;
-    uint16_t pressureMax = 4095;
-};
 
 /// PenPressureReader — BT MCU 压力通道 (col01)
 ///
@@ -38,7 +23,7 @@ public:
     using PressureCallback = std::function<void(const PenPressureStats& stats)>;
     void SetPressureCallback(PressureCallback cb);
     /// 设置状态事件句柄（用于通知 App 侧刷新状态）
-    void SetNotifyEvent(HANDLE h) { m_notifyEvent = h; }
+    void SetNotifyEvent(NativeEventHandle h) { m_notifyEvent = h; }
 
     /// 获取最新压力统计（原子读，线程安全）
     PenPressureStats GetPressureStats() const;
@@ -56,13 +41,11 @@ private:
     mutable std::mutex m_cbMutex;
     PressureCallback m_pressureCallback;
 
-    static uint16_t ScalePressure(uint16_t raw, PenPressureRangeMode mode);
-    static uint16_t PressureMax(PenPressureRangeMode mode);
     void ApplyPressureModeLocked(PenPressureRangeMode mode);
 
     mutable std::mutex m_statsMutex;
     PenPressureStats m_stats;
-    HANDLE m_notifyEvent = nullptr;
+    NativeEventHandle m_notifyEvent = nullptr;
 };
 
 } // namespace Himax::Pen

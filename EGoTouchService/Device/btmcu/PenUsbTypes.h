@@ -9,6 +9,8 @@
 
 namespace Himax::Pen {
 
+using NativeEventHandle = void*;
+
 enum class PenUsbCommandId : uint16_t {
     QueryPenStatus = 0x7101,
     QueryPenInfo = 0x7701,
@@ -92,6 +94,16 @@ enum class PenCurrentMode : uint8_t {
 enum class PenPressureRangeMode : uint8_t {
     Raw12Bit4096 = 0,
     Raw14Bit16382 = 1,
+};
+
+struct PenPressureStats {
+    uint16_t press[4] = {0, 0, 0, 0};
+    uint16_t rawPress[4] = {0, 0, 0, 0};
+    uint8_t freq1 = 0;
+    uint8_t freq2 = 0;
+    uint8_t reportType = 0;
+    PenPressureRangeMode pressureMode = PenPressureRangeMode::Raw12Bit4096;
+    uint16_t pressureMax = 4095;
 };
 
 constexpr PenCurrentMode PenCurrentModeFromRaw(uint8_t raw) noexcept {
