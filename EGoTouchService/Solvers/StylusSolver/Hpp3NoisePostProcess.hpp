@@ -102,7 +102,7 @@ public:
         // ═══════════════════════════════════════════════════════════
         // Gate 3 — Coordinate jump (TX1 vs TX2)
         // ═══════════════════════════════════════════════════════════
-        const auto& tx2Coor = runtime.tx2.coordinate.reportGlobalCoor;
+        const auto tx2Coor = ResolveTx2GlobalCoor(runtime);
         if (tx2Coor.valid) {
             const uint32_t jumpDim1 = AbsDiff(coor.dim1, tx2Coor.dim1);
             const uint32_t jumpDim2 = AbsDiff(coor.dim2, tx2Coor.dim2);
@@ -178,6 +178,35 @@ private:
         if (m_havePrevValidCoor) {
             coor = m_prevValidCoor;
         }
+    }
+
+    static constexpr int kAnchorCenterOffset = Asa::kGridDim / 2;
+    static constexpr int kSensorTxCount = 60;
+    static constexpr int kSensorRxCount = 40;
+
+    static inline Asa::AsaCoorResult ResolveTx2GlobalCoor(const StylusRuntimeFrame& runtime) {
+        if (runtime.tx2.coordinate.reportGlobalCoor.valid) {
+            return runtime.tx2.coordinate.reportGlobalCoor;
+        }
+        Asa::AsaCoorResult coor = runtime.tx2.feature.refinedLocalCoor;
+        if (!coor.valid) return coor;
+        LocalToGlobal(coor,
+                      runtime.rawGrid.asaGrid.tx2.anchorRow,
+                      runtime.rawGrid.asaGrid.tx2.anchorCol,
+                      kAnchorCenterOffset);
+        coor.dim1 = std::clamp(coor.dim1, 0, kSensorTxCount * Asa::kCoorUnit - 1);
+        coor.dim2 = std::clamp(coor.dim2, 0, kSensorRxCount * Asa::kCoorUnit - 1);
+        return coor;
+    }
+
+    static inline void LocalToGlobal(Asa::AsaCoorResult& coor,
+                                     int anchorRow,
+                                     int anchorCol,
+                                     int anchorCenterOffset) {
+        if (!coor.valid) return;
+        const int32_t centerOff = static_cast<int32_t>(anchorCenterOffset) * Asa::kCoorUnit;
+        coor.dim1 += static_cast<int32_t>(anchorCol) * Asa::kCoorUnit - centerOff;
+        coor.dim2 += static_cast<int32_t>(anchorRow) * Asa::kCoorUnit - centerOff;
     }
 
     static inline uint32_t AbsDiff(int32_t a, int32_t b) {

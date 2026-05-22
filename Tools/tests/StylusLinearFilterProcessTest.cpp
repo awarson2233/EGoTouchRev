@@ -2,6 +2,7 @@
 #include "StylusSolver/CoorIIRProcess.hpp"
 #include "StylusSolver/CoorSpeedProcess.hpp"
 #include "StylusSolver/GridFeatureExtractor.hpp"
+#include "StylusSolver/Hpp3NoisePostProcess.hpp"
 #include "StylusSolver/Hpp3PostPressureProcess.hpp"
 #include "StylusSolver/LinearFilterProcess.hpp"
 #include "StylusSolver/TiltProcess.hpp"
@@ -156,6 +157,11 @@ void SetTx1LinePeakFrame(Solvers::HeatmapFrame& frame,
     if (rightCol >= 0) {
         stylus.runtime.rawGrid.asaGrid.tx1.grid[4][rightCol] = static_cast<int16_t>(rightValue);
     }
+}
+
+void SetBtPressure(Solvers::HeatmapFrame& frame, uint16_t pressure) {
+    frame.stylus.input.btSample.hasSample = true;
+    frame.stylus.input.btSample.pressure[3] = pressure;
 }
 
 void TestDefaultParametersMatchAsaTable() {
@@ -357,15 +363,33 @@ void TestTx1LinePeakHistoryCarriesPreviousSelection() {
 
     Solvers::HeatmapFrame first{};
     SetTx1LinePeakFrame(first, 3, 540, 6, 520);
+    SetBtPressure(first, 10);
     extractor.Process(first);
     Require(first.stylus.runtime.tx1.feature.projection.peakIdxDim1 == 3,
             "history seed frame should select the initial dim1 peak");
 
     Solvers::HeatmapFrame second{};
     SetTx1LinePeakFrame(second, 3, 520, 6, 560);
+    SetBtPressure(second, 10);
     extractor.Process(second);
     Require(second.stylus.runtime.tx1.feature.projection.peakIdxDim1 == 3,
             "TX1 line peak history should keep a nearby previous peak selected over a slightly stronger newcomer");
+}
+
+void TestTx1LinePeakHistoryDoesNotCarryDuringHover() {
+    Solvers::Stylus::GridFeatureExtractor extractor;
+
+    Solvers::HeatmapFrame first{};
+    SetTx1LinePeakFrame(first, 3, 540, 6, 520);
+    extractor.Process(first);
+    Require(first.stylus.runtime.tx1.feature.projection.peakIdxDim1 == 3,
+            "hover history seed frame should select the initial dim1 peak");
+
+    Solvers::HeatmapFrame second{};
+    SetTx1LinePeakFrame(second, 3, 520, 6, 560);
+    extractor.Process(second);
+    Require(second.stylus.runtime.tx1.feature.projection.peakIdxDim1 == 6,
+            "hover TX1 line peak selection should follow the strongest current peak instead of history");
 }
 
 void TestTx1LinePeakHistoryResetsAfterInvalidParse() {
@@ -373,6 +397,7 @@ void TestTx1LinePeakHistoryResetsAfterInvalidParse() {
 
     Solvers::HeatmapFrame first{};
     SetTx1LinePeakFrame(first, 3, 540, 6, 520);
+    SetBtPressure(first, 10);
     extractor.Process(first);
 
     Solvers::HeatmapFrame invalid{};
@@ -380,6 +405,7 @@ void TestTx1LinePeakHistoryResetsAfterInvalidParse() {
 
     Solvers::HeatmapFrame second{};
     SetTx1LinePeakFrame(second, 3, 520, 6, 560);
+    SetBtPressure(second, 10);
     extractor.Process(second);
     Require(second.stylus.runtime.tx1.feature.projection.peakIdxDim1 == 6,
             "invalid parse frame should clear TX1 line peak history before the next valid frame");
@@ -479,6 +505,28 @@ void TestCoordinateSolverPublishesTx1AxisEdgeSignals() {
 
     Require(stylus.runtime.pressure.outputPressure == 200,
             "low TX2 signal alone should not suppress edge pressure when TX1 axis signals are strong");
+}
+
+void TestNoisePostRejectsJumpBeforeTiltProcess() {
+    Solvers::Stylus::Hpp3NoisePostProcess noise;
+    Solvers::HeatmapFrame frame{};
+    auto& runtime = frame.stylus.runtime;
+    runtime.tx1.coordinate.reportGlobalCoor = Coor(10000, 10000);
+    runtime.tx2.feature.refinedLocalCoor = Coor(0, 0);
+    runtime.rawGrid.asaGrid.tx2.valid = true;
+    runtime.rawGrid.asaGrid.tx2.anchorRow = 4;
+    runtime.rawGrid.asaGrid.tx2.anchorCol = 4;
+    runtime.signal.signalX = 1000;
+    runtime.signal.signalY = 1000;
+
+    noise.Process(frame);
+
+    Require(runtime.post.noiseRejected,
+            "noise post should reject TX1/TX2 jump before TiltProcess publishes TX2 coordinate");
+    Require((runtime.post.noiseRejectReason & 4) != 0,
+            "noise post should mark coordinate jump as the reject reason");
+    Require(!runtime.tx2.coordinate.reportGlobalCoor.valid,
+            "test setup should keep TX2 report coordinate unpublished before TiltProcess");
 }
 
 void TestAftCoorProcessScalesFactoryLockThresholds() {
@@ -1127,10 +1175,12 @@ int main() {
         TestTx2SeedThresholdIsGreaterThanNinetyNine();
         TestTx1LinePeakFirstFrameUsesStrongestCurrentPeak();
         TestTx1LinePeakHistoryCarriesPreviousSelection();
+        TestTx1LinePeakHistoryDoesNotCarryDuringHover();
         TestTx1LinePeakHistoryResetsAfterInvalidParse();
         TestPhysicalLowEdge3x3SumUsesInwardCells();
         TestCoordinateSolverDoesNotMarkLocalEdgeAsPhysicalEdge();
         TestCoordinateSolverPublishesTx1AxisEdgeSignals();
+        TestNoisePostRejectsJumpBeforeTiltProcess();
         TestAftCoorProcessScalesFactoryLockThresholds();
         TestTiltJitterFilterMatchesTsacore();
         TestCoordinateSolverUsesFixedDevicePitchTables();

@@ -57,8 +57,13 @@ bool StylusPipeline::Process(HeatmapFrame& frame) {
         return true;
     }
 
-    m_tiltProcess.Process(frame);
     m_noisePostProcess.Process(frame);
+    if (frame.stylus.runtime.post.noiseRejected) {
+        m_tiltProcess.Reset();
+        frame.stylus.runtime.tilt = {};
+    } else {
+        m_tiltProcess.Process(frame);
+    }
     m_pressureSolver.Process(frame);
     m_postPressure.Process(frame);
     m_edgeCoorProcess.Process(frame);
