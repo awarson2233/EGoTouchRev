@@ -165,11 +165,11 @@ void DiagnosticsWorkbench::DrawControlPanel() {
     if (!allowLiveControl) ImGui::EndDisabled();
 
     bool masterParserOnly = (m_proxy != nullptr) && m_proxy->IsMasterParserOnlyMode();
-    if (!m_proxy || !allowLiveControl) ImGui::BeginDisabled();
+    if (!m_proxy) ImGui::BeginDisabled();
     if (ImGui::Checkbox("Master Parser Only (Raw Heatmap)", &masterParserOnly) && m_proxy) {
         m_proxy->SetMasterParserOnlyMode(masterParserOnly);
     }
-    if (!m_proxy || !allowLiveControl) ImGui::EndDisabled();
+    if (!m_proxy) ImGui::EndDisabled();
     if (masterParserOnly) {
         ImGui::TextUnformatted("Enabled: only Master Frame Parser is active.");
     }

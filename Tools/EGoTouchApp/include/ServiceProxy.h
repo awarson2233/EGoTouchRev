@@ -102,7 +102,7 @@ public:
 
     // MasterParser-only mode (local pipeline control)
     void SetMasterParserOnlyMode(bool enabled);
-    bool IsMasterParserOnlyMode() const { return m_masterParserOnly; }
+    bool IsMasterParserOnlyMode() const { return m_masterParserOnly.load(std::memory_order_relaxed); }
 
     // Local DVR export
     void TriggerDvrBinaryExport();
@@ -191,7 +191,7 @@ private:
     std::atomic<bool> m_vhfTranspose{false};
 
     // MasterParser-only mode
-    bool m_masterParserOnly = false;
+    std::atomic<bool> m_masterParserOnly{false};
     std::optional<TouchPipelineModuleEnableState> m_masterParserOnlySnapshot;
 
     // PenBridge status (polled alongside logs)

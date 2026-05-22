@@ -5,6 +5,72 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# 自动生成 .clangd 配置文件以支持 clangd 自动识别系统头文件和 Windows Kits
+if (WIN32 AND CMAKE_EXPORT_COMPILE_COMMANDS)
+    set(CLANGD_FILE "${CMAKE_CURRENT_SOURCE_DIR}/.clangd")
+    message(STATUS "Checking/Generating .clangd config for clangd language server...")
+    
+    # 查找本地最新的 MSVC 包含路径
+    set(MSVC_INCLUDE_DIRS "")
+    file(GLOB vs_msvc_dirs 
+        "C:/Program Files/Microsoft Visual Studio/2022/*/VC/Tools/MSVC/*"
+        "C:/Program Files/Microsoft Visual Studio/18/*/VC/Tools/MSVC/*"
+        "C:/Program Files (x86)/Microsoft Visual Studio/2022/*/VC/Tools/MSVC/*"
+    )
+    if (vs_msvc_dirs)
+        list(SORT vs_msvc_dirs ORDER DESCENDING)
+        list(GET vs_msvc_dirs 0 latest_msvc_dir)
+        if (EXISTS "${latest_msvc_dir}/include")
+            list(APPEND MSVC_INCLUDE_DIRS 
+                "${latest_msvc_dir}/include"
+                "${latest_msvc_dir}/atlmfc/include"
+            )
+        endif()
+    endif()
+
+    # 查找本地最新的 Windows SDK 包含路径
+    set(WIN_SDK_INCLUDE_DIRS "")
+    file(GLOB sdk_dirs "C:/Program Files (x86)/Windows Kits/10/Include/*")
+    if (sdk_dirs)
+        list(SORT sdk_dirs ORDER DESCENDING)
+        foreach(sdk_dir IN LISTS sdk_dirs)
+            if (sdk_dir MATCHES "[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+")
+                set(latest_sdk_dir "${sdk_dir}")
+                break()
+            endif()
+        endforeach()
+        
+        if (latest_sdk_dir)
+            list(APPEND WIN_SDK_INCLUDE_DIRS
+                "${latest_sdk_dir}/ucrt"
+                "${latest_sdk_dir}/shared"
+                "${latest_sdk_dir}/um"
+                "${latest_sdk_dir}/winrt"
+                "${latest_sdk_dir}/cppwinrt"
+            )
+        endif()
+    endif()
+    
+    # 构造 .clangd 的配置内容
+    set(SYSTEM_INCLUDES ${MSVC_INCLUDE_DIRS} ${WIN_SDK_INCLUDE_DIRS})
+    if (SYSTEM_INCLUDES)
+        set(CLANGD_CONTENT "CompileFlags:\n")
+        string(APPEND CLANGD_CONTENT "  CompilationDatabase: build\n")
+        string(APPEND CLANGD_CONTENT "  Add:\n")
+        
+        foreach(dir IN LISTS SYSTEM_INCLUDES)
+            string(REPLACE "\\" "/" dir_clean "${dir}")
+            string(APPEND CLANGD_CONTENT "    - /imsvc\n")
+            string(APPEND CLANGD_CONTENT "    - ${dir_clean}\n")
+        endforeach()
+        
+        file(WRITE "${CLANGD_FILE}" "${CLANGD_CONTENT}")
+        message(STATUS "Auto-generated .clangd config successfully at: ${CLANGD_FILE}")
+    else()
+        message(WARNING "Could not auto-detect MSVC or Windows SDK directories. .clangd was not generated.")
+    endif()
+endif()
+
 include(CTest)
 enable_testing()
 # Use static MSVC runtime to avoid missing VCRUNTIME140.dll on target machines
@@ -248,6 +314,16 @@ if (EGO_BUILD_TESTS)
     )
     target_link_libraries(VhfReporterStylusPacketTest PRIVATE Device Solvers Common)
 
+    add_executable(PenUsbProtocolTest
+        Tools/tests/PenUsbProtocolTest.cpp
+    )
+    target_link_libraries(PenUsbProtocolTest PRIVATE Device Common)
+
+    add_executable(PenFactoryStatusFlagsTest
+        Tools/tests/PenFactoryStatusFlagsTest.cpp
+    )
+    target_link_libraries(PenFactoryStatusFlagsTest PRIVATE Device Common)
+
     add_test(NAME CommonLoggerTest COMMAND CommonLoggerTest)
     add_test(NAME HostSystemStateMonitorTest COMMAND HostSystemStateMonitorTest)
     add_test(NAME TouchTrackerSilentGapTest COMMAND TouchTrackerSilentGapTest)
@@ -257,6 +333,8 @@ if (EGO_BUILD_TESTS)
     add_test(NAME StylusLinearFilterProcessTest COMMAND StylusLinearFilterProcessTest)
     add_test(NAME StylusHpp3PostPressureProcessTest COMMAND StylusHpp3PostPressureProcessTest)
     add_test(NAME VhfReporterStylusPacketTest COMMAND VhfReporterStylusPacketTest)
+    add_test(NAME PenUsbProtocolTest COMMAND PenUsbProtocolTest)
+    add_test(NAME PenFactoryStatusFlagsTest COMMAND PenFactoryStatusFlagsTest)
 endif()
 
 

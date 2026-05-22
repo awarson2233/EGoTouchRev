@@ -69,6 +69,7 @@ struct DvrStylusData {
     bool tx2BlockValid = false;
     uint32_t status = 0;
     uint16_t pressure = 0;
+    uint16_t btRawPressure[4]{};
     uint16_t signalX = 0;
     uint16_t signalY = 0;
     uint16_t maxRawPeak = 0;
@@ -86,6 +87,8 @@ struct DvrFrameSlot {
 
     // Heatmap matrix (4800 bytes)
     int16_t heatmapMatrix[40][60]{};
+    uint16_t rawDataLength = 0;
+    uint8_t rawData[Frame::kTotalFrameSize]{};
 
     // Structured suffix views (588 bytes total)
     Frame::MasterSuffixView masterSuffix{};
@@ -112,6 +115,10 @@ struct DvrFrameSlot {
         masterWasRead = src.masterWasRead;
 
         std::memcpy(heatmapMatrix, src.heatmapMatrix, sizeof(heatmapMatrix));
+        rawDataLength = static_cast<uint16_t>(std::min(src.rawLen, static_cast<size_t>(Frame::kTotalFrameSize)));
+        if (rawDataLength != 0 && src.rawPtr) {
+            std::memcpy(rawData, src.rawPtr, rawDataLength);
+        }
 
         masterSuffix = src.masterSuffix;
         slaveSuffix  = src.slaveSuffix;
@@ -124,6 +131,9 @@ struct DvrFrameSlot {
         stylus.tx2BlockValid = src.stylus.input.tx2BlockValid;
         stylus.status = src.stylus.input.status;
         stylus.pressure = src.stylus.output.pressure;
+        for (int i = 0; i < 4; ++i) {
+            stylus.btRawPressure[i] = src.stylus.input.btSample.rawPressure[static_cast<size_t>(i)];
+        }
         stylus.signalX = src.stylus.interop.signalX;
         stylus.signalY = src.stylus.interop.signalY;
         stylus.maxRawPeak = src.stylus.interop.maxRawPeak;

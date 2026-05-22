@@ -38,6 +38,7 @@ public:
 
     void SetBtMcuPressure(uint16_t pressure);
     void SetBtMcuPressurePacket(const std::array<uint16_t, 4>& pressure,
+                                const std::array<uint16_t, 4>& rawPressure,
                                 uint8_t freq1,
                                 uint8_t freq2);
 

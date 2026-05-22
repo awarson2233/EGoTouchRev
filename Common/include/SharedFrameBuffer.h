@@ -22,7 +22,7 @@ constexpr const wchar_t* kSharedFrameName = L"Global\\EGoTouchSharedFrame";
 constexpr const wchar_t* kFrameReadyEventName = L"Global\\EGoTouchFrameReady";
 
 // Stable shared-memory ABI contract for Phase 0.
-constexpr uint32_t kSharedFrameAbiVersion = 1;
+constexpr uint32_t kSharedFrameAbiVersion = 3;
 constexpr uint32_t kSharedFrameAbiCapabilities = 0;
 constexpr uint32_t kSharedFrameAbiReserved = 0;
 
@@ -186,6 +186,8 @@ struct SharedFrameData {
 
     // Heatmap matrix
     int16_t  heatmapMatrix[40][60]{};
+    uint16_t rawDataLength = 0;
+    uint8_t  rawData[Frame::kTotalFrameSize]{};
     uint64_t timestamp = 0;
 
     // Touch contacts & Features
@@ -214,6 +216,7 @@ struct SharedFrameData {
     bool     stylusTx2Valid      = false;
     uint32_t stylusStatus        = 0;
     uint16_t stylusPressure      = 0;
+    uint16_t stylusBtRawPressure[4]{};
 
     // ASA/HPP fields
     uint8_t  stylusAsaMode      = 0;
@@ -322,6 +325,10 @@ inline void PopulateSharedFrameDataFromSolverFrame(SharedFrameData& dst,
                                                    const HeatmapFrame& src) {
     ResetSharedFrameData(dst);
     std::memcpy(dst.heatmapMatrix, src.heatmapMatrix, sizeof(dst.heatmapMatrix));
+    dst.rawDataLength = static_cast<uint16_t>(std::min(src.rawLen, static_cast<size_t>(Frame::kTotalFrameSize)));
+    if (dst.rawDataLength != 0 && src.rawPtr) {
+        std::memcpy(dst.rawData, src.rawPtr, dst.rawDataLength);
+    }
     dst.timestamp = src.timestamp;
     dst.masterWasRead = src.masterWasRead;
 
@@ -402,6 +409,9 @@ inline void PopulateSharedFrameDataFromSolverFrame(SharedFrameData& dst,
     dst.stylusTx2Valid = stylus.input.tx2BlockValid;
     dst.stylusStatus = stylus.input.status;
     dst.stylusPressure = stylus.output.pressure;
+    for (int i = 0; i < 4; ++i) {
+        dst.stylusBtRawPressure[i] = stylus.input.btSample.rawPressure[static_cast<size_t>(i)];
+    }
     dst.stylusRecheckEnabled = stylus.interop.recheckEnabled;
     dst.stylusRecheckPassed = stylus.interop.recheckPassed;
     dst.stylusRecheckOverlap = stylus.interop.recheckOverlap;
@@ -501,6 +511,14 @@ template <typename HeatmapFrame>
 inline void PopulateSolverFrameFromSharedFrameData(HeatmapFrame& out,
                                                    const SharedFrameData& src) {
     std::memcpy(out.heatmapMatrix, src.heatmapMatrix, sizeof(out.heatmapMatrix));
+#if EGOTOUCH_DIAG
+    out.rawData.assign(src.rawData, src.rawData + std::min<int>(src.rawDataLength, Frame::kTotalFrameSize));
+    out.rawPtr = out.rawData.empty() ? nullptr : out.rawData.data();
+    out.rawLen = out.rawData.size();
+#else
+    out.rawPtr = nullptr;
+    out.rawLen = 0;
+#endif
     out.timestamp = src.timestamp;
     out.masterWasRead = src.masterWasRead;
 
@@ -582,6 +600,9 @@ inline void PopulateSolverFrameFromSharedFrameData(HeatmapFrame& out,
     stylus.input.tx2BlockValid = src.stylusTx2Valid;
     stylus.input.status = src.stylusStatus;
     stylus.output.pressure = src.stylusPressure;
+    for (int i = 0; i < 4; ++i) {
+        stylus.input.btSample.rawPressure[static_cast<size_t>(i)] = src.stylusBtRawPressure[i];
+    }
     stylus.interop.recheckEnabled = src.stylusRecheckEnabled;
     stylus.interop.recheckPassed = src.stylusRecheckPassed;
     stylus.interop.recheckOverlap = src.stylusRecheckOverlap;

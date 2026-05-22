@@ -200,11 +200,11 @@ Payload:
 
 | 位置 | 说明 |
 |---|---|
-| `PenEventBridge.cpp:171-179` | 当前桥接层的 ACK 映射表 |
-| `PenEventBridge.cpp:187-197` | 当前桥接层 `0x8001` ACK 发送 |
-| `PenEventBridge.cpp:231-243` | 当前桥接层把首次 `0x7B` 作为触发点，发送 `0x7D01` |
-| `PenEventBridge.cpp:300-367` | 当前握手序列：`0x7101 -> 0x7701 -> 0x7701` |
-| `PenEventBridge.cpp:376-398` | 当前唯一已确认的 `0x7D01` exact factory payload |
+| `PenUsbTypes.h` | 当前桥接层复用的 ACK 映射表、接收帧过滤和 factory status flags helper |
+| `PenEventBridge.cpp` | 当前桥接层 `0x8001` ACK 发送 |
+| `PenEventBridge.cpp` | 当前桥接层把首次 `0x7B` 作为触发点，发送 `0x7D01` |
+| `PenEventBridge.cpp` | 当前握手序列：`0x7101 -> 0x7701 -> 0x7701` |
+| `PenEventBridge.cpp` | 当前唯一已确认的 `0x7D01` exact factory payload |
 
 ---
 
@@ -213,4 +213,4 @@ Payload:
 1. 接收帧 `byte[0..3] / byte[6] / byte[7]` 的精确定义仍未最终命名。
 2. `0x77` 事件目前只看到 ACK，没有看见业务语义。
 3. 需要更多抓包来确认：`0x7B` 的 event payload 本身是否携带可用于选择 `0x7D01` 模板的信息。
-4. `PenEventBridge.cpp:171` 中的 `0x6F -> 0x0B` 不是原厂 Ghidra 事件表中的确认项；原厂确认的是 `0x2F -> 0x0B`。
+4. `0x6F -> 0x0B` 已从当前 ACK 表移除；如后续抓包确认该事件，再重新加入。

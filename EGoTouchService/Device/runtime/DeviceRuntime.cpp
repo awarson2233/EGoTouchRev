@@ -14,6 +14,25 @@ namespace {
 constexpr std::size_t kMaxHistoryItems = 512;
 constexpr std::chrono::milliseconds kEventDebounce{400};
 constexpr std::chrono::milliseconds kDisplayOffSuspendDelay{2000};
+
+uint8_t PayloadByteOrZero(const Himax::Pen::PenEvent& ev) noexcept {
+    return ev.payload.empty() ? 0 : ev.payload[0];
+}
+
+const char* FactoryStatusEventName(Himax::Pen::PenUsbEventCode code) noexcept {
+    using EC = Himax::Pen::PenUsbEventCode;
+    switch (code) {
+    case EC::PenAcStatus: return "PenAcStatus";
+    case EC::PenConnStatus: return "PenConnStatus";
+    case EC::PenCurStatus: return "PenCurStatus";
+    case EC::PenTypeInfo: return "PenTypeInfo";
+    case EC::PenRotateAngle: return "PenRotateAngle";
+    case EC::PenTouchMode: return "PenTouchMode";
+    case EC::PenGlobalPreventMode: return "PenGlobalPreventMode";
+    case EC::PenHolster: return "PenHolster";
+    default: return "Unknown";
+    }
+}
 } // namespace
 
 // --------------- ToString helpers ---------------
@@ -154,14 +173,19 @@ void DeviceRuntime::SetVhfTransposeEnabled(bool enabled) {
     m_vhfReporter.SetTransposeEnabled(enabled);
 }
 
+void DeviceRuntime::SetMasterParserOnlyMode(bool enabled) {
+    m_masterParserOnly.store(enabled, std::memory_order_relaxed);
+}
+
 void DeviceRuntime::IngestBtMcuPressure(uint16_t p) {
     m_stylusPipeline.SetBtMcuPressure(p);
 }
 
 void DeviceRuntime::IngestBtMcuPressurePacket(const std::array<uint16_t, 4>& pressure,
+                                              const std::array<uint16_t, 4>& rawPressure,
                                               uint8_t freq1,
                                               uint8_t freq2) {
-    m_stylusPipeline.SetBtMcuPressurePacket(pressure, freq1, freq2);
+    m_stylusPipeline.SetBtMcuPressurePacket(pressure, rawPressure, freq1, freq2);
 }
 
 // --------------- 命令注入 ---------------
@@ -482,8 +506,12 @@ void DeviceRuntime::OnStreaming() {
         m_stylusVhfEnabled.load(std::memory_order_relaxed));
 
     // 4. Touch pipeline — reads frame, writes contacts/packets
-    m_touchPipeline.Process(touchFrame);
-    m_vhfReporter.DispatchTouch(touchFrame);
+    if (m_masterParserOnly.load(std::memory_order_relaxed)) {
+        m_touchPipeline.ProcessMasterParserOnly(touchFrame);
+    } else {
+        m_touchPipeline.Process(touchFrame);
+        m_vhfReporter.DispatchTouch(touchFrame);
+    }
 
 #ifdef _DEBUG
     // 5. Debug frame push (IPC visualization)
@@ -497,8 +525,57 @@ void DeviceRuntime::OnStreaming() {
 
 // --------------- MCU 事件路由 ---------------
 
+void DeviceRuntime::HandlePenButtonStatusCode(uint8_t statusCode,
+                                              uint8_t rawEventPayload,
+                                              const char* source) {
+    switch (m_penButtonMode) {
+    case PenButtonMode::OemCustom:
+        m_vhfReporter.SetBarrelButtonState(true);
+        LOG_INFO("Runtime", __func__, "MCU",
+                 "{}: statusCode={} raw={} mode=OEM vhf=1 win32=0",
+                 source, statusCode, rawEventPayload);
+        break;
+
+    case PenButtonMode::NativeBarrel: {
+        const bool ok = m_synthPenButton.InjectWinF22Shortcut();
+        LOG_INFO("Runtime", __func__, "MCU",
+                 "{}: statusCode={} raw={} mode=Barrel shortcut=Win+F22 win32={}",
+                 source, statusCode, rawEventPayload, ok ? 1 : 0);
+        break;
+    }
+
+    case PenButtonMode::NativeEraser: {
+        POINT pt{};
+        GetCursorPos(&pt);
+        const bool ok = m_synthPenButton.InjectEraserPulse(pt);
+        LOG_INFO("Runtime", __func__, "MCU",
+                 "{}: statusCode={} raw={} mode=Eraser vhf=0 win32={}",
+                 source, statusCode, rawEventPayload, ok ? 1 : 0);
+        break;
+    }
+    }
+}
+
 void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent& ev) {
     using EC = Himax::Pen::PenUsbEventCode;
+    const uint8_t payload0 = PayloadByteOrZero(ev);
+
+    if (Himax::Pen::FactoryStatusFlagsAffected(ev.code)) {
+        uint16_t oldFlags = 0;
+        uint16_t newFlags = 0;
+        {
+            std::lock_guard<std::mutex> lk(m_penStateMu);
+            oldFlags = m_penState.factoryStatusFlags;
+            newFlags = Himax::Pen::ApplyFactoryStatusFlagUpdate(oldFlags, ev.code, payload0);
+            m_penState.factoryStatusFlags = newFlags;
+        }
+        if (oldFlags != newFlags) {
+            LOG_INFO("Runtime", __func__, "MCU",
+                     "{} flags: 0x{:04X} -> 0x{:04X} (payload=0x{:02X})",
+                     FactoryStatusEventName(ev.code), oldFlags, newFlags, payload0);
+        }
+    }
+
     switch (ev.code) {
 
     case EC::PenConnStatus: {
@@ -578,38 +655,32 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent& ev) {
         {
             std::lock_guard<std::mutex> lk(m_penStateMu);
             m_penState.hasCurrentFunc = ev.semantic.hasCurrentFunc;
-            m_penState.currentFunc = ev.semantic.hasCurrentFunc ? ev.semantic.currentFunc : 0;
+            m_penState.currentFunc = ev.semantic.hasCurrentFunc ? ev.semantic.currentFunc : payload0;
             func = m_penState.currentFunc;
         }
 
-        switch (m_penButtonMode) {
-        case PenButtonMode::OemCustom:
-            m_vhfReporter.SetBarrelButtonState(true);
+        if (func == 1) {
+            HandlePenButtonStatusCode(3, func, "PenCurrentFunc");
+        } else {
             LOG_INFO("Runtime", __func__, "MCU",
-                     "PenCurrentFunc: func={} mode=OEM vhf=1 win32=0",
-                     func);
-            break;
-
-        case PenButtonMode::NativeBarrel: {
-            const bool ok = m_synthPenButton.InjectWinF22Shortcut();
-            LOG_INFO("Runtime", __func__, "MCU",
-                     "PenCurrentFunc: func={} mode=Barrel shortcut=Win+F22 win32={}",
-                     func, ok ? 1 : 0);
-            break;
-        }
-
-        case PenButtonMode::NativeEraser: {
-            POINT pt{};
-            GetCursorPos(&pt);
-            const bool ok = m_synthPenButton.InjectEraserPulse(pt);
-            LOG_INFO("Runtime", __func__, "MCU",
-                     "PenCurrentFunc: func={} mode=Eraser vhf=0 win32={}",
-                     func, ok ? 1 : 0);
-            break;
-        }
+                     "PenCurrentFunc: func={} ignored by factory gate.", func);
         }
         break;
     }
+
+    case EC::PenAcStatus:
+    case EC::PenRotateAngle:
+    case EC::PenTouchMode:
+    case EC::PenGlobalPreventMode:
+    case EC::PenHolster:
+        LOG_INFO("Runtime", __func__, "MCU",
+                 "{}: payload=0x{:02X} flags updated.",
+                 FactoryStatusEventName(ev.code), payload0);
+        break;
+
+    case EC::PenGlobalAnnotation:
+        HandlePenButtonStatusCode(4, payload0, "PenGlobalAnnotation");
+        break;
 
     case EC::EraserToggle: {
         uint8_t eraserState = 0;

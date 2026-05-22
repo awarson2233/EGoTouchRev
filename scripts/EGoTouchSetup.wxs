@@ -5,7 +5,7 @@
     - UpgradeCode 必须全局唯一，绝不能改，用于覆盖更新旧版本。
     - 我们使用 -arch arm64 命令行参数来设定原生架构
   -->
-  <Package Name="!(loc.ProductName)" Manufacturer="!(loc.Manufacturer)" Version="1.0.0"
+  <Package Name="!(loc.ProductName)" Manufacturer="!(loc.Manufacturer)" Version="1.0.4"
            UpgradeCode="434AC770-0762-431A-9ABC-DB2F9DB289AC" 
            Scope="perMachine"
            Language="!(loc.Language)">

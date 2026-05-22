@@ -104,7 +104,7 @@ void ServiceProxy::SaveConfig() {
     }
 
     const TouchPipelineModuleEnableState* persistedModuleState = nullptr;
-    if (m_masterParserOnly && m_masterParserOnlySnapshot.has_value()) {
+    if (m_masterParserOnly.load(std::memory_order_relaxed) && m_masterParserOnlySnapshot.has_value()) {
         persistedModuleState = &*m_masterParserOnlySnapshot;
     }
 
@@ -276,8 +276,15 @@ void ServiceProxy::SetPenButtonRoute(PenButtonRoute r) {
 
 // ── MasterParser-only mode (local) ──
 void ServiceProxy::SetMasterParserOnlyMode(bool enabled) {
-    if (!IsLiveControlAllowed()) return;
-    if (enabled == m_masterParserOnly) return;
+    if (enabled == m_masterParserOnly.load(std::memory_order_relaxed)) return;
+
+    if (IsConnected() && IsLiveControlAllowed()) {
+        Ipc::IpcRequest req{};
+        req.command = Ipc::IpcCommand::SetMasterParserOnly;
+        req.param[0] = enabled ? 1 : 0;
+        req.paramLen = 1;
+        m_client.Send(req);
+    }
 
     if (enabled) {
         m_masterParserOnlySnapshot = CaptureTouchPipelineModuleEnableState(m_pipeline);
@@ -294,7 +301,7 @@ void ServiceProxy::SetMasterParserOnlyMode(bool enabled) {
         m_masterParserOnlySnapshot.reset();
     }
 
-    m_masterParserOnly = enabled;
+    m_masterParserOnly.store(enabled, std::memory_order_relaxed);
 }
 
 } // namespace App

@@ -98,6 +98,8 @@ struct RuntimeSnapshot {
 };
 
 struct RuntimePenState {
+    uint16_t factoryStatusFlags = 0;
+
     bool hasConnection = false;
     bool connected = false;
 
@@ -169,10 +171,12 @@ public:
     void SaveStylusPipelineConfig(std::ostream& out) const;
     void SetVhfEnabled(bool enabled);
     void SetVhfTransposeEnabled(bool enabled);
+    void SetMasterParserOnlyMode(bool enabled);
 
     /// 注入 BT MCU 压感值（由 PenBridge 线程写入，StylusPipeline 帧内读取）
     void IngestBtMcuPressure(uint16_t p);
     void IngestBtMcuPressurePacket(const std::array<uint16_t, 4>& pressure,
+                                   const std::array<uint16_t, 4>& rawPressure,
                                    uint8_t freq1,
                                    uint8_t freq2);
 
@@ -196,6 +200,9 @@ public:
 
 private:
     ThreadResult WorkerMain();
+    void HandlePenButtonStatusCode(uint8_t statusCode,
+                                   uint8_t rawEventPayload,
+                                   const char* source);
 
     // ── Worker 状态处理（每个状态一个入口，Worker 只做调度） ──
     void OnReady();              // ready → 尝试 auto init
@@ -224,6 +231,7 @@ private:
     mutable std::mutex m_penStateMu;
     std::atomic<bool> m_autoMode{false};
     std::atomic<bool> m_stylusVhfEnabled{true};
+    std::atomic<bool> m_masterParserOnly{false};
     PenButtonMode m_penButtonMode = PenButtonMode::OemCustom;
     PenButtonRoute m_penButtonRoute = PenButtonRoute::VhfOnly;
     SyntheticPenButtonInjector m_synthPenButton;

@@ -55,6 +55,7 @@ public:
 
     /// Main entry: processes one frame through all 6 phases.
     bool Process(HeatmapFrame& frame);
+    bool ProcessMasterParserOnly(HeatmapFrame& frame);
 
     /// Pipeline name for config file section header.
     std::string GetName() const { return "TouchPipeline"; }

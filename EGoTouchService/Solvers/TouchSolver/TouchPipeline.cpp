@@ -5,6 +5,12 @@ namespace Solvers {
 // ══════════════════════════════════════════════════════════════════════
 // Process — linear orchestration of all 6 phases
 // ══════════════════════════════════════════════════════════════════════
+bool TouchPipeline::ProcessMasterParserOnly(HeatmapFrame& frame) {
+    m_frameParser.Process(frame);
+    ResetIdleOutputs(frame);
+    return true;
+}
+
 bool TouchPipeline::Process(HeatmapFrame& frame) {
     const size_t desiredContactCapacity = static_cast<size_t>(
         std::max(m_zoneExp.m_maxTouches, m_tracker.m_maxTouchCount));

@@ -368,6 +368,7 @@ void StylusPipeline::LoadConfig(const std::string& key, const std::string& value
 void StylusPipeline::SetBtMcuPressure(uint16_t pressure) {
     std::lock_guard<std::mutex> lk(m_btMutex);
     m_btSample.pressure.fill(0);
+    m_btSample.rawPressure.fill(0);
     m_btSample.pressure[3] = pressure;
     m_btSample.freq1 = 0;
     m_btSample.freq2 = 0;
@@ -377,10 +378,12 @@ void StylusPipeline::SetBtMcuPressure(uint16_t pressure) {
 }
 
 void StylusPipeline::SetBtMcuPressurePacket(const std::array<uint16_t, 4>& pressure,
+                                            const std::array<uint16_t, 4>& rawPressure,
                                             uint8_t freq1,
                                             uint8_t freq2) {
     std::lock_guard<std::mutex> lk(m_btMutex);
     m_btSample.pressure = pressure;
+    m_btSample.rawPressure = rawPressure;
     m_btSample.freq1 = freq1;
     m_btSample.freq2 = freq2;
     m_btSample.seq += 1;

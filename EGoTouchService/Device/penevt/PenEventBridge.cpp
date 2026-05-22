@@ -54,11 +54,28 @@ std::optional<std::wstring> PenEventBridge::FindDevicePath() {
         std::vector<uint8_t> buf(reqSize, 0);
         auto* det = reinterpret_cast<SP_DEVICE_INTERFACE_DETAIL_DATA_W*>(buf.data());
         det->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W);
-        if (SetupDiGetDeviceInterfaceDetailW(devInfo, &ifData, det, reqSize,
-                                             nullptr, nullptr)) {
-            result = det->DevicePath;
-            break;
+        if (!SetupDiGetDeviceInterfaceDetailW(devInfo, &ifData, det, reqSize,
+                                              nullptr, nullptr)) {
+            continue;
         }
+
+        HANDLE probe = CreateFileW(det->DevicePath,
+                                   GENERIC_READ | GENERIC_WRITE,
+                                   FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                   nullptr,
+                                   OPEN_EXISTING,
+                                   FILE_ATTRIBUTE_NORMAL,
+                                   nullptr);
+        if (probe == INVALID_HANDLE_VALUE) {
+            LOG_WARN("PenEvent", __func__, "MCU",
+                     "Skipping event device path that failed probe open: error={}",
+                     GetLastError());
+            continue;
+        }
+
+        CloseHandle(probe);
+        result = det->DevicePath;
+        break;
     }
     SetupDiDestroyDeviceInfoList(devInfo);
     return result;
@@ -172,14 +189,7 @@ bool PenEventBridge::SendScanMode(uint8_t freq1, uint8_t freq2, uint8_t mode) {
 
 // ── 协议辅助 ───────────────────────────────────────────────────────────────
 int PenEventBridge::GetAckCode(uint8_t eventCode) {
-    switch (eventCode) {
-    case 0x6F: return 11;   case 0x70: return 0;    case 0x71: return 1;
-    case 0x72: return 2;    case 0x73: return 0xD;  case 0x74: return 3;
-    case 0x75: return 4;    case 0x76: return 5;    case 0x77: return 6;
-    case 0x78: return 7;    case 0x79: return 8;    case 0x7B: return 0xA;
-    case 0x7C: return 0xC;  case 0x7F: return 9;    case 0x2F: return 0xB;
-    default:   return -1;
-    }
+    return GetFactoryBtMcuAckCode(eventCode);
 }
 
 bool PenEventBridge::SendRawPacket(const std::vector<uint8_t>& pkt) {
@@ -416,34 +426,32 @@ void PenEventBridge::OnConnected() {
 }
 
 void PenEventBridge::OnPacketReceived(const std::vector<uint8_t>& packet) {
-    if (packet.size() < 8) return;
-
-    // ── 诊断: 完整报文 hex dump (前 16 字节) ──
-    {
-        std::string hexDump;
-        size_t dumpLen = std::min(packet.size(), size_t(16));
-        for (size_t i = 0; i < dumpLen; ++i) {
-            char buf[8];
-            snprintf(buf, sizeof(buf), "%02X ", packet[i]);
-            hexDump += buf;
-        }
-        LOG_INFO("PenEvent", __func__, "MCU",
-                 "RX [{}B]: {}", packet.size(), hexDump);
+    std::string hexDump;
+    size_t dumpLen = std::min(packet.size(), size_t(16));
+    for (size_t i = 0; i < dumpLen; ++i) {
+        char buf[8];
+        snprintf(buf, sizeof(buf), "%02X ", packet[i]);
+        hexDump += buf;
     }
 
-    const uint8_t eventCode = packet[5];
+    auto parsed = TryParsePenUsbEventFrame(std::span<const uint8_t>(packet.data(), packet.size()));
+    if (!parsed) {
+        LOG_WARN("PenEvent", __func__, "MCU",
+                 "Dropping invalid RX [{}B]: {}", packet.size(), hexDump);
+        return;
+    }
 
-    // 1. 自动 ACK
+    const uint8_t eventCode = parsed->eventCode;
+    LOG_INFO("PenEvent", __func__, "MCU",
+             "RX [{}B]: {}", packet.size(), hexDump);
+
     int ackCode = GetAckCode(eventCode);
     if (ackCode >= 0) {
         SendAck(static_cast<uint8_t>(ackCode));
     }
 
-    // 2. 使用事件驱动的 session flow 推进握手/InitParam
     AdvanceSessionFromEvent(eventCode);
 
-    // 3. 触发上层回调
-    // NOTE: 0x15/0x2E01 handler removed — Ghidra confirms not in factory event table.
     PenEventCallback cbCopy;
     {
         std::lock_guard<std::mutex> lk(m_cbMutex);
@@ -452,7 +460,7 @@ void PenEventBridge::OnPacketReceived(const std::vector<uint8_t>& packet) {
     if (cbCopy) {
         PenEvent ev;
         ev.code = static_cast<PenUsbEventCode>(eventCode);
-        ev.payload = std::vector<uint8_t>(packet.begin() + 8, packet.end());
+        ev.payload.assign(parsed->payload.begin(), parsed->payload.end());
         ev.receivedAt = std::chrono::steady_clock::now();
 
         if (!ev.payload.empty()) {
@@ -529,10 +537,9 @@ bool PenEventBridge::SendInitProtocolParams() {
     }
 
     // ── 使用 API Monitor 抓包 (row #1022) 的完整 40 字节报文 ──
-    // 原厂 CSV 参数: "3333,3333,2e7,412,258,411a,0f,1,"
-    // 对应二进制 (从 full-dump.apmx64 提取):
+    // exact factory capture:
     //   header:  07 01 02 00 01 7D 11 20
-    //   payload: 33 33 33 33 E7 02 12 04 58 02 1A 41 0F 01 01 00
+    //   payload: 33 33 33 33 E7 02 12 04 58 02 8D 20 0F 01 02 00
     //            00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     const std::vector<uint8_t> pkt = {
         // header (8 bytes)

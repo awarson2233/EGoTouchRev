@@ -1,4 +1,5 @@
 #include "ServiceProxyInternal.h"
+#include "FrameLayout.h"
 #include <algorithm>
 #include <chrono>
 
@@ -33,6 +34,17 @@ bool IsMonotonicServiceTimeline(const std::vector<Solvers::HeatmapFrame>& frames
     return true;
 }
 
+void PopulateRawHeatmapFromFrameData(Solvers::HeatmapFrame& frame) {
+    if (!frame.rawPtr || frame.rawLen < Frame::kMasterFrameSize) return;
+    const uint8_t* raw = frame.rawPtr + Frame::kMatrixOffset;
+    int16_t* heat = reinterpret_cast<int16_t*>(frame.heatmapMatrix);
+    for (int i = 0; i < Frame::kMatrixCells; ++i) {
+        const uint16_t value = static_cast<uint16_t>(raw[i * 2]) |
+            (static_cast<uint16_t>(raw[i * 2 + 1]) << 8);
+        heat[i] = static_cast<int16_t>(value);
+    }
+}
+
 const char* PlaybackTimingModeLabel(PlaybackTimingMode mode) {
     switch (mode) {
     case PlaybackTimingMode::HostReceiveEpochUs:
@@ -61,6 +73,9 @@ bool ServiceProxy::GetCurrentFrame(Solvers::HeatmapFrame& out) {
         if (m_playbackDataset.frames.empty()) return false;
         const size_t index = std::min(m_playbackFrameIndex.load(), m_playbackDataset.frames.size() - 1);
         out = m_playbackDataset.frames[index].frame;
+        if (m_masterParserOnly.load(std::memory_order_relaxed)) {
+            PopulateRawHeatmapFromFrameData(out);
+        }
         return true;
     }
     return GetLatestFrame(out);

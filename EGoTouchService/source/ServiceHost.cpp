@@ -567,6 +567,7 @@ void ServiceHost::StartPenSubsystem() {
             if (m_deviceRuntime) {
                 m_deviceRuntime->IngestBtMcuPressurePacket(
                     std::array<uint16_t, 4>{stats.press[0], stats.press[1], stats.press[2], stats.press[3]},
+                    std::array<uint16_t, 4>{stats.rawPress[0], stats.rawPress[1], stats.rawPress[2], stats.rawPress[3]},
                     stats.freq1,
                     stats.freq2);
             }
@@ -1475,6 +1476,16 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(const Ipc::IpcRequest& req) {
 
     case Ipc::IpcCommand::GetPenBridgeStatus:
         HandleIpcGetPenBridgeStatus(resp);
+        break;
+
+    case Ipc::IpcCommand::SetMasterParserOnly:
+        if (req.paramLen >= 1 && m_deviceRuntime) {
+            m_deviceRuntime->SetMasterParserOnlyMode(req.param[0] != 0);
+            Ipc::MarkSuccess(resp);
+            LOG_INFO("Service", __func__, "IPC", "Master parser only mode {}.", req.param[0] != 0 ? "enabled" : "disabled");
+        } else {
+            Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidState);
+        }
         break;
 
     case Ipc::IpcCommand::SetPenPressureMode:

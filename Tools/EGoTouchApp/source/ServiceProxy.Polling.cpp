@@ -1,5 +1,6 @@
 #include "ServiceProxyInternal.h"
 #include "GuiLogSink.h"
+#include "FrameLayout.h"
 #include <algorithm>
 #include <chrono>
 #include <sstream>
@@ -9,6 +10,17 @@
 namespace App {
 
 namespace {
+
+void PopulateRawHeatmapFromFrameData(Solvers::HeatmapFrame& frame) {
+    if (!frame.rawPtr || frame.rawLen < Frame::kMasterFrameSize) return;
+    const uint8_t* raw = frame.rawPtr + Frame::kMatrixOffset;
+    int16_t* heat = reinterpret_cast<int16_t*>(frame.heatmapMatrix);
+    for (int i = 0; i < Frame::kMatrixCells; ++i) {
+        const uint16_t value = static_cast<uint16_t>(raw[i * 2]) |
+            (static_cast<uint16_t>(raw[i * 2 + 1]) << 8);
+        heat[i] = static_cast<int16_t>(value);
+    }
+}
 
 uint64_t CaptureSystemEpochUs() {
     static LARGE_INTEGER frequency = [] {
@@ -101,6 +113,9 @@ void ServiceProxy::PollLoop() {
                 {
                     std::lock_guard<std::mutex> lk(m_frameMutex);
                     if (m_frameReader.Read(m_latestFrame)) {
+                        if (m_masterParserOnly.load(std::memory_order_relaxed)) {
+                            PopulateRawHeatmapFromFrameData(m_latestFrame);
+                        }
                         m_latestFrame.receiveSystemEpochUs = CaptureSystemEpochUs();
                         m_hasNewFrame.store(true, std::memory_order_release);
                         gotFrame = true;

@@ -42,6 +42,7 @@ struct StylusPacket {
 
 struct StylusBtInputSnapshot {
     std::array<uint16_t, 4> pressure{};
+    std::array<uint16_t, 4> rawPressure{};
     uint32_t seq = 0;
     uint8_t freq1 = 0;
     uint8_t freq2 = 0;
@@ -399,6 +400,7 @@ struct StylusFrameData {
 
     inline void SnapshotBtInput(uint16_t btPressure, uint32_t btSeq, bool hasBtSample) {
         input.btSample.pressure.fill(0);
+        input.btSample.rawPressure.fill(0);
         input.btSample.pressure[3] = btPressure;
         input.btSample.seq = btSeq;
         input.btSample.freq1 = 0;
@@ -411,6 +413,7 @@ struct StylusFrameData {
                                 uint32_t btSeq,
                                 bool hasBtSample) {
         input.btSample.pressure = btPressure;
+        input.btSample.rawPressure.fill(0);
         input.btSample.seq = btSeq;
         input.btSample.freq1 = 0;
         input.btSample.freq2 = 0;

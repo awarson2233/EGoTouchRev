@@ -11,3 +11,4 @@ temp/
 .codex/
 .antigravitycli/*
 out/
+.clangd
