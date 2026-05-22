@@ -116,6 +116,10 @@ struct StylusGridFeature {
     Asa::AsaProjection projection{};
     Asa::AsaCoorResult refinedLocalCoor{};
     uint16_t peakSignal = 0;
+    uint16_t dim1SelectedPeakNetSignal = 0;
+    uint16_t dim2SelectedPeakNetSignal = 0;
+    bool dim1SelectedPeakOnEdge = false;
+    bool dim2SelectedPeakOnEdge = false;
 };
 
 struct StylusCoordinateResult {

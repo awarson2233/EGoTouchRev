@@ -24,8 +24,8 @@ public:
     // Sensor dimensions (from asaPrmt)
     int m_sensorTxCount = 60;   // bTxCount
     int m_sensorRxCount = 40;   // bRxCount
-    int m_sensorDim1 = 60;      // wField00
-    int m_sensorDim2 = 40;      // wField02
+    int m_sensorDim1 = 0x0A00;  // wField00
+    int m_sensorDim2 = 0x0640;  // wField02
 
     // Bypass gate: skip lock when this ASA-style flag is active
     bool m_bypassLock = false;
@@ -71,13 +71,11 @@ public:
 
         if (coor.dim1 < minBound || coor.dim2 < minBound ||
             coor.dim1 >= maxBoundX || coor.dim2 >= maxBoundY) {
-            // Near boundary → use edge thresholds (more tolerant)
-            thresholdX = m_lockFlashEdgeX;
-            thresholdY = m_lockFlashEdgeY;
+            thresholdX = ScaleLockThreshold(m_lockFlashEdgeX, m_sensorTxCount, m_sensorDim1);
+            thresholdY = ScaleLockThreshold(m_lockFlashEdgeY, m_sensorRxCount, m_sensorDim2);
         } else {
-            // Interior → use in-band thresholds
-            thresholdX = m_lockFlashInBandX;
-            thresholdY = m_lockFlashInBandY;
+            thresholdX = ScaleLockThreshold(m_lockFlashInBandX, m_sensorTxCount, m_sensorDim1);
+            thresholdY = ScaleLockThreshold(m_lockFlashInBandY, m_sensorRxCount, m_sensorDim2);
         }
 
         // ── Pen-down transition: lock to start position ──
@@ -144,6 +142,12 @@ private:
     bool m_flagLockX = false;
     bool m_flagLockY = false;
     uint16_t m_prevPressure = 0;
+
+    static inline uint32_t ScaleLockThreshold(uint8_t flashValue, int sensorCount, int physicalSize) {
+        if (physicalSize <= 0) return 0;
+        return (static_cast<uint32_t>(flashValue) * static_cast<uint32_t>(sensorCount) * Asa::kCoorUnit) /
+               static_cast<uint32_t>(physicalSize);
+    }
 
     inline void ClampToSensor(Asa::AsaCoorResult& coor) const {
         coor.dim1 = std::clamp(coor.dim1, 0, m_sensorTxCount * Asa::kCoorUnit);

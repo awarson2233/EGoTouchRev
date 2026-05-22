@@ -2,6 +2,7 @@
 #include "StylusSolver/CoorIIRProcess.hpp"
 #include "StylusSolver/CoorSpeedProcess.hpp"
 #include "StylusSolver/GridFeatureExtractor.hpp"
+#include "StylusSolver/Hpp3PostPressureProcess.hpp"
 #include "StylusSolver/LinearFilterProcess.hpp"
 #include "StylusSolver/TiltProcess.hpp"
 #include "StylusSolver/StylusPipeline.h"
@@ -384,6 +385,121 @@ void TestTx1LinePeakHistoryResetsAfterInvalidParse() {
             "invalid parse frame should clear TX1 line peak history before the next valid frame");
 }
 
+void TestPhysicalLowEdge3x3SumUsesInwardCells() {
+    Solvers::HeatmapFrame frame{};
+    auto& stylus = frame.stylus;
+    stylus.runtime.parse.valid = true;
+    stylus.runtime.rawGrid.asaGrid.tx1.valid = true;
+    stylus.runtime.rawGrid.asaGrid.tx1.anchorRow = 10;
+    stylus.runtime.rawGrid.asaGrid.tx1.anchorCol = 0;
+
+    for (int r = 3; r <= 5; ++r) {
+        stylus.runtime.rawGrid.asaGrid.tx1.grid[r][3] = 50;
+        stylus.runtime.rawGrid.asaGrid.tx1.grid[r][4] = static_cast<int16_t>(r == 4 ? 300 : 250);
+        stylus.runtime.rawGrid.asaGrid.tx1.grid[r][5] = 100;
+        stylus.runtime.rawGrid.asaGrid.tx1.grid[r][6] = 70;
+    }
+
+    Solvers::Stylus::GridFeatureExtractor extractor;
+    extractor.Process(frame);
+
+    Require(stylus.runtime.tx1.feature.peak.valid,
+            "physical low-edge fixture should produce a TX1 peak");
+    Require(stylus.runtime.tx1.feature.peak.neighborSum3x3 == 1310,
+            "physical low edge should sum inward columns [edge, edge+2], excluding the out-of-sensor side");
+}
+
+void TestCoordinateSolverDoesNotMarkLocalEdgeAsPhysicalEdge() {
+    Solvers::HeatmapFrame frame{};
+    auto& stylus = frame.stylus;
+    stylus.runtime.tx1.feature.peak.valid = true;
+    stylus.runtime.rawGrid.asaGrid.tx1.anchorRow = 10;
+    stylus.runtime.rawGrid.asaGrid.tx1.anchorCol = 10;
+
+    auto& projection = stylus.runtime.tx1.feature.projection;
+    projection.Clear();
+    projection.peakIdxDim1 = 0;
+    projection.peakIdxDim2 = 4;
+    projection.dim1[0] = 300;
+    projection.dim1[1] = 100;
+    projection.dim2[3] = 100;
+    projection.dim2[4] = 300;
+    projection.dim2[5] = 100;
+
+    Solvers::Stylus::CoordinateSolver solver;
+    solver.Process(frame);
+
+    Require(stylus.runtime.tx1.coordinate.localGridCoor.valid,
+            "local-window edge should still solve using missing-neighbor zeroes");
+    Require(!stylus.runtime.signal.dim1EdgeActive,
+            "local index 0 should not be reported as a physical sensor edge when anchor is interior");
+}
+
+void TestCoordinateSolverPublishesTx1AxisEdgeSignals() {
+    Solvers::HeatmapFrame frame{};
+    auto& stylus = frame.stylus;
+    stylus.runtime.tx1.feature.peak.valid = true;
+    stylus.runtime.tx1.feature.peakSignal = 4000;
+    stylus.runtime.tx2.feature.peakSignal = 0;
+    stylus.runtime.rawGrid.asaGrid.tx1.anchorRow = 0;
+    stylus.runtime.rawGrid.asaGrid.tx1.anchorCol = 0;
+
+    auto& projection = stylus.runtime.tx1.feature.projection;
+    projection.Clear();
+    projection.peakIdxDim1 = 4;
+    projection.peakIdxDim2 = 4;
+    projection.dim1[4] = 300;
+    projection.dim1[5] = 100;
+    projection.dim1[6] = 50;
+    projection.dim2[4] = 300;
+    projection.dim2[5] = 100;
+    projection.dim2[6] = 50;
+    stylus.runtime.tx1.feature.dim1SelectedPeakOnEdge = true;
+    stylus.runtime.tx1.feature.dim2SelectedPeakOnEdge = true;
+    stylus.runtime.tx1.feature.dim1SelectedPeakNetSignal = 2200;
+    stylus.runtime.tx1.feature.dim2SelectedPeakNetSignal = 2300;
+
+    Solvers::Stylus::CoordinateSolver solver;
+    solver.Process(frame);
+
+    Require(stylus.runtime.signal.signalY == 0,
+            "TX2 peak signal should remain available separately for tilt");
+    Require(stylus.runtime.signal.dim1EdgeSignal == 2200 &&
+            stylus.runtime.signal.dim2EdgeSignal == 2300,
+            "edge pressure signals should come from TX1 dim1/dim2 line peaks");
+
+    Solvers::Stylus::Hpp3PostPressureProcess postPressure;
+    auto& pressure = stylus.runtime.pressure;
+    pressure.outputPressure = 200;
+    pressure.rawPressure = 200;
+    pressure.mappedPressure = 200;
+    stylus.runtime.decision.tipDownCandidate = true;
+    stylus.runtime.decision.authoritativeDown = true;
+    postPressure.Process(frame);
+
+    Require(stylus.runtime.pressure.outputPressure == 200,
+            "low TX2 signal alone should not suppress edge pressure when TX1 axis signals are strong");
+}
+
+void TestAftCoorProcessScalesFactoryLockThresholds() {
+    Solvers::Stylus::AftCoorProcess aft;
+    Solvers::HeatmapFrame frame{};
+    auto& stylus = frame.stylus;
+    stylus.runtime.pressure.outputPressure = 100;
+    stylus.runtime.post.finalCoor = Coor(100, 100);
+    aft.Process(frame);
+
+    stylus.runtime.post.finalCoor = Coor(120, 100);
+    aft.Process(frame);
+    Require(stylus.runtime.post.finalCoor.dim1 == 100,
+            "scaled edge lock threshold should keep a 20-unit X move locked");
+
+    stylus.runtime.post.finalCoor = Coor(130, 100);
+    aft.Process(frame);
+    Require(stylus.runtime.post.finalCoor.dim1 != 100,
+            "scaled edge lock threshold should release once X movement exceeds about 24 units");
+}
+
 void TestTiltJitterFilterMatchesTsacore() {
     Require(Solvers::Stylus::TiltProcess::JitterFilter1Degree(5, 7) == 6,
             "jitter filter should pull larger current tilt back by one degree");
@@ -493,6 +609,10 @@ void TestCoordinateSolverUsesPhysicalTopLeftEdgeAtLocalCenter() {
     projection.dim2[4] = 300;
     projection.dim2[5] = 100;
     projection.dim2[6] = 50;
+    stylus.runtime.tx1.feature.dim1SelectedPeakOnEdge = true;
+    stylus.runtime.tx1.feature.dim2SelectedPeakOnEdge = true;
+    stylus.runtime.tx1.feature.dim1SelectedPeakNetSignal = 300;
+    stylus.runtime.tx1.feature.dim2SelectedPeakNetSignal = 300;
 
     Solvers::Stylus::CoordinateSolver solver;
     solver.Process(frame);
@@ -523,6 +643,10 @@ void TestCoordinateSolverUsesPhysicalBottomRightEdgeAtLocalCenter() {
     projection.dim2[4] = 300;
     projection.dim2[3] = 100;
     projection.dim2[2] = 50;
+    stylus.runtime.tx1.feature.dim1SelectedPeakOnEdge = true;
+    stylus.runtime.tx1.feature.dim2SelectedPeakOnEdge = true;
+    stylus.runtime.tx1.feature.dim1SelectedPeakNetSignal = 300;
+    stylus.runtime.tx1.feature.dim2SelectedPeakNetSignal = 300;
 
     Solvers::Stylus::CoordinateSolver solver;
     solver.Process(frame);
@@ -1004,6 +1128,10 @@ int main() {
         TestTx1LinePeakFirstFrameUsesStrongestCurrentPeak();
         TestTx1LinePeakHistoryCarriesPreviousSelection();
         TestTx1LinePeakHistoryResetsAfterInvalidParse();
+        TestPhysicalLowEdge3x3SumUsesInwardCells();
+        TestCoordinateSolverDoesNotMarkLocalEdgeAsPhysicalEdge();
+        TestCoordinateSolverPublishesTx1AxisEdgeSignals();
+        TestAftCoorProcessScalesFactoryLockThresholds();
         TestTiltJitterFilterMatchesTsacore();
         TestCoordinateSolverUsesFixedDevicePitchTables();
         TestCoordinateSolverClampsGlobalCoordinateAtTopLeftEdge();

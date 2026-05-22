@@ -48,6 +48,9 @@ private:
     using PeakFlags = std::array<uint16_t, Asa::kGridSize>;
     using Grid2D = int16_t[Asa::kGridDim][Asa::kGridDim];
     using Axis = int32_t[Asa::kGridDim];
+    static constexpr int kAnchorCenterOffset = Asa::kGridDim / 2;
+    static constexpr int kSensorCols = 60;
+    static constexpr int kSensorRows = 40;
     static constexpr int kFactoryTx2SeedThreshold = 99; // Original GetGridTx2Peaks accepts reduced TX2 cells only when value > 99.
     static constexpr int kFactoryTx2RegionFloor = 100;
     struct FourNeighborList { std::array<uint8_t, 4> indices; uint8_t count; };
@@ -60,6 +63,13 @@ private:
 
     struct ProjectionBounds {
         int minRow = 0, maxRow = 0, minCol = 0, maxCol = 0;
+    };
+
+    struct AxisEdgeGeometry {
+        int lowIdx = -1;
+        int highIdx = -1;
+        int validMin = 0;
+        int validMax = Asa::kGridDim - 1;
     };
 
     struct LinePeakCandidate { int peakIdx = -1, leftBoundary = 0, rightBoundary = 0, age = 0; int32_t netSignal = 0, regionEnergy = 0; };
@@ -85,6 +95,39 @@ private:
     }();
 
     static inline int32_t NonNegative(int32_t value) { return std::max<int32_t>(value, 0); }
+
+    static inline bool IsValidLocalIndex(int idx) { return idx >= 0 && idx < Asa::kGridDim; }
+
+    static inline AxisEdgeGeometry GetAxisEdgeGeometry(int anchor, int sensorCount) {
+        AxisEdgeGeometry geometry{};
+        geometry.lowIdx = kAnchorCenterOffset - anchor;
+        geometry.highIdx = kAnchorCenterOffset + sensorCount - 1 - anchor;
+        geometry.validMin = std::clamp(geometry.lowIdx, 0, Asa::kGridDim - 1);
+        geometry.validMax = std::clamp(geometry.highIdx, 0, Asa::kGridDim - 1);
+        if (geometry.validMax < geometry.validMin) {
+            geometry.validMin = 0;
+            geometry.validMax = Asa::kGridDim - 1;
+        }
+        return geometry;
+    }
+
+    static inline bool IsPhysicalLowEdge(int idx, const AxisEdgeGeometry& geometry) {
+        return IsValidLocalIndex(geometry.lowIdx) && idx == geometry.lowIdx;
+    }
+
+    static inline bool IsPhysicalHighEdge(int idx, const AxisEdgeGeometry& geometry) {
+        return IsValidLocalIndex(geometry.highIdx) && idx == geometry.highIdx;
+    }
+
+    static inline bool IsPhysicalEdge(int idx, const AxisEdgeGeometry& geometry) {
+        return IsPhysicalLowEdge(idx, geometry) || IsPhysicalHighEdge(idx, geometry);
+    }
+
+    static inline bool RangeTouchesPhysicalEdge(int minIdx, int maxIdx, const AxisEdgeGeometry& geometry) {
+        return (IsValidLocalIndex(geometry.lowIdx) && minIdx <= geometry.lowIdx && geometry.lowIdx <= maxIdx) ||
+               (IsValidLocalIndex(geometry.highIdx) && minIdx <= geometry.highIdx && geometry.highIdx <= maxIdx);
+    }
+
     static inline std::size_t GridIndex(int row, int col) { return static_cast<std::size_t>(row * Asa::kGridDim + col); }
     static inline int32_t GridAt(const Grid& grid, int row, int col) { return grid[GridIndex(row, col)]; }
     template <typename Func>
@@ -141,6 +184,8 @@ private:
         }
         Grid searchGrid{};
         CopyGrid(block, searchGrid, out.grid);
+        const AxisEdgeGeometry dim1Edge = GetAxisEdgeGeometry(block.anchorCol, kSensorCols);
+        const AxisEdgeGeometry dim2Edge = GetAxisEdgeGeometry(block.anchorRow, kSensorRows);
         PeakRegion best;
         best.valid = false;
         ScanPeakRegions(searchGrid, peakFlagsOut, m_tx1PeakSeedThreshold, m_peakRegionFloor, [](int) { return false; },
@@ -149,7 +194,7 @@ private:
                                 CleanLargeRegion(searchGrid, peakFlagsOut, region);
                                 return;
                             }
-                            region.sum3x3 = Calc3x3Sum(searchGrid, region.peakRow, region.peakCol);
+                            region.sum3x3 = Calc3x3Sum(searchGrid, region.peakRow, region.peakCol, dim2Edge, dim1Edge);
                             if (!best.valid || region.peakValue >= best.peakValue) CopyPeakRegionSummary(best, region);
                         });
         CopyGrid(searchGrid, out.grid);
@@ -158,7 +203,7 @@ private:
             return;
         }
         ExportPrimaryPeak(best, out);
-        ProjectTx1To1D(searchGrid, best, out);
+        ProjectTx1To1D(searchGrid, best, out, dim2Edge, dim1Edge);
     }
 
     inline void AnalyzeTx2BlockFromTx1(const Grid2D& tx1SearchGrid, const PeakFlags& tx1PeakFlags,
@@ -168,15 +213,19 @@ private:
         Grid tx1Linear{}, tx2Search{};
         CopyGrid(tx1SearchGrid, tx1Linear);
         CopyGrid(block, tx2Search, out.grid);
+        const AxisEdgeGeometry dim1Edge = GetAxisEdgeGeometry(block.anchorCol, kSensorCols);
+        const AxisEdgeGeometry dim2Edge = GetAxisEdgeGeometry(block.anchorRow, kSensorRows);
         ReduceTx2DataByTx1Peaks(tx1Linear, tx2Search);
-        ScanTx2PeakRegions(tx2Search, tx1PeakFlags, out.peakTable);
+        ScanTx2PeakRegions(tx2Search, tx1PeakFlags, out.peakTable, dim2Edge, dim1Edge);
         CopyGrid(tx2Search, out.grid);
         ExportStrongestTx2Peak(out);
     }
 
     inline void ScanTx2PeakRegions(Grid& tx2Search,
                                    const PeakFlags& tx1PeakFlags,
-                                   Asa::GridPeakTable& peakTable) const {
+                                   Asa::GridPeakTable& peakTable,
+                                   const AxisEdgeGeometry& dim2Edge,
+                                   const AxisEdgeGeometry& dim1Edge) const {
         PeakFlags peakFlags{};
         uint16_t peakIndex = 1;
         for (int idx = 0; idx < Asa::kGridSize; ++idx) {
@@ -193,8 +242,8 @@ private:
             peakFlags[uidx] = peakIndex;
             GrowPeakRegion(tx2Search, peakFlags, peakIndex, kFactoryTx2RegionFloor, region);
             UpdatePeakData(region, tx2Search);
-            UpdateRefinedPos(region, tx2Search);
-            region.sum3x3 = Calc3x3Sum(tx2Search, region.peakRow, region.peakCol);
+            UpdateRefinedPos(region, tx2Search, dim2Edge, dim1Edge);
+            region.sum3x3 = Calc3x3Sum(tx2Search, region.peakRow, region.peakCol, dim2Edge, dim1Edge);
             UpdateTx2PeakTable(region, peakIndex, peakTable);
 
             if (peakIndex < 0x7fff) ++peakIndex;
@@ -295,11 +344,31 @@ private:
         }
     }
 
-    static inline int32_t Calc3x3Sum(const Grid& grid, int peakRow, int peakCol) {
-        const int rowMin = std::clamp(peakRow - 1, 0, Asa::kGridDim - 3);
-        const int colMin = std::clamp(peakCol - 1, 0, Asa::kGridDim - 3);
+    static inline void GetThreeCellAxisRange(int peakIdx, const AxisEdgeGeometry& geometry, int& minIdx, int& maxIdx) {
+        if (IsPhysicalLowEdge(peakIdx, geometry)) {
+            minIdx = peakIdx;
+            maxIdx = peakIdx + 2;
+        } else if (IsPhysicalHighEdge(peakIdx, geometry)) {
+            minIdx = peakIdx - 2;
+            maxIdx = peakIdx;
+        } else {
+            minIdx = peakIdx - 1;
+            maxIdx = peakIdx + 1;
+        }
+        minIdx = std::clamp(minIdx, geometry.validMin, geometry.validMax);
+        maxIdx = std::clamp(maxIdx, geometry.validMin, geometry.validMax);
+    }
+
+    static inline int32_t Calc3x3Sum(const Grid& grid,
+                                     int peakRow,
+                                     int peakCol,
+                                     const AxisEdgeGeometry& rowEdge,
+                                     const AxisEdgeGeometry& colEdge) {
+        int rowMin = 0, rowMax = 0, colMin = 0, colMax = 0;
+        GetThreeCellAxisRange(peakRow, rowEdge, rowMin, rowMax);
+        GetThreeCellAxisRange(peakCol, colEdge, colMin, colMax);
         int32_t sum = 0;
-        ForEachCellInRange(rowMin, rowMin + 2, colMin, colMin + 2, [&](int r, int c) { sum += GridAt(grid, r, c); });
+        ForEachCellInRange(rowMin, rowMax, colMin, colMax, [&](int r, int c) { sum += GridAt(grid, r, c); });
         return sum;
     }
 
@@ -313,17 +382,32 @@ private:
         });
     }
 
-    static inline void GetRefineAxisRange(int peakIdx, int maxIdx, int& minIdx, int& maxIdxOut) {
-        if (peakIdx == 0) { minIdx = peakIdx; maxIdxOut = peakIdx + 1; }
-        else if (peakIdx == maxIdx) { minIdx = peakIdx - 1; maxIdxOut = peakIdx; }
-        else if (peakIdx == 1 || peakIdx == maxIdx - 1) { minIdx = peakIdx - 1; maxIdxOut = peakIdx + 1; }
-        else { minIdx = peakIdx - 2; maxIdxOut = peakIdx + 2; }
+    static inline void GetRefineAxisRange(int peakIdx, const AxisEdgeGeometry& geometry, int& minIdx, int& maxIdxOut) {
+        if (IsPhysicalLowEdge(peakIdx, geometry)) {
+            minIdx = peakIdx;
+            maxIdxOut = peakIdx + 1;
+        } else if (IsPhysicalHighEdge(peakIdx, geometry)) {
+            minIdx = peakIdx - 1;
+            maxIdxOut = peakIdx;
+        } else if ((IsValidLocalIndex(geometry.lowIdx) && peakIdx == geometry.lowIdx + 1) ||
+                   (IsValidLocalIndex(geometry.highIdx) && peakIdx == geometry.highIdx - 1)) {
+            minIdx = peakIdx - 1;
+            maxIdxOut = peakIdx + 1;
+        } else {
+            minIdx = peakIdx - 2;
+            maxIdxOut = peakIdx + 2;
+        }
+        minIdx = std::clamp(minIdx, geometry.validMin, geometry.validMax);
+        maxIdxOut = std::clamp(maxIdxOut, geometry.validMin, geometry.validMax);
     }
 
-    static inline void UpdateRefinedPos(PeakRegion& region, const Grid& grid) {
+    static inline void UpdateRefinedPos(PeakRegion& region,
+                                        const Grid& grid,
+                                        const AxisEdgeGeometry& rowEdge,
+                                        const AxisEdgeGeometry& colEdge) {
         int colMin = 0, colMax = 0, rowMin = 0, rowMax = 0;
-        GetRefineAxisRange(region.peakCol, Asa::kGridDim - 1, colMin, colMax);
-        GetRefineAxisRange(region.peakRow, Asa::kGridDim - 1, rowMin, rowMax);
+        GetRefineAxisRange(region.peakCol, colEdge, colMin, colMax);
+        GetRefineAxisRange(region.peakRow, rowEdge, rowMin, rowMax);
         int32_t total = 0;
         int sampleCount = 0;
         ForEachCellInRange(rowMin, rowMax, colMin, colMax, [&](int row, int col) {
@@ -420,26 +504,36 @@ private:
         }
     }
 
-    inline void ProjectTx1To1D(const Grid& grid, const PeakRegion& region, StylusGridFeature& out) {
-        const ProjectionBounds projectionBounds = BuildProjectionBounds(region);
+    inline void ProjectTx1To1D(const Grid& grid,
+                               const PeakRegion& region,
+                               StylusGridFeature& out,
+                               const AxisEdgeGeometry& rowEdge,
+                               const AxisEdgeGeometry& colEdge) {
+        const ProjectionBounds projectionBounds = BuildProjectionBounds(region, rowEdge, colEdge);
         out.projection.spanDim1 = projectionBounds.maxRow - projectionBounds.minRow + 1;
         out.projection.spanDim2 = projectionBounds.maxCol - projectionBounds.minCol + 1;
         FillProjectionAxis(out.projection.dim1, projectionBounds.minRow, projectionBounds.maxRow,
                            [&](int c, int r) { return GridAt(grid, r, c); });
         FillProjectionAxis(out.projection.dim2, projectionBounds.minCol, projectionBounds.maxCol,
                            [&](int r, int c) { return GridAt(grid, r, c); });
-        ProcessTx1LinePeaks(out.projection);
+        ProcessTx1LinePeaks(out, colEdge, rowEdge);
     }
 
-    static inline ProjectionBounds BuildProjectionBounds(const PeakRegion& region) {
+    static inline ProjectionBounds BuildProjectionBounds(const PeakRegion& region,
+                                                         const AxisEdgeGeometry& rowEdge,
+                                                         const AxisEdgeGeometry& colEdge) {
         ProjectionBounds bounds{region.minRow, region.maxRow, region.minCol, region.maxCol};
-        if (bounds.minCol == 0 || bounds.maxCol == Asa::kGridDim - 1) {
-            if (region.peakRow != 0) bounds.minRow = region.peakRow - 1;
-            if (region.peakRow != Asa::kGridDim - 1) bounds.maxRow = region.peakRow + 1;
+        bounds.minRow = std::clamp(bounds.minRow, rowEdge.validMin, rowEdge.validMax);
+        bounds.maxRow = std::clamp(bounds.maxRow, rowEdge.validMin, rowEdge.validMax);
+        bounds.minCol = std::clamp(bounds.minCol, colEdge.validMin, colEdge.validMax);
+        bounds.maxCol = std::clamp(bounds.maxCol, colEdge.validMin, colEdge.validMax);
+        if (RangeTouchesPhysicalEdge(bounds.minCol, bounds.maxCol, colEdge)) {
+            bounds.minRow = std::clamp(region.peakRow - 1, rowEdge.validMin, rowEdge.validMax);
+            bounds.maxRow = std::clamp(region.peakRow + 1, rowEdge.validMin, rowEdge.validMax);
         }
-        if (bounds.minRow == 0 || bounds.maxRow == Asa::kGridDim - 1) {
-            if (region.peakCol != 0) bounds.minCol = region.peakCol - 1;
-            if (region.peakCol != Asa::kGridDim - 1) bounds.maxCol = region.peakCol + 1;
+        if (RangeTouchesPhysicalEdge(bounds.minRow, bounds.maxRow, rowEdge)) {
+            bounds.minCol = std::clamp(region.peakCol - 1, colEdge.validMin, colEdge.validMax);
+            bounds.maxCol = std::clamp(region.peakCol + 1, colEdge.validMin, colEdge.validMax);
         }
         return bounds;
     }
@@ -485,17 +579,29 @@ private:
         if (current.selectedByRank < 0) current.selectedByRank = current.strongestByNet;
     }
     
-    inline int ProcessTx1LinePeakAxis(const Axis& signal, LinePeakTable& previous) {
+    inline LinePeakCandidate ProcessTx1LinePeakAxis(const Axis& signal, LinePeakTable& previous) {
         LinePeakTable current = SearchLinePeaks(signal);
         ApplyLinePeakHistory(current, previous);
-        const int selectedPeakIdx = GetSelectedLinePeakIdx(current);
+        LinePeakCandidate selected{};
+        const int selectedSlot = current.selectedByRank >= 0 ? current.selectedByRank : current.strongestByNet;
+        if (selectedSlot >= 0 && selectedSlot < current.count) {
+            selected = current.peaks[static_cast<std::size_t>(selectedSlot)];
+        }
         previous = current;
-        return selectedPeakIdx;
+        return selected;
     }
 
-    inline void ProcessTx1LinePeaks(Asa::AsaProjection& projection) {
-        projection.peakIdxDim1 = ProcessTx1LinePeakAxis(projection.dim1, m_prevLinePeaksDim1);
-        projection.peakIdxDim2 = ProcessTx1LinePeakAxis(projection.dim2, m_prevLinePeaksDim2);
+    inline void ProcessTx1LinePeaks(StylusGridFeature& out,
+                                    const AxisEdgeGeometry& dim1Edge,
+                                    const AxisEdgeGeometry& dim2Edge) {
+        LinePeakCandidate dim1Peak = ProcessTx1LinePeakAxis(out.projection.dim1, m_prevLinePeaksDim1);
+        LinePeakCandidate dim2Peak = ProcessTx1LinePeakAxis(out.projection.dim2, m_prevLinePeaksDim2);
+        out.projection.peakIdxDim1 = dim1Peak.peakIdx;
+        out.projection.peakIdxDim2 = dim2Peak.peakIdx;
+        out.dim1SelectedPeakNetSignal = static_cast<uint16_t>(std::clamp(dim1Peak.netSignal, 0, 0xFFFF));
+        out.dim2SelectedPeakNetSignal = static_cast<uint16_t>(std::clamp(dim2Peak.netSignal, 0, 0xFFFF));
+        out.dim1SelectedPeakOnEdge = IsPhysicalEdge(dim1Peak.peakIdx, dim1Edge);
+        out.dim2SelectedPeakOnEdge = IsPhysicalEdge(dim2Peak.peakIdx, dim2Edge);
     }
 
     inline LinePeakTable SearchLinePeaks(const Axis& signal) const {

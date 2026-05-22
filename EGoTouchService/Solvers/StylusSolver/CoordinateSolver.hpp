@@ -85,10 +85,10 @@ public:
         signal.recheckThreshold = m_signalFloor;
         signal.recheckThresholdMulti = static_cast<uint16_t>(std::max<uint16_t>(m_signalFloor, 256));
 
-        signal.dim1EdgeActive = IsAnyEdgePeak(tx1.feature.projection.peakIdxDim1, dim1Edge);
-        signal.dim2EdgeActive = IsAnyEdgePeak(tx1.feature.projection.peakIdxDim2, dim2Edge);
-        signal.dim1EdgeSignal = signal.dim1EdgeActive ? signal.signalX : 0;
-        signal.dim2EdgeSignal = signal.dim2EdgeActive ? signal.signalY : 0;
+        signal.dim1EdgeActive = tx1.feature.dim1SelectedPeakOnEdge;
+        signal.dim2EdgeActive = tx1.feature.dim2SelectedPeakOnEdge;
+        signal.dim1EdgeSignal = signal.dim1EdgeActive ? tx1.feature.dim1SelectedPeakNetSignal : 0;
+        signal.dim2EdgeSignal = signal.dim2EdgeActive ? tx1.feature.dim2SelectedPeakNetSignal : 0;
 
         runtime.decision.inRangeCandidate = tx1.coordinate.reportGlobalCoor.valid;
         flow.terminal = false;
@@ -140,11 +140,11 @@ private:
     }
 
     static inline bool IsLowEdgePeak(int peakIdx, const AxisEdgeGeometry& geometry) {
-        return peakIdx == 0 || peakIdx == geometry.lowIdx;
+        return IsValidLocalIndex(geometry.lowIdx) && peakIdx == geometry.lowIdx;
     }
 
     static inline bool IsHighEdgePeak(int peakIdx, const AxisEdgeGeometry& geometry) {
-        return peakIdx == Asa::kGridDim - 1 || peakIdx == geometry.highIdx;
+        return IsValidLocalIndex(geometry.highIdx) && peakIdx == geometry.highIdx;
     }
 
     static inline bool IsAnyEdgePeak(int peakIdx, const AxisEdgeGeometry& geometry) {
@@ -223,7 +223,10 @@ private:
                                    const TriangleEdgeParams& edge,
                                    const AxisEdgeGeometry& geometry) const {
         if (!IsValidLocalIndex(peakIdx)) return kInvalidCoor;
-        const auto s = [&](int i) -> int { return static_cast<int>(std::clamp(signal[i], 0, 65535)); };
+        const auto s = [&](int i) -> int {
+            if (!IsValidLocalIndex(i)) return 0;
+            return static_cast<int>(std::clamp(signal[i], 0, 65535));
+        };
 
         if (IsLowEdgePeak(peakIdx, geometry) && HasRequiredLowNeighbors(peakIdx)) {
             return peakIdx * Asa::kCoorUnit +
@@ -234,7 +237,6 @@ private:
                                           edge.ratio, edge.sumThresholdIdxLast);
             return (peakIdx + 1) * Asa::kCoorUnit - e;
         }
-        if (peakIdx == 0 || peakIdx == Asa::kGridDim - 1) return kInvalidCoor;
         const int offset = TriangleAlgUsing3Point(s(peakIdx - 1), s(peakIdx), s(peakIdx + 1));
         return peakIdx * Asa::kCoorUnit + offset;
     }

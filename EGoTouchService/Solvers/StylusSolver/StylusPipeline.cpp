@@ -58,6 +58,7 @@ bool StylusPipeline::Process(HeatmapFrame& frame) {
     }
 
     m_tiltProcess.Process(frame);
+    m_noisePostProcess.Process(frame);
     m_pressureSolver.Process(frame);
     m_postPressure.Process(frame);
     m_edgeCoorProcess.Process(frame);
