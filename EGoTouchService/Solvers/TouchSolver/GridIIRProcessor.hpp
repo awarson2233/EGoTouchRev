@@ -3,7 +3,6 @@
 // Header-only. Converted from Preprocessing/GridIIRProcessor.{h,cpp}.
 // Dynamic threshold gated IIR with aggressive noise floor decay.
 
-#include "NeonCompat.h"
 #include "SolverTypes.h"
 #include <algorithm>
 #include <cstring>
