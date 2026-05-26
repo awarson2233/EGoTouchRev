@@ -27,6 +27,11 @@ public:
     bool m_edgeThresholdEnabled = true;
     int  m_edgeThreshold = 300;
     int  m_z8Radius = 2;
+    int  m_localMaxRadius = 1;
+    bool m_closePeakSaddleFilter = true;
+    int  m_closePeakRadius = 2;
+    int  m_closePeakMinSaddleDrop = 80;
+    float m_closePeakMinSaddleRatio = 0.08f;
     int  m_maxPeaks = 20;
     int  m_pressureDriftDebounceLimit = 3;
     int  m_macroZoneMinArea = 3;
@@ -36,8 +41,10 @@ public:
     // ────────────────────────────────────────────────────────
     inline void Detect(const HeatmapFrame& frame,
                        const std::vector<MacroZone>& macroZones) {
-        // Step 1: DetectInRange — asymmetric 8-neighbor local max
+        // Step 1: DetectInRange — asymmetric local max
         DetectInRange(frame, macroZones);
+
+        if (m_closePeakSaddleFilter) ApplyClosePeakSaddleFilter(frame);
 
         // Step 2: Z8 Filter — signal >> 5 > neighborSignalSum → remove
         if (m_z8Filter) ApplyZ8Filter();
@@ -132,17 +139,15 @@ private:
                 }
                 if (v < thold) continue;
 
-                // --- Combined Local-Max + Neighbor Sum (single pass) ---
+                const int localRadius = std::clamp(m_localMaxRadius, 1, 5);
                 bool isPeak = true;
-                int nbrSigSum = 0;
-                for (int dr = -m_z8Radius; dr <= m_z8Radius && isPeak; ++dr) {
-                    for (int dc = -m_z8Radius; dc <= m_z8Radius; ++dc) {
+                for (int dr = -localRadius; dr <= localRadius && isPeak; ++dr) {
+                    for (int dc = -localRadius; dc <= localRadius; ++dc) {
                         if (dr == 0 && dc == 0) continue;
                         int nr = r + dr;
                         int nc = c + dc;
                         if (nr >= 0 && nr < kRows && nc >= 0 && nc < kCols) {
                             int16_t nv = val(nr, nc);
-                            nbrSigSum += nv;
                             bool after = (dr > 0) || (dr == 0 && dc > 0);
                             if (after) {
                                 if (nv > v) { isPeak = false; break; }
@@ -153,6 +158,19 @@ private:
                     }
                 }
                 if (!isPeak) continue;
+
+                int nbrSigSum = 0;
+                const int z8Radius = std::clamp(m_z8Radius, 1, 5);
+                for (int dr = -z8Radius; dr <= z8Radius; ++dr) {
+                    for (int dc = -z8Radius; dc <= z8Radius; ++dc) {
+                        if (dr == 0 && dc == 0) continue;
+                        int nr = r + dr;
+                        int nc = c + dc;
+                        if (nr >= 0 && nr < kRows && nc >= 0 && nc < kCols) {
+                            nbrSigSum += val(nr, nc);
+                        }
+                    }
+                }
 
                 // PressureDrift check
                 if (m_pressureDriftFilter &&
@@ -192,6 +210,69 @@ private:
                 }
             }
         }
+    }
+
+    inline int EstimateSaddleSignal(const HeatmapFrame& frame,
+                                    const Peak& a,
+                                    const Peak& b) const {
+        const int rowDelta = b.r - a.r;
+        const int colDelta = b.c - a.c;
+        const int steps = std::max(std::abs(rowDelta), std::abs(colDelta));
+        int saddle = 0;
+        for (int step = 1; step < steps; ++step) {
+            const double t = static_cast<double>(step) / static_cast<double>(steps);
+            const int r = static_cast<int>(std::lround(static_cast<double>(a.r) + static_cast<double>(rowDelta) * t));
+            const int c = static_cast<int>(std::lround(static_cast<double>(a.c) + static_cast<double>(colDelta) * t));
+            if (r < 0 || r >= kRows || c < 0 || c >= kCols) continue;
+            if ((r == a.r && c == a.c) || (r == b.r && c == b.c)) continue;
+            saddle = std::max(saddle, static_cast<int>(frame.heatmapMatrix[r][c]));
+        }
+        return saddle;
+    }
+
+    inline void CompactPeaksBySuppression(const std::array<bool, kMaxStoredPeaks>& suppress) {
+        int writeIdx = 0;
+        for (int i = 0; i < m_peakCount; ++i) {
+            if (suppress[static_cast<size_t>(i)]) continue;
+            if (writeIdx != i) {
+                m_peaks[static_cast<size_t>(writeIdx)] = m_peaks[static_cast<size_t>(i)];
+            }
+            ++writeIdx;
+        }
+        m_peakCount = writeIdx;
+    }
+
+    inline void ApplyClosePeakSaddleFilter(const HeatmapFrame& frame) {
+        if (m_peakCount <= 1) return;
+        const int closeRadius = std::max(1, m_closePeakRadius);
+        std::array<bool, kMaxStoredPeaks> suppress{};
+        suppress.fill(false);
+
+        for (int i = 0; i < m_peakCount; ++i) {
+            if (suppress[static_cast<size_t>(i)]) continue;
+            const auto& a = m_peaks[static_cast<size_t>(i)];
+            for (int j = i + 1; j < m_peakCount; ++j) {
+                if (suppress[static_cast<size_t>(j)]) continue;
+                const auto& b = m_peaks[static_cast<size_t>(j)];
+                if (a.macroZoneIndex != b.macroZoneIndex) continue;
+                const int rowDist = std::abs(a.r - b.r);
+                const int colDist = std::abs(a.c - b.c);
+                if (std::max(rowDist, colDist) > closeRadius) continue;
+
+                const int weakerIdx = (a.z <= b.z) ? i : j;
+                const int weakerSignal = static_cast<int>(m_peaks[static_cast<size_t>(weakerIdx)].z);
+                const int saddle = EstimateSaddleSignal(frame, a, b);
+                const int requiredDrop = std::max(
+                    m_closePeakMinSaddleDrop,
+                    static_cast<int>(static_cast<float>(weakerSignal) * m_closePeakMinSaddleRatio));
+                if (weakerSignal - saddle < requiredDrop) {
+                    suppress[static_cast<size_t>(weakerIdx)] = true;
+                    if (weakerIdx == i) break;
+                }
+            }
+        }
+
+        CompactPeaksBySuppression(suppress);
     }
 
     // ────────────────────────────────────────────────────────

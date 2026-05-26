@@ -95,6 +95,37 @@ void TestSingleFingerSilentGapRelink() {
     Require(resumed->reportEvent == TouchReportMove, "relinked finger should resume as Move");
 }
 
+void TestFastSingleFingerGapRelinkUsesPrediction() {
+    PipelineHarness h;
+    const int id = VisibleContacts(h.Run({{10.0f, 10.0f}}))[0]->id;
+    h.Run({{16.0f, 10.0f}});
+
+    const auto gap = h.Run({});
+    Require(VisibleContacts(gap).empty(), "fast gap frame should stay silent");
+    Require(FindContactById(gap, id) != nullptr, "fast gap should keep hidden contact");
+
+    const auto resume = h.Run({{28.0f, 10.0f}});
+    const auto* relinked = FindVisibleById(resume, id);
+    Require(relinked != nullptr, "fast relink should keep original id after one missing frame");
+    Require(relinked->reportEvent == TouchReportMove, "fast relink should resume as Move");
+}
+
+void TestFastSingleFingerTwoGapRelinkUsesPrediction() {
+    PipelineHarness h;
+    const int id = VisibleContacts(h.Run({{10.0f, 10.0f}}))[0]->id;
+    h.Run({{16.0f, 10.0f}});
+
+    const auto gap1 = h.Run({});
+    const auto gap2 = h.Run({});
+    Require(FindContactById(gap1, id) != nullptr, "first fast gap should keep hidden contact");
+    Require(FindContactById(gap2, id) != nullptr, "second fast gap should keep hidden contact");
+
+    const auto resume = h.Run({{34.0f, 10.0f}});
+    const auto* relinked = FindVisibleById(resume, id);
+    Require(relinked != nullptr, "fast relink should keep original id after two missing frames");
+    Require(relinked->reportEvent == TouchReportMove, "two-gap relink should resume as Move");
+}
+
 void TestSingleFingerGapTimeout() {
     PipelineHarness h;
     const int id = VisibleContacts(h.Run({{10.0f, 10.0f}}))[0]->id;
@@ -161,6 +192,8 @@ void TestAmbiguousSilentGapDoesNotHijackOldIds() {
 int main() {
     try {
         TestSingleFingerSilentGapRelink();
+        TestFastSingleFingerGapRelinkUsesPrediction();
+        TestFastSingleFingerTwoGapRelinkUsesPrediction();
         TestSingleFingerGapTimeout();
         TestTwoFingerRelinkKeepsOtherFinger();
         TestAmbiguousSilentGapDoesNotHijackOldIds();

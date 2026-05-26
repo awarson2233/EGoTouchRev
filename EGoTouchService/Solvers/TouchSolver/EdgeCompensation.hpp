@@ -88,15 +88,24 @@ inline void TZ_GetEdgeTouchedFlag(ZoneEdgeInfo& ei) {
     }
 }
 
+inline uint8_t TZ_GetCentroidEdgeFlags(const ZoneEdgeInfo& ei) {
+    uint8_t flags = 0;
+    if (ei.minCol <= kGridColMin) flags |= 0x01;
+    if (ei.maxCol >= kGridColMax) flags |= 0x02;
+    if (ei.minRow <= kGridRowMin) flags |= 0x04;
+    if (ei.maxRow >= kGridRowMax) flags |= 0x08;
+    return flags;
+}
+
 // ── CTD_EC LUT and helpers (from firmware) ──
 
 struct ECSegment {
-    uint8_t edgeWidthThreshold;
-    uint8_t lutIdxLow;
-    uint8_t lutIdxHigh;
+    int edgeWidthThreshold;
+    int lutIdxLow;
+    int lutIdxHigh;
 };
 struct ECProfile {
-    uint8_t numSegments;
+    int numSegments;
     ECSegment segments[4];
 };
 
@@ -149,84 +158,162 @@ static const ECProfile g_defaultECProfiles[4] = {
 static inline int ECGetOffset(uint8_t subIdx, uint8_t edgeW,
                                const ECProfile& prof) {
     int si = 0;
-    while (si < prof.numSegments - 1 &&
+    const int segmentCount = std::clamp(prof.numSegments, 1, 4);
+    while (si < segmentCount - 1 &&
            prof.segments[si].edgeWidthThreshold < edgeW)
         si++;
     auto& s = prof.segments[si];
-    uint16_t hi = g_ctd256Ln[s.lutIdxHigh];
-    uint16_t lo = g_ctd256Ln[s.lutIdxLow];
+    const int hiIdx = std::clamp(s.lutIdxHigh, 0, 255);
+    const int loIdx = std::clamp(s.lutIdxLow, 0, 255);
+    uint16_t hi = g_ctd256Ln[hiIdx];
+    uint16_t lo = g_ctd256Ln[loIdx];
     if (hi == lo) return 0;
     int r = (int(g_ctd256Ln[subIdx] - lo) * 0x100) / int(hi - lo);
     return std::min(r, 0xFF);
 }
 
-static inline int ECGetFinalOffset(int rawDist, int compOff, int blendRange) {
+static inline int ECGetFinalOffset(int rawDist, int compOff, int blendWidth) {
     if (rawDist <= 0) return 0;
-    if (compOff >= rawDist) return rawDist;
-    if (blendRange <= 0 || rawDist >= blendRange) return rawDist;
-    return (rawDist * rawDist + compOff * (blendRange - rawDist)) / blendRange;
+    const int blendStart = 0x100;
+    const int width = std::max(1, blendWidth);
+    if (rawDist <= blendStart) return compOff;
+    if (rawDist >= blendStart + width) return rawDist;
+    const int t = ((rawDist - blendStart) * 0x100) / width;
+    int blended = rawDist * t + compOff * (0x100 - t);
+    if (blended < 0) blended += 0xff;
+    return blended >> 8;
 }
+
+enum class ECEdge : uint8_t {
+    Dim1Near = 0,
+    Dim1Far = 1,
+    Dim2Near = 2,
+    Dim2Far = 3,
+};
+
+struct ECDimResult {
+    bool active = false;
+    bool corrected = false;
+    bool nearEdge = false;
+    bool farEdge = false;
+    uint8_t edgeWidth = 0;
+    int rawDistQ8 = 0;
+    int finalOffQ8 = 0;
+    float correctedDistance = 0.0f;
+};
 
 class EdgeCompensator {
 public:
     bool m_enabled = true;
     EdgeBounds m_bounds;
-    float m_ecBlendRange = 2.0f;
+    float m_ecBlendRange = 0.25f;
+    ECProfile m_profiles[4] = {
+        g_defaultECProfiles[0],
+        g_defaultECProfiles[1],
+        g_defaultECProfiles[2],
+        g_defaultECProfiles[3],
+    };
 
     inline void Process(std::vector<TouchContact>& contacts,
                         const std::vector<ZoneEdgeInfo>& edgeInfos,
                         const EdgeBounds& bounds) {
         if (!m_enabled) return;
-        for (int i = 0; i < (int)contacts.size(); ++i) {
-            if (i >= (int)edgeInfos.size()) break;
-            auto& tc = contacts[i];
-            auto& ei = edgeInfos[i];
-            if (!(ei.edgeFlags & 0x20)) continue;
+        for (int i = 0; i < static_cast<int>(contacts.size()); ++i) {
+            if (i >= static_cast<int>(edgeInfos.size())) break;
+            auto& tc = contacts[static_cast<size_t>(i)];
+            const auto& ei = edgeInfos[static_cast<size_t>(i)];
+            tc.edgeFlags |= ei.edgeFlags;
+            tc.centroidEdgeFlags |= TZ_GetCentroidEdgeFlags(ei);
+            const bool edge = (tc.edgeFlags & (0x20 | 0x80000)) != 0 ||
+                              tc.centroidEdgeFlags != 0;
+            if (!edge) continue;
+
             tc.isEdge = true;
-            ProcessDim(tc.x, float(bounds.colMin), float(bounds.colMax),
-                       ei.edgeFlags, ei, true);
-            ProcessDim(tc.y, float(bounds.rowMin), float(bounds.rowMax),
-                       ei.edgeFlags, ei, false);
+            tc.rawXBeforeEC = tc.x;
+            tc.rawYBeforeEC = tc.y;
+            tc.ecFlags &= ~(0x100u | 0x200u);
+
+            ECDimResult xResult = ProcessDim(tc.x, bounds.colMin, bounds.colMax,
+                                             ei, tc.centroidEdgeFlags,
+                                             0x01, 0x02,
+                                             ECEdge::Dim1Near, ECEdge::Dim1Far);
+            ECDimResult yResult = ProcessDim(tc.y, bounds.rowMin, bounds.rowMax,
+                                             ei, tc.centroidEdgeFlags,
+                                             0x04, 0x08,
+                                             ECEdge::Dim2Near, ECEdge::Dim2Far);
+
+            if (xResult.active) {
+                tc.ecWidthX = xResult.edgeWidth;
+                tc.edgeDistX = xResult.correctedDistance;
+                if (xResult.corrected) tc.ecFlags |= 0x100;
+            }
+            if (yResult.active) {
+                tc.ecWidthY = yResult.edgeWidth;
+                tc.edgeDistY = yResult.correctedDistance;
+                if (yResult.corrected) tc.ecFlags |= 0x200;
+            }
         }
     }
 
 private:
-    inline void ProcessDim(float& coord, float boundNear, float boundFar,
-                           uint32_t edgeFlags, const ZoneEdgeInfo& ei,
-                           bool isDimX) {
-        bool nearEdge = isDimX ? (ei.minCol <= kGridColMin)
-                               : (ei.minRow <= kGridRowMin);
-        bool farEdge  = isDimX ? (ei.maxCol >= kGridColMax)
-                               : (ei.maxRow >= kGridRowMax);
-        if (!nearEdge && !farEdge) return;
+    static inline uint8_t ComputeEdgeWidth(int outerSum,
+                                           int innerSum,
+                                           int outerMax,
+                                           int innerMax) {
+        int outer = outerSum;
+        int inner = innerSum;
+        if (outer <= 0 && outerMax > 0) {
+            outer = outerMax;
+            inner = innerMax;
+        }
+        if (outer <= 0) return 0;
+        if (inner <= 0) return 255;
+        return static_cast<uint8_t>(std::clamp((outer * 255) / inner, 0, 255));
+    }
 
-        int outer = isDimX ? ei.outerColSigSum : ei.outerRowSigSum;
-        int inner = isDimX ? ei.innerColSigSum : ei.innerRowSigSum;
-        uint8_t edgeWidth = (inner > 0)
-            ? uint8_t(std::min(outer * 255 / inner, 255))
-            : 0;
+    inline ECDimResult ProcessDim(float& coord,
+                                  float boundNear,
+                                  float boundFar,
+                                  const ZoneEdgeInfo& ei,
+                                  uint8_t centroidFlags,
+                                  uint8_t nearMask,
+                                  uint8_t farMask,
+                                  ECEdge nearProfile,
+                                  ECEdge farProfile) const {
+        ECDimResult result;
+        result.nearEdge = (centroidFlags & nearMask) != 0;
+        result.farEdge = (centroidFlags & farMask) != 0;
+        if (!result.nearEdge && !result.farEdge) return result;
 
-        int q8coord = int(coord * 256.0f);
-        int rawDist;
-        if (farEdge)
-            rawDist = int(boundFar * 256.0f) - q8coord;
-        else
-            rawDist = q8coord - int(boundNear * 256.0f);
-        if (rawDist < 0) rawDist = 0;
+        const int q8coord = static_cast<int>(coord * 256.0f);
+        const int nearDist = std::max(0, q8coord - static_cast<int>(boundNear * 256.0f));
+        const int farDist = std::max(0, static_cast<int>(boundFar * 256.0f) - q8coord);
+        const bool useFar = result.farEdge && (!result.nearEdge || farDist < nearDist);
+        result.rawDistQ8 = useFar ? farDist : nearDist;
+        result.active = true;
 
-        uint8_t subIdx = uint8_t(std::min(rawDist, 255));
-        int profIdx = isDimX ? (farEdge ? 1 : 0) : (farEdge ? 3 : 2);
-        int offset = ECGetOffset(subIdx, edgeWidth,
-                                 g_defaultECProfiles[profIdx]);
-        int compOff = 256 - offset;
+        const bool isDimX = nearMask == 0x01;
+        result.edgeWidth = isDimX
+            ? ComputeEdgeWidth(ei.outerColSigSum, ei.innerColSigSum, ei.outerColMax, ei.innerColMax)
+            : ComputeEdgeWidth(ei.outerRowSigSum, ei.innerRowSigSum, ei.outerRowMax, ei.innerRowMax);
 
-        int blendRange = int(m_ecBlendRange * 256.0f);
-        int finalOff = ECGetFinalOffset(rawDist, compOff, blendRange);
+        const uint8_t subIdx = static_cast<uint8_t>(std::min(result.rawDistQ8, 255));
+        const int profileIndex = static_cast<int>(useFar ? farProfile : nearProfile);
+        const int offset = ECGetOffset(subIdx, result.edgeWidth, m_profiles[profileIndex]);
+        const int compOff = 256 - offset;
+        const int blendWidth = std::max(1, static_cast<int>(m_ecBlendRange * 256.0f));
+        result.finalOffQ8 = ECGetFinalOffset(result.rawDistQ8, compOff, blendWidth);
+        result.correctedDistance = static_cast<float>(result.finalOffQ8) / 256.0f;
 
-        if (farEdge)
-            coord = boundFar - float(finalOff) / 256.0f;
-        else
-            coord = boundNear + float(finalOff) / 256.0f;
+        const int oldQ8 = q8coord;
+        if (useFar) {
+            coord = boundFar - result.correctedDistance;
+        } else {
+            coord = boundNear + result.correctedDistance;
+        }
+        const int newQ8 = static_cast<int>(coord * 256.0f);
+        result.corrected = newQ8 != oldQ8;
+        return result;
     }
 };
 
@@ -241,22 +328,26 @@ public:
                         const EdgeBounds& bounds) {
         if (!m_enabled) return;
 
-        for (int i = 0; i < (int)contacts.size(); ++i) {
-            if (i >= (int)edgeInfos.size()) break;
-            auto& tc = contacts[i];
-            auto& ei = edgeInfos[i];
+        for (int i = 0; i < static_cast<int>(contacts.size()); ++i) {
+            if (i >= static_cast<int>(edgeInfos.size())) break;
+            auto& tc = contacts[static_cast<size_t>(i)];
+            const auto& ei = edgeInfos[static_cast<size_t>(i)];
+            const uint8_t centroidFlags = tc.centroidEdgeFlags | TZ_GetCentroidEdgeFlags(ei);
+            const uint32_t edgeFlags = tc.edgeFlags | ei.edgeFlags;
+            if ((edgeFlags & 0x20) == 0 && centroidFlags == 0) continue;
 
-            if (!(ei.edgeFlags & 0x20)) continue;
+            const bool xEdge = (centroidFlags & 0x03) != 0;
+            const bool yEdge = (centroidFlags & 0x0c) != 0;
+            const float fallbackXDist = std::min(tc.x - bounds.colMin, bounds.colMax - tc.x);
+            const float fallbackYDist = std::min(tc.y - bounds.rowMin, bounds.rowMax - tc.y);
+            const float xDist = tc.edgeDistX > 0.0f ? tc.edgeDistX : fallbackXDist;
+            const float yDist = tc.edgeDistY > 0.0f ? tc.edgeDistY : fallbackYDist;
+            const bool uncorrectedX = xEdge && (tc.ecFlags & 0x100) == 0;
+            const bool uncorrectedY = yEdge && (tc.ecFlags & 0x200) == 0;
+            const bool stillPinned = (uncorrectedX && xDist <= static_cast<float>(m_edgeMargin)) ||
+                                     (uncorrectedY && yDist <= static_cast<float>(m_edgeMargin));
 
-            bool atEdge =
-                ei.minCol <= bounds.colMin + m_edgeMargin ||
-                ei.maxCol >= bounds.colMax - m_edgeMargin ||
-                ei.minRow <= bounds.rowMin + m_edgeMargin ||
-                ei.maxRow >= bounds.rowMax - m_edgeMargin;
-
-            if (!atEdge) continue;
-
-            if (tc.state == 0) {
+            if (tc.state == 0 && stillPinned) {
                 tc.debugFlags |= 0x400;
                 tc.isReported = false;
             }

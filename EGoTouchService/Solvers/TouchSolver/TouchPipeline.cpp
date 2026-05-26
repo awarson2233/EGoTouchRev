@@ -35,7 +35,7 @@ bool TouchPipeline::Process(HeatmapFrame& frame) {
     // ── Phase 2: Signal Conditioning ────────────────────────────────
     m_baseline.Process(frame);
     m_cmf.Process(frame);
-    m_gridIIR.Process(frame);
+    m_gridIIR.Process(frame, m_peakDet.m_threshold);
 
     // ── Phase 3: Candidate Generation ───────────────────────────────
     frame.contacts.clear();
@@ -254,6 +254,23 @@ std::vector<ConfigParam> TouchPipeline::GetConfigSchema() const {
                    ConfigParam::Bool, const_cast<bool*>(&m_edgeComp.m_enabled)).Module("Zone & Contact");
     s.emplace_back("ECBlendRange", "EC Blend Range",
                    ConfigParam::Float, const_cast<float*>(&m_edgeComp.m_ecBlendRange), 0.0f, 5.0f).Module("Zone & Contact");
+    const char* ecEdgeNames[4] = {"Dim1Near", "Dim1Far", "Dim2Near", "Dim2Far"};
+    for (int edge = 0; edge < 4; ++edge) {
+        auto& profile = m_edgeComp.m_profiles[edge];
+        const std::string prefix = std::string("EC") + ecEdgeNames[edge];
+        s.emplace_back(prefix + "Segments", prefix + " Segments",
+                       ConfigParam::Int, const_cast<int*>(&profile.numSegments), 1, 4).Module("Zone & Contact");
+        for (int segment = 0; segment < 4; ++segment) {
+            const std::string segPrefix = prefix + "S" + std::to_string(segment);
+            auto& seg = profile.segments[segment];
+            s.emplace_back(segPrefix + "Width", segPrefix + " Width",
+                           ConfigParam::Int, const_cast<int*>(&seg.edgeWidthThreshold), 0, 255).Module("Zone & Contact");
+            s.emplace_back(segPrefix + "LutLow", segPrefix + " LUT Low",
+                           ConfigParam::Int, const_cast<int*>(&seg.lutIdxLow), 0, 255).Module("Zone & Contact");
+            s.emplace_back(segPrefix + "LutHigh", segPrefix + " LUT High",
+                           ConfigParam::Int, const_cast<int*>(&seg.lutIdxHigh), 0, 255).Module("Zone & Contact");
+        }
+    }
 
     // ── Touch Classification ──
     s.emplace_back("PalmEnabled", "Touch Classification Enabled",
@@ -330,16 +347,6 @@ std::vector<ConfigParam> TouchPipeline::GetConfigSchema() const {
                    ConfigParam::Float, const_cast<float*>(&m_tracker.m_accBoostSizeMm), 0.1f, 5.0f).Module("Tracking");
     s.emplace_back("PredictionScale", "Prediction Scale",
                    ConfigParam::Float, const_cast<float*>(&m_tracker.m_predictionScale), 0.0f, 2.0f).Module("Tracking");
-    s.emplace_back("LiftOffHoldEnabled", "LiftOff Hold Enable",
-                   ConfigParam::Bool, const_cast<bool*>(&m_tracker.m_liftOffHoldEnabled)).Module("Tracking");
-    s.emplace_back("LiftOffHoldFrames", "LiftOff Hold",
-                   ConfigParam::Int, const_cast<int*>(&m_tracker.m_liftOffHoldFrames), 0, 10).Module("Tracking");
-    s.emplace_back("LiftOffPredictEnabled", "LiftOff Predict",
-                   ConfigParam::Bool, const_cast<bool*>(&m_tracker.m_liftOffPredictEnabled)).Module("Tracking");
-    s.emplace_back("LiftOffVelocityDecay", "LiftOff Vel Decay",
-                   ConfigParam::Float, const_cast<float*>(&m_tracker.m_liftOffVelocityDecay), 0.0f, 1.0f).Module("Tracking");
-    s.emplace_back("LiftOffHoldSpeedThreshold", "LiftOff Hold Speed",
-                   ConfigParam::Float, const_cast<float*>(&m_tracker.m_liftOffHoldSpeedThreshold), 0.0f, 5.0f).Module("Tracking");
     s.emplace_back("GapRelinkEnabled", "Gap Relink Enable",
                    ConfigParam::Bool, const_cast<bool*>(&m_tracker.m_gapRelinkEnabled)).Module("Tracking");
     s.emplace_back("GapRelinkWindowFrames", "Gap Relink Window",
@@ -482,6 +489,19 @@ void TouchPipeline::SaveConfig(std::ostream& out) const {
     // Phase 4: EdgeCompensation
     out << "ECEnabled=" << (m_edgeComp.m_enabled?"1":"0") << "\n";
     out << "ECBlendRange=" << m_edgeComp.m_ecBlendRange << "\n";
+    const char* ecEdgeNames[4] = {"Dim1Near", "Dim1Far", "Dim2Near", "Dim2Far"};
+    for (int edge = 0; edge < 4; ++edge) {
+        const auto& profile = m_edgeComp.m_profiles[edge];
+        const std::string prefix = std::string("EC") + ecEdgeNames[edge];
+        out << prefix << "Segments=" << profile.numSegments << "\n";
+        for (int segment = 0; segment < 4; ++segment) {
+            const auto& seg = profile.segments[segment];
+            const std::string segPrefix = prefix + "S" + std::to_string(segment);
+            out << segPrefix << "Width=" << seg.edgeWidthThreshold << "\n";
+            out << segPrefix << "LutLow=" << seg.lutIdxLow << "\n";
+            out << segPrefix << "LutHigh=" << seg.lutIdxHigh << "\n";
+        }
+    }
     // Phase 3: TouchClassifier
     out << "PalmEnabled=" << (m_touchClassifier.m_enabled?"1":"0") << "\n";
     out << "PalmAreaThreshold=" << m_touchClassifier.m_areaThreshold << "\n";
@@ -520,11 +540,6 @@ void TouchPipeline::SaveConfig(std::ostream& out) const {
     out << "AccThresholdBoost=" << m_tracker.m_accThresholdBoost << "\n";
     out << "AccBoostSizeMm=" << m_tracker.m_accBoostSizeMm << "\n";
     out << "PredictionScale=" << m_tracker.m_predictionScale << "\n";
-    out << "LiftOffHoldEnabled=" << (m_tracker.m_liftOffHoldEnabled?"1":"0") << "\n";
-    out << "LiftOffHoldFrames=" << m_tracker.m_liftOffHoldFrames << "\n";
-    out << "LiftOffPredictEnabled=" << (m_tracker.m_liftOffPredictEnabled?"1":"0") << "\n";
-    out << "LiftOffVelocityDecay=" << m_tracker.m_liftOffVelocityDecay << "\n";
-    out << "LiftOffHoldSpeedThreshold=" << m_tracker.m_liftOffHoldSpeedThreshold << "\n";
     out << "GapRelinkEnabled=" << (m_tracker.m_gapRelinkEnabled?"1":"0") << "\n";
     out << "GapRelinkWindowFrames=" << m_tracker.m_gapRelinkWindowFrames << "\n";
     out << "TouchDownDebounceFrames=" << m_tracker.m_touchDownDebounceFrames << "\n";
@@ -582,6 +597,34 @@ void TouchPipeline::SaveConfig(std::ostream& out) const {
 void TouchPipeline::LoadConfig(const std::string& key,
                                 const std::string& value) {
     auto toBool = [](const std::string& v) { return v=="1"||v=="true"; };
+    auto loadECProfile = [&](const std::string& k) {
+        const char* edgeNames[4] = {"Dim1Near", "Dim1Far", "Dim2Near", "Dim2Far"};
+        for (int edge = 0; edge < 4; ++edge) {
+            auto& profile = m_edgeComp.m_profiles[edge];
+            const std::string prefix = std::string("EC") + edgeNames[edge];
+            if (k == prefix + "Segments") {
+                profile.numSegments = std::clamp(std::stoi(value), 1, 4);
+                return true;
+            }
+            for (int segment = 0; segment < 4; ++segment) {
+                auto& seg = profile.segments[segment];
+                const std::string segPrefix = prefix + "S" + std::to_string(segment);
+                if (k == segPrefix + "Width") {
+                    seg.edgeWidthThreshold = std::clamp(std::stoi(value), 0, 255);
+                    return true;
+                }
+                if (k == segPrefix + "LutLow") {
+                    seg.lutIdxLow = std::clamp(std::stoi(value), 0, 255);
+                    return true;
+                }
+                if (k == segPrefix + "LutHigh") {
+                    seg.lutIdxHigh = std::clamp(std::stoi(value), 0, 255);
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
     // Phase 1
     if      (key=="FrameParserEnabled")      m_frameParser.m_enabled = toBool(value);
     // Phase 2: Baseline
@@ -622,6 +665,7 @@ void TouchPipeline::LoadConfig(const std::string& key,
     // Phase 4: EdgeCompensation
     else if (key=="ECEnabled")               m_edgeComp.m_enabled = toBool(value);
     else if (key=="ECBlendRange")            m_edgeComp.m_ecBlendRange = std::stof(value);
+    else if (loadECProfile(key))              {}
     // Phase 3: TouchClassifier
     else if (key=="PalmEnabled")             m_touchClassifier.m_enabled = toBool(value);
     else if (key=="PalmAreaThreshold")       m_touchClassifier.m_areaThreshold = std::stoi(value);
@@ -660,11 +704,6 @@ void TouchPipeline::LoadConfig(const std::string& key,
     else if (key=="AccThresholdBoost")       m_tracker.m_accThresholdBoost = std::stof(value);
     else if (key=="AccBoostSizeMm")          m_tracker.m_accBoostSizeMm = std::stof(value);
     else if (key=="PredictionScale")         m_tracker.m_predictionScale = std::stof(value);
-    else if (key=="LiftOffHoldEnabled")      m_tracker.m_liftOffHoldEnabled = toBool(value);
-    else if (key=="LiftOffHoldFrames")       m_tracker.m_liftOffHoldFrames = std::stoi(value);
-    else if (key=="LiftOffPredictEnabled")   m_tracker.m_liftOffPredictEnabled = toBool(value);
-    else if (key=="LiftOffVelocityDecay")    m_tracker.m_liftOffVelocityDecay = std::stof(value);
-    else if (key=="LiftOffHoldSpeedThreshold")m_tracker.m_liftOffHoldSpeedThreshold = std::stof(value);
     else if (key=="GapRelinkEnabled")        m_tracker.m_gapRelinkEnabled = toBool(value);
     else if (key=="GapRelinkWindowFrames")   m_tracker.m_gapRelinkWindowFrames = std::stoi(value);
     else if (key=="TouchDownDebounceFrames") m_tracker.m_touchDownDebounceFrames = std::stoi(value);

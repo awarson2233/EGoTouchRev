@@ -34,7 +34,7 @@ public:
         std::memset(m_historyBuffer, 0, sizeof(m_historyBuffer));
     }
 
-    inline bool Process(HeatmapFrame& frame) {
+    inline bool Process(HeatmapFrame& frame, int candidatePreserveThreshold = 0) {
         if (!m_enabled) return true;
 
         if (!m_historyInitialized) {
@@ -68,6 +68,8 @@ public:
         const int16_t dynThreshold = static_cast<int16_t>(std::max(
             static_cast<int>(std::lround(frameMax * m_gateRatio)),
             m_gateStaticFloor));
+        const int16_t preserveThreshold = static_cast<int16_t>(
+            std::clamp(candidatePreserveThreshold, 0, 0x7FFF));
 
         int16_t* framePixel = &frame.heatmapMatrix[0][0];
         int16_t* histPixel  = &m_historyBuffer[0][0];
@@ -77,7 +79,7 @@ public:
         const int32_t noiseFloorCutoff = static_cast<int32_t>(m_noiseFloorCutoff);
 
         auto applyDecay = [&](int16_t current, int16_t history) -> int16_t {
-            if (current >= dynThreshold) {
+            if (current >= dynThreshold || (preserveThreshold > 0 && current >= preserveThreshold)) {
                 return current;
             }
 
@@ -93,6 +95,8 @@ public:
         if (!m_residualEnabled) {
 #if defined(_M_ARM64)
             const int16x8_t dynThresholdVec = vdupq_n_s16(dynThreshold);
+            const int16x8_t preserveThresholdVec = vdupq_n_s16(preserveThreshold);
+            const bool preserveEnabled = preserveThreshold > 0;
             const int32x4_t zero32 = vdupq_n_s32(0);
             const int32x4_t decayStepVec = vdupq_n_s32(decayStep);
             const int32x4_t noiseFloorVec = vdupq_n_s32(noiseFloorCutoff);
@@ -100,7 +104,10 @@ public:
             for (; i + 8 <= kGridCellCount; i += 8) {
                 const int16x8_t currentVec = vld1q_s16(framePixel + i);
                 const int16x8_t historyVec = vld1q_s16(histPixel + i);
-                const uint16x8_t keepCurrentMask = vcgeq_s16(currentVec, dynThresholdVec);
+                uint16x8_t keepCurrentMask = vcgeq_s16(currentVec, dynThresholdVec);
+                if (preserveEnabled) {
+                    keepCurrentMask = vorrq_u16(keepCurrentMask, vcgeq_s16(currentVec, preserveThresholdVec));
+                }
 
                 const int32x4_t currentLo = vmovl_s16(vget_low_s16(currentVec));
                 const int32x4_t currentHi = vmovl_s16(vget_high_s16(currentVec));

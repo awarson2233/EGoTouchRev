@@ -47,6 +47,15 @@ struct TouchContact {
     bool isReported = true;
     int prevIndex = -1;
     int debugFlags = 0;
+    uint32_t edgeFlags = 0;
+    uint8_t centroidEdgeFlags = 0;
+    uint32_t ecFlags = 0;
+    float edgeDistX = 0.0f;
+    float edgeDistY = 0.0f;
+    float rawXBeforeEC = 0.0f;
+    float rawYBeforeEC = 0.0f;
+    uint8_t ecWidthX = 0;
+    uint8_t ecWidthY = 0;
 
     // TS/TE/TouchReport-aligned state mirrors
     uint32_t lifeFlags = 0;

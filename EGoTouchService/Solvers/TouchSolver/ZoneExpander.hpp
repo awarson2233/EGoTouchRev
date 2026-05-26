@@ -56,6 +56,7 @@ public:
             m_units[pi].peakCol = pk.c;
             m_units[pi].peakRow = pk.r;
             m_units[pi].peakSig = pk.z;
+            m_units[pi].zoneThold = zoneThold;
             m_units[pi].peakCount = 0;
             m_units[pi].addPeakIndex(pi);
             FloodFill(frame, pi, pk, zoneThold, maxRadius);
@@ -117,6 +118,7 @@ private:
         ZoneType type = NF;     // TZ_GetType result
         int peakCol = 0, peakRow = 0;
         int16_t peakSig = 0;
+        int16_t zoneThold = 0;
         static constexpr int kMaxPeaksPerZone = 16;
         int peakIndices[kMaxPeaksPerZone];
         int peakCount = 0;
@@ -125,6 +127,21 @@ private:
             peakCount++;
         }
         int getPeakCount() const { return std::min(peakCount, kMaxPeaksPerZone); }
+    };
+
+    struct MfNode {
+        int idx = 0;
+        int16_t sig = 0;
+        uint8_t owner = 0;
+    };
+
+    struct MfAccum {
+        int peakIndex = -1;
+        int area = 0;
+        int signalSum = 0;
+        int64_t weightedColSum = 0;
+        int64_t weightedRowSum = 0;
+        int weightTotal = 0;
     };
 
     std::array<uint8_t, kGridSize> m_touchZones{};
@@ -145,6 +162,11 @@ private:
     int m_bfsHead = 0, m_bfsTail = 0;
     // Scratch buffer for DilateAndErode (avoids 2x 2400B array copies)
     std::array<uint8_t, kGridSize> m_scratch{};
+    std::array<uint8_t, kGridSize> m_mfOwner{};
+    std::array<int, kGridSize> m_mfTouched{};
+    int m_mfTouchedCount = 0;
+    MfNode m_mfHeap[kGridSize];
+    int m_mfHeapSize = 0;
 
     inline void Reset() {
         m_touchZones.fill(0);
@@ -156,6 +178,7 @@ private:
         m_activeZoneCellCount = 0;
         m_dilateCandidateCount = 0;
         m_newDilatedCellCount = 0;
+        ClearMfScratch();
     }
 
     inline void RecordZoneCell(int idx) {
@@ -439,10 +462,146 @@ private:
         }
     }
 
+    inline void ClearMfScratch() {
+        for (int i = 0; i < m_mfTouchedCount; ++i) {
+            m_mfOwner[static_cast<size_t>(m_mfTouched[static_cast<size_t>(i)])] = 0;
+        }
+        m_mfTouchedCount = 0;
+        m_mfHeapSize = 0;
+    }
+
+    static inline bool MfNodeLess(const MfNode& a, const MfNode& b) {
+        if (a.sig != b.sig) return a.sig < b.sig;
+        if (a.owner != b.owner) return a.owner > b.owner;
+        return a.idx > b.idx;
+    }
+
+    inline void MfHeapPush(MfNode node) {
+        if (m_mfHeapSize >= kGridSize) return;
+        m_mfHeap[m_mfHeapSize] = node;
+        int i = m_mfHeapSize++;
+        while (i > 0) {
+            const int parent = (i - 1) / 2;
+            if (!MfNodeLess(m_mfHeap[parent], m_mfHeap[i])) break;
+            std::swap(m_mfHeap[parent], m_mfHeap[i]);
+            i = parent;
+        }
+    }
+
+    inline MfNode MfHeapPop() {
+        MfNode top = m_mfHeap[0];
+        m_mfHeap[0] = m_mfHeap[--m_mfHeapSize];
+        int i = 0;
+        while (true) {
+            const int left = i * 2 + 1;
+            const int right = i * 2 + 2;
+            int best = i;
+            if (left < m_mfHeapSize && MfNodeLess(m_mfHeap[best], m_mfHeap[left])) best = left;
+            if (right < m_mfHeapSize && MfNodeLess(m_mfHeap[best], m_mfHeap[right])) best = right;
+            if (best == i) break;
+            std::swap(m_mfHeap[i], m_mfHeap[best]);
+            i = best;
+        }
+        return top;
+    }
+
+    inline void AssignMfOwner(int idx, uint8_t owner) {
+        if (m_mfOwner[static_cast<size_t>(idx)] != 0) return;
+        m_mfOwner[static_cast<size_t>(idx)] = owner;
+        m_mfTouched[static_cast<size_t>(m_mfTouchedCount++)] = idx;
+    }
+
+    inline int PartitionMultiFingerZone(
+            const HeatmapFrame& frame,
+            int unitIndex,
+            const ZoneUnit& unit,
+            std::span<const Peak> peaks,
+            std::span<const PeakEvaluation> evaluations,
+            std::array<MfAccum, ZoneUnit::kMaxPeaksPerZone>& accums) {
+        ClearMfScratch();
+        for (auto& accum : accums) accum = {};
+
+        const uint8_t ownerZoneId = static_cast<uint8_t>(unitIndex + 1);
+        int partitionCount = 0;
+        for (int j = 0; j < unit.getPeakCount(); ++j) {
+            const int peakIndex = unit.peakIndices[j];
+            if (peakIndex < 0 || peakIndex >= static_cast<int>(peaks.size())) continue;
+            if (!AllowContactPeak(evaluations, peakIndex)) continue;
+            const Peak& peak = peaks[static_cast<size_t>(peakIndex)];
+            const int idx = peak.r * kCols + peak.c;
+            if (idx < 0 || idx >= kGridSize) continue;
+            if (m_touchZones[static_cast<size_t>(idx)] != ownerZoneId) continue;
+            if (m_mfOwner[static_cast<size_t>(idx)] != 0) continue;
+            if (partitionCount >= ZoneUnit::kMaxPeaksPerZone) break;
+
+            const uint8_t owner = static_cast<uint8_t>(partitionCount + 1);
+            accums[static_cast<size_t>(partitionCount)].peakIndex = peakIndex;
+            AssignMfOwner(idx, owner);
+            MfHeapPush({idx, peak.z, owner});
+            ++partitionCount;
+        }
+
+        static constexpr int dr[] = {-1,-1,-1, 0, 0, 1, 1, 1};
+        static constexpr int dc[] = {-1, 0, 1,-1, 1,-1, 0, 1};
+
+        while (m_mfHeapSize > 0) {
+            const MfNode node = MfHeapPop();
+            const int r = node.idx / kCols;
+            const int c = node.idx % kCols;
+            for (int d = 0; d < 8; ++d) {
+                const int nr = r + dr[d];
+                const int nc = c + dc[d];
+                if (nr < 0 || nr >= kRows || nc < 0 || nc >= kCols) continue;
+                const int ni = nr * kCols + nc;
+                if (m_touchZones[static_cast<size_t>(ni)] != ownerZoneId) continue;
+                if (m_mfOwner[static_cast<size_t>(ni)] != 0) continue;
+                AssignMfOwner(ni, node.owner);
+                MfHeapPush({ni, frame.heatmapMatrix[nr][nc], node.owner});
+            }
+        }
+
+        for (int i = 0; i < m_mfTouchedCount; ++i) {
+            const int idx = m_mfTouched[static_cast<size_t>(i)];
+            const uint8_t owner = m_mfOwner[static_cast<size_t>(idx)];
+            if (owner == 0 || owner > partitionCount) continue;
+            const int r = idx / kCols;
+            const int c = idx % kCols;
+            const int16_t sig = frame.heatmapMatrix[r][c];
+            if (sig < unit.zoneThold) continue;
+            auto& accum = accums[static_cast<size_t>(owner - 1)];
+            accum.area++;
+            accum.signalSum += sig;
+            if (sig > 0) {
+                accum.weightedColSum += static_cast<int64_t>(c) * 128 * sig;
+                accum.weightedRowSum += static_cast<int64_t>(r) * 128 * sig;
+                accum.weightTotal += sig;
+            }
+        }
+
+        ClearMfScratch();
+        return partitionCount;
+    }
+
+    static inline uint8_t GetCentroidEdgeFlags(const ZoneEdgeInfo& edgeInfo) {
+        uint8_t flags = 0;
+        if (edgeInfo.minCol <= kGridColMin) flags |= 0x01;
+        if (edgeInfo.maxCol >= kGridColMax) flags |= 0x02;
+        if (edgeInfo.minRow <= kGridRowMin) flags |= 0x04;
+        if (edgeInfo.maxRow >= kGridRowMax) flags |= 0x08;
+        return flags;
+    }
+
+    static inline void ApplyEdgeInfo(TouchContact& contact, const ZoneEdgeInfo& edgeInfo) {
+        contact.edgeFlags = edgeInfo.edgeFlags;
+        contact.centroidEdgeFlags = GetCentroidEdgeFlags(edgeInfo);
+        contact.isEdge = (contact.edgeFlags & (0x20 | 0x80000)) != 0 ||
+                         contact.centroidEdgeFlags != 0;
+    }
+
     // ────────────────────────────────────────────────────────
     // Compute centroids and populate frame.contacts.
     // Single-peak zones: standard weighted centroid.
-    // Multi-peak zones (TZ_MFProcess): 3×3 local centroid per peak.
+    // Multi-peak zones: per-peak pixel partition inside merged zone.
     // ────────────────────────────────────────────────────────
     inline void ComputeCentroidsAndContacts(
             HeatmapFrame& frame,
@@ -487,48 +646,37 @@ private:
                 tc.area = u.area;
                 tc.signalSum = u.signalSum;
                 tc.state = 0;
+                ApplyEdgeInfo(tc, m_edgeInfos[static_cast<size_t>(pi)]);
                 frame.contacts.push_back(tc);
                 m_contactEdgeInfos.push_back(m_edgeInfos[static_cast<size_t>(pi)]);
             } else {
-                // ── Multi-peak (TZ_MFProcess): CTD_General 3×3 per peak ──
-                int sharedArea = u.area / u.getPeakCount();
-                int sharedSig  = u.signalSum / u.getPeakCount();
+                std::array<MfAccum, ZoneUnit::kMaxPeaksPerZone> mfAccums{};
+                const int partitionCount = PartitionMultiFingerZone(
+                    frame, pi, u, peaks, evaluations, mfAccums);
 
-                for (int j = 0; j < u.getPeakCount(); ++j) {
-                    int pkIdx = u.peakIndices[j];
-                    if (pkIdx < 0 || pkIdx >= (int)peaks.size()) continue;
-                    if (!AllowContactPeak(evaluations, pkIdx)) continue;
-                    const Peak& pk = peaks[pkIdx];
+                for (int j = 0; j < partitionCount; ++j) {
+                    const auto& accum = mfAccums[static_cast<size_t>(j)];
+                    if (accum.peakIndex < 0 || accum.peakIndex >= static_cast<int>(peaks.size())) continue;
+                    if (accum.area == 0) continue;
+                    const Peak& pk = peaks[static_cast<size_t>(accum.peakIndex)];
 
-                    // 3×3 local weighted centroid around peak position
-                    int64_t wColSum = 0, wRowSum = 0;
-                    int wTotal = 0;
-                    for (int dr = -1; dr <= 1; ++dr) {
-                        for (int dc = -1; dc <= 1; ++dc) {
-                            int nr = pk.r + dr, nc = pk.c + dc;
-                            if (nr < 0 || nr >= kRows ||
-                                nc < 0 || nc >= kCols) continue;
-                            int16_t sig = frame.heatmapMatrix[nr][nc];
-                            if (sig <= 0) continue;
-                            wColSum += static_cast<int64_t>(nc) * 128 * sig;
-                            wRowSum += static_cast<int64_t>(nr) * 128 * sig;
-                            wTotal  += sig;
-                        }
+                    float cx = static_cast<float>(pk.c) + 0.5f;
+                    float cy = static_cast<float>(pk.r) + 0.5f;
+                    if (accum.weightTotal > 0) {
+                        const int64_t colFixed = (accum.weightedColSum * 2) / accum.weightTotal + 0x80;
+                        const int64_t rowFixed = (accum.weightedRowSum * 2) / accum.weightTotal + 0x80;
+                        cx = static_cast<float>(colFixed) / 256.0f;
+                        cy = static_cast<float>(rowFixed) / 256.0f;
                     }
-                    if (wTotal == 0) wTotal = 1;
-
-                    const int64_t colFixed = (wColSum * 2) / wTotal + 0x80;
-                    const int64_t rowFixed = (wRowSum * 2) / wTotal + 0x80;
-                    float cx = static_cast<float>(colFixed) / 256.0f;
-                    float cy = static_cast<float>(rowFixed) / 256.0f;
 
                     TouchContact tc;
-                    tc.id = pk.id;  // Peak's persistent ID
+                    tc.id = pk.id;
                     tc.x = cx;
                     tc.y = cy;
-                    tc.area = sharedArea;
-                    tc.signalSum = sharedSig;
+                    tc.area = accum.area;
+                    tc.signalSum = accum.signalSum;
                     tc.state = 0;
+                    ApplyEdgeInfo(tc, m_edgeInfos[static_cast<size_t>(pi)]);
                     frame.contacts.push_back(tc);
                     m_contactEdgeInfos.push_back(m_edgeInfos[static_cast<size_t>(pi)]);
                 }
