@@ -1,4 +1,5 @@
 #include "ServiceProxyInternal.h"
+#include "DvrFormat.h"
 #include "Logger.h"
 #include <algorithm>
 #include <array>
@@ -8,7 +9,6 @@
 #include <fstream>
 #include <iomanip>
 #include <sstream>
-#include <type_traits>
 #include <vector>
 
 namespace App {
@@ -16,197 +16,21 @@ namespace App {
 namespace {
 
 constexpr const char* kExportRootDir = "C:/ProgramData/EGoTouchRev/exports";
-constexpr int kCurrentDvrFormatVersion = 5;
 
-enum DvrBinaryFlags : uint32_t {
-    kDvrFlagHasStylusDiagnostics    = 1u << 0,
-    kDvrFlagHasStructuredSuffix     = 1u << 1,
-    kDvrFlagHasReceiveSystemEpochUs = 1u << 2,
-    kDvrFlagHasDynamicDebug         = 1u << 3,
-};
+namespace DvrFmt = Dvr::Format;
 
-enum class Dvr2SectionType : uint32_t {
-    Meta = 1,
-    Index = 2,
-    Frames = 3,
-    DynamicDebugSchema = 4,
-    DynamicDebugValues = 5,
-};
-
-struct Dvr2FileHeader {
-    char magic[8];
-    uint16_t formatVersion = static_cast<uint16_t>(kCurrentDvrFormatVersion);
-    uint16_t headerSize = sizeof(Dvr2FileHeader);
-    uint32_t sectionCount = 0;
-    uint64_t tocOffset = 0;
-    uint32_t flags = 0;
-    uint32_t reserved = 0;
-};
-
-struct Dvr2SectionEntry {
-    uint32_t type = 0;
-    uint32_t version = 0;
-    uint64_t offset = 0;
-    uint64_t size = 0;
-};
-
-struct Dvr2MetaSectionV1 {
-    uint32_t frameCount = 0;
-    uint32_t frameRecordVersion = 1;
-    uint32_t flags = 0;
-    uint32_t reserved = 0;
-};
-
-struct Dvr2DynamicDebugSchemaHeaderV1 {
-    uint16_t schemaVersion = 0;
-    uint16_t fieldCount = 0;
-    uint32_t schemaHash = 0;
-    uint32_t recordSize = 0;
-    uint32_t reserved = 0;
-};
-
-struct Dvr2DynamicDebugValuesHeaderV1 {
-    uint32_t frameCount = 0;
-    uint32_t reserved = 0;
-};
-
-struct Dvr2DynamicDebugFrameHeaderV1 {
-    uint32_t sampleCount = 0;
-    uint32_t reserved = 0;
-};
-
-struct Dvr2DynamicDebugSampleV1 {
-    uint16_t fieldId = 0;
-    uint8_t valueType = static_cast<uint8_t>(Ipc::DebugValueType::UInt32);
-    uint8_t flags = 0;
-    uint32_t reserved = 0;
-    uint64_t rawValue = 0;
-};
-
-struct Dvr2IndexEntryV1 {
-    uint64_t timestamp = 0;
-    uint64_t receiveSystemEpochUs = 0;
-    uint64_t frameOffset = 0;
-    uint32_t frameSize = 0;
-    uint32_t reserved = 0;
-};
-
-struct Dvr2ContactRecordV1 {
-    int32_t id = 0;
-    float x = 0.0f;
-    float y = 0.0f;
-    int32_t state = 0;
-    int32_t area = 0;
-    int32_t signalSum = 0;
-};
-
-struct Dvr2PeakRecordV1 {
-    int32_t r = 0;
-    int32_t c = 0;
-    int16_t z = 0;
-    uint8_t id = 0;
-    uint8_t reserved = 0;
-};
-
-struct Dvr2StylusPointRecordV1 {
-    uint8_t valid = 0;
-    uint8_t reserved0[3]{};
-    float x = 0.0f;
-    float y = 0.0f;
-    uint16_t reportX = 0;
-    uint16_t reportY = 0;
-    uint16_t pressure = 0;
-    uint16_t rawPressure = 0;
-    uint16_t mappedPressure = 0;
-    uint16_t peakTx1 = 0;
-    uint16_t peakTx2 = 0;
-    uint16_t reserved1 = 0;
-    float tx1X = 0.0f;
-    float tx1Y = 0.0f;
-    float tx2X = 0.0f;
-    float tx2Y = 0.0f;
-    float confidence = 0.0f;
-};
-
-struct Dvr2StylusDataRecordV1 {
-    uint8_t slaveValid = 0;
-    uint8_t checksumOk = 0;
-    uint8_t tx1BlockValid = 0;
-    uint8_t tx2BlockValid = 0;
-    uint32_t status = 0;
-    uint16_t pressure = 0;
-    uint16_t signalX = 0;
-    uint16_t signalY = 0;
-    uint16_t maxRawPeak = 0;
-    uint8_t pipelineStage = 0;
-    uint8_t reserved[5]{};
-    Dvr2StylusPointRecordV1 point{};
-};
-
-struct Dvr2FrameRecordV1 {
-    uint64_t timestamp = 0;
-    uint64_t receiveSystemEpochUs = 0;
-    uint64_t dvrSeq = 0;
-    uint8_t masterWasRead = 1;
-    uint8_t masterSuffixValid = 0;
-    uint8_t slaveSuffixValid = 0;
-    uint8_t reserved0 = 0;
-    int16_t heatmapMatrix[40][60]{};
-    uint16_t masterSuffix[Frame::kMasterSuffixWords]{};
-    uint16_t slaveSuffix[Frame::kSlaveSuffixWords]{};
-    Dvr2StylusDataRecordV1 stylus{};
-    Dvr2ContactRecordV1 contacts[Dvr::kMaxContacts]{};
-    uint32_t contactCount = 0;
-    Dvr2PeakRecordV1 peaks[Dvr::kMaxPeaks]{};
-    uint32_t peakCount = 0;
-};
-
-struct Dvr2StylusDataRecordV2 {
-    uint8_t slaveValid = 0;
-    uint8_t checksumOk = 0;
-    uint8_t tx1BlockValid = 0;
-    uint8_t tx2BlockValid = 0;
-    uint32_t status = 0;
-    uint16_t pressure = 0;
-    uint16_t btRawPressure[4]{};
-    uint16_t signalX = 0;
-    uint16_t signalY = 0;
-    uint16_t maxRawPeak = 0;
-    uint8_t pipelineStage = 0;
-    uint8_t reserved[5]{};
-    Dvr2StylusPointRecordV1 point{};
-};
-
-struct Dvr2FrameRecordV2 {
-    uint64_t timestamp = 0;
-    uint64_t receiveSystemEpochUs = 0;
-    uint64_t dvrSeq = 0;
-    uint8_t masterWasRead = 1;
-    uint8_t masterSuffixValid = 0;
-    uint8_t slaveSuffixValid = 0;
-    uint8_t reserved0 = 0;
-    int16_t heatmapMatrix[40][60]{};
-    uint16_t masterSuffix[Frame::kMasterSuffixWords]{};
-    uint16_t slaveSuffix[Frame::kSlaveSuffixWords]{};
-    Dvr2StylusDataRecordV2 stylus{};
-    Dvr2ContactRecordV1 contacts[Dvr::kMaxContacts]{};
-    uint32_t contactCount = 0;
-    Dvr2PeakRecordV1 peaks[Dvr::kMaxPeaks]{};
-    uint32_t peakCount = 0;
-};
-
-struct Dvr2FrameRecordV3 {
-    Dvr2FrameRecordV2 frame{};
-    uint16_t rawDataLength = 0;
-    uint8_t rawData[Frame::kTotalFrameSize]{};
-};
-
-static_assert(std::is_trivially_copyable_v<Dvr2FrameRecordV1>);
-static_assert(std::is_standard_layout_v<Dvr2FrameRecordV1>);
-static_assert(std::is_trivially_copyable_v<Dvr2FrameRecordV2>);
-static_assert(std::is_standard_layout_v<Dvr2FrameRecordV2>);
-static_assert(std::is_trivially_copyable_v<Dvr2FrameRecordV3>);
-static_assert(std::is_standard_layout_v<Dvr2FrameRecordV3>);
+using Dvr2FileHeader = DvrFmt::Dvr2FileHeader;
+using Dvr2SectionEntry = DvrFmt::Dvr2SectionEntry;
+using Dvr2SectionType = DvrFmt::Dvr2SectionType;
+using Dvr2MetaSection = DvrFmt::Dvr2MetaSection;
+using Dvr2FrameSchemaHeader = DvrFmt::Dvr2FrameSchemaHeader;
+using Dvr2FieldDef = DvrFmt::Dvr2FieldDef;
+using Dvr2IndexEntry = DvrFmt::Dvr2IndexEntry;
+using Dvr2FramePayload = DvrFmt::Dvr2FramePayload;
+using Dvr2DynamicDebugSchemaHeader = DvrFmt::Dvr2DynamicDebugSchemaHeader;
+using Dvr2DynamicDebugValuesHeader = DvrFmt::Dvr2DynamicDebugValuesHeader;
+using Dvr2DynamicDebugFrameHeader = DvrFmt::Dvr2DynamicDebugFrameHeader;
+using Dvr2DynamicDebugSample = DvrFmt::Dvr2DynamicDebugSample;
 
 bool WriteAll(std::ofstream& out, const void* data, size_t bytes) {
     out.write(reinterpret_cast<const char*>(data), static_cast<std::streamsize>(bytes));
@@ -219,11 +43,11 @@ bool ReadAll(std::ifstream& in, void* data, size_t bytes) {
 }
 
 std::array<char, 8> MakeDvr2Magic() {
-    return {'E', 'G', 'O', 'D', 'V', 'R', '2', '\0'};
+    return DvrFmt::kDvr2Magic;
 }
 
 std::array<char, 8> MakeLegacyDvrMagic() {
-    return {'E', 'G', 'O', 'D', 'V', 'R', 'B', '1'};
+    return DvrFmt::kLegacyDvrMagic;
 }
 
 std::string MakeDatasetTimestampString() {
@@ -250,10 +74,10 @@ std::string MakeDvrDatasetName() {
 }
 
 uint32_t ComputeDvrBinaryFlags(const std::vector<Dvr::DvrFrameSlot>& frames) {
-    uint32_t flags = kDvrFlagHasStylusDiagnostics | kDvrFlagHasStructuredSuffix;
+    uint32_t flags = DvrFmt::kDvrFlagHasStylusDiagnostics | DvrFmt::kDvrFlagHasStructuredSuffix;
     for (const auto& frame : frames) {
         if (frame.receiveSystemEpochUs != 0) {
-            flags |= kDvrFlagHasReceiveSystemEpochUs;
+            flags |= DvrFmt::kDvrFlagHasReceiveSystemEpochUs;
         }
     }
     return flags;
@@ -280,12 +104,24 @@ bool DynamicDebugSamplesMatchSchema(const DvrDynamicDebugSchema& schema,
     return true;
 }
 
-bool CanPersistDynamicDebug(const std::vector<Dvr::DvrFrameSlot>& frames,
-                            const DvrDynamicDebugSchema* dynamicSchema) {
-    if (!dynamicSchema || dynamicSchema->fields.empty()) return false;
+bool DynamicDebugSamplesMatchSchema(const DvrDynamicDebugSchema& schema,
+                                    const Dvr::DvrDynamicDebugFrameSlot& frame) {
+    if (frame.sampleCount != schema.fields.size()) return false;
+    for (size_t i = 0; i < schema.fields.size(); ++i) {
+        if (frame.samples[i].fieldId != schema.fields[i].fieldId) return false;
+        if (static_cast<Ipc::DebugValueType>(frame.samples[i].valueType) != schema.fields[i].valueType) return false;
+    }
+    return true;
+}
+
+bool CanPersistDynamicDebug(const std::vector<Dvr::DvrDynamicDebugFrameSlot>* frames,
+                            const DvrDynamicDebugSchema* dynamicSchema,
+                            size_t expectedFrameCount) {
+    if (!frames || !dynamicSchema || dynamicSchema->fields.empty()) return false;
+    if (frames->size() != expectedFrameCount) return false;
     if (!HasUniqueDynamicFieldIds(*dynamicSchema)) return false;
-    for (const auto& frame : frames) {
-        if (!DynamicDebugSamplesMatchSchema(*dynamicSchema, frame.dynamicDebug)) {
+    for (const auto& frame : *frames) {
+        if (!DynamicDebugSamplesMatchSchema(*dynamicSchema, frame)) {
             return false;
         }
     }
@@ -317,68 +153,64 @@ bool ValidateDynamicDebugPayload(const DvrDynamicDebugSchema& schema,
     return true;
 }
 
-Dvr2FrameRecordV2 MakeFrameRecordV2(const Dvr::DvrFrameSlot& src) {
-    Dvr2FrameRecordV2 dst{};
-    dst.timestamp = src.timestamp;
-    dst.receiveSystemEpochUs = src.receiveSystemEpochUs;
-    dst.dvrSeq = src.dvrSeq;
-    dst.masterWasRead = src.masterWasRead ? 1 : 0;
-    dst.masterSuffixValid = src.masterSuffixValid ? 1 : 0;
-    dst.slaveSuffixValid = src.slaveSuffixValid ? 1 : 0;
-    std::memcpy(dst.heatmapMatrix, src.heatmapMatrix, sizeof(dst.heatmapMatrix));
-    std::memcpy(dst.masterSuffix, src.masterSuffix.words, sizeof(dst.masterSuffix));
-    std::memcpy(dst.slaveSuffix, src.slaveSuffix.words, sizeof(dst.slaveSuffix));
+Dvr2FramePayload MakeFramePayload(const Dvr::DvrFrameSlot& src) {
+    Dvr2FramePayload dst{};
+    auto& frame = dst.frame;
+    frame.timestamp = src.timestamp;
+    frame.receiveSystemEpochUs = src.receiveSystemEpochUs;
+    frame.dvrSeq = src.dvrSeq;
+    frame.masterWasRead = src.masterWasRead ? 1 : 0;
+    frame.masterSuffixValid = src.masterSuffixValid ? 1 : 0;
+    frame.slaveSuffixValid = src.slaveSuffixValid ? 1 : 0;
+    std::memcpy(frame.heatmapMatrix, src.heatmapMatrix, sizeof(frame.heatmapMatrix));
+    std::memcpy(frame.masterSuffix, src.masterSuffix.words, sizeof(frame.masterSuffix));
+    std::memcpy(frame.slaveSuffix, src.slaveSuffix.words, sizeof(frame.slaveSuffix));
 
-    dst.stylus.slaveValid = src.stylus.slaveValid ? 1 : 0;
-    dst.stylus.checksumOk = src.stylus.checksumOk ? 1 : 0;
-    dst.stylus.tx1BlockValid = src.stylus.tx1BlockValid ? 1 : 0;
-    dst.stylus.tx2BlockValid = src.stylus.tx2BlockValid ? 1 : 0;
-    dst.stylus.status = src.stylus.status;
-    dst.stylus.pressure = src.stylus.pressure;
-    std::memcpy(dst.stylus.btRawPressure, src.stylus.btRawPressure, sizeof(dst.stylus.btRawPressure));
-    dst.stylus.signalX = src.stylus.signalX;
-    dst.stylus.signalY = src.stylus.signalY;
-    dst.stylus.maxRawPeak = src.stylus.maxRawPeak;
-    dst.stylus.pipelineStage = src.stylus.pipelineStage;
-    dst.stylus.point.valid = src.stylus.point.valid ? 1 : 0;
-    dst.stylus.point.x = src.stylus.point.x;
-    dst.stylus.point.y = src.stylus.point.y;
-    dst.stylus.point.reportX = src.stylus.point.reportX;
-    dst.stylus.point.reportY = src.stylus.point.reportY;
-    dst.stylus.point.pressure = src.stylus.point.pressure;
-    dst.stylus.point.rawPressure = src.stylus.point.rawPressure;
-    dst.stylus.point.mappedPressure = src.stylus.point.mappedPressure;
-    dst.stylus.point.peakTx1 = src.stylus.point.peakTx1;
-    dst.stylus.point.peakTx2 = src.stylus.point.peakTx2;
-    dst.stylus.point.tx1X = src.stylus.point.tx1X;
-    dst.stylus.point.tx1Y = src.stylus.point.tx1Y;
-    dst.stylus.point.tx2X = src.stylus.point.tx2X;
-    dst.stylus.point.tx2Y = src.stylus.point.tx2Y;
-    dst.stylus.point.confidence = src.stylus.point.confidence;
+    frame.stylus.slaveValid = src.stylus.slaveValid ? 1 : 0;
+    frame.stylus.checksumOk = src.stylus.checksumOk ? 1 : 0;
+    frame.stylus.tx1BlockValid = src.stylus.tx1BlockValid ? 1 : 0;
+    frame.stylus.tx2BlockValid = src.stylus.tx2BlockValid ? 1 : 0;
+    frame.stylus.status = src.stylus.status;
+    frame.stylus.pressure = src.stylus.pressure;
+    std::memcpy(frame.stylus.btRawPressure, src.stylus.btRawPressure, sizeof(frame.stylus.btRawPressure));
+    frame.stylus.signalX = src.stylus.signalX;
+    frame.stylus.signalY = src.stylus.signalY;
+    frame.stylus.maxRawPeak = src.stylus.maxRawPeak;
+    frame.stylus.pipelineStage = src.stylus.pipelineStage;
+    frame.stylus.point.valid = src.stylus.point.valid ? 1 : 0;
+    frame.stylus.point.x = src.stylus.point.x;
+    frame.stylus.point.y = src.stylus.point.y;
+    frame.stylus.point.reportX = src.stylus.point.reportX;
+    frame.stylus.point.reportY = src.stylus.point.reportY;
+    frame.stylus.point.pressure = src.stylus.point.pressure;
+    frame.stylus.point.rawPressure = src.stylus.point.rawPressure;
+    frame.stylus.point.mappedPressure = src.stylus.point.mappedPressure;
+    frame.stylus.point.peakTx1 = src.stylus.point.peakTx1;
+    frame.stylus.point.peakTx2 = src.stylus.point.peakTx2;
+    frame.stylus.point.tx1X = src.stylus.point.tx1X;
+    frame.stylus.point.tx1Y = src.stylus.point.tx1Y;
+    frame.stylus.point.tx2X = src.stylus.point.tx2X;
+    frame.stylus.point.tx2Y = src.stylus.point.tx2Y;
+    frame.stylus.point.confidence = src.stylus.point.confidence;
 
-    dst.contactCount = std::min<uint32_t>(src.contactCount, Dvr::kMaxContacts);
-    for (uint32_t i = 0; i < dst.contactCount; ++i) {
-        dst.contacts[i].id = src.contacts[i].id;
-        dst.contacts[i].x = src.contacts[i].x;
-        dst.contacts[i].y = src.contacts[i].y;
-        dst.contacts[i].state = src.contacts[i].state;
-        dst.contacts[i].area = src.contacts[i].area;
-        dst.contacts[i].signalSum = src.contacts[i].signalSum;
+    frame.contactCount = std::min<uint32_t>(src.contactCount, DvrFmt::kMaxContacts);
+    for (uint32_t i = 0; i < frame.contactCount; ++i) {
+        frame.contacts[i].id = src.contacts[i].id;
+        frame.contacts[i].x = src.contacts[i].x;
+        frame.contacts[i].y = src.contacts[i].y;
+        frame.contacts[i].state = src.contacts[i].state;
+        frame.contacts[i].area = src.contacts[i].area;
+        frame.contacts[i].signalSum = src.contacts[i].signalSum;
     }
 
-    dst.peakCount = std::min<uint32_t>(src.peakCount, Dvr::kMaxPeaks);
-    for (uint32_t i = 0; i < dst.peakCount; ++i) {
-        dst.peaks[i].r = src.peaks[i].r;
-        dst.peaks[i].c = src.peaks[i].c;
-        dst.peaks[i].z = src.peaks[i].z;
-        dst.peaks[i].id = src.peaks[i].id;
+    frame.peakCount = std::min<uint32_t>(src.peakCount, DvrFmt::kMaxPeaks);
+    for (uint32_t i = 0; i < frame.peakCount; ++i) {
+        frame.peaks[i].r = src.peaks[i].r;
+        frame.peaks[i].c = src.peaks[i].c;
+        frame.peaks[i].z = src.peaks[i].z;
+        frame.peaks[i].id = src.peaks[i].id;
     }
-    return dst;
-}
 
-Dvr2FrameRecordV3 MakeFrameRecord(const Dvr::DvrFrameSlot& src) {
-    Dvr2FrameRecordV3 dst{};
-    dst.frame = MakeFrameRecordV2(src);
     dst.rawDataLength = std::min<uint16_t>(src.rawDataLength, Frame::kTotalFrameSize);
     if (dst.rawDataLength != 0) {
         std::memcpy(dst.rawData, src.rawData, dst.rawDataLength);
@@ -386,81 +218,223 @@ Dvr2FrameRecordV3 MakeFrameRecord(const Dvr::DvrFrameSlot& src) {
     return dst;
 }
 
-template <typename FrameRecord>
-void PopulateHeatmapFrameFromRecord(const FrameRecord& src, Solvers::HeatmapFrame& dst) {
-    dst = {};
-    dst.timestamp = src.timestamp;
-    dst.receiveSystemEpochUs = src.receiveSystemEpochUs;
-    dst.masterWasRead = src.masterWasRead != 0;
-    std::memcpy(dst.heatmapMatrix, src.heatmapMatrix, sizeof(dst.heatmapMatrix));
-    std::memcpy(dst.masterSuffix.words, src.masterSuffix, sizeof(src.masterSuffix));
-    std::memcpy(dst.slaveSuffix.words, src.slaveSuffix, sizeof(src.slaveSuffix));
-    dst.masterSuffixValid = src.masterSuffixValid != 0;
-    dst.slaveSuffixValid = src.slaveSuffixValid != 0;
+uint64_t FieldExtent(const Dvr2FieldDef& field) {
+    const uint64_t elementCount = field.elementCount == 0 ? 1 : field.elementCount;
+    const uint64_t elementSize = field.elementSize == 0 ? field.size : field.elementSize;
+    const uint64_t stride = field.stride == 0 ? elementSize : field.stride;
+    return static_cast<uint64_t>(field.offset) + (elementCount - 1) * stride + elementSize;
+}
 
-    dst.stylus.input.slaveValid = src.stylus.slaveValid != 0;
-    dst.stylus.input.checksumOk = src.stylus.checksumOk != 0;
-    dst.stylus.input.tx1BlockValid = src.stylus.tx1BlockValid != 0;
-    dst.stylus.input.tx2BlockValid = src.stylus.tx2BlockValid != 0;
-    dst.stylus.input.status = src.stylus.status;
-    dst.stylus.output.pressure = src.stylus.pressure;
-    if constexpr (requires { src.stylus.btRawPressure; }) {
-        for (int i = 0; i < 4; ++i) {
-            dst.stylus.input.btSample.rawPressure[static_cast<size_t>(i)] = src.stylus.btRawPressure[i];
-        }
+const Dvr2FieldDef* RequireField(const std::vector<Dvr2FieldDef>& fields,
+                                 std::string_view path,
+                                 std::string* outError) {
+    const auto* field = DvrFmt::FindField(fields, path);
+    if (!field && outError) {
+        *outError = "DVR2 frame schema is missing required field: ";
+        outError->append(path);
     }
-    dst.stylus.interop.signalX = src.stylus.signalX;
-    dst.stylus.interop.signalY = src.stylus.signalY;
-    dst.stylus.interop.maxRawPeak = src.stylus.maxRawPeak;
-    dst.stylus.output.pipelineStage = src.stylus.pipelineStage;
-    dst.stylus.output.point.valid = src.stylus.point.valid != 0;
-    dst.stylus.output.point.x = src.stylus.point.x;
-    dst.stylus.output.point.y = src.stylus.point.y;
-    dst.stylus.output.point.reportX = src.stylus.point.reportX;
-    dst.stylus.output.point.reportY = src.stylus.point.reportY;
-    dst.stylus.output.point.pressure = src.stylus.point.pressure;
-    dst.stylus.output.point.rawPressure = src.stylus.point.rawPressure;
-    dst.stylus.output.point.mappedPressure = src.stylus.point.mappedPressure;
-    dst.stylus.output.point.peakTx1 = src.stylus.point.peakTx1;
-    dst.stylus.output.point.peakTx2 = src.stylus.point.peakTx2;
-    dst.stylus.output.point.tx1X = src.stylus.point.tx1X;
-    dst.stylus.output.point.tx1Y = src.stylus.point.tx1Y;
-    dst.stylus.output.point.tx2X = src.stylus.point.tx2X;
-    dst.stylus.output.point.tx2Y = src.stylus.point.tx2Y;
-    dst.stylus.output.point.confidence = src.stylus.point.confidence;
+    return field;
+}
 
+bool ValidateField(const Dvr2FieldDef& field,
+                   size_t recordSize,
+                   std::string_view path,
+                   DvrFmt::Dvr2ValueType valueType,
+                   DvrFmt::Dvr2FieldRank rank,
+                   std::string* outError) {
+    if (field.valueType != static_cast<uint8_t>(valueType) ||
+        field.rank != static_cast<uint8_t>(rank)) {
+        if (outError) {
+            *outError = "DVR2 frame schema field has unexpected type/rank: ";
+            outError->append(path);
+        }
+        return false;
+    }
+    if (FieldExtent(field) > recordSize) {
+        if (outError) {
+            *outError = "DVR2 frame schema field exceeds record bounds: ";
+            outError->append(path);
+        }
+        return false;
+    }
+    return true;
+}
+
+template <typename T>
+bool ReadScalarField(const std::vector<uint8_t>& record,
+                     const std::vector<Dvr2FieldDef>& fields,
+                     std::string_view path,
+                     DvrFmt::Dvr2ValueType valueType,
+                     T& out,
+                     std::string* outError) {
+    const auto* field = RequireField(fields, path, outError);
+    if (!field) return false;
+    if (!ValidateField(*field, record.size(), path, valueType, DvrFmt::Dvr2FieldRank::Scalar, outError)) return false;
+    if (field->size != sizeof(T) || field->elementSize != sizeof(T)) {
+        if (outError) {
+            *outError = "DVR2 frame schema scalar size mismatch: ";
+            outError->append(path);
+        }
+        return false;
+    }
+    std::memcpy(&out, record.data() + field->offset, sizeof(T));
+    return true;
+}
+
+bool CopyContiguousField(const std::vector<uint8_t>& record,
+                         const std::vector<Dvr2FieldDef>& fields,
+                         std::string_view path,
+                         DvrFmt::Dvr2ValueType valueType,
+                         DvrFmt::Dvr2FieldRank rank,
+                         uint32_t expectedSize,
+                         void* dst,
+                         std::string* outError) {
+    const auto* field = RequireField(fields, path, outError);
+    if (!field) return false;
+    if (!ValidateField(*field, record.size(), path, valueType, rank, outError)) return false;
+    if (field->size != expectedSize) {
+        if (outError) {
+            *outError = "DVR2 frame schema field size mismatch: ";
+            outError->append(path);
+        }
+        return false;
+    }
+    std::memcpy(dst, record.data() + field->offset, expectedSize);
+    return true;
+}
+
+template <typename T>
+bool ReadStridedField(const std::vector<uint8_t>& record,
+                      const std::vector<Dvr2FieldDef>& fields,
+                      std::string_view path,
+                      DvrFmt::Dvr2ValueType valueType,
+                      uint32_t index,
+                      T& out,
+                      std::string* outError) {
+    const auto* field = RequireField(fields, path, outError);
+    if (!field) return false;
+    if (!ValidateField(*field, record.size(), path, valueType, DvrFmt::Dvr2FieldRank::Array, outError)) return false;
+    if (field->elementSize != sizeof(T) || index >= field->elementCount) {
+        if (outError) {
+            *outError = "DVR2 frame schema strided field mismatch: ";
+            outError->append(path);
+        }
+        return false;
+    }
+    const uint64_t offset = static_cast<uint64_t>(field->offset) + static_cast<uint64_t>(index) * field->stride;
+    if (offset + sizeof(T) > record.size()) {
+        if (outError) {
+            *outError = "DVR2 frame schema strided field exceeds record bounds: ";
+            outError->append(path);
+        }
+        return false;
+    }
+    std::memcpy(&out, record.data() + offset, sizeof(T));
+    return true;
+}
+
+bool PopulateHeatmapFrameFromRecordBytes(const std::vector<uint8_t>& record,
+                                         const std::vector<Dvr2FieldDef>& fields,
+                                         Solvers::HeatmapFrame& dst,
+                                         std::string* outError) {
+    dst = {};
+
+    uint8_t u8 = 0;
+    uint16_t u16 = 0;
+    uint32_t u32 = 0;
+    if (!ReadScalarField(record, fields, "timestamp", DvrFmt::Dvr2ValueType::UInt64, dst.timestamp, outError)) return false;
+    if (!ReadScalarField(record, fields, "receiveSystemEpochUs", DvrFmt::Dvr2ValueType::UInt64, dst.receiveSystemEpochUs, outError)) return false;
+    if (!ReadScalarField(record, fields, "masterWasRead", DvrFmt::Dvr2ValueType::Bool, u8, outError)) return false;
+    dst.masterWasRead = u8 != 0;
+    if (!ReadScalarField(record, fields, "masterSuffixValid", DvrFmt::Dvr2ValueType::Bool, u8, outError)) return false;
+    dst.masterSuffixValid = u8 != 0;
+    if (!ReadScalarField(record, fields, "slaveSuffixValid", DvrFmt::Dvr2ValueType::Bool, u8, outError)) return false;
+    dst.slaveSuffixValid = u8 != 0;
+    if (!CopyContiguousField(record, fields, "heatmapMatrix", DvrFmt::Dvr2ValueType::Int16, DvrFmt::Dvr2FieldRank::Matrix, sizeof(dst.heatmapMatrix), dst.heatmapMatrix, outError)) return false;
+    if (!CopyContiguousField(record, fields, "masterSuffix.words", DvrFmt::Dvr2ValueType::UInt16, DvrFmt::Dvr2FieldRank::Array, sizeof(dst.masterSuffix.words), dst.masterSuffix.words, outError)) return false;
+    if (!CopyContiguousField(record, fields, "slaveSuffix.words", DvrFmt::Dvr2ValueType::UInt16, DvrFmt::Dvr2FieldRank::Array, sizeof(dst.slaveSuffix.words), dst.slaveSuffix.words, outError)) return false;
+
+    if (!ReadScalarField(record, fields, "stylus.slaveValid", DvrFmt::Dvr2ValueType::Bool, u8, outError)) return false;
+    dst.stylus.input.slaveValid = u8 != 0;
+    if (!ReadScalarField(record, fields, "stylus.checksumOk", DvrFmt::Dvr2ValueType::Bool, u8, outError)) return false;
+    dst.stylus.input.checksumOk = u8 != 0;
+    if (!ReadScalarField(record, fields, "stylus.tx1BlockValid", DvrFmt::Dvr2ValueType::Bool, u8, outError)) return false;
+    dst.stylus.input.tx1BlockValid = u8 != 0;
+    if (!ReadScalarField(record, fields, "stylus.tx2BlockValid", DvrFmt::Dvr2ValueType::Bool, u8, outError)) return false;
+    dst.stylus.input.tx2BlockValid = u8 != 0;
+    if (!ReadScalarField(record, fields, "stylus.status", DvrFmt::Dvr2ValueType::UInt32, dst.stylus.input.status, outError)) return false;
+    if (!ReadScalarField(record, fields, "stylus.pressure", DvrFmt::Dvr2ValueType::UInt16, dst.stylus.output.pressure, outError)) return false;
+    if (!CopyContiguousField(record, fields, "stylus.btRawPressure", DvrFmt::Dvr2ValueType::UInt16, DvrFmt::Dvr2FieldRank::Array, sizeof(dst.stylus.input.btSample.rawPressure), dst.stylus.input.btSample.rawPressure.data(), outError)) return false;
+    if (!ReadScalarField(record, fields, "stylus.signalX", DvrFmt::Dvr2ValueType::UInt16, dst.stylus.interop.signalX, outError)) return false;
+    if (!ReadScalarField(record, fields, "stylus.signalY", DvrFmt::Dvr2ValueType::UInt16, dst.stylus.interop.signalY, outError)) return false;
+    if (!ReadScalarField(record, fields, "stylus.maxRawPeak", DvrFmt::Dvr2ValueType::UInt16, dst.stylus.interop.maxRawPeak, outError)) return false;
+    if (!ReadScalarField(record, fields, "stylus.pipelineStage", DvrFmt::Dvr2ValueType::UInt8, dst.stylus.output.pipelineStage, outError)) return false;
+
+    if (!ReadScalarField(record, fields, "stylus.point.valid", DvrFmt::Dvr2ValueType::Bool, u8, outError)) return false;
+    dst.stylus.output.point.valid = u8 != 0;
+    if (!ReadScalarField(record, fields, "stylus.point.x", DvrFmt::Dvr2ValueType::Float32, dst.stylus.output.point.x, outError)) return false;
+    if (!ReadScalarField(record, fields, "stylus.point.y", DvrFmt::Dvr2ValueType::Float32, dst.stylus.output.point.y, outError)) return false;
+    if (!ReadScalarField(record, fields, "stylus.point.reportX", DvrFmt::Dvr2ValueType::UInt16, dst.stylus.output.point.reportX, outError)) return false;
+    if (!ReadScalarField(record, fields, "stylus.point.reportY", DvrFmt::Dvr2ValueType::UInt16, dst.stylus.output.point.reportY, outError)) return false;
+    if (!ReadScalarField(record, fields, "stylus.point.pressure", DvrFmt::Dvr2ValueType::UInt16, dst.stylus.output.point.pressure, outError)) return false;
+    if (!ReadScalarField(record, fields, "stylus.point.rawPressure", DvrFmt::Dvr2ValueType::UInt16, dst.stylus.output.point.rawPressure, outError)) return false;
+    if (!ReadScalarField(record, fields, "stylus.point.mappedPressure", DvrFmt::Dvr2ValueType::UInt16, dst.stylus.output.point.mappedPressure, outError)) return false;
+    if (!ReadScalarField(record, fields, "stylus.point.peakTx1", DvrFmt::Dvr2ValueType::UInt16, dst.stylus.output.point.peakTx1, outError)) return false;
+    if (!ReadScalarField(record, fields, "stylus.point.peakTx2", DvrFmt::Dvr2ValueType::UInt16, dst.stylus.output.point.peakTx2, outError)) return false;
+    if (!ReadScalarField(record, fields, "stylus.point.tx1X", DvrFmt::Dvr2ValueType::Float32, dst.stylus.output.point.tx1X, outError)) return false;
+    if (!ReadScalarField(record, fields, "stylus.point.tx1Y", DvrFmt::Dvr2ValueType::Float32, dst.stylus.output.point.tx1Y, outError)) return false;
+    if (!ReadScalarField(record, fields, "stylus.point.tx2X", DvrFmt::Dvr2ValueType::Float32, dst.stylus.output.point.tx2X, outError)) return false;
+    if (!ReadScalarField(record, fields, "stylus.point.tx2Y", DvrFmt::Dvr2ValueType::Float32, dst.stylus.output.point.tx2Y, outError)) return false;
+    if (!ReadScalarField(record, fields, "stylus.point.confidence", DvrFmt::Dvr2ValueType::Float32, dst.stylus.output.point.confidence, outError)) return false;
+
+    if (!ReadScalarField(record, fields, "contactCount", DvrFmt::Dvr2ValueType::UInt32, u32, outError)) return false;
+    const uint32_t contactCount = std::min<uint32_t>(u32, DvrFmt::kMaxContacts);
     dst.contacts.clear();
-    dst.contacts.reserve(std::min<uint32_t>(src.contactCount, Dvr::kMaxContacts));
-    for (uint32_t i = 0; i < src.contactCount && i < static_cast<uint32_t>(Dvr::kMaxContacts); ++i) {
+    dst.contacts.reserve(contactCount);
+    for (uint32_t i = 0; i < contactCount; ++i) {
         Solvers::TouchContact tc{};
-        tc.id = src.contacts[i].id;
-        tc.x = src.contacts[i].x;
-        tc.y = src.contacts[i].y;
-        tc.state = src.contacts[i].state;
-        tc.area = src.contacts[i].area;
-        tc.signalSum = src.contacts[i].signalSum;
+        if (!ReadStridedField(record, fields, "contacts[].id", DvrFmt::Dvr2ValueType::Int32, i, tc.id, outError)) return false;
+        if (!ReadStridedField(record, fields, "contacts[].x", DvrFmt::Dvr2ValueType::Float32, i, tc.x, outError)) return false;
+        if (!ReadStridedField(record, fields, "contacts[].y", DvrFmt::Dvr2ValueType::Float32, i, tc.y, outError)) return false;
+        if (!ReadStridedField(record, fields, "contacts[].state", DvrFmt::Dvr2ValueType::Int32, i, tc.state, outError)) return false;
+        if (!ReadStridedField(record, fields, "contacts[].area", DvrFmt::Dvr2ValueType::Int32, i, tc.area, outError)) return false;
+        if (!ReadStridedField(record, fields, "contacts[].signalSum", DvrFmt::Dvr2ValueType::Int32, i, tc.signalSum, outError)) return false;
         dst.contacts.push_back(tc);
     }
 
+#if EGOTOUCH_DIAG
+    if (!ReadScalarField(record, fields, "peakCount", DvrFmt::Dvr2ValueType::UInt32, u32, outError)) return false;
+    const uint32_t peakCount = std::min<uint32_t>(u32, DvrFmt::kMaxPeaks);
     dst.peaks.clear();
-    dst.peaks.reserve(std::min<uint32_t>(src.peakCount, Dvr::kMaxPeaks));
-    for (uint32_t i = 0; i < src.peakCount && i < static_cast<uint32_t>(Dvr::kMaxPeaks); ++i) {
+    dst.peaks.reserve(peakCount);
+    for (uint32_t i = 0; i < peakCount; ++i) {
         Solvers::TouchPeak tp{};
-        tp.r = src.peaks[i].r;
-        tp.c = src.peaks[i].c;
-        tp.z = src.peaks[i].z;
-        tp.id = src.peaks[i].id;
+        if (!ReadStridedField(record, fields, "peaks[].r", DvrFmt::Dvr2ValueType::Int32, i, tp.r, outError)) return false;
+        if (!ReadStridedField(record, fields, "peaks[].c", DvrFmt::Dvr2ValueType::Int32, i, tp.c, outError)) return false;
+        if (!ReadStridedField(record, fields, "peaks[].z", DvrFmt::Dvr2ValueType::Int16, i, tp.z, outError)) return false;
+        if (!ReadStridedField(record, fields, "peaks[].id", DvrFmt::Dvr2ValueType::UInt8, i, tp.id, outError)) return false;
         dst.peaks.push_back(tp);
     }
-}
+#endif
 
-void PopulateHeatmapFrameFromRecord(const Dvr2FrameRecordV3& src, Solvers::HeatmapFrame& dst) {
-    PopulateHeatmapFrameFromRecord(src.frame, dst);
+    if (!ReadScalarField(record, fields, "rawDataLength", DvrFmt::Dvr2ValueType::UInt16, u16, outError)) return false;
+    const auto* rawField = RequireField(fields, "rawData", outError);
+    if (!rawField) return false;
+    if (!ValidateField(*rawField, record.size(), "rawData", DvrFmt::Dvr2ValueType::UInt8, DvrFmt::Dvr2FieldRank::Array, outError)) return false;
+    if (rawField->size != Frame::kTotalFrameSize) {
+        if (outError) *outError = "DVR2 frame schema rawData size mismatch";
+        return false;
+    }
+    const size_t rawLen = std::min<size_t>(u16, Frame::kTotalFrameSize);
 #if EGOTOUCH_DIAG
-    dst.rawData.assign(src.rawData, src.rawData + std::min<int>(src.rawDataLength, Frame::kTotalFrameSize));
+    dst.rawData.assign(record.data() + rawField->offset, record.data() + rawField->offset + rawLen);
     dst.rawPtr = dst.rawData.empty() ? nullptr : dst.rawData.data();
     dst.rawLen = dst.rawData.size();
+#else
+    dst.rawPtr = nullptr;
+    dst.rawLen = 0;
 #endif
+    return true;
 }
 
 bool ReadSectionEntries(std::ifstream& in,
@@ -485,6 +459,86 @@ const Dvr2SectionEntry* FindSection(const std::vector<Dvr2SectionEntry>& section
         if (section.type == static_cast<uint32_t>(type)) return &section;
     }
     return nullptr;
+}
+
+bool ReadFrameSchemaSection(std::ifstream& in,
+                            const Dvr2SectionEntry& section,
+                            Dvr2FrameSchemaHeader& outHeader,
+                            std::vector<Dvr2FieldDef>& outFields,
+                            std::string* outError) {
+    outHeader = {};
+    outFields.clear();
+    if (section.size < sizeof(Dvr2FrameSchemaHeader)) {
+        if (outError) *outError = "DVR2 frame schema section is truncated";
+        return false;
+    }
+    in.seekg(static_cast<std::streamoff>(section.offset), std::ios::beg);
+    if (!in.good()) {
+        if (outError) *outError = "invalid DVR2 frame schema offset";
+        return false;
+    }
+    if (!ReadAll(in, &outHeader, sizeof(outHeader))) {
+        if (outError) *outError = "failed to read DVR2 frame schema header";
+        return false;
+    }
+    if (outHeader.fieldRecordSize != sizeof(Dvr2FieldDef)) {
+        if (outError) *outError = "unsupported DVR2 frame schema field record size";
+        return false;
+    }
+    const uint64_t expectedSize = sizeof(Dvr2FrameSchemaHeader) +
+        static_cast<uint64_t>(outHeader.fieldCount) * sizeof(Dvr2FieldDef);
+    if (section.size != expectedSize) {
+        if (outError) *outError = "DVR2 frame schema section size mismatch";
+        return false;
+    }
+    outFields.resize(outHeader.fieldCount);
+    if (!outFields.empty() && !ReadAll(in, outFields.data(), outFields.size() * sizeof(Dvr2FieldDef))) {
+        if (outError) *outError = "failed to read DVR2 frame schema fields";
+        return false;
+    }
+    if (DvrFmt::ComputeFieldSchemaHash(outFields) != outHeader.schemaHash) {
+        if (outError) *outError = "DVR2 frame schema hash mismatch";
+        return false;
+    }
+    return true;
+}
+
+bool ValidateFrameSchema(const Dvr2FrameSchemaHeader& schemaHeader,
+                         const Dvr2MetaSection& meta,
+                         const std::vector<Dvr2FieldDef>& fields,
+                         std::string* outError) {
+    if (schemaHeader.fieldCount == 0 || fields.empty()) {
+        if (outError) *outError = "DVR2 frame schema contains no fields";
+        return false;
+    }
+    if (schemaHeader.schemaHash != meta.frameSchemaHash) {
+        if (outError) *outError = "DVR2 meta/frame schema hash mismatch";
+        return false;
+    }
+    if (schemaHeader.frameRecordSize != meta.frameRecordSize) {
+        if (outError) *outError = "DVR2 meta/frame schema record size mismatch";
+        return false;
+    }
+    for (const auto& path : {
+             "timestamp", "receiveSystemEpochUs", "dvrSeq", "masterWasRead",
+             "masterSuffixValid", "slaveSuffixValid", "heatmapMatrix",
+             "masterSuffix.words", "slaveSuffix.words", "stylus.slaveValid",
+             "stylus.checksumOk", "stylus.tx1BlockValid", "stylus.tx2BlockValid",
+             "stylus.status", "stylus.pressure", "stylus.btRawPressure",
+             "stylus.signalX", "stylus.signalY", "stylus.maxRawPeak",
+             "stylus.pipelineStage", "stylus.point.valid", "stylus.point.x",
+             "stylus.point.y", "stylus.point.reportX", "stylus.point.reportY",
+             "stylus.point.pressure", "stylus.point.rawPressure",
+             "stylus.point.mappedPressure", "stylus.point.peakTx1",
+             "stylus.point.peakTx2", "stylus.point.tx1X", "stylus.point.tx1Y",
+             "stylus.point.tx2X", "stylus.point.tx2Y", "stylus.point.confidence",
+             "contacts[]", "contacts[].id", "contacts[].x", "contacts[].y",
+             "contacts[].state", "contacts[].area", "contacts[].signalSum",
+             "contactCount", "peaks[]", "peaks[].r", "peaks[].c", "peaks[].z",
+             "peaks[].id", "peakCount", "rawDataLength", "rawData"}) {
+        if (!RequireField(fields, path, outError)) return false;
+    }
+    return true;
 }
 
 template <size_t N>
@@ -622,7 +676,7 @@ bool ReadDynamicDebugSchemaSection(std::ifstream& in,
                                    DvrDynamicDebugSchema& outSchema,
                                    std::string* outError) {
     outSchema = {};
-    if (section.size < sizeof(Dvr2DynamicDebugSchemaHeaderV1)) {
+    if (section.size < sizeof(Dvr2DynamicDebugSchemaHeader)) {
         if (outError) *outError = "DVR2 dynamic schema section is truncated";
         return false;
     }
@@ -633,7 +687,7 @@ bool ReadDynamicDebugSchemaSection(std::ifstream& in,
         return false;
     }
 
-    Dvr2DynamicDebugSchemaHeaderV1 header{};
+    Dvr2DynamicDebugSchemaHeader header{};
     if (!ReadAll(in, &header, sizeof(header))) {
         if (outError) *outError = "failed to read DVR2 dynamic schema header";
         return false;
@@ -643,7 +697,7 @@ bool ReadDynamicDebugSchemaSection(std::ifstream& in,
         return false;
     }
 
-    const uint64_t requiredSize = sizeof(Dvr2DynamicDebugSchemaHeaderV1) +
+    const uint64_t requiredSize = sizeof(Dvr2DynamicDebugSchemaHeader) +
         static_cast<uint64_t>(header.fieldCount) * sizeof(Ipc::DebugFieldSchemaWire);
     if (section.size != requiredSize) {
         if (outError) *outError = "DVR2 dynamic schema section size mismatch";
@@ -686,7 +740,7 @@ bool ReadDynamicDebugValuesSection(std::ifstream& in,
                                    std::vector<DvrDynamicDebugFrame>& outFrames,
                                    std::string* outError) {
     outFrames.clear();
-    if (section.size < sizeof(Dvr2DynamicDebugValuesHeaderV1)) {
+    if (section.size < sizeof(Dvr2DynamicDebugValuesHeader)) {
         if (outError) *outError = "DVR2 dynamic values section is truncated";
         return false;
     }
@@ -697,7 +751,7 @@ bool ReadDynamicDebugValuesSection(std::ifstream& in,
         return false;
     }
 
-    Dvr2DynamicDebugValuesHeaderV1 header{};
+    Dvr2DynamicDebugValuesHeader header{};
     if (!ReadAll(in, &header, sizeof(header))) {
         if (outError) *outError = "failed to read DVR2 dynamic values header";
         return false;
@@ -707,22 +761,22 @@ bool ReadDynamicDebugValuesSection(std::ifstream& in,
         return false;
     }
 
-    uint64_t bytesConsumed = sizeof(Dvr2DynamicDebugValuesHeaderV1);
+    uint64_t bytesConsumed = sizeof(Dvr2DynamicDebugValuesHeader);
     outFrames.resize(header.frameCount);
     for (uint32_t frameIndex = 0; frameIndex < header.frameCount; ++frameIndex) {
-        if (bytesConsumed + sizeof(Dvr2DynamicDebugFrameHeaderV1) > section.size) {
+        if (bytesConsumed + sizeof(Dvr2DynamicDebugFrameHeader) > section.size) {
             if (outError) *outError = "DVR2 dynamic values frame header exceeds section bounds";
             return false;
         }
 
-        Dvr2DynamicDebugFrameHeaderV1 frameHeader{};
+        Dvr2DynamicDebugFrameHeader frameHeader{};
         if (!ReadAll(in, &frameHeader, sizeof(frameHeader))) {
             if (outError) *outError = "failed to read DVR2 dynamic frame header";
             return false;
         }
-        bytesConsumed += sizeof(Dvr2DynamicDebugFrameHeaderV1);
+        bytesConsumed += sizeof(Dvr2DynamicDebugFrameHeader);
 
-        const uint64_t frameBytes = static_cast<uint64_t>(frameHeader.sampleCount) * sizeof(Dvr2DynamicDebugSampleV1);
+        const uint64_t frameBytes = static_cast<uint64_t>(frameHeader.sampleCount) * sizeof(Dvr2DynamicDebugSample);
         if (bytesConsumed + frameBytes > section.size) {
             if (outError) *outError = "DVR2 dynamic frame exceeds section bounds";
             return false;
@@ -731,7 +785,7 @@ bool ReadDynamicDebugValuesSection(std::ifstream& in,
         auto& frame = outFrames[frameIndex];
         frame.samples.reserve(frameHeader.sampleCount);
         for (uint32_t sampleIndex = 0; sampleIndex < frameHeader.sampleCount; ++sampleIndex) {
-            Dvr2DynamicDebugSampleV1 wire{};
+            Dvr2DynamicDebugSample wire{};
             if (!ReadAll(in, &wire, sizeof(wire))) {
                 if (outError) *outError = "failed to read DVR2 dynamic sample";
                 return false;
@@ -762,25 +816,34 @@ std::filesystem::path ResolveReplayBinaryPath(const std::filesystem::path& input
 bool WriteDvrBinaryFile(const std::filesystem::path& filePath,
                         const std::vector<Dvr::DvrFrameSlot>& frames,
                         const DvrDynamicDebugSchema* dynamicSchema,
+                        const std::vector<Dvr::DvrDynamicDebugFrameSlot>* dynamicFrames,
                         uint32_t* outFlags) {
     if (frames.empty()) return false;
 
     uint32_t flags = ComputeDvrBinaryFlags(frames);
 
-    std::vector<Dvr2FrameRecordV3> records;
+    std::vector<Dvr2FramePayload> records;
     records.reserve(frames.size());
     for (const auto& frame : frames) {
-        records.push_back(MakeFrameRecord(frame));
+        records.push_back(MakeFramePayload(frame));
     }
+
+    const auto frameSchema = DvrFmt::BuildFrameSchema();
+    const uint32_t frameSchemaHash = DvrFmt::ComputeFieldSchemaHash(frameSchema);
+    Dvr2FrameSchemaHeader frameSchemaHeader{};
+    frameSchemaHeader.schemaHash = frameSchemaHash;
+    frameSchemaHeader.fieldCount = static_cast<uint32_t>(frameSchema.size());
+    frameSchemaHeader.fieldRecordSize = sizeof(Dvr2FieldDef);
+    frameSchemaHeader.frameRecordSize = sizeof(Dvr2FramePayload);
 
     DvrDynamicDebugSchema effectiveDynamicSchema{};
     if (dynamicSchema) {
         effectiveDynamicSchema = *dynamicSchema;
     }
 
-    const bool hasDynamicDebug = CanPersistDynamicDebug(frames, dynamicSchema);
+    const bool hasDynamicDebug = CanPersistDynamicDebug(dynamicFrames, dynamicSchema, frames.size());
     if (hasDynamicDebug) {
-        flags |= kDvrFlagHasDynamicDebug;
+        flags |= DvrFmt::kDvrFlagHasDynamicDebug;
     }
     if (outFlags) *outFlags = flags;
 
@@ -807,26 +870,27 @@ bool WriteDvrBinaryFile(const std::filesystem::path& filePath,
         }
     }
 
-    Dvr2DynamicDebugSchemaHeaderV1 dynamicSchemaHeader{};
+    Dvr2DynamicDebugSchemaHeader dynamicSchemaHeader{};
     std::vector<uint8_t> dynamicValuesBlob;
     if (hasDynamicDebug) {
-        Dvr2DynamicDebugValuesHeaderV1 valuesHeader{};
+        Dvr2DynamicDebugValuesHeader valuesHeader{};
         valuesHeader.frameCount = static_cast<uint32_t>(frames.size());
         dynamicValuesBlob.insert(dynamicValuesBlob.end(),
                                  reinterpret_cast<const uint8_t*>(&valuesHeader),
                                  reinterpret_cast<const uint8_t*>(&valuesHeader) + sizeof(valuesHeader));
-        for (const auto& frame : frames) {
-            Dvr2DynamicDebugFrameHeaderV1 frameHeader{};
-            frameHeader.sampleCount = static_cast<uint32_t>(frame.dynamicDebug.samples.size());
+        for (const auto& frame : *dynamicFrames) {
+            Dvr2DynamicDebugFrameHeader frameHeader{};
+            frameHeader.sampleCount = frame.sampleCount;
             dynamicValuesBlob.insert(dynamicValuesBlob.end(),
                                      reinterpret_cast<const uint8_t*>(&frameHeader),
                                      reinterpret_cast<const uint8_t*>(&frameHeader) + sizeof(frameHeader));
-            for (const auto& sample : frame.dynamicDebug.samples) {
-                Dvr2DynamicDebugSampleV1 wire{};
+            for (uint16_t i = 0; i < frame.sampleCount; ++i) {
+                const auto& sample = frame.samples[i];
+                Dvr2DynamicDebugSample wire{};
                 wire.fieldId = sample.fieldId;
-                wire.valueType = static_cast<uint8_t>(sample.value.valueType);
-                wire.flags = sample.value.valid ? 0x1u : 0x0u;
-                wire.rawValue = sample.value.rawValue;
+                wire.valueType = sample.valueType;
+                wire.flags = sample.valid ? 0x1u : 0x0u;
+                wire.rawValue = sample.rawValue;
                 dynamicValuesBlob.insert(dynamicValuesBlob.end(),
                                          reinterpret_cast<const uint8_t*>(&wire),
                                          reinterpret_cast<const uint8_t*>(&wire) + sizeof(wire));
@@ -837,29 +901,32 @@ bool WriteDvrBinaryFile(const std::filesystem::path& filePath,
     Dvr2FileHeader header{};
     const auto magic = MakeDvr2Magic();
     std::copy(magic.begin(), magic.end(), header.magic);
-    header.formatVersion = static_cast<uint16_t>(kCurrentDvrFormatVersion);
-    header.sectionCount = hasDynamicDebug ? 5u : 3u;
+    header.formatVersion = static_cast<uint16_t>(DvrFmt::kCurrentDvrFormatVersion);
+    header.sectionCount = hasDynamicDebug ? 6u : 4u;
     header.tocOffset = sizeof(Dvr2FileHeader);
     header.flags = flags;
 
     const uint64_t tocSize = static_cast<uint64_t>(header.sectionCount) * sizeof(Dvr2SectionEntry);
     const uint64_t metaOffset = header.tocOffset + tocSize;
-    const uint64_t metaSize = sizeof(Dvr2MetaSectionV1);
-    const uint64_t indexOffset = metaOffset + metaSize;
-    const uint64_t indexSize = static_cast<uint64_t>(records.size()) * sizeof(Dvr2IndexEntryV1);
+    const uint64_t metaSize = sizeof(Dvr2MetaSection);
+    const uint64_t frameSchemaOffset = metaOffset + metaSize;
+    const uint64_t frameSchemaSize = sizeof(Dvr2FrameSchemaHeader) + static_cast<uint64_t>(frameSchema.size()) * sizeof(Dvr2FieldDef);
+    const uint64_t indexOffset = frameSchemaOffset + frameSchemaSize;
+    const uint64_t indexSize = static_cast<uint64_t>(records.size()) * sizeof(Dvr2IndexEntry);
     const uint64_t framesOffset = indexOffset + indexSize;
-    const uint64_t framesSize = static_cast<uint64_t>(records.size()) * sizeof(Dvr2FrameRecordV3);
+    const uint64_t framesSize = static_cast<uint64_t>(records.size()) * sizeof(Dvr2FramePayload);
     uint64_t nextOffset = framesOffset + framesSize;
 
     std::vector<Dvr2SectionEntry> sections;
     sections.reserve(header.sectionCount);
     sections.push_back({static_cast<uint32_t>(Dvr2SectionType::Meta), 1, metaOffset, metaSize});
+    sections.push_back({static_cast<uint32_t>(Dvr2SectionType::FrameSchema), 1, frameSchemaOffset, frameSchemaSize});
     sections.push_back({static_cast<uint32_t>(Dvr2SectionType::Index), 1, indexOffset, indexSize});
     sections.push_back({static_cast<uint32_t>(Dvr2SectionType::Frames), 1, framesOffset, framesSize});
 
     if (hasDynamicDebug) {
         const uint64_t dynamicSchemaOffset = nextOffset;
-        const uint64_t dynamicSchemaSize = sizeof(Dvr2DynamicDebugSchemaHeaderV1) +
+        const uint64_t dynamicSchemaSize = sizeof(Dvr2DynamicDebugSchemaHeader) +
             static_cast<uint64_t>(dynamicSchemaRecords.size()) * sizeof(Ipc::DebugFieldSchemaWire);
         nextOffset += dynamicSchemaSize;
         const uint64_t dynamicValuesOffset = nextOffset;
@@ -873,17 +940,18 @@ bool WriteDvrBinaryFile(const std::filesystem::path& filePath,
         dynamicSchemaHeader.recordSize = sizeof(Ipc::DebugFieldSchemaWire);
     }
 
-    Dvr2MetaSectionV1 meta{};
+    Dvr2MetaSection meta{};
     meta.frameCount = static_cast<uint32_t>(records.size());
-    meta.frameRecordVersion = 3;
     meta.flags = flags;
+    meta.frameRecordSize = sizeof(Dvr2FramePayload);
+    meta.frameSchemaHash = frameSchemaHash;
 
-    std::vector<Dvr2IndexEntryV1> index(records.size());
+    std::vector<Dvr2IndexEntry> index(records.size());
     for (size_t i = 0; i < records.size(); ++i) {
         index[i].timestamp = records[i].frame.timestamp;
         index[i].receiveSystemEpochUs = records[i].frame.receiveSystemEpochUs;
-        index[i].frameOffset = framesOffset + static_cast<uint64_t>(i) * sizeof(Dvr2FrameRecordV3);
-        index[i].frameSize = static_cast<uint32_t>(sizeof(Dvr2FrameRecordV3));
+        index[i].frameOffset = framesOffset + static_cast<uint64_t>(i) * sizeof(Dvr2FramePayload);
+        index[i].frameSize = static_cast<uint32_t>(sizeof(Dvr2FramePayload));
     }
 
     std::ofstream out(filePath, std::ios::binary | std::ios::trunc);
@@ -891,8 +959,10 @@ bool WriteDvrBinaryFile(const std::filesystem::path& filePath,
     if (!WriteAll(out, &header, sizeof(header))) return false;
     if (!WriteAll(out, sections.data(), sections.size() * sizeof(Dvr2SectionEntry))) return false;
     if (!WriteAll(out, &meta, sizeof(meta))) return false;
-    if (!WriteAll(out, index.data(), index.size() * sizeof(Dvr2IndexEntryV1))) return false;
-    if (!WriteAll(out, records.data(), records.size() * sizeof(Dvr2FrameRecordV3))) return false;
+    if (!WriteAll(out, &frameSchemaHeader, sizeof(frameSchemaHeader))) return false;
+    if (!WriteAll(out, frameSchema.data(), frameSchema.size() * sizeof(Dvr2FieldDef))) return false;
+    if (!WriteAll(out, index.data(), index.size() * sizeof(Dvr2IndexEntry))) return false;
+    if (!WriteAll(out, records.data(), records.size() * sizeof(Dvr2FramePayload))) return false;
     if (hasDynamicDebug) {
         if (!WriteAll(out, &dynamicSchemaHeader, sizeof(dynamicSchemaHeader))) return false;
         if (!dynamicSchemaRecords.empty() && !WriteAll(out, dynamicSchemaRecords.data(), dynamicSchemaRecords.size() * sizeof(Ipc::DebugFieldSchemaWire))) return false;
@@ -930,11 +1000,19 @@ bool ReadDvrBinaryFile(const std::filesystem::path& filePath,
     const auto dvr2Magic = MakeDvr2Magic();
     const auto legacyMagic = MakeLegacyDvrMagic();
     if (std::equal(legacyMagic.begin(), legacyMagic.end(), header.magic)) {
-        if (outError) *outError = "unsupported legacy DVR format; only DVR2 .dvrbin files are accepted";
+        if (outError) *outError = "unsupported legacy DVR format; only schema DVR2 .dvrbin files are accepted";
         return false;
     }
     if (!std::equal(dvr2Magic.begin(), dvr2Magic.end(), header.magic)) {
         if (outError) *outError = "invalid DVR2 magic";
+        return false;
+    }
+    if (header.formatVersion != DvrFmt::kCurrentDvrFormatVersion) {
+        if (outError) *outError = "unsupported DVR2 format version";
+        return false;
+    }
+    if (header.headerSize != sizeof(Dvr2FileHeader) || header.tocOffset != sizeof(Dvr2FileHeader)) {
+        if (outError) *outError = "invalid DVR2 header layout";
         return false;
     }
     if (header.sectionCount == 0) {
@@ -948,27 +1026,28 @@ bool ReadDvrBinaryFile(const std::filesystem::path& filePath,
     }
 
     const auto* metaSection = FindSection(sections, Dvr2SectionType::Meta);
+    const auto* frameSchemaSection = FindSection(sections, Dvr2SectionType::FrameSchema);
     const auto* indexSection = FindSection(sections, Dvr2SectionType::Index);
     const auto* framesSection = FindSection(sections, Dvr2SectionType::Frames);
     const auto* dynamicSchemaSection = FindSection(sections, Dvr2SectionType::DynamicDebugSchema);
     const auto* dynamicValuesSection = FindSection(sections, Dvr2SectionType::DynamicDebugValues);
-    if (!metaSection || !indexSection || !framesSection) {
-        if (outError) *outError = "DVR2 file is missing required sections";
+    if (!metaSection || !frameSchemaSection || !indexSection || !framesSection) {
+        if (outError) *outError = "DVR2 file is missing required schema sections";
         return false;
     }
-    if (metaSection->version != 1 || indexSection->version != 1 || framesSection->version != 1) {
+    if (metaSection->version != 1 || frameSchemaSection->version != 1 || indexSection->version != 1 || framesSection->version != 1) {
         if (outError) *outError = "unsupported DVR2 section version";
+        return false;
+    }
+    if (metaSection->size != sizeof(Dvr2MetaSection)) {
+        if (outError) *outError = "DVR2 meta section size mismatch";
         return false;
     }
 
     in.seekg(static_cast<std::streamoff>(metaSection->offset), std::ios::beg);
-    Dvr2MetaSectionV1 meta{};
+    Dvr2MetaSection meta{};
     if (!ReadAll(in, &meta, sizeof(meta))) {
         if (outError) *outError = "failed to read DVR2 meta section";
-        return false;
-    }
-    if (meta.frameRecordVersion < 1 || meta.frameRecordVersion > 3) {
-        if (outError) *outError = "unsupported DVR2 frame record version";
         return false;
     }
     if (meta.flags != header.flags) {
@@ -979,30 +1058,54 @@ bool ReadDvrBinaryFile(const std::filesystem::path& filePath,
         if (outError) *outError = "DVR2 dataset contains no frames";
         return false;
     }
+    if (meta.txCount != Frame::kTxCount || meta.rxCount != Frame::kRxCount ||
+        meta.masterSuffixWords != Frame::kMasterSuffixWords ||
+        meta.slaveSuffixWords != Frame::kSlaveSuffixWords ||
+        meta.maxContacts != DvrFmt::kMaxContacts || meta.maxPeaks != DvrFmt::kMaxPeaks ||
+        meta.rawFrameSize != Frame::kTotalFrameSize) {
+        if (outError) *outError = "DVR2 meta dimensions are unsupported";
+        return false;
+    }
+    if (meta.frameRecordSize == 0) {
+        if (outError) *outError = "DVR2 frame record size is zero";
+        return false;
+    }
 
-    if (indexSection->size != static_cast<uint64_t>(meta.frameCount) * sizeof(Dvr2IndexEntryV1)) {
+    Dvr2FrameSchemaHeader schemaHeader{};
+    std::vector<Dvr2FieldDef> frameFields;
+    if (!ReadFrameSchemaSection(in, *frameSchemaSection, schemaHeader, frameFields, outError)) {
+        return false;
+    }
+    if (!ValidateFrameSchema(schemaHeader, meta, frameFields, outError)) {
+        return false;
+    }
+
+    if (indexSection->size != static_cast<uint64_t>(meta.frameCount) * sizeof(Dvr2IndexEntry)) {
         if (outError) *outError = "DVR2 index section size mismatch";
         return false;
     }
-    const size_t frameRecordSize = meta.frameRecordVersion == 1
-        ? sizeof(Dvr2FrameRecordV1)
-        : (meta.frameRecordVersion == 2 ? sizeof(Dvr2FrameRecordV2) : sizeof(Dvr2FrameRecordV3));
-    if (framesSection->size != static_cast<uint64_t>(meta.frameCount) * frameRecordSize) {
+    if (framesSection->size != static_cast<uint64_t>(meta.frameCount) * meta.frameRecordSize) {
         if (outError) *outError = "DVR2 frame section size mismatch";
         return false;
     }
 
-    std::vector<Dvr2IndexEntryV1> index(meta.frameCount);
+    std::vector<Dvr2IndexEntry> index(meta.frameCount);
     in.seekg(static_cast<std::streamoff>(indexSection->offset), std::ios::beg);
-    if (!ReadAll(in, index.data(), index.size() * sizeof(Dvr2IndexEntryV1))) {
+    if (!ReadAll(in, index.data(), index.size() * sizeof(Dvr2IndexEntry))) {
         if (outError) *outError = "failed to read DVR2 index section";
         return false;
     }
 
     outFrames.reserve(meta.frameCount);
+    std::vector<uint8_t> record(meta.frameRecordSize);
+    const uint64_t framesEnd = framesSection->offset + framesSection->size;
     for (uint32_t i = 0; i < meta.frameCount; ++i) {
-        if (index[i].frameSize != frameRecordSize) {
+        if (index[i].frameSize != meta.frameRecordSize) {
             if (outError) *outError = "unsupported DVR2 frame size";
+            return false;
+        }
+        if (index[i].frameOffset < framesSection->offset || index[i].frameOffset + index[i].frameSize > framesEnd) {
+            if (outError) *outError = "DVR2 frame index points outside frame section";
             return false;
         }
         in.seekg(static_cast<std::streamoff>(index[i].frameOffset), std::ios::beg);
@@ -1010,33 +1113,18 @@ bool ReadDvrBinaryFile(const std::filesystem::path& filePath,
             if (outError) *outError = "invalid DVR2 frame offset";
             return false;
         }
+        if (!ReadAll(in, record.data(), record.size())) {
+            if (outError) *outError = "failed to read DVR2 frame payload";
+            return false;
+        }
         Solvers::HeatmapFrame frame{};
-        if (meta.frameRecordVersion == 1) {
-            Dvr2FrameRecordV1 record{};
-            if (!ReadAll(in, &record, sizeof(record))) {
-                if (outError) *outError = "failed to read DVR2 frame record";
-                return false;
-            }
-            PopulateHeatmapFrameFromRecord(record, frame);
-        } else if (meta.frameRecordVersion == 2) {
-            Dvr2FrameRecordV2 record{};
-            if (!ReadAll(in, &record, sizeof(record))) {
-                if (outError) *outError = "failed to read DVR2 frame record";
-                return false;
-            }
-            PopulateHeatmapFrameFromRecord(record, frame);
-        } else {
-            Dvr2FrameRecordV3 record{};
-            if (!ReadAll(in, &record, sizeof(record))) {
-                if (outError) *outError = "failed to read DVR2 frame record";
-                return false;
-            }
-            PopulateHeatmapFrameFromRecord(record, frame);
+        if (!PopulateHeatmapFrameFromRecordBytes(record, frameFields, frame, outError)) {
+            return false;
         }
         outFrames.push_back(std::move(frame));
     }
 
-    if ((header.flags & kDvrFlagHasDynamicDebug) != 0) {
+    if ((header.flags & DvrFmt::kDvrFlagHasDynamicDebug) != 0) {
         if (!dynamicSchemaSection || !dynamicValuesSection) {
             if (outError) *outError = "DVR2 file is missing dynamic debug sections";
             return false;
@@ -1372,6 +1460,10 @@ void ServiceProxy::TriggerDvrBinaryExport() {
             m_dvrExporting.store(false);
             return;
         }
+        std::vector<Dvr::DvrDynamicDebugFrameSlot> dynamicFrameSlots;
+        if (m_dvrDynamicDebugBuffer) {
+            dynamicFrameSlots = m_dvrDynamicDebugBuffer->GetSnapshot();
+        }
 
         namespace fs = std::filesystem;
         const fs::path dir = MakeDvrExportRoot();
@@ -1401,9 +1493,31 @@ void ServiceProxy::TriggerDvrBinaryExport() {
             preTriggerFrames.erase(preTriggerFrames.begin(), preTriggerFrames.begin() + static_cast<long long>(dropCount));
         }
 
+        std::vector<Dvr::DvrDynamicDebugFrameSlot> preTriggerDynamicFrames;
+        const std::vector<Dvr::DvrDynamicDebugFrameSlot>* dynamicFramesForExport = nullptr;
+        if (!dynamicFrameSlots.empty()) {
+            bool allDynamicFramesMatched = true;
+            preTriggerDynamicFrames.reserve(preTriggerFrames.size());
+            for (const auto& frame : preTriggerFrames) {
+                const auto match = std::find_if(dynamicFrameSlots.begin(), dynamicFrameSlots.end(), [seq = frame.dvrSeq](const auto& dynamicFrame) {
+                    return dynamicFrame.dvrSeq == seq;
+                });
+                if (match == dynamicFrameSlots.end()) {
+                    allDynamicFramesMatched = false;
+                    break;
+                }
+                preTriggerDynamicFrames.push_back(*match);
+            }
+            if (allDynamicFramesMatched) {
+                dynamicFramesForExport = &preTriggerDynamicFrames;
+            } else {
+                LOG_WARN("App", "TriggerDvrBinaryExport", "IPC", "Dynamic debug frames did not cover all exported DVR frames; exporting static frame schema only.");
+            }
+        }
+
         const fs::path replayBinPath = dir / (datasetName + ".dvrbin");
         const auto dynamicSchema = GetCurrentDvrDynamicDebugSchema();
-        if (!WriteDvrBinaryFile(replayBinPath, preTriggerFrames, &dynamicSchema, nullptr)) {
+        if (!WriteDvrBinaryFile(replayBinPath, preTriggerFrames, &dynamicSchema, dynamicFramesForExport, nullptr)) {
             LOG_ERROR("App", "TriggerDvrBinaryExport", "IPC", "Failed to write DVR2 dataset: {}", replayBinPath.string());
             m_dvrExporting.store(false);
             return;

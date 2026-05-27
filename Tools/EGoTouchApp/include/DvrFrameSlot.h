@@ -11,10 +11,8 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
-#include <vector>
 #include "FrameLayout.h"
 #include "SolverTypes.h"
-#include "ServiceProxyTypes.h"
 
 namespace Dvr {
 
@@ -42,6 +40,25 @@ struct DvrPeak {
     uint8_t _pad = 0;  // explicit padding
 };
 static_assert(sizeof(DvrPeak) == 12, "DvrPeak must be exactly 12 bytes");
+
+constexpr int kMaxDynamicDebugSamples = 256;
+
+struct DvrDynamicDebugSampleSlot {
+    uint16_t fieldId = 0;
+    uint8_t valueType = 0;
+    uint8_t valid = 0;
+    uint32_t reserved = 0;
+    uint64_t rawValue = 0;
+};
+static_assert(sizeof(DvrDynamicDebugSampleSlot) == 16, "DvrDynamicDebugSampleSlot must be exactly 16 bytes");
+
+struct DvrDynamicDebugFrameSlot {
+    uint64_t dvrSeq = 0;
+    uint16_t sampleCount = 0;
+    uint16_t reserved0 = 0;
+    uint32_t reserved1 = 0;
+    DvrDynamicDebugSampleSlot samples[kMaxDynamicDebugSamples]{};
+};
 
 // ── DVR stylus snapshot ──
 struct DvrStylusPoint {
@@ -105,8 +122,6 @@ struct DvrFrameSlot {
 
     DvrPeak    peaks[kMaxPeaks]{};
     uint8_t    peakCount = 0;
-
-    App::DvrDynamicDebugFrame dynamicDebug{};
 
     // ── Populate from HeatmapFrame ──
     void CopyFrom(const Solvers::HeatmapFrame& src) {

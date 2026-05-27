@@ -60,22 +60,6 @@ bool TouchPipeline::Process(HeatmapFrame& frame) {
     m_contactExtractor.Process(frame, peaks, m_peakDet.m_threshold, peakEvaluations);
 
     // ── Phase 6: Contact Post-Processing ─────────────────────────────
-    // Compatibility bridge: legacy StylusSuppress* config keys still map to
-    // TouchTracker fields, while pre-tracking suppression logic lives here.
-    m_stylusSuppress.m_stylusSuppressGlobalEnabled = m_tracker.m_stylusSuppressGlobalEnabled;
-    m_stylusSuppress.m_stylusSuppressLocalEnabled = m_tracker.m_stylusSuppressLocalEnabled;
-    m_stylusSuppress.m_stylusSuppressLocalDistance = m_tracker.m_stylusSuppressLocalDistance;
-    m_stylusSuppress.m_stylusSuppressPenPeakThreshold = m_tracker.m_stylusSuppressPenPeakThreshold;
-    m_stylusSuppress.m_stylusSuppressTouchSignalKeep = m_tracker.m_stylusSuppressTouchSignalKeep;
-    m_stylusSuppress.m_stylusSuppressTouchAreaKeep = m_tracker.m_stylusSuppressTouchAreaKeep;
-    m_stylusSuppress.m_stylusAftEnabled = m_tracker.m_stylusAftEnabled;
-    m_stylusSuppress.m_stylusAftDebounceFrames = m_tracker.m_stylusAftDebounceFrames;
-    m_stylusSuppress.m_stylusAftWeakSignalThreshold = m_tracker.m_stylusAftWeakSignalThreshold;
-    m_stylusSuppress.m_stylusAftWeakSizeThresholdMm = m_tracker.m_stylusAftWeakSizeThresholdMm;
-    m_stylusSuppress.m_stylusAftSuppressFrames = m_tracker.m_stylusAftSuppressFrames;
-    m_stylusSuppress.m_fallbackSizeMm = m_tracker.m_fallbackSizeMm;
-    m_stylusSuppress.m_sizeAreaScale = m_tracker.m_sizeAreaScale;
-    m_stylusSuppress.m_sizeSignalScale = m_tracker.m_sizeSignalScale;
     const auto& edgeInfos = m_contactExtractor.GetEdgeInfos();
     const auto& edgeBounds = m_contactExtractor.GetEdgeBounds();
     m_edgeComp.Process(frame.contacts, edgeInfos, edgeBounds);
@@ -149,6 +133,23 @@ void TouchPipeline::ResetIdleOutputs(HeatmapFrame& frame) {
         m_diagZoneEdge.fill(0);
     }
 #endif
+}
+
+void TouchPipeline::SyncStylusSuppressConfigFromTracker() {
+    m_stylusSuppress.m_stylusSuppressGlobalEnabled = m_tracker.m_stylusSuppressGlobalEnabled;
+    m_stylusSuppress.m_stylusSuppressLocalEnabled = m_tracker.m_stylusSuppressLocalEnabled;
+    m_stylusSuppress.m_stylusSuppressLocalDistance = m_tracker.m_stylusSuppressLocalDistance;
+    m_stylusSuppress.m_stylusSuppressPenPeakThreshold = m_tracker.m_stylusSuppressPenPeakThreshold;
+    m_stylusSuppress.m_stylusSuppressTouchSignalKeep = m_tracker.m_stylusSuppressTouchSignalKeep;
+    m_stylusSuppress.m_stylusSuppressTouchAreaKeep = m_tracker.m_stylusSuppressTouchAreaKeep;
+    m_stylusSuppress.m_stylusAftEnabled = m_tracker.m_stylusAftEnabled;
+    m_stylusSuppress.m_stylusAftDebounceFrames = m_tracker.m_stylusAftDebounceFrames;
+    m_stylusSuppress.m_stylusAftWeakSignalThreshold = m_tracker.m_stylusAftWeakSignalThreshold;
+    m_stylusSuppress.m_stylusAftWeakSizeThresholdMm = m_tracker.m_stylusAftWeakSizeThresholdMm;
+    m_stylusSuppress.m_stylusAftSuppressFrames = m_tracker.m_stylusAftSuppressFrames;
+    m_stylusSuppress.m_fallbackSizeMm = m_tracker.m_fallbackSizeMm;
+    m_stylusSuppress.m_sizeAreaScale = m_tracker.m_sizeAreaScale;
+    m_stylusSuppress.m_sizeSignalScale = m_tracker.m_sizeSignalScale;
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -840,6 +841,8 @@ void TouchPipeline::LoadConfig(const std::string& key,
     else if (key=="LongPressMoveTolerance")  m_gesture.m_longPressMoveTolerance = std::stof(value);
     else if (key=="ReleasePendingFrames")    m_gesture.m_releasePendingFrames = std::stoi(value);
     else if (key=="BypassStateMachine")      m_gesture.m_bypassStateMachine = toBool(value);
+
+    SyncStylusSuppressConfigFromTracker();
 }
 
 } // namespace Solvers

@@ -81,8 +81,16 @@ private:
     static constexpr int kRows = 40;
     static constexpr int kCols = 60;
 
+    struct PressureDriftRowStats {
+        int gradientSum = 0;
+        int signalSum = 0;
+        bool hasSharpSpike = false;
+    };
+
     std::array<Peak, kMaxStoredPeaks> m_peaks{};
     std::array<Peak, kMaxStoredPeaks> m_prevPeaks{};
+    std::array<PressureDriftRowStats, kRows> m_pressureRows{};
+    std::array<uint8_t, kRows> m_pressureRowsReady{};
     int m_peakCount = 0;
     int m_prevPeakCount = 0;
     uint8_t m_nextPeakId = 1;
@@ -116,8 +124,24 @@ private:
                               const std::vector<MacroZone>& macroZones) {
         m_peakCount = 0;
         const int maxPeaks = EffectiveMaxPeaks();
+        int weakIdx = -1;
+        if (m_pressureDriftFilter) {
+            m_pressureRowsReady.fill(0);
+        }
+
+        auto refreshWeakIdx = [&]() {
+            weakIdx = 0;
+            for (int k = 1; k < maxPeaks; ++k) {
+                if (m_peaks[static_cast<size_t>(k)].z <
+                    m_peaks[static_cast<size_t>(weakIdx)].z) {
+                    weakIdx = k;
+                }
+            }
+        };
 
         const int colEnd = kCols - 1;
+        const int localRadius = std::clamp(m_localMaxRadius, 1, 5);
+        const int z8Radius = std::clamp(m_z8Radius, 1, 5);
 
         auto val = [&](int r, int c) -> int16_t {
             return frame.heatmapMatrix[r][c];
@@ -139,7 +163,6 @@ private:
                 }
                 if (v < thold) continue;
 
-                const int localRadius = std::clamp(m_localMaxRadius, 1, 5);
                 bool isPeak = true;
                 for (int dr = -localRadius; dr <= localRadius && isPeak; ++dr) {
                     for (int dc = -localRadius; dc <= localRadius; ++dc) {
@@ -160,7 +183,6 @@ private:
                 if (!isPeak) continue;
 
                 int nbrSigSum = 0;
-                const int z8Radius = std::clamp(m_z8Radius, 1, 5);
                 for (int dr = -z8Radius; dr <= z8Radius; ++dr) {
                     for (int dc = -z8Radius; dc <= z8Radius; ++dc) {
                         if (dr == 0 && dc == 0) continue;
@@ -173,40 +195,25 @@ private:
                 }
 
                 // PressureDrift check
-                if (m_pressureDriftFilter &&
-                    DetectPressureDrift(frame, c, r)) {
+                if (m_pressureDriftFilter && DetectPressureDrift(frame, c, r)) {
                     continue;
                 }
 
                 // TSACore Peak_Insert: cap at m_maxPeaks, replace weakest
+                Peak peak;
+                peak.r = r;
+                peak.c = c;
+                peak.z = v;
+                peak.neighborSignalSum = nbrSigSum;
+                peak.macroZoneIndex = zi;
+                peak.macroZoneArea = zone.area;
+                peak.macroZoneSignalSum = zone.signalSum;
                 if (m_peakCount < maxPeaks) {
-                    Peak peak;
-                    peak.r = r;
-                    peak.c = c;
-                    peak.z = v;
-                    peak.neighborSignalSum = nbrSigSum;
-                    peak.macroZoneIndex = zi;
-                    peak.macroZoneArea = zone.area;
-                    peak.macroZoneSignalSum = zone.signalSum;
                     m_peaks[static_cast<size_t>(m_peakCount++)] = peak;
-                } else {
-                    // Buffer full — find weakest peak and replace
-                    int weakIdx = 0;
-                    for (int k = 1; k < maxPeaks; ++k)
-                        if (m_peaks[static_cast<size_t>(k)].z <
-                            m_peaks[static_cast<size_t>(weakIdx)].z)
-                            weakIdx = k;
-                    if (m_peaks[static_cast<size_t>(weakIdx)].z < v) {
-                        Peak peak;
-                        peak.r = r;
-                        peak.c = c;
-                        peak.z = v;
-                        peak.neighborSignalSum = nbrSigSum;
-                        peak.macroZoneIndex = zi;
-                        peak.macroZoneArea = zone.area;
-                        peak.macroZoneSignalSum = zone.signalSum;
-                        m_peaks[static_cast<size_t>(weakIdx)] = peak;
-                    }
+                    if (m_peakCount == maxPeaks) refreshWeakIdx();
+                } else if (m_peaks[static_cast<size_t>(weakIdx)].z < v) {
+                    m_peaks[static_cast<size_t>(weakIdx)] = peak;
+                    refreshWeakIdx();
                 }
             }
         }
@@ -218,11 +225,16 @@ private:
         const int rowDelta = b.r - a.r;
         const int colDelta = b.c - a.c;
         const int steps = std::max(std::abs(rowDelta), std::abs(colDelta));
+        auto roundStep = [steps](int delta, int step) {
+            const int numerator = delta * step;
+            return numerator >= 0
+                ? (numerator + steps / 2) / steps
+                : (numerator - steps / 2) / steps;
+        };
         int saddle = 0;
         for (int step = 1; step < steps; ++step) {
-            const double t = static_cast<double>(step) / static_cast<double>(steps);
-            const int r = static_cast<int>(std::lround(static_cast<double>(a.r) + static_cast<double>(rowDelta) * t));
-            const int c = static_cast<int>(std::lround(static_cast<double>(a.c) + static_cast<double>(colDelta) * t));
+            const int r = a.r + roundStep(rowDelta, step);
+            const int c = a.c + roundStep(colDelta, step);
             if (r < 0 || r >= kRows || c < 0 || c >= kCols) continue;
             if ((r == a.r && c == a.c) || (r == b.r && c == b.c)) continue;
             saddle = std::max(saddle, static_cast<int>(frame.heatmapMatrix[r][c]));
@@ -279,32 +291,40 @@ private:
     // PressureDrift_Detect — TSACore gradient-based palm press
     // Returns true if the peak looks like a flat palm press.
     // ────────────────────────────────────────────────────────
+    inline void BuildPressureDriftRowStats(
+            const HeatmapFrame& frame,
+            int row,
+            PressureDriftRowStats& stats) const {
+        stats = {};
+        const int sharpSpikeLimit = m_sigTholdLimit / 3;
+        for (int c = 1; c < kCols - 1; ++c) {
+            const int grad = std::abs(static_cast<int>(frame.heatmapMatrix[row][c + 1])
+                                    - static_cast<int>(frame.heatmapMatrix[row][c - 1]));
+            stats.hasSharpSpike = stats.hasSharpSpike || grad > sharpSpikeLimit;
+            stats.gradientSum += grad;
+            if (frame.heatmapMatrix[row][c] > 0) {
+                stats.signalSum += frame.heatmapMatrix[row][c];
+            }
+        }
+    }
+
     inline bool DetectPressureDrift(const HeatmapFrame& frame,
-                                    int col, int row) const {
+                                    int col,
+                                    int row) {
         const int16_t peakSig = frame.heatmapMatrix[row][col];
         const int16_t limit3_4 = static_cast<int16_t>(m_sigTholdLimit * 3 / 4);
         const int16_t limit3_8 = static_cast<int16_t>(m_sigTholdLimit * 3 / 8);
 
-        // Signal range gate: must be in [limit*3/8, limit*3/4]
-        if (peakSig > limit3_4 || peakSig < limit3_8)
-            return false;
+        if (peakSig > limit3_4 || peakSig < limit3_8) return false;
 
-        // Scan entire row: gradient and signal sum
-        int gradientSum = 0, rowSignalSum = 0;
-        for (int c = 1; c < kCols - 1; ++c) {
-            // Gradient = |buf[c+1] - buf[c-1]|  (TSACore: cross-2-column)
-            int grad = std::abs(static_cast<int>(frame.heatmapMatrix[row][c + 1])
-                              - static_cast<int>(frame.heatmapMatrix[row][c - 1]));
-            if (grad > m_sigTholdLimit / 3)
-                return false;  // Sharp spike → not drift
-            gradientSum += grad;
-            if (frame.heatmapMatrix[row][c] > 0)
-                rowSignalSum += frame.heatmapMatrix[row][c];
+        if (m_pressureRowsReady[static_cast<size_t>(row)] == 0) {
+            BuildPressureDriftRowStats(frame, row, m_pressureRows[static_cast<size_t>(row)]);
+            m_pressureRowsReady[static_cast<size_t>(row)] = 1;
         }
-
-        // Drift condition: rowSum >= peak*9/2 AND peak*6 >= gradSum
-        return (rowSignalSum >= peakSig * 9 / 2) &&
-               (peakSig * 6 >= gradientSum);
+        const auto& stats = m_pressureRows[static_cast<size_t>(row)];
+        if (stats.hasSharpSpike) return false;
+        return (stats.signalSum >= peakSig * 9 / 2) &&
+               (peakSig * 6 >= stats.gradientSum);
     }
 
     // ────────────────────────────────────────────────────────

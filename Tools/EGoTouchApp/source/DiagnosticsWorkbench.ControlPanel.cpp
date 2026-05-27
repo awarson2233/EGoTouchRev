@@ -199,6 +199,7 @@ void DiagnosticsWorkbench::DrawControlPanel() {
         bool isTouchOnly = !desiredFull;
         if (ImGui::Checkbox("Touch-Only Mode (Pure Finger, Disable Pen)", &isTouchOnly)) {
             m_proxy->SetSrvModeFull(!isTouchOnly);
+            m_proxy->SaveConfig();
         }
         const char* activeModeText = activeFull ? "Full" : "Touch-Only";
         const char* desiredModeText = desiredFull ? "Full" : "Touch-Only";

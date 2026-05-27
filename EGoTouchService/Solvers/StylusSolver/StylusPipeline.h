@@ -42,9 +42,9 @@ public:
                                 uint8_t freq1,
                                 uint8_t freq2);
 
-    int GetPacketSensorRows() const { return m_packetSensorRows; }
-    int GetPacketSensorCols() const { return m_packetSensorCols; }
-    bool GetEmitPacketWhenInvalid() const { return m_emitPacketWhenInvalid; }
+    int GetPacketSensorRows() const { return kPacketSensorRows; }
+    int GetPacketSensorCols() const { return kPacketSensorCols; }
+    bool GetEmitPacketWhenInvalid() const { return true; }
 
     Stylus::StylusFrameParser m_frameParser;
     Stylus::GridFeatureExtractor m_featureExtractor;
@@ -68,9 +68,8 @@ private:
     mutable std::mutex m_btMutex;
     StylusBtInputSnapshot m_btSample{};
 
-    int m_packetSensorRows = 40;
-    int m_packetSensorCols = 60;
-    bool m_emitPacketWhenInvalid = true;
+    static constexpr int kPacketSensorRows = 40;
+    static constexpr int kPacketSensorCols = 60;
 };
 
 } // namespace Solvers

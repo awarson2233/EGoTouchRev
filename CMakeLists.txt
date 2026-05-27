@@ -267,6 +267,7 @@ if (EGO_BUILD_TESTS)
     add_executable(SolversRawdataBenchmarkTest
         Tools/tests/RawdataBenchmarkTest.cpp
     )
+    target_include_directories(SolversRawdataBenchmarkTest PRIVATE "${APP_ROOT}/include")
     target_link_libraries(SolversRawdataBenchmarkTest PRIVATE Solvers Common)
 
     add_executable(CommonLoggerTest

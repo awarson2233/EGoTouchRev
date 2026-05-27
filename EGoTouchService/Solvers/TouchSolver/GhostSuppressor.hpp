@@ -1,8 +1,9 @@
 #pragma once
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
-#include <vector>
 
 namespace Solvers { namespace Touch {
 
@@ -44,14 +45,17 @@ inline void GhostSuppressor::ProcessTracked(Contact* contacts,
                                             uint32_t silentGapFlag) const {
     if (!m_rxGhostFilterEnabled || contactCount <= 1 || maxTouchCount <= 0) return;
 
-    std::vector<uint8_t> removeById(static_cast<size_t>(maxTouchCount) + 1, 0);
+    std::array<uint8_t, 257> removeById{};
+    const int idLimit = std::min(maxTouchCount, static_cast<int>(removeById.size()) - 1);
     for (int i = 0; i < contactCount; ++i) {
         const auto& a = contacts[i];
-        if (a.state == upState || HasLifeFlag(a, silentGapFlag) || a.id <= 0 || a.id > maxTouchCount) continue;
+        if (a.state == upState || HasLifeFlag(a, silentGapFlag) || a.id <= 0 || a.id > idLimit) continue;
         for (int j = i + 1; j < contactCount; ++j) {
             const auto& b = contacts[j];
-            if (b.state == upState || HasLifeFlag(b, silentGapFlag) || b.id <= 0 || b.id > maxTouchCount) continue;
-            const int ld = std::abs(static_cast<int>(std::lround(a.y)) - static_cast<int>(std::lround(b.y)));
+            if (b.state == upState || HasLifeFlag(b, silentGapFlag) || b.id <= 0 || b.id > idLimit) continue;
+            const int ay = static_cast<int>(a.y + (a.y >= 0.0f ? 0.5f : -0.5f));
+            const int by = static_cast<int>(b.y + (b.y >= 0.0f ? 0.5f : -0.5f));
+            const int ld = std::abs(ay - by);
             if (ld > m_rxGhostLineDelta) continue;
             const Contact* strong = &a;
             const Contact* weak = &b;
@@ -68,14 +72,14 @@ inline void GhostSuppressor::ProcessTracked(Contact* contacts,
     int writePos = 0;
     for (int i = 0; i < contactCount; ++i) {
         if (contacts[i].state == upState || HasLifeFlag(contacts[i], silentGapFlag) ||
-            contacts[i].id <= 0 || contacts[i].id > maxTouchCount || removeById[static_cast<size_t>(contacts[i].id)] == 0)
+            contacts[i].id <= 0 || contacts[i].id > idLimit || removeById[static_cast<size_t>(contacts[i].id)] == 0)
             contacts[writePos++] = contacts[i];
     }
     contactCount = writePos;
 
     int trackWrite = 0;
     for (int i = 0; i < nextTrackCount; ++i) {
-        if (nextTracks[i].id <= 0 || nextTracks[i].id > maxTouchCount || removeById[static_cast<size_t>(nextTracks[i].id)] == 0)
+        if (nextTracks[i].id <= 0 || nextTracks[i].id > idLimit || removeById[static_cast<size_t>(nextTracks[i].id)] == 0)
             nextTracks[trackWrite++] = nextTracks[i];
     }
     nextTrackCount = trackWrite;

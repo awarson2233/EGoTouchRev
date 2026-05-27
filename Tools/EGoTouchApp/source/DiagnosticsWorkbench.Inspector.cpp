@@ -592,7 +592,7 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
 
         if (ImGui::BeginTabItem("Config")) {
             if (ImGui::BeginTabBar("StylusConfigTabs")) {
-                static const char* modules[] = {"Frame Parser", "Data Solve", "Pressure", "Coordinate", "Output"};
+                static const char* modules[] = {"Frame Parser", "Data Solve", "Pressure", "Coordinate"};
                 for (const char* module : modules) {
                     if (ImGui::BeginTabItem(module)) {
                         ConfigUIRenderer::RenderConfigSchemaByModule(schema, module);

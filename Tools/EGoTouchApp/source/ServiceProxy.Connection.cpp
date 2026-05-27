@@ -5,7 +5,8 @@
 namespace App {
 
 ServiceProxy::ServiceProxy()
-    : m_dvrBuffer(std::make_unique<RingBuffer<Dvr::DvrFrameSlot, kDvrCapacity>>()) {
+    : m_dvrBuffer(std::make_unique<RingBuffer<Dvr::DvrFrameSlot, kDvrCapacity>>()),
+      m_dvrDynamicDebugBuffer(std::make_unique<RingBuffer<Dvr::DvrDynamicDebugFrameSlot, kDvrCapacity>>()) {
     // TouchPipeline is self-contained — no processor registration needed.
     LoadConfig();
 }

@@ -1,4 +1,5 @@
 #include "ServiceProxyInternal.h"
+#include <algorithm>
 #include <cstring>
 #include <unordered_map>
 
@@ -124,6 +125,26 @@ DvrDynamicDebugFrame ServiceProxy::CaptureDynamicDebugFrame() const {
             sample.value = it->second;
         }
         frame.samples.push_back(std::move(sample));
+    }
+    return frame;
+}
+
+Dvr::DvrDynamicDebugFrameSlot ServiceProxy::CaptureDvrDynamicDebugFrameSlot(uint64_t dvrSeq) const {
+    std::lock_guard<std::mutex> lk(m_dynamicDebugMutex);
+    Dvr::DvrDynamicDebugFrameSlot frame{};
+    frame.dvrSeq = dvrSeq;
+    frame.sampleCount = static_cast<uint16_t>(std::min<size_t>(m_dynamicDebugFields.size(), Dvr::kMaxDynamicDebugSamples));
+    for (uint16_t i = 0; i < frame.sampleCount; ++i) {
+        const auto& field = m_dynamicDebugFields[i];
+        auto& sample = frame.samples[i];
+        sample.fieldId = field.fieldId;
+        sample.valueType = static_cast<uint8_t>(field.valueType);
+        auto it = m_dynamicDebugValues.find(field.fieldId);
+        if (it != m_dynamicDebugValues.end()) {
+            sample.valueType = static_cast<uint8_t>(it->second.valueType);
+            sample.valid = it->second.valid ? 1 : 0;
+            sample.rawValue = it->second.rawValue;
+        }
     }
     return frame;
 }

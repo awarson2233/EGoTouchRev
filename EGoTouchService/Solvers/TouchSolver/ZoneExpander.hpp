@@ -22,6 +22,7 @@ public:
     static constexpr int kRows = 40;
     static constexpr int kCols = 60;
     static constexpr int kGridSize = kRows * kCols;
+    static constexpr int kMaxTouchScratch = 256;
 
     int  m_tholdScaleNumer = 0x40; // ~50%  (TSACore DAT)
     int  m_tholdScaleShift = 7;    // >>7
@@ -72,28 +73,32 @@ public:
         // TSACore SigSumFilter_ReserveTouch: keep top-N by signalSum
         if (m_maxTouches > 0 &&
             static_cast<int>(frame.contacts.size()) > m_maxTouches) {
-            std::vector<int> order(frame.contacts.size());
-            for (int i = 0; i < static_cast<int>(order.size()); ++i) order[static_cast<size_t>(i)] = i;
-            std::sort(order.begin(), order.end(), [&](int a, int b) {
+            const int contactCount = std::min(static_cast<int>(frame.contacts.size()), kGridSize);
+            const int keepCount = std::min({m_maxTouches, contactCount, kMaxTouchScratch});
+            std::array<int, kGridSize> order;
+            for (int i = 0; i < contactCount; ++i) order[static_cast<size_t>(i)] = i;
+            std::sort(order.begin(), order.begin() + contactCount, [&](int a, int b) {
                 return frame.contacts[static_cast<size_t>(a)].signalSum >
                        frame.contacts[static_cast<size_t>(b)].signalSum;
             });
 
-            std::vector<TouchContact> keptContacts;
-            std::vector<ZoneEdgeInfo> keptEdgeInfos;
-            keptContacts.reserve(static_cast<size_t>(m_maxTouches));
-            keptEdgeInfos.reserve(static_cast<size_t>(m_maxTouches));
-            for (int i = 0; i < m_maxTouches; ++i) {
+            std::array<TouchContact, kMaxTouchScratch> keptContacts;
+            std::array<ZoneEdgeInfo, kMaxTouchScratch> keptEdgeInfos;
+            for (int i = 0; i < keepCount; ++i) {
                 const int src = order[static_cast<size_t>(i)];
-                TouchContact contact = frame.contacts[static_cast<size_t>(src)];
-                contact.id = i;
-                keptContacts.push_back(contact);
-                keptEdgeInfos.push_back(src < static_cast<int>(m_contactEdgeInfos.size())
+                keptContacts[static_cast<size_t>(i)] = frame.contacts[static_cast<size_t>(src)];
+                keptContacts[static_cast<size_t>(i)].id = i;
+                keptEdgeInfos[static_cast<size_t>(i)] = src < static_cast<int>(m_contactEdgeInfos.size())
                     ? m_contactEdgeInfos[static_cast<size_t>(src)]
-                    : ZoneEdgeInfo{});
+                    : ZoneEdgeInfo{};
             }
-            frame.contacts = std::move(keptContacts);
-            m_contactEdgeInfos = std::move(keptEdgeInfos);
+
+            frame.contacts.resize(static_cast<size_t>(keepCount));
+            m_contactEdgeInfos.resize(static_cast<size_t>(keepCount));
+            for (int i = 0; i < keepCount; ++i) {
+                frame.contacts[static_cast<size_t>(i)] = keptContacts[static_cast<size_t>(i)];
+                m_contactEdgeInfos[static_cast<size_t>(i)] = keptEdgeInfos[static_cast<size_t>(i)];
+            }
         }
 
     }

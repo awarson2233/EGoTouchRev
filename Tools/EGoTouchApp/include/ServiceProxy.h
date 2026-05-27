@@ -144,6 +144,7 @@ public:
 private:
     DvrDynamicDebugSchema CaptureDynamicDebugSchema() const;
     DvrDynamicDebugFrame CaptureDynamicDebugFrame() const;
+    Dvr::DvrDynamicDebugFrameSlot CaptureDvrDynamicDebugFrameSlot(uint64_t dvrSeq) const;
 
     static constexpr const wchar_t* kSharedMemName =
         L"Global\\EGoTouchSharedFrame";
@@ -170,6 +171,7 @@ private:
 
     // DVR ring buffer (POD slots — zero heap allocation per frame)
     std::unique_ptr<RingBuffer<Dvr::DvrFrameSlot, kDvrCapacity>> m_dvrBuffer;
+    std::unique_ptr<RingBuffer<Dvr::DvrDynamicDebugFrameSlot, kDvrCapacity>> m_dvrDynamicDebugBuffer;
     std::atomic<uint64_t> m_dvrSeqCounter{0};
     std::atomic<bool> m_dvrExporting{false};
     std::thread m_dvrThread;

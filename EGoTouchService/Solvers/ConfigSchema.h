@@ -7,7 +7,7 @@ namespace Solvers {
 
 // 配置参数元数据（无 UI 依赖）
 struct ConfigParam {
-    enum Type { Bool, Int, Float, Double, String };
+    enum Type { Bool, Int, UInt8, UInt16, Float, Double, String };
     enum Category { General = 0, Solver, Filter, Behavior, Output, Advanced };
 
     std::string key;

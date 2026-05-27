@@ -105,31 +105,22 @@ std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
                         ConfigParam::Int, const_cast<int*>(&m_postPressure.m_btFreqShiftDebounceFrames), 0.0f, 255.0f)
         .Module("Pressure");
     schema.emplace_back("sp.pressureEdgeEnterThreshold", "Pressure Edge Enter Threshold",
-                        ConfigParam::Int, const_cast<uint16_t*>(&m_postPressure.m_pressureEdgeEnterThreshold), 0.0f, 65535.0f)
+                        ConfigParam::UInt16, const_cast<uint16_t*>(&m_postPressure.m_pressureEdgeEnterThreshold), 0.0f, 65535.0f)
         .Module("Pressure");
     schema.emplace_back("sp.pressureEdgeExitThreshold", "Pressure Edge Exit Threshold",
-                        ConfigParam::Int, const_cast<uint16_t*>(&m_postPressure.m_pressureEdgeExitThreshold), 0.0f, 65535.0f)
+                        ConfigParam::UInt16, const_cast<uint16_t*>(&m_postPressure.m_pressureEdgeExitThreshold), 0.0f, 65535.0f)
         .Module("Pressure");
-    schema.emplace_back("sp.packetSensorRows", "Packet Sensor Rows",
-                        ConfigParam::Int, const_cast<int*>(&m_packetSensorRows), 1.0f, 200.0f)
-        .Module("Output");
-    schema.emplace_back("sp.packetSensorCols", "Packet Sensor Cols",
-                        ConfigParam::Int, const_cast<int*>(&m_packetSensorCols), 1.0f, 200.0f)
-        .Module("Output");
-    schema.emplace_back("sp.emitPacketWhenInvalid", "Emit Invalid Packet",
-                        ConfigParam::Bool, const_cast<bool*>(&m_emitPacketWhenInvalid))
-        .Module("Output");
     schema.emplace_back("sp.tipDownPressureThreshold", "Tip Down Pressure Threshold",
-                        ConfigParam::Int, const_cast<uint16_t*>(&m_pressureSolver.m_tipDownPressureThreshold), 0.0f, 4095.0f)
+                        ConfigParam::UInt16, const_cast<uint16_t*>(&m_pressureSolver.m_tipDownPressureThreshold), 0.0f, 4095.0f)
         .Module("Pressure");
     schema.emplace_back("sp.btPressSignalSuppressEnterThreshold", "BT Press Suppress Enter Threshold",
-                        ConfigParam::Int, const_cast<uint16_t*>(&m_pressureSolver.m_btPressSignalSuppressEnterThreshold), 0.0f, 65535.0f)
+                        ConfigParam::UInt16, const_cast<uint16_t*>(&m_pressureSolver.m_btPressSignalSuppressEnterThreshold), 0.0f, 65535.0f)
         .Module("Pressure");
     schema.emplace_back("sp.btPressSignalSuppressExitThreshold", "BT Press Suppress Exit Threshold",
-                        ConfigParam::Int, const_cast<uint16_t*>(&m_pressureSolver.m_btPressSignalSuppressExitThreshold), 0.0f, 65535.0f)
+                        ConfigParam::UInt16, const_cast<uint16_t*>(&m_pressureSolver.m_btPressSignalSuppressExitThreshold), 0.0f, 65535.0f)
         .Module("Pressure");
     schema.emplace_back("sp.signalFloor", "Signal Floor",
-                        ConfigParam::Int, const_cast<uint16_t*>(&m_coordinateSolver.m_signalFloor), 0.0f, 65535.0f)
+                        ConfigParam::UInt16, const_cast<uint16_t*>(&m_coordinateSolver.m_signalFloor), 0.0f, 65535.0f)
         .Module("Coordinate");
     schema.emplace_back("sp.edgeCoorEnabled", "Edge Coor Process Enabled",
                         ConfigParam::Bool, const_cast<bool*>(&m_edgeCoorProcess.m_enabled))
@@ -141,10 +132,10 @@ std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
                         ConfigParam::Bool, const_cast<bool*>(&m_noisePostProcess.m_enabled))
         .Module("Data Solve");
     schema.emplace_back("sp.noiseSignalRatioThold", "Noise Signal Ratio Threshold",
-                        ConfigParam::Int, const_cast<int*>(reinterpret_cast<const int*>(&m_noisePostProcess.m_signalRatioThreshold)), 1.0f, 16.0f)
+                        ConfigParam::UInt8, const_cast<uint8_t*>(&m_noisePostProcess.m_signalRatioThreshold), 1.0f, 16.0f)
         .Module("Data Solve");
     schema.emplace_back("sp.noiseSignalDropRatio", "Noise Signal Magnitude Drop Ratio",
-                        ConfigParam::Int, const_cast<int*>(reinterpret_cast<const int*>(&m_noisePostProcess.m_signalMagnitudeDropRatio)), 1.0f, 16.0f)
+                        ConfigParam::UInt8, const_cast<uint8_t*>(&m_noisePostProcess.m_signalMagnitudeDropRatio), 1.0f, 16.0f)
         .Module("Data Solve");
     schema.emplace_back("sp.linearFilterEnabled", "Linear Filter Enabled",
                         ConfigParam::Bool, const_cast<bool*>(&m_linearFilterProcess.m_enabled))
@@ -169,28 +160,28 @@ std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
                         ConfigParam::Bool, const_cast<bool*>(&m_coorIIRProcess.m_enabled))
         .Module("Data Solve");
     schema.emplace_back("sp.iirCoefLowInBand", "IIR Coef Low In-Band",
-                        ConfigParam::Int, const_cast<uint8_t*>(&m_coorIIRProcess.m_coefLowInBand), 0.0f, 255.0f)
+                        ConfigParam::UInt8, const_cast<uint8_t*>(&m_coorIIRProcess.m_coefLowInBand), 0.0f, 255.0f)
         .Module("Data Solve");
     schema.emplace_back("sp.iirCoefHighInBand", "IIR Coef High In-Band",
-                        ConfigParam::Int, const_cast<uint8_t*>(&m_coorIIRProcess.m_coefHighInBand), 0.0f, 255.0f)
+                        ConfigParam::UInt8, const_cast<uint8_t*>(&m_coorIIRProcess.m_coefHighInBand), 0.0f, 255.0f)
         .Module("Data Solve");
     schema.emplace_back("sp.iirSpeedTholdInBand", "IIR Speed Thold In-Band",
-                        ConfigParam::Int, const_cast<uint8_t*>(&m_coorIIRProcess.m_speedTholdInBand), 0.0f, 255.0f)
+                        ConfigParam::UInt8, const_cast<uint8_t*>(&m_coorIIRProcess.m_speedTholdInBand), 0.0f, 255.0f)
         .Module("Data Solve");
     schema.emplace_back("sp.iirCoefLowEdge", "IIR Coef Low Edge",
-                        ConfigParam::Int, const_cast<uint8_t*>(&m_coorIIRProcess.m_coefLowEdge), 0.0f, 255.0f)
+                        ConfigParam::UInt8, const_cast<uint8_t*>(&m_coorIIRProcess.m_coefLowEdge), 0.0f, 255.0f)
         .Module("Data Solve");
     schema.emplace_back("sp.iirCoefHighEdge", "IIR Coef High Edge",
-                        ConfigParam::Int, const_cast<uint8_t*>(&m_coorIIRProcess.m_coefHighEdge), 0.0f, 255.0f)
+                        ConfigParam::UInt8, const_cast<uint8_t*>(&m_coorIIRProcess.m_coefHighEdge), 0.0f, 255.0f)
         .Module("Data Solve");
     schema.emplace_back("sp.iirSpeedTholdEdge", "IIR Speed Thold Edge",
-                        ConfigParam::Int, const_cast<uint8_t*>(&m_coorIIRProcess.m_speedTholdEdge), 0.0f, 255.0f)
+                        ConfigParam::UInt8, const_cast<uint8_t*>(&m_coorIIRProcess.m_speedTholdEdge), 0.0f, 255.0f)
         .Module("Data Solve");
     schema.emplace_back("sp.iirSpeedMax", "IIR Speed Max",
                         ConfigParam::Int, const_cast<int*>(&m_coorIIRProcess.m_speedMax), 0.0f, 1000.0f)
         .Module("Data Solve");
     schema.emplace_back("sp.iirMaxCoef", "IIR Max Coef (Denominator)",
-                        ConfigParam::Int, const_cast<uint8_t*>(&m_coorIIRProcess.m_maxCoef), 0.0f, 255.0f)
+                        ConfigParam::UInt8, const_cast<uint8_t*>(&m_coorIIRProcess.m_maxCoef), 0.0f, 255.0f)
         .Module("Data Solve");
 
     // ── AftCoorProcess ──
@@ -198,16 +189,16 @@ std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
                         ConfigParam::Bool, const_cast<bool*>(&m_aftCoorProcess.m_enabled))
         .Module("Data Solve");
     schema.emplace_back("sp.lockFlashInBandX", "Lock Flash In-Band X",
-                        ConfigParam::Int, const_cast<uint8_t*>(&m_aftCoorProcess.m_lockFlashInBandX), 0.0f, 255.0f)
+                        ConfigParam::UInt8, const_cast<uint8_t*>(&m_aftCoorProcess.m_lockFlashInBandX), 0.0f, 255.0f)
         .Module("Data Solve");
     schema.emplace_back("sp.lockFlashInBandY", "Lock Flash In-Band Y",
-                        ConfigParam::Int, const_cast<uint8_t*>(&m_aftCoorProcess.m_lockFlashInBandY), 0.0f, 255.0f)
+                        ConfigParam::UInt8, const_cast<uint8_t*>(&m_aftCoorProcess.m_lockFlashInBandY), 0.0f, 255.0f)
         .Module("Data Solve");
     schema.emplace_back("sp.lockFlashEdgeX", "Lock Flash Edge X",
-                        ConfigParam::Int, const_cast<uint8_t*>(&m_aftCoorProcess.m_lockFlashEdgeX), 0.0f, 255.0f)
+                        ConfigParam::UInt8, const_cast<uint8_t*>(&m_aftCoorProcess.m_lockFlashEdgeX), 0.0f, 255.0f)
         .Module("Data Solve");
     schema.emplace_back("sp.lockFlashEdgeY", "Lock Flash Edge Y",
-                        ConfigParam::Int, const_cast<uint8_t*>(&m_aftCoorProcess.m_lockFlashEdgeY), 0.0f, 255.0f)
+                        ConfigParam::UInt8, const_cast<uint8_t*>(&m_aftCoorProcess.m_lockFlashEdgeY), 0.0f, 255.0f)
         .Module("Data Solve");
     schema.emplace_back("sp.lockSensorTxCount", "Lock Sensor TX Count",
                         ConfigParam::Int, const_cast<int*>(&m_aftCoorProcess.m_sensorTxCount), 1.0f, 200.0f)
@@ -232,9 +223,6 @@ void StylusPipeline::SaveConfig(std::ostream& out) const {
     out << "sp.btFreqShiftDebounceFrames=" << m_postPressure.m_btFreqShiftDebounceFrames << "\n";
     out << "sp.pressureEdgeEnterThreshold=" << m_postPressure.m_pressureEdgeEnterThreshold << "\n";
     out << "sp.pressureEdgeExitThreshold=" << m_postPressure.m_pressureEdgeExitThreshold << "\n";
-    out << "sp.packetSensorRows=" << m_packetSensorRows << "\n";
-    out << "sp.packetSensorCols=" << m_packetSensorCols << "\n";
-    out << "sp.emitPacketWhenInvalid=" << (m_emitPacketWhenInvalid ? "1" : "0") << "\n";
     out << "sp.tipDownPressureThreshold=" << m_pressureSolver.m_tipDownPressureThreshold << "\n";
     out << "sp.btPressSignalSuppressEnterThreshold=" << m_pressureSolver.m_btPressSignalSuppressEnterThreshold << "\n";
     out << "sp.btPressSignalSuppressExitThreshold=" << m_pressureSolver.m_btPressSignalSuppressExitThreshold << "\n";
@@ -299,12 +287,6 @@ void StylusPipeline::LoadConfig(const std::string& key, const std::string& value
     } else if (key == "sp.pressureEdgeExitThreshold") {
         m_postPressure.m_pressureEdgeExitThreshold =
             static_cast<uint16_t>(std::clamp(std::stoi(value), 0, 0xFFFF));
-    } else if (key == "sp.packetSensorRows") {
-        m_packetSensorRows = std::max(1, std::stoi(value));
-    } else if (key == "sp.packetSensorCols") {
-        m_packetSensorCols = std::max(1, std::stoi(value));
-    } else if (key == "sp.emitPacketWhenInvalid") {
-        m_emitPacketWhenInvalid = toBool(value);
     } else if (key == "sp.tipDownPressureThreshold") {
         m_pressureSolver.m_tipDownPressureThreshold = static_cast<uint16_t>(std::clamp(std::stoi(value), 0, 4095));
     } else if (key == "sp.btPressSignalSuppressEnterThreshold") {

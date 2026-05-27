@@ -41,6 +41,7 @@ std::filesystem::path ResolveReplayBinaryPath(const std::filesystem::path& input
 bool WriteDvrBinaryFile(const std::filesystem::path& filePath,
                         const std::vector<Dvr::DvrFrameSlot>& frames,
                         const DvrDynamicDebugSchema* dynamicSchema = nullptr,
+                        const std::vector<Dvr::DvrDynamicDebugFrameSlot>* dynamicFrames = nullptr,
                         uint32_t* outFlags = nullptr);
 bool ReadDvrBinaryFile(const std::filesystem::path& filePath,
                        std::vector<Solvers::HeatmapFrame>& outFrames,

@@ -124,9 +124,11 @@ void ServiceProxy::PollLoop() {
                 if (gotFrame && m_dvrBuffer) {
                     Dvr::DvrFrameSlot slot;
                     slot.CopyFrom(m_latestFrame);
-                    slot.dynamicDebug = CaptureDynamicDebugFrame();
                     slot.dvrSeq = m_dvrSeqCounter.fetch_add(1, std::memory_order_relaxed) + 1;
                     m_dvrBuffer->PushOverwriting(slot);
+                    if (m_dvrDynamicDebugBuffer) {
+                        m_dvrDynamicDebugBuffer->PushOverwriting(CaptureDvrDynamicDebugFrameSlot(slot.dvrSeq));
+                    }
                 }
             }
             if (wt == WaitType::Log) {

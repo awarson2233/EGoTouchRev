@@ -46,6 +46,7 @@ namespace Solvers {
 class TouchPipeline {
 public:
     TouchPipeline() {
+        SyncStylusSuppressConfigFromTracker();
 #if EGOTOUCH_DIAG
         m_diagPeaks.reserve(Touch::PeakDetector::kMaxStoredPeaks);
 #endif
@@ -91,6 +92,7 @@ public:
 
 private:
     void ResetIdleOutputs(HeatmapFrame& frame);
+    void SyncStylusSuppressConfigFromTracker();
 
 #if EGOTOUCH_DIAG
     mutable std::mutex m_diagMtx;

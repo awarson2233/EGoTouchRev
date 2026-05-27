@@ -1,6 +1,7 @@
 #include "TouchSolver/TouchPipeline.h"
 #include "StylusPipeline.h"
 #include "FrameLayout.h"
+#include "DvrFormat.h"
 
 #include <algorithm>
 #include <array>
@@ -44,24 +45,21 @@ constexpr int kDvrMaxPeaks = 30;
 
 const std::filesystem::path kDefaultDatasetPath = std::filesystem::path("../Tools/tests/dataset.dvrbin");
 
-#if defined(_MSC_VER)
-#pragma warning(push)
-#pragma warning(disable : 4324)
-#endif
-
 enum class BenchmarkMode {
     Linked,
     Independent,
     Both,
 };
 
-enum class Dvr2SectionType : uint32_t {
-    Meta = 1,
-    Index = 2,
-    Frames = 3,
-    DynamicDebugSchema = 4,
-    DynamicDebugValues = 5,
-};
+namespace DvrFmt = Dvr::Format;
+
+using Dvr2FileHeader = DvrFmt::Dvr2FileHeader;
+using Dvr2SectionEntry = DvrFmt::Dvr2SectionEntry;
+using Dvr2SectionType = DvrFmt::Dvr2SectionType;
+using Dvr2MetaSection = DvrFmt::Dvr2MetaSection;
+using Dvr2FrameSchemaHeader = DvrFmt::Dvr2FrameSchemaHeader;
+using Dvr2FieldDef = DvrFmt::Dvr2FieldDef;
+using Dvr2IndexEntry = DvrFmt::Dvr2IndexEntry;
 
 struct Options {
     std::filesystem::path datasetPath = kDefaultDatasetPath;
@@ -71,118 +69,12 @@ struct Options {
     BenchmarkMode mode = BenchmarkMode::Linked;
 };
 
-struct Dvr2FileHeader {
-    char magic[8];
-    uint16_t formatVersion = 0;
-    uint16_t headerSize = sizeof(Dvr2FileHeader);
-    uint32_t sectionCount = 0;
-    uint64_t tocOffset = 0;
-    uint32_t flags = 0;
-    uint32_t reserved = 0;
-};
-
-struct Dvr2SectionEntry {
-    uint32_t type = 0;
-    uint32_t version = 0;
-    uint64_t offset = 0;
-    uint64_t size = 0;
-};
-
-struct Dvr2MetaSectionV1 {
-    uint32_t frameCount = 0;
-    uint32_t frameRecordVersion = 0;
-    uint32_t flags = 0;
-    uint32_t reserved = 0;
-};
-
-struct Dvr2IndexEntryV1 {
-    uint64_t timestamp = 0;
-    uint64_t receiveSystemEpochUs = 0;
-    uint64_t frameOffset = 0;
-    uint32_t frameSize = 0;
-    uint32_t reserved = 0;
-};
-
-struct Dvr2ContactRecordV1 {
-    int32_t id = 0;
-    float x = 0.0f;
-    float y = 0.0f;
-    int32_t state = 0;
-    int32_t area = 0;
-    int32_t signalSum = 0;
-};
-
-struct Dvr2PeakRecordV1 {
-    int32_t r = 0;
-    int32_t c = 0;
-    int16_t z = 0;
-    uint8_t id = 0;
-    uint8_t reserved = 0;
-};
-
-struct Dvr2StylusPointRecordV1 {
-    uint8_t valid = 0;
-    uint8_t reserved0[3]{};
-    float x = 0.0f;
-    float y = 0.0f;
-    uint16_t reportX = 0;
-    uint16_t reportY = 0;
-    uint16_t pressure = 0;
-    uint16_t rawPressure = 0;
-    uint16_t mappedPressure = 0;
-    uint16_t peakTx1 = 0;
-    uint16_t peakTx2 = 0;
-    uint16_t reserved1 = 0;
-    float tx1X = 0.0f;
-    float tx1Y = 0.0f;
-    float tx2X = 0.0f;
-    float tx2Y = 0.0f;
-    float confidence = 0.0f;
-};
-
-struct Dvr2StylusDataRecordV1 {
-    uint8_t slaveValid = 0;
-    uint8_t checksumOk = 0;
-    uint8_t tx1BlockValid = 0;
-    uint8_t tx2BlockValid = 0;
-    uint32_t status = 0;
-    uint16_t pressure = 0;
-    uint16_t signalX = 0;
-    uint16_t signalY = 0;
-    uint16_t maxRawPeak = 0;
-    uint8_t pipelineStage = 0;
-    uint8_t reserved[5]{};
-    Dvr2StylusPointRecordV1 point{};
-};
-
-struct Dvr2FrameRecordV1 {
-    uint64_t timestamp = 0;
-    uint64_t receiveSystemEpochUs = 0;
-    uint64_t dvrSeq = 0;
-    uint8_t masterWasRead = 1;
-    uint8_t masterSuffixValid = 0;
-    uint8_t slaveSuffixValid = 0;
-    uint8_t reserved0 = 0;
-    int16_t heatmapMatrix[kRows][kCols]{};
-    uint16_t masterSuffix[Frame::kMasterSuffixWords]{};
-    uint16_t slaveSuffix[Frame::kSlaveSuffixWords]{};
-    Dvr2StylusDataRecordV1 stylus{};
-    Dvr2ContactRecordV1 contacts[kDvrMaxContacts]{};
-    uint32_t contactCount = 0;
-    Dvr2PeakRecordV1 peaks[kDvrMaxPeaks]{};
-    uint32_t peakCount = 0;
-};
-
-#if defined(_MSC_VER)
-#pragma warning(pop)
-#endif
-
 static_assert(sizeof(Dvr2FileHeader) == 32);
 static_assert(sizeof(Dvr2SectionEntry) == 24);
-static_assert(sizeof(Dvr2IndexEntryV1) == 32);
-static_assert(sizeof(Dvr2FrameRecordV1) == 6096);
-static_assert(std::is_trivially_copyable_v<Dvr2FrameRecordV1>);
-static_assert(std::is_standard_layout_v<Dvr2FrameRecordV1>);
+static_assert(sizeof(Dvr2MetaSection) == 64);
+static_assert(sizeof(Dvr2FrameSchemaHeader) == 32);
+static_assert(sizeof(Dvr2FieldDef) == 164);
+static_assert(sizeof(Dvr2IndexEntry) == 32);
 
 struct DvrDatasetFrame {
     Solvers::HeatmapFrame touchFrame;
@@ -312,7 +204,7 @@ bool ReadAll(std::ifstream& in, void* data, size_t bytes) {
 }
 
 std::array<char, 8> MakeDvr2Magic() {
-    return {'E', 'G', 'O', 'D', 'V', 'R', '2', '\0'};
+    return DvrFmt::kDvr2Magic;
 }
 
 bool RangeWithinFile(uint64_t offset, uint64_t size, uint64_t fileSize) {
@@ -357,17 +249,78 @@ std::vector<uint8_t> BuildRawFrameBytes(const Solvers::HeatmapFrame& frame) {
     return raw;
 }
 
-Solvers::HeatmapFrame PopulateHeatmapFrameFromRecord(const Dvr2FrameRecordV1& record) {
+const Dvr2FieldDef& RequireFrameField(const std::vector<Dvr2FieldDef>& fields,
+                                      std::string_view path) {
+    const auto* field = DvrFmt::FindField(fields, path);
+    if (!field) {
+        throw std::runtime_error("DVR2 frame schema missing required field: " + std::string(path));
+    }
+    return *field;
+}
+
+uint64_t FrameFieldExtent(const Dvr2FieldDef& field) {
+    uint64_t extent = static_cast<uint64_t>(field.offset) + field.size;
+    if (field.elementCount > 1) {
+        extent = std::max(extent,
+            static_cast<uint64_t>(field.offset) +
+            static_cast<uint64_t>(field.elementCount - 1) * field.stride + field.elementSize);
+    }
+    return extent;
+}
+
+template <typename T>
+T ReadFrameFieldScalar(const std::vector<uint8_t>& record,
+                       const std::vector<Dvr2FieldDef>& fields,
+                       std::string_view path,
+                       uint32_t index = 0) {
+    const auto& field = RequireFrameField(fields, path);
+    const uint64_t offset = static_cast<uint64_t>(field.offset) + static_cast<uint64_t>(index) * field.stride;
+    if (offset + sizeof(T) > record.size()) {
+        throw std::runtime_error("DVR2 frame field exceeds record: " + std::string(path));
+    }
+    T value{};
+    std::memcpy(&value, record.data() + static_cast<size_t>(offset), sizeof(T));
+    return value;
+}
+
+void CopyFrameFieldBytes(const std::vector<uint8_t>& record,
+                         const std::vector<Dvr2FieldDef>& fields,
+                         std::string_view path,
+                         void* destination,
+                         size_t destinationBytes) {
+    const auto& field = RequireFrameField(fields, path);
+    if (field.offset + destinationBytes > record.size() || destinationBytes > field.size) {
+        throw std::runtime_error("DVR2 frame field size mismatch: " + std::string(path));
+    }
+    std::memcpy(destination, record.data() + field.offset, destinationBytes);
+}
+
+Solvers::HeatmapFrame PopulateHeatmapFrameFromRecordBytes(const std::vector<uint8_t>& record,
+                                                          const std::vector<Dvr2FieldDef>& fields) {
     Solvers::HeatmapFrame frame;
-    frame.timestamp = record.timestamp;
-    frame.receiveSystemEpochUs = record.receiveSystemEpochUs;
-    frame.masterWasRead = record.masterWasRead != 0;
-    frame.masterSuffixValid = record.masterSuffixValid != 0;
-    frame.slaveSuffixValid = record.slaveSuffixValid != 0;
-    std::memcpy(frame.heatmapMatrix, record.heatmapMatrix, sizeof(frame.heatmapMatrix));
-    std::memcpy(frame.masterSuffix.words, record.masterSuffix, sizeof(record.masterSuffix));
-    std::memcpy(frame.slaveSuffix.words, record.slaveSuffix, sizeof(record.slaveSuffix));
+    frame.timestamp = ReadFrameFieldScalar<uint64_t>(record, fields, "timestamp");
+    frame.receiveSystemEpochUs = ReadFrameFieldScalar<uint64_t>(record, fields, "receiveSystemEpochUs");
+    frame.masterWasRead = ReadFrameFieldScalar<uint8_t>(record, fields, "masterWasRead") != 0;
+    frame.masterSuffixValid = ReadFrameFieldScalar<uint8_t>(record, fields, "masterSuffixValid") != 0;
+    frame.slaveSuffixValid = ReadFrameFieldScalar<uint8_t>(record, fields, "slaveSuffixValid") != 0;
+    CopyFrameFieldBytes(record, fields, "heatmapMatrix", frame.heatmapMatrix, sizeof(frame.heatmapMatrix));
+    CopyFrameFieldBytes(record, fields, "masterSuffix.words", frame.masterSuffix.words, sizeof(frame.masterSuffix.words));
+    CopyFrameFieldBytes(record, fields, "slaveSuffix.words", frame.slaveSuffix.words, sizeof(frame.slaveSuffix.words));
     return frame;
+}
+
+std::vector<uint8_t> RawFrameBytesFromRecordBytes(const std::vector<uint8_t>& record,
+                                                  const std::vector<Dvr2FieldDef>& fields,
+                                                  const Solvers::HeatmapFrame& frame) {
+    const auto& rawField = RequireFrameField(fields, "rawData");
+    const size_t rawLen = std::min<size_t>(ReadFrameFieldScalar<uint16_t>(record, fields, "rawDataLength"), Frame::kTotalFrameSize);
+    if (rawLen == 0) {
+        return BuildRawFrameBytes(frame);
+    }
+    if (rawField.offset + rawLen > record.size()) {
+        throw std::runtime_error("DVR2 rawData field exceeds record");
+    }
+    return std::vector<uint8_t>(record.data() + rawField.offset, record.data() + rawField.offset + rawLen);
 }
 
 DvrDataset LoadDvrDataset(const std::filesystem::path& filePath) {
@@ -396,8 +349,9 @@ DvrDataset LoadDvrDataset(const std::filesystem::path& filePath) {
     if (!std::equal(dvr2Magic.begin(), dvr2Magic.end(), header.magic)) {
         throw std::runtime_error("Invalid DVR2 magic: " + filePath.string());
     }
-    if (header.headerSize != sizeof(Dvr2FileHeader)) {
-        throw std::runtime_error("Unsupported DVR2 header size: " + filePath.string());
+    if (header.formatVersion != DvrFmt::kCurrentDvrFormatVersion ||
+        header.headerSize != sizeof(Dvr2FileHeader) || header.tocOffset != sizeof(Dvr2FileHeader)) {
+        throw std::runtime_error("Unsupported DVR2 header layout: " + filePath.string());
     }
     if (header.sectionCount == 0 || header.sectionCount > 16) {
         throw std::runtime_error("Unsupported DVR2 section count: " + filePath.string());
@@ -414,26 +368,24 @@ DvrDataset LoadDvrDataset(const std::filesystem::path& filePath) {
     }
 
     const auto* metaSection = FindSection(sections, Dvr2SectionType::Meta);
+    const auto* frameSchemaSection = FindSection(sections, Dvr2SectionType::FrameSchema);
     const auto* indexSection = FindSection(sections, Dvr2SectionType::Index);
     const auto* framesSection = FindSection(sections, Dvr2SectionType::Frames);
-    if (!metaSection || !indexSection || !framesSection) {
-        throw std::runtime_error("DVR2 file is missing required sections: " + filePath.string());
+    if (!metaSection || !frameSchemaSection || !indexSection || !framesSection) {
+        throw std::runtime_error("DVR2 file is missing required schema sections: " + filePath.string());
     }
-    if (metaSection->version != 1 || indexSection->version != 1 || framesSection->version != 1) {
+    if (metaSection->version != 1 || frameSchemaSection->version != 1 || indexSection->version != 1 || framesSection->version != 1) {
         throw std::runtime_error("Unsupported DVR2 section version: " + filePath.string());
     }
-    if (metaSection->size != sizeof(Dvr2MetaSectionV1) ||
+    if (metaSection->size != sizeof(Dvr2MetaSection) ||
         !RangeWithinFile(metaSection->offset, metaSection->size, fileSize)) {
         throw std::runtime_error("Invalid DVR2 meta section: " + filePath.string());
     }
 
-    Dvr2MetaSectionV1 meta{};
+    Dvr2MetaSection meta{};
     in.seekg(static_cast<std::streamoff>(metaSection->offset), std::ios::beg);
     if (!ReadAll(in, &meta, sizeof(meta))) {
         throw std::runtime_error("Failed to read DVR2 meta section: " + filePath.string());
-    }
-    if (meta.frameRecordVersion != 1) {
-        throw std::runtime_error("Unsupported DVR2 frame record version: " + filePath.string());
     }
     if (meta.flags != header.flags) {
         throw std::runtime_error("DVR2 header/meta flags mismatch: " + filePath.string());
@@ -441,9 +393,46 @@ DvrDataset LoadDvrDataset(const std::filesystem::path& filePath) {
     if (meta.frameCount == 0) {
         throw std::runtime_error("DVR2 dataset contains no frames: " + filePath.string());
     }
+    if (meta.txCount != Frame::kTxCount || meta.rxCount != Frame::kRxCount ||
+        meta.masterSuffixWords != Frame::kMasterSuffixWords || meta.slaveSuffixWords != Frame::kSlaveSuffixWords ||
+        meta.rawFrameSize != Frame::kTotalFrameSize) {
+        throw std::runtime_error("Unsupported DVR2 meta dimensions: " + filePath.string());
+    }
 
-    const uint64_t expectedIndexSize = static_cast<uint64_t>(meta.frameCount) * sizeof(Dvr2IndexEntryV1);
-    const uint64_t expectedFramesSize = static_cast<uint64_t>(meta.frameCount) * sizeof(Dvr2FrameRecordV1);
+    if (frameSchemaSection->size < sizeof(Dvr2FrameSchemaHeader) ||
+        !RangeWithinFile(frameSchemaSection->offset, frameSchemaSection->size, fileSize)) {
+        throw std::runtime_error("Invalid DVR2 frame schema section: " + filePath.string());
+    }
+    Dvr2FrameSchemaHeader schemaHeader{};
+    in.seekg(static_cast<std::streamoff>(frameSchemaSection->offset), std::ios::beg);
+    if (!ReadAll(in, &schemaHeader, sizeof(schemaHeader))) {
+        throw std::runtime_error("Failed to read DVR2 frame schema header: " + filePath.string());
+    }
+    if (schemaHeader.fieldRecordSize != sizeof(Dvr2FieldDef) || schemaHeader.frameRecordSize != meta.frameRecordSize) {
+        throw std::runtime_error("Unsupported DVR2 frame schema layout: " + filePath.string());
+    }
+    const uint64_t expectedSchemaSize = sizeof(Dvr2FrameSchemaHeader) +
+        static_cast<uint64_t>(schemaHeader.fieldCount) * sizeof(Dvr2FieldDef);
+    if (frameSchemaSection->size != expectedSchemaSize) {
+        throw std::runtime_error("DVR2 frame schema size mismatch: " + filePath.string());
+    }
+    std::vector<Dvr2FieldDef> frameFields(schemaHeader.fieldCount);
+    if (!frameFields.empty() && !ReadAll(in, frameFields.data(), frameFields.size() * sizeof(Dvr2FieldDef))) {
+        throw std::runtime_error("Failed to read DVR2 frame schema fields: " + filePath.string());
+    }
+    if (DvrFmt::ComputeFieldSchemaHash(frameFields) != schemaHeader.schemaHash || meta.frameSchemaHash != schemaHeader.schemaHash) {
+        throw std::runtime_error("DVR2 frame schema hash mismatch: " + filePath.string());
+    }
+    for (const auto& path : {"timestamp", "receiveSystemEpochUs", "masterWasRead", "masterSuffixValid", "slaveSuffixValid",
+                            "heatmapMatrix", "masterSuffix.words", "slaveSuffix.words", "rawDataLength", "rawData"}) {
+        const auto& field = RequireFrameField(frameFields, path);
+        if (FrameFieldExtent(field) > meta.frameRecordSize) {
+            throw std::runtime_error("DVR2 frame schema field exceeds frame size: " + std::string(path));
+        }
+    }
+
+    const uint64_t expectedIndexSize = static_cast<uint64_t>(meta.frameCount) * sizeof(Dvr2IndexEntry);
+    const uint64_t expectedFramesSize = static_cast<uint64_t>(meta.frameCount) * meta.frameRecordSize;
     if (indexSection->size != expectedIndexSize || !RangeWithinFile(indexSection->offset, indexSection->size, fileSize)) {
         throw std::runtime_error("Invalid DVR2 index section: " + filePath.string());
     }
@@ -451,9 +440,9 @@ DvrDataset LoadDvrDataset(const std::filesystem::path& filePath) {
         throw std::runtime_error("Invalid DVR2 frame section: " + filePath.string());
     }
 
-    std::vector<Dvr2IndexEntryV1> index(meta.frameCount);
+    std::vector<Dvr2IndexEntry> index(meta.frameCount);
     in.seekg(static_cast<std::streamoff>(indexSection->offset), std::ios::beg);
-    if (!ReadAll(in, index.data(), index.size() * sizeof(Dvr2IndexEntryV1))) {
+    if (!ReadAll(in, index.data(), index.size() * sizeof(Dvr2IndexEntry))) {
         throw std::runtime_error("Failed to read DVR2 index section: " + filePath.string());
     }
 
@@ -465,20 +454,20 @@ DvrDataset LoadDvrDataset(const std::filesystem::path& filePath) {
 
     for (uint32_t i = 0; i < meta.frameCount; ++i) {
         const uint64_t expectedFrameOffset = framesSection->offset +
-            static_cast<uint64_t>(i) * sizeof(Dvr2FrameRecordV1);
-        if (index[i].frameOffset != expectedFrameOffset || index[i].frameSize != sizeof(Dvr2FrameRecordV1)) {
+            static_cast<uint64_t>(i) * meta.frameRecordSize;
+        if (index[i].frameOffset != expectedFrameOffset || index[i].frameSize != meta.frameRecordSize) {
             throw std::runtime_error("Invalid DVR2 frame index entry: " + filePath.string());
         }
 
-        Dvr2FrameRecordV1 record{};
+        std::vector<uint8_t> record(meta.frameRecordSize);
         in.seekg(static_cast<std::streamoff>(index[i].frameOffset), std::ios::beg);
-        if (!ReadAll(in, &record, sizeof(record))) {
-            throw std::runtime_error("Failed to read DVR2 frame record: " + filePath.string());
+        if (!ReadAll(in, record.data(), record.size())) {
+            throw std::runtime_error("Failed to read DVR2 frame payload: " + filePath.string());
         }
 
         DvrDatasetFrame sample;
-        sample.touchFrame = PopulateHeatmapFrameFromRecord(record);
-        sample.rawFrame = BuildRawFrameBytes(sample.touchFrame);
+        sample.touchFrame = PopulateHeatmapFrameFromRecordBytes(record, frameFields);
+        sample.rawFrame = RawFrameBytesFromRecordBytes(record, frameFields, sample.touchFrame);
         dataset.frames.push_back(std::move(sample));
     }
 
