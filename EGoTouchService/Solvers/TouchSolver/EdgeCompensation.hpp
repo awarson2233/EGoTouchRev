@@ -2,6 +2,7 @@
 
 #include "TouchFrameTypes.h"
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -21,21 +22,25 @@ struct EdgeBounds {
 
 // Per-zone edge info collected by TZ_UpdateEdgeInfo during BFS
 struct ZoneEdgeInfo {
-    int outerColSigSum = 0;  // Signal sum at col==min/max
-    int innerColSigSum = 0;  // Signal sum at col==min+1/max-1
-    int outerRowSigSum = 0;  // Signal sum at row==min/max
-    int innerRowSigSum = 0;  // Signal sum at row==min+1/max-1
-    int16_t outerColMax = 0; // Max signal at outer col edge
-    int16_t innerColMax = 0; // Max signal at inner col edge
-    int16_t outerRowMax = 0; // Max signal at outer row edge
-    int16_t innerRowMax = 0; // Max signal at inner row edge
+    int outerColSigSum = 0;
+    int innerColSigSum = 0;
+    int outerRowSigSum = 0;
+    int innerRowSigSum = 0;
+    int16_t outerColMax = 0;
+    int16_t innerColMax = 0;
+    int16_t outerRowMax = 0;
+    int16_t innerRowMax = 0;
 
-    // Zone bounding box (set by flagMask & 4 path)
     uint8_t minCol = 255, maxCol = 0;
     uint8_t minRow = 255, maxRow = 0;
+    uint8_t minRowOnOuterCol = 255, maxRowOnOuterCol = 0;
+    uint8_t colAtMinOuterRow = 0, colAtMaxOuterRow = 0;
+    uint8_t minColOnOuterRow = 255, maxColOnOuterRow = 0;
+    uint8_t rowAtMinOuterCol = 0, rowAtMaxOuterCol = 0;
+    uint8_t colEdgeWidth = 0;
+    uint8_t rowEdgeWidth = 0;
 
-    // TZ_GetEdgeTouchedFlag result
-    uint32_t edgeFlags = 0;  // 0x20=touches boundary, 0x80000=within 2px
+    uint32_t edgeFlags = 0;
 };
 
 // BFS-level grid limits (node indices, not physical edges)
@@ -46,32 +51,51 @@ static constexpr int kGridRowMin = 0, kGridRowMax = 39;
 inline void TZ_UpdateEdgeInfo(ZoneEdgeInfo& ei,
                               int16_t signal, int col, int row,
                               uint8_t flagMask) {
-    // X-axis (column) boundaries
     if (col == kGridColMin || col == kGridColMax) {
         ei.outerColSigSum += signal;
         if (flagMask & 1)
             ei.outerColMax = std::max(ei.outerColMax, signal);
+        if (flagMask & 4) {
+            const bool firstOuterCol = ei.minRowOnOuterCol == 255;
+            if (firstOuterCol || row < ei.minRowOnOuterCol) {
+                ei.minRowOnOuterCol = static_cast<uint8_t>(row);
+                ei.colAtMinOuterRow = static_cast<uint8_t>(col);
+            }
+            if (firstOuterCol || row > ei.maxRowOnOuterCol) {
+                ei.maxRowOnOuterCol = static_cast<uint8_t>(row);
+                ei.colAtMaxOuterRow = static_cast<uint8_t>(col);
+            }
+        }
     } else if (col == kGridColMin + 1 || col == kGridColMax - 1) {
         ei.innerColSigSum += signal;
         if (flagMask & 2)
             ei.innerColMax = std::max(ei.innerColMax, signal);
     }
-    // Y-axis (row) boundaries
     if (row == kGridRowMin || row == kGridRowMax) {
         ei.outerRowSigSum += signal;
         if (flagMask & 1)
             ei.outerRowMax = std::max(ei.outerRowMax, signal);
+        if (flagMask & 4) {
+            const bool firstOuterRow = ei.minColOnOuterRow == 255;
+            if (firstOuterRow || col < ei.minColOnOuterRow) {
+                ei.minColOnOuterRow = static_cast<uint8_t>(col);
+                ei.rowAtMinOuterCol = static_cast<uint8_t>(row);
+            }
+            if (firstOuterRow || col > ei.maxColOnOuterRow) {
+                ei.maxColOnOuterRow = static_cast<uint8_t>(col);
+                ei.rowAtMaxOuterCol = static_cast<uint8_t>(row);
+            }
+        }
     } else if (row == kGridRowMin + 1 || row == kGridRowMax - 1) {
         ei.innerRowSigSum += signal;
         if (flagMask & 2)
             ei.innerRowMax = std::max(ei.innerRowMax, signal);
     }
-    // Core pixels: update bounding box
     if (flagMask & 4) {
-        ei.minCol = std::min(ei.minCol, (uint8_t)col);
-        ei.maxCol = std::max(ei.maxCol, (uint8_t)col);
-        ei.minRow = std::min(ei.minRow, (uint8_t)row);
-        ei.maxRow = std::max(ei.maxRow, (uint8_t)row);
+        ei.minCol = std::min(ei.minCol, static_cast<uint8_t>(col));
+        ei.maxCol = std::max(ei.maxCol, static_cast<uint8_t>(col));
+        ei.minRow = std::min(ei.minRow, static_cast<uint8_t>(row));
+        ei.maxRow = std::max(ei.maxRow, static_cast<uint8_t>(row));
     }
 }
 
@@ -88,13 +112,54 @@ inline void TZ_GetEdgeTouchedFlag(ZoneEdgeInfo& ei) {
     }
 }
 
-inline uint8_t TZ_GetCentroidEdgeFlags(const ZoneEdgeInfo& ei) {
+inline uint8_t TZ_GetCentroidEdgeFlags(const ZoneEdgeInfo& ei, float col, float row) {
     uint8_t flags = 0;
-    if (ei.minCol <= kGridColMin) flags |= 0x01;
-    if (ei.maxCol >= kGridColMax) flags |= 0x02;
-    if (ei.minRow <= kGridRowMin) flags |= 0x04;
-    if (ei.maxRow >= kGridRowMax) flags |= 0x08;
+    if (ei.minCol <= kGridColMin && col < static_cast<float>(kGridColMin + 2)) flags |= 0x01;
+    if (ei.maxCol >= kGridColMax && col > static_cast<float>(kGridColMax - 1)) flags |= 0x02;
+    if (ei.minRow <= kGridRowMin && row < static_cast<float>(kGridRowMin + 2)) flags |= 0x04;
+    if (ei.maxRow >= kGridRowMax && row > static_cast<float>(kGridRowMax - 1)) flags |= 0x08;
     return flags;
+}
+
+template <size_t Rows, size_t Cols>
+inline void TZ_GetEdgeWidth(ZoneEdgeInfo& ei,
+                            const int16_t (&heatmap)[Rows][Cols],
+                            int16_t threshold) {
+    if (ei.minColOnOuterRow <= ei.maxColOnOuterRow) {
+        int left = ei.minColOnOuterRow;
+        int right = ei.maxColOnOuterRow;
+        int scannedLeft = left;
+        int scannedRight = right;
+        while (right < static_cast<int>(Cols) && heatmap[ei.rowAtMaxOuterCol][right] >= threshold) {
+            scannedRight = right;
+            ++right;
+        }
+        while (left >= 0 && heatmap[ei.rowAtMinOuterCol][left] >= threshold) {
+            scannedLeft = left;
+            --left;
+        }
+        ei.rowEdgeWidth = static_cast<uint8_t>(std::clamp(scannedRight - scannedLeft + 1, 0, 255));
+    } else {
+        ei.rowEdgeWidth = 0;
+    }
+
+    if (ei.minRowOnOuterCol <= ei.maxRowOnOuterCol) {
+        int top = ei.minRowOnOuterCol;
+        int bottom = ei.maxRowOnOuterCol;
+        int scannedTop = top;
+        int scannedBottom = bottom;
+        while (bottom < static_cast<int>(Rows) && heatmap[bottom][ei.colAtMaxOuterRow] >= threshold) {
+            scannedBottom = bottom;
+            ++bottom;
+        }
+        while (top >= 0 && heatmap[top][ei.colAtMinOuterRow] >= threshold) {
+            scannedTop = top;
+            --top;
+        }
+        ei.colEdgeWidth = static_cast<uint8_t>(std::clamp(scannedBottom - scannedTop + 1, 0, 255));
+    } else {
+        ei.colEdgeWidth = 0;
+    }
 }
 
 // ── CTD_EC LUT and helpers (from firmware) ──
@@ -149,10 +214,10 @@ static const uint16_t g_ctd256Ln[256] = {
 
 // ── Default EC profiles (per edge direction) ──
 static const ECProfile g_defaultECProfiles[4] = {
-    { 3, { {64, 2, 32}, {128, 32, 96}, {255, 96, 192}, {0,0,0} } },
-    { 3, { {64, 2, 32}, {128, 32, 96}, {255, 96, 192}, {0,0,0} } },
-    { 3, { {64, 2, 32}, {128, 32, 96}, {255, 96, 192}, {0,0,0} } },
-    { 3, { {64, 2, 32}, {128, 32, 96}, {255, 96, 192}, {0,0,0} } },
+    { 1, { {7, 16, 224}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0} } },
+    { 1, { {7, 16, 224}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0} } },
+    { 1, { {7, 16, 96}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0} } },
+    { 1, { {7, 16, 96}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0} } },
 };
 
 static inline int ECGetOffset(uint8_t subIdx, uint8_t edgeW,
@@ -173,7 +238,7 @@ static inline int ECGetOffset(uint8_t subIdx, uint8_t edgeW,
 }
 
 static inline int ECGetFinalOffset(int rawDist, int compOff, int blendWidth) {
-    if (rawDist <= 0) return 0;
+    if (rawDist < 0) return 0;
     const int blendStart = 0x100;
     const int width = std::max(1, blendWidth);
     if (rawDist <= blendStart) return compOff;
@@ -223,7 +288,7 @@ public:
             auto& tc = contacts[static_cast<size_t>(i)];
             const auto& ei = edgeInfos[static_cast<size_t>(i)];
             tc.edgeFlags |= ei.edgeFlags;
-            tc.centroidEdgeFlags |= TZ_GetCentroidEdgeFlags(ei);
+            tc.centroidEdgeFlags |= TZ_GetCentroidEdgeFlags(ei, tc.x, tc.y);
             const bool edge = (tc.edgeFlags & (0x20 | 0x80000)) != 0 ||
                               tc.centroidEdgeFlags != 0;
             if (!edge) continue;
@@ -256,21 +321,6 @@ public:
     }
 
 private:
-    static inline uint8_t ComputeEdgeWidth(int outerSum,
-                                           int innerSum,
-                                           int outerMax,
-                                           int innerMax) {
-        int outer = outerSum;
-        int inner = innerSum;
-        if (outer <= 0 && outerMax > 0) {
-            outer = outerMax;
-            inner = innerMax;
-        }
-        if (outer <= 0) return 0;
-        if (inner <= 0) return 255;
-        return static_cast<uint8_t>(std::clamp((outer * 255) / inner, 0, 255));
-    }
-
     inline ECDimResult ProcessDim(float& coord,
                                   float boundNear,
                                   float boundFar,
@@ -293,9 +343,7 @@ private:
         result.active = true;
 
         const bool isDimX = nearMask == 0x01;
-        result.edgeWidth = isDimX
-            ? ComputeEdgeWidth(ei.outerColSigSum, ei.innerColSigSum, ei.outerColMax, ei.innerColMax)
-            : ComputeEdgeWidth(ei.outerRowSigSum, ei.innerRowSigSum, ei.outerRowMax, ei.innerRowMax);
+        result.edgeWidth = isDimX ? ei.colEdgeWidth : ei.rowEdgeWidth;
 
         const uint8_t subIdx = static_cast<uint8_t>(std::min(result.rawDistQ8, 255));
         const int profileIndex = static_cast<int>(useFar ? farProfile : nearProfile);
@@ -332,7 +380,7 @@ public:
             if (i >= static_cast<int>(edgeInfos.size())) break;
             auto& tc = contacts[static_cast<size_t>(i)];
             const auto& ei = edgeInfos[static_cast<size_t>(i)];
-            const uint8_t centroidFlags = tc.centroidEdgeFlags | TZ_GetCentroidEdgeFlags(ei);
+            const uint8_t centroidFlags = tc.centroidEdgeFlags | TZ_GetCentroidEdgeFlags(ei, tc.x, tc.y);
             const uint32_t edgeFlags = tc.edgeFlags | ei.edgeFlags;
             if ((edgeFlags & 0x20) == 0 && centroidFlags == 0) continue;
 

@@ -75,6 +75,8 @@ public:
         std::array<TouchContact*, kMaxSlots> contactForSlot{};
         contactForSlot.fill(nullptr);
         for (auto& c : frame.contacts) {
+            const bool hiddenContinuation = (c.lifeFlags & TouchLifeSilentGap) != 0;
+            if (!c.isReported && !hiddenContinuation) continue;
             const int idx = c.id - 1;
             if (idx >= 0 && idx < kMaxSlots) contactForSlot[idx] = &c;
         }
@@ -104,7 +106,7 @@ public:
             const int idx = c.id - 1;
             if (idx < 0 || idx >= kMaxSlots) continue;
             if (c.state == TouchStateUp) { c.isReported = false; continue; }
-            if ((c.lifeFlags & TouchLifeSilentGap) != 0) {
+            if (!c.isReported || (c.lifeFlags & TouchLifeSilentGap) != 0) {
                 c.isReported = false;
                 c.reportEvent = TouchReportIdle;
                 continue;

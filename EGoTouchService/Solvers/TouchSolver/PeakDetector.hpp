@@ -24,7 +24,7 @@ public:
     bool m_z1Filter = false;
     bool m_pressureDriftFilter = true;
     bool m_edgePeakFilter = true;
-    bool m_edgeThresholdEnabled = true;
+    bool m_edgeThresholdEnabled = false;
     int  m_edgeThreshold = 300;
     int  m_z8Radius = 2;
     int  m_localMaxRadius = 1;
@@ -60,7 +60,7 @@ public:
         }
 
         // Step 4: Edge peak filter — weak edge peaks < maxSig*5/8
-        if (m_edgePeakFilter) ApplyEdgePeakFilter();
+        if (m_edgePeakFilter) ApplyEdgePeakFilter(frame);
 
         // Step 5: Sort ascending by signal (TSACore default)
         SortPeaks();
@@ -326,34 +326,23 @@ private:
 
     // ────────────────────────────────────────────────────────
     // EdgePeakFilter_WorkAround — remove weak edge peaks
-    // On first/last row: peaks with signal < maxSig*5/8
+    // W273AS2700 uses the first/last column path.
     // ────────────────────────────────────────────────────────
-    inline void ApplyEdgePeakFilter() {
-        auto filterEdgeLine = [this](auto predicate) {
-            // Find max signal among edge peaks
+    inline void ApplyEdgePeakFilter(const HeatmapFrame& frame) {
+        auto filterEdgeColumn = [this, &frame](int col) {
             int16_t maxSig = 0;
-            for (int i = 0; i < m_peakCount; ++i) {
-                const auto& p = m_peaks[static_cast<size_t>(i)];
-                if (predicate(p) && p.z > maxSig) {
-                    maxSig = p.z;
-                }
+            for (int row = 0; row < kRows; ++row) {
+                maxSig = std::max(maxSig, frame.heatmapMatrix[row][col]);
             }
             if (maxSig == 0) return;
-            const int16_t cutoff =
-                static_cast<int16_t>((maxSig >> 3) * 5);  // 5/8
+            const int16_t cutoff = static_cast<int16_t>((maxSig >> 3) * 5);
             CompactPeaks([&](const Peak& p) {
-                return predicate(p) && p.z < cutoff;
+                return p.c == col && p.z < cutoff;
             });
         };
 
-        // Row 0 (top edge)
-        filterEdgeLine([](const Peak& p) { return p.r == 0; });
-        // Row last (bottom edge)
-        filterEdgeLine([this](const Peak& p) { return p.r == kRows - 1; });
-        // Col 0 (left edge)
-        filterEdgeLine([](const Peak& p) { return p.c == 0; });
-        // Col last (right edge)
-        filterEdgeLine([this](const Peak& p) { return p.c == kCols - 1; });
+        filterEdgeColumn(0);
+        filterEdgeColumn(kCols - 1);
     }
 
     // ────────────────────────────────────────────────────────

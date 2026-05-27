@@ -13,10 +13,14 @@ namespace {
 
 using Solvers::HeatmapFrame;
 using Solvers::TouchContact;
+using Solvers::TouchLifeMapped;
 using Solvers::TouchLifeSilentGap;
 using Solvers::TouchReportDown;
+using Solvers::TouchReportIdle;
 using Solvers::TouchReportMove;
 using Solvers::TouchReportUp;
+using Solvers::TouchStateDown;
+using Solvers::TouchStateMove;
 using Solvers::Touch::CoordinateFilter;
 using Solvers::Touch::TouchGestureStateMachine;
 using Solvers::Touch::TouchTracker;
@@ -187,6 +191,64 @@ void TestAmbiguousSilentGapDoesNotHijackOldIds() {
     Require(hiddenB != nullptr && !hiddenB->isReported, "oldB should stay hidden when relink is ambiguous");
 }
 
+TouchContact MakeGestureContact(int id, float x, float y, int state, bool reported) {
+    TouchContact c;
+    c.id = id;
+    c.x = x;
+    c.y = y;
+    c.state = state;
+    c.area = 12;
+    c.signalSum = 1200;
+    c.sizeMm = 2.0f;
+    c.isReported = reported;
+    c.lifeFlags = TouchLifeMapped;
+    return c;
+}
+
+void TestHiddenNonSilentContactDoesNotBecomeVisibleInGesture() {
+    TouchGestureStateMachine gesture;
+
+    HeatmapFrame down;
+    down.contacts.push_back(MakeGestureContact(1, 10.0f, 10.0f, TouchStateDown, true));
+    gesture.Process(down);
+    Require(VisibleContacts(down).size() == 1 && down.contacts[0].reportEvent == TouchReportDown,
+            "visible contact should enter gesture as Down");
+
+    HeatmapFrame move;
+    move.contacts.push_back(MakeGestureContact(1, 12.0f, 10.0f, TouchStateMove, true));
+    gesture.Process(move);
+    Require(VisibleContacts(move).size() == 1 && move.contacts[0].reportEvent == TouchReportMove,
+            "visible moved contact should enter dragging as Move");
+
+    HeatmapFrame hidden;
+    hidden.contacts.push_back(MakeGestureContact(1, 13.0f, 10.0f, TouchStateMove, false));
+    gesture.Process(hidden);
+    Require(!hidden.contacts[0].isReported && hidden.contacts[0].reportEvent == TouchReportIdle,
+            "non-silent hidden contact should not be resurrected by gesture output rewrite");
+    const auto* up = FindVisibleById(hidden, 1);
+    Require(up != nullptr && up->reportEvent == TouchReportUp,
+            "previously visible contact should be released when the replacement contact is hidden");
+}
+
+void TestHiddenNewContactReportsDownWhenSuppressionEnds() {
+    TouchGestureStateMachine gesture;
+
+    HeatmapFrame hidden;
+    hidden.contacts.push_back(MakeGestureContact(1, 10.0f, 10.0f, TouchStateMove, false));
+    gesture.Process(hidden);
+    Require(VisibleContacts(hidden).empty(),
+            "hidden new contact should not create a visible gesture slot");
+    Require(hidden.contacts[0].reportEvent == TouchReportIdle,
+            "hidden new contact should remain idle");
+
+    HeatmapFrame visible;
+    visible.contacts.push_back(MakeGestureContact(1, 10.1f, 10.0f, TouchStateMove, true));
+    gesture.Process(visible);
+    const auto visibleContacts = VisibleContacts(visible);
+    Require(visibleContacts.size() == 1 && visibleContacts[0]->reportEvent == TouchReportDown,
+            "first visible frame after suppression should report Down, not Move");
+}
+
 } // namespace
 
 int main() {
@@ -197,6 +259,8 @@ int main() {
         TestSingleFingerGapTimeout();
         TestTwoFingerRelinkKeepsOtherFinger();
         TestAmbiguousSilentGapDoesNotHijackOldIds();
+        TestHiddenNonSilentContactDoesNotBecomeVisibleInGesture();
+        TestHiddenNewContactReportsDownWhenSuppressionEnds();
         std::cout << "[TEST] TouchTracker silent-gap relink tests passed.\n";
         return 0;
     } catch (const std::exception& ex) {

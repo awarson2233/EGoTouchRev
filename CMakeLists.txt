@@ -334,6 +334,11 @@ if (EGO_BUILD_TESTS)
     )
     target_link_libraries(VhfReporterStylusPacketTest PRIVATE Device Solvers Common)
 
+    add_executable(VhfReporterTouchPacketTest
+        Tools/tests/VhfReporterTouchPacketTest.cpp
+    )
+    target_link_libraries(VhfReporterTouchPacketTest PRIVATE Device Solvers Common)
+
     add_executable(PenUsbProtocolTest
         Tools/tests/PenUsbProtocolTest.cpp
     )
@@ -372,6 +377,7 @@ if (EGO_BUILD_TESTS)
     add_test(NAME StylusLinearFilterProcessTest COMMAND StylusLinearFilterProcessTest)
     add_test(NAME StylusHpp3PostPressureProcessTest COMMAND StylusHpp3PostPressureProcessTest)
     add_test(NAME VhfReporterStylusPacketTest COMMAND VhfReporterStylusPacketTest)
+    add_test(NAME VhfReporterTouchPacketTest COMMAND VhfReporterTouchPacketTest)
     add_test(NAME PenUsbProtocolTest COMMAND PenUsbProtocolTest)
     add_test(NAME PenUsbInitSessionTest COMMAND PenUsbInitSessionTest)
     add_test(NAME DeviceRuntimeSystemPowerPolicyTest COMMAND DeviceRuntimeSystemPowerPolicyTest)

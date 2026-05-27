@@ -30,6 +30,7 @@ public:
     bool m_palmAwareExpansionEnabled = true;
     float m_fingerInPalmThresholdRatio = 0.70f;
     int m_fingerInPalmMaxRadius = 3;
+    int m_edgeWidthThreshold = 300;
     EdgeBounds m_edgeBounds;
 
     // ────────────────────────────────────────────────────────
@@ -303,6 +304,8 @@ private:
             }
         }
         TZ_GetEdgeTouchedFlag(m_edgeInfos[peakIdx]);
+        TZ_GetEdgeWidth(m_edgeInfos[peakIdx], frame.heatmapMatrix,
+                        static_cast<int16_t>(m_edgeWidthThreshold));
     }
 
     // ────────────────────────────────────────────────────────
@@ -582,18 +585,11 @@ private:
         return partitionCount;
     }
 
-    static inline uint8_t GetCentroidEdgeFlags(const ZoneEdgeInfo& edgeInfo) {
-        uint8_t flags = 0;
-        if (edgeInfo.minCol <= kGridColMin) flags |= 0x01;
-        if (edgeInfo.maxCol >= kGridColMax) flags |= 0x02;
-        if (edgeInfo.minRow <= kGridRowMin) flags |= 0x04;
-        if (edgeInfo.maxRow >= kGridRowMax) flags |= 0x08;
-        return flags;
-    }
-
     static inline void ApplyEdgeInfo(TouchContact& contact, const ZoneEdgeInfo& edgeInfo) {
         contact.edgeFlags = edgeInfo.edgeFlags;
-        contact.centroidEdgeFlags = GetCentroidEdgeFlags(edgeInfo);
+        contact.centroidEdgeFlags = TZ_GetCentroidEdgeFlags(edgeInfo, contact.x, contact.y);
+        contact.ecWidthX = edgeInfo.colEdgeWidth;
+        contact.ecWidthY = edgeInfo.rowEdgeWidth;
         contact.isEdge = (contact.edgeFlags & (0x20 | 0x80000)) != 0 ||
                          contact.centroidEdgeFlags != 0;
     }

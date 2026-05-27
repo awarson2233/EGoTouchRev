@@ -28,6 +28,15 @@ Solvers::ZoneEdgeInfo MakeEdgeInfo(uint8_t minCol, uint8_t maxCol,
     return info;
 }
 
+void TestDefaultProfilesMatchW273() {
+    Solvers::Touch::EdgeCompensator compensator;
+    Require(compensator.m_profiles[0].numSegments == 1, "Dim1 near should use one EC segment");
+    Require(compensator.m_profiles[0].segments[0].edgeWidthThreshold == 7, "Dim1 near threshold should match TSAPrmt");
+    Require(compensator.m_profiles[0].segments[0].lutIdxLow == 16, "Dim1 near low LUT should match TSAPrmt");
+    Require(compensator.m_profiles[0].segments[0].lutIdxHigh == 224, "Dim1 near high LUT should match TSAPrmt");
+    Require(compensator.m_profiles[2].segments[0].lutIdxHigh == 96, "Dim2 near high LUT should match TSAPrmt");
+}
+
 void TestDim1NearCorrectionMetadata() {
     Solvers::Touch::EdgeCompensator compensator;
     std::vector<Solvers::TouchContact> contacts(1);
@@ -36,10 +45,7 @@ void TestDim1NearCorrectionMetadata() {
     contacts[0].state = Solvers::TouchStateDown;
 
     std::vector<Solvers::ZoneEdgeInfo> edgeInfos(1, MakeEdgeInfo(0, 2, 18, 22));
-    edgeInfos[0].outerColSigSum = 300;
-    edgeInfos[0].innerColSigSum = 100;
-    edgeInfos[0].outerColMax = 240;
-    edgeInfos[0].innerColMax = 80;
+    edgeInfos[0].colEdgeWidth = 3;
 
     compensator.Process(contacts, edgeInfos, Solvers::EdgeBounds{});
 
@@ -47,7 +53,7 @@ void TestDim1NearCorrectionMetadata() {
     Require((contacts[0].edgeFlags & 0x20) != 0, "edge flags should include boundary touch");
     Require((contacts[0].centroidEdgeFlags & 0x01) != 0, "centroid flags should include Dim1 near edge");
     Require((contacts[0].ecFlags & 0x100) != 0, "Dim1 correction flag should be set");
-    Require(contacts[0].ecWidthX == 255, "edge width should clamp to 255 when outer sum dominates");
+    Require(contacts[0].ecWidthX == 3, "edge width should come from threshold-scanned column edge width");
     RequireNear(contacts[0].rawXBeforeEC, 0.5f, 0.0001f, "raw X should be retained");
     Require(contacts[0].edgeDistX > 0.0f, "corrected X edge distance should be populated");
     Require(std::fabs(contacts[0].x - 0.5f) > 0.0001f, "X coordinate should be corrected");
@@ -61,37 +67,38 @@ void TestDim2FarCorrectionMetadata() {
     contacts[0].state = Solvers::TouchStateDown;
 
     std::vector<Solvers::ZoneEdgeInfo> edgeInfos(1, MakeEdgeInfo(28, 32, 37, 39));
-    edgeInfos[0].outerRowSigSum = 300;
-    edgeInfos[0].innerRowSigSum = 100;
-    edgeInfos[0].outerRowMax = 240;
-    edgeInfos[0].innerRowMax = 80;
+    edgeInfos[0].rowEdgeWidth = 4;
 
     compensator.Process(contacts, edgeInfos, Solvers::EdgeBounds{});
 
     Require((contacts[0].centroidEdgeFlags & 0x08) != 0, "centroid flags should include Dim2 far edge");
     Require((contacts[0].ecFlags & 0x200) != 0, "Dim2 correction flag should be set");
-    Require(contacts[0].ecWidthY == 255, "Y edge width should clamp to 255");
+    Require(contacts[0].ecWidthY == 4, "Y edge width should come from threshold-scanned row edge width");
     RequireNear(contacts[0].rawYBeforeEC, 39.5f, 0.0001f, "raw Y should be retained");
     Require(contacts[0].edgeDistY > 0.0f, "corrected Y edge distance should be populated");
     Require(std::fabs(contacts[0].y - 39.5f) > 0.0001f, "Y coordinate should be corrected");
 }
 
-void TestInnerZeroFallbackIsStrongEdge() {
-    Solvers::Touch::EdgeCompensator compensator;
-    std::vector<Solvers::TouchContact> contacts(1);
-    contacts[0].x = 0.5f;
-    contacts[0].y = 20.0f;
+void TestEdgeWidthScansThreshold() {
+    Solvers::ZoneEdgeInfo info;
+    int16_t heatmap[40][60] = {};
+    for (int row = 8; row <= 12; ++row) {
+        heatmap[row][0] = 320;
+    }
+    Solvers::TZ_UpdateEdgeInfo(info, 320, 0, 10, 7);
+    Solvers::TZ_UpdateEdgeInfo(info, 320, 0, 11, 7);
+    Solvers::TZ_GetEdgeWidth(info, heatmap, 300);
 
-    std::vector<Solvers::ZoneEdgeInfo> edgeInfos(1, MakeEdgeInfo(0, 2, 18, 22));
-    edgeInfos[0].outerColSigSum = 120;
-    edgeInfos[0].innerColSigSum = 0;
-    edgeInfos[0].outerColMax = 120;
-    edgeInfos[0].innerColMax = 0;
+    Require(info.colEdgeWidth == 5, "column edge width should scan contiguous cells above threshold");
 
-    compensator.Process(contacts, edgeInfos, Solvers::EdgeBounds{});
-
-    Require(contacts[0].ecWidthX == 255, "outer-only edge signal should be treated as strong edge width");
-    Require((contacts[0].ecFlags & 0x100) != 0, "outer-only edge signal should still correct Dim1");
+    Solvers::ZoneEdgeInfo farInfo;
+    int16_t farHeatmap[40][60] = {};
+    for (int row = 0; row <= 2; ++row) {
+        farHeatmap[row][59] = 320;
+    }
+    Solvers::TZ_UpdateEdgeInfo(farInfo, 320, 59, 0, 7);
+    Solvers::TZ_GetEdgeWidth(farInfo, farHeatmap, 300);
+    Require(farInfo.colEdgeWidth == 3, "far column edge width should initialize max-side scan state");
 }
 
 void TestNonEdgeContactIsUnchanged() {
@@ -118,8 +125,7 @@ void TestEdgeRejectorDoesNotSuppressCorrectedContact() {
     contacts[0].state = Solvers::TouchStateDown;
 
     std::vector<Solvers::ZoneEdgeInfo> edgeInfos(1, MakeEdgeInfo(0, 2, 18, 22));
-    edgeInfos[0].outerColSigSum = 300;
-    edgeInfos[0].innerColSigSum = 100;
+    edgeInfos[0].colEdgeWidth = 3;
 
     compensator.Process(contacts, edgeInfos, Solvers::EdgeBounds{});
     rejector.Process(contacts, edgeInfos, Solvers::EdgeBounds{});
@@ -131,9 +137,10 @@ void TestEdgeRejectorDoesNotSuppressCorrectedContact() {
 
 int main() {
     try {
+        TestDefaultProfilesMatchW273();
         TestDim1NearCorrectionMetadata();
         TestDim2FarCorrectionMetadata();
-        TestInnerZeroFallbackIsStrongEdge();
+        TestEdgeWidthScansThreshold();
         TestNonEdgeContactIsUnchanged();
         TestEdgeRejectorDoesNotSuppressCorrectedContact();
         std::cout << "[TEST] Touch edge compensation tests passed.\n";

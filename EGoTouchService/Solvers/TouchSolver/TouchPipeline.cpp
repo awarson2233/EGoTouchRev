@@ -7,6 +7,7 @@ namespace Solvers {
 // ══════════════════════════════════════════════════════════════════════
 bool TouchPipeline::ProcessMasterParserOnly(HeatmapFrame& frame) {
     m_frameParser.Process(frame);
+    m_baseline.Process(frame);
     ResetIdleOutputs(frame);
     return true;
 }
@@ -27,13 +28,14 @@ bool TouchPipeline::Process(HeatmapFrame& frame) {
         frame.masterSuffix.hasFinger();
     const bool hasLiveTouchState =
         m_tracker.HasLiveTracks() || m_gesture.HasLiveState();
+    // ── Phase 2: Signal Conditioning ────────────────────────────────
+    m_baseline.Process(frame);
+
     if (!hasCurrentFinger && !hasLiveTouchState) {
         ResetIdleOutputs(frame);
         return true;
     }
 
-    // ── Phase 2: Signal Conditioning ────────────────────────────────
-    m_baseline.Process(frame);
     m_cmf.Process(frame);
     m_gridIIR.Process(frame, m_peakDet.m_threshold);
 
@@ -194,6 +196,32 @@ std::vector<ConfigParam> TouchPipeline::GetConfigSchema() const {
                    ConfigParam::Bool, const_cast<bool*>(&m_baseline.m_enabled)).Module("Signal Conditioning");
     s.emplace_back("BaselineValue", "Baseline Value",
                    ConfigParam::Int, const_cast<int*>(&m_baseline.m_baseline), 0, 65535).Module("Signal Conditioning");
+    s.emplace_back("BaselineNoiseDeadband", "Baseline Noise Deadband",
+                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_noiseDeadband), 0, 100).Module("Signal Conditioning");
+    s.emplace_back("BaselinePositiveDriftDeadband", "Baseline Positive Drift Deadband",
+                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_positiveDriftDeadband), 0, 200).Module("Signal Conditioning");
+    s.emplace_back("BaselineNegativeDeadband", "Baseline Negative Deadband",
+                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_negativeDeadband), 0, 200).Module("Signal Conditioning");
+    s.emplace_back("BaselineTouchFreezeThreshold", "Baseline Touch Freeze Threshold",
+                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_touchFreezeThreshold), 1, 1000).Module("Signal Conditioning");
+    s.emplace_back("BaselineReleaseHoldFrames", "Baseline Release Hold Frames",
+                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_releaseHoldFrames), 0, 60).Module("Signal Conditioning");
+    s.emplace_back("BaselinePositiveAlphaShift", "Baseline Positive Alpha Shift",
+                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_positiveAlphaShift), 0, 15).Module("Signal Conditioning");
+    s.emplace_back("BaselineNegativeAlphaShift", "Baseline Negative Alpha Shift",
+                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_negativeAlphaShift), 0, 15).Module("Signal Conditioning");
+    s.emplace_back("BaselineNoiseAlphaShift", "Baseline Noise Alpha Shift",
+                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_noiseAlphaShift), 0, 15).Module("Signal Conditioning");
+    s.emplace_back("BaselinePositiveMaxStep", "Baseline Positive Max Step",
+                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_positiveMaxStep), 0, 100).Module("Signal Conditioning");
+    s.emplace_back("BaselineNegativeMaxStep", "Baseline Negative Max Step",
+                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_negativeMaxStep), 0, 100).Module("Signal Conditioning");
+    s.emplace_back("BaselineAcquisitionAlphaShift", "Baseline Acquisition Alpha Shift",
+                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_acquisitionAlphaShift), 0, 15).Module("Signal Conditioning");
+    s.emplace_back("BaselineAcquisitionMaxStep", "Baseline Acquisition Max Step",
+                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_acquisitionMaxStep), 1, 1024).Module("Signal Conditioning");
+    s.emplace_back("BaselineNoiseTrackingEnabled", "Baseline Noise Tracking Enabled",
+                   ConfigParam::Bool, const_cast<bool*>(&m_baseline.m_noiseTrackingEnabled)).Module("Signal Conditioning");
 
     // ── Signal Conditioning: CMF ──
     s.emplace_back("CMFEnabled", "CMF Enabled",
@@ -454,6 +482,19 @@ void TouchPipeline::SaveConfig(std::ostream& out) const {
     // Phase 2: Baseline
     out << "BaselineEnabled=" << (m_baseline.m_enabled?"1":"0") << "\n";
     out << "BaselineValue=" << m_baseline.m_baseline << "\n";
+    out << "BaselineNoiseDeadband=" << m_baseline.m_noiseDeadband << "\n";
+    out << "BaselinePositiveDriftDeadband=" << m_baseline.m_positiveDriftDeadband << "\n";
+    out << "BaselineNegativeDeadband=" << m_baseline.m_negativeDeadband << "\n";
+    out << "BaselineTouchFreezeThreshold=" << m_baseline.m_touchFreezeThreshold << "\n";
+    out << "BaselineReleaseHoldFrames=" << m_baseline.m_releaseHoldFrames << "\n";
+    out << "BaselinePositiveAlphaShift=" << m_baseline.m_positiveAlphaShift << "\n";
+    out << "BaselineNegativeAlphaShift=" << m_baseline.m_negativeAlphaShift << "\n";
+    out << "BaselineNoiseAlphaShift=" << m_baseline.m_noiseAlphaShift << "\n";
+    out << "BaselinePositiveMaxStep=" << m_baseline.m_positiveMaxStep << "\n";
+    out << "BaselineNegativeMaxStep=" << m_baseline.m_negativeMaxStep << "\n";
+    out << "BaselineAcquisitionAlphaShift=" << m_baseline.m_acquisitionAlphaShift << "\n";
+    out << "BaselineAcquisitionMaxStep=" << m_baseline.m_acquisitionMaxStep << "\n";
+    out << "BaselineNoiseTrackingEnabled=" << (m_baseline.m_noiseTrackingEnabled?"1":"0") << "\n";
     // Phase 2: CMF
     out << "CMFEnabled=" << (m_cmf.m_enabled?"1":"0") << "\n";
     out << "CMFDimensionMode=" << static_cast<int>(m_cmf.m_mode) << "\n";
@@ -629,7 +670,20 @@ void TouchPipeline::LoadConfig(const std::string& key,
     if      (key=="FrameParserEnabled")      m_frameParser.m_enabled = toBool(value);
     // Phase 2: Baseline
     else if (key=="BaselineEnabled")         m_baseline.m_enabled = toBool(value);
-    else if (key=="BaselineValue")           m_baseline.m_baseline = std::stoi(value);
+    else if (key=="BaselineValue")           { m_baseline.m_baseline = std::stoi(value); m_baseline.Reset(); }
+    else if (key=="BaselineNoiseDeadband")   m_baseline.m_noiseDeadband = std::stoi(value);
+    else if (key=="BaselinePositiveDriftDeadband") m_baseline.m_positiveDriftDeadband = std::stoi(value);
+    else if (key=="BaselineNegativeDeadband") m_baseline.m_negativeDeadband = std::stoi(value);
+    else if (key=="BaselineTouchFreezeThreshold") m_baseline.m_touchFreezeThreshold = std::stoi(value);
+    else if (key=="BaselineReleaseHoldFrames") m_baseline.m_releaseHoldFrames = std::stoi(value);
+    else if (key=="BaselinePositiveAlphaShift") m_baseline.m_positiveAlphaShift = std::stoi(value);
+    else if (key=="BaselineNegativeAlphaShift") m_baseline.m_negativeAlphaShift = std::stoi(value);
+    else if (key=="BaselineNoiseAlphaShift") m_baseline.m_noiseAlphaShift = std::stoi(value);
+    else if (key=="BaselinePositiveMaxStep") m_baseline.m_positiveMaxStep = std::stoi(value);
+    else if (key=="BaselineNegativeMaxStep") m_baseline.m_negativeMaxStep = std::stoi(value);
+    else if (key=="BaselineAcquisitionAlphaShift") m_baseline.m_acquisitionAlphaShift = std::stoi(value);
+    else if (key=="BaselineAcquisitionMaxStep") m_baseline.m_acquisitionMaxStep = std::stoi(value);
+    else if (key=="BaselineNoiseTrackingEnabled") m_baseline.m_noiseTrackingEnabled = toBool(value);
     // Phase 2: CMF
     else if (key=="CMFEnabled")              m_cmf.m_enabled = toBool(value);
     else if (key=="CMFDimensionMode")        m_cmf.m_mode = static_cast<Touch::CMFProcessor::DimensionMode>(std::stoi(value));

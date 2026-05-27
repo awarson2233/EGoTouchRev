@@ -1294,3 +1294,360 @@ raw ──→ dif = baseline − raw           [空间分离: 绝对值→相对
 2. **正常路径零开销**：GridIIR 在无噪声时直通，CMF 中无效行跳过处理，Peak 中 Mode 2 分支不激活。每个阶段都尽可能在理想条件下不做多余计算，确保最佳触摸延迟。
 
 3. **多重安全网**：Z8 和 Z1 双级滤波互补，充电器噪声检查可在任何阶段提前退出，全内嵌 SD 检测切换阈值策略，BLRecal 的多条件滞后判断——系统在每个层级都设有"安全网"，任何单点异常都不会导致整个流水线崩溃。
+
+---
+
+## 15. 屏幕边缘手指修正机制分析
+
+屏幕边缘是容式触摸屏的"弱信号区"——边缘电极的电场分布不对称，导致手指在边缘时信号更弱、坐标更容易畸变、更容易意外离开。原厂算法在流水线的**五个不同层级**部署了边缘修正机制，从信号检测到坐标输出形成完整闭环。
+
+### 15.0 边缘判定基础
+
+#### 面板 Toe 特性检测
+
+`TouchThold_ToeUseSpecialThold()` 通过项目名判断是否启用特殊 toe 阈值：
+```
+if projectName in {"P116", "P150", "P186"}: return true
+else: return false
+```
+"Toe"（趾端）指面板的物理边缘区域。这些特定华为面板型号的边缘电场特性需要特殊处理。
+
+#### 边缘距离计算
+
+`Touch_SetEdgeDist` 计算每个触摸点到最近边缘的距离，存储于触摸结构体中：
+
+```
+touch->dim1EdgeDist (0x22c) = min(compensatedX − leftBoundary, rightBoundary − compensatedX)
+touch->dim2EdgeDist (0x22e) = min(compensatedY − topBoundary,  bottomBoundary − compensatedY)
+```
+
+边界值来自 `g_tsaPrmtFlashConst`:
+| 字段 | 偏移 | 含义 |
+|---|---|---|
+| `leftBoundary` | `+0x2a` | dim1 左边界 |
+| `rightBoundary` | `+0x2c` | dim1 右边界 |
+| `topBoundary` | `+0x2e` | dim2 上边界 |
+| `bottomBoundary` | `+0x30` | dim2 下边界 |
+
+---
+
+### 15.1 第一层：峰值检测 — 边缘阈值差异化
+
+这是信号进入触摸候选之前的**第一道防线**，位于流水线的 Peak Detection 阶段。
+
+**W273AS2700 配置**: `Peak_IsToExcludeSideRegion()` 硬编码返回 `0`——侧边区域**不排除**，即边缘列和内部列同样参与峰值检测。
+
+当 toe 面板 + 特殊阈值启用时，在 `Peak_DetectInRange` 的 3×3 扫描中：
+
+```
+对每个网格位置 (col, row):
+    if (toe面板 AND 处于边缘列):
+        effectiveThreshold = g_tsaPrmtDynamic[10]   ← toe专用阈值
+    else:
+        effectiveThreshold = g_tsaPrmtDynamic[8]    ← 标准动态阈值
+    
+    if dif[col,row] >= effectiveThreshold AND 是局部最大值:
+        Peak_Insert(col, row)
+```
+
+**设计意图**: 边缘列的电场强度通常弱于中央列。独立的 toe 阈值允许边缘使用更低的检测门槛，防止边缘手指因信号弱而被漏检。这不是坐标修正，而是确保边缘触摸**能被检测到**的前提保障。
+
+---
+
+### 15.2 第二层：BLSM 基线 — 边缘优化更新
+
+位于信号处理链的 BLSM 阶段 7-8：
+
+```
+BLSM_ProcessStage: stages 7,8
+
+IF (全局边缘标志 OR BLSM_ProcessUseNextSideThold()):
+    使用 flash[0x4c] 作为阈值   ← 宽阈值（边缘场景）
+ELSE:
+    使用 flash[0x4a] 作为阈值   ← 窄阈值
+
+BLIIR_Update(stage=0, threshold, flash[0x52])
+```
+
+`BLSM_ProcessUseNextSideThold()` 的条件链：
+```
+TouchThold_ToeUseSpecialThold()  ← P116/P150/P186 面板
+AND (g_tsaPrpt->bNextSideThreshCol == 1  OR  bNextSideThreshCol == bCols - 2)
+```
+
+即仅在**面板支持 toe** 且**当前活动列为边缘列**时启用宽阈值。
+
+**设计意图**: 边缘列的电场波动天然大于中央列。使用更宽的基线更新阈值防止正常的边缘信号起伏被误判为"触摸"而冻结基线更新。这确保边缘区域的基线仍能在触摸间隙得到更新，避免长期累积漂移。
+
+在 `BLSM_GetProperty` 中，边缘小阈值标志 `g_BLSMNextEdgeSmallThresh` 还会影响属性判定的信号范围条件，进一步调整边缘列的基线行为。
+
+---
+
+### 15.3 第三层：CMF — 边缘行特殊阈值
+
+在 `CMF_ProcessDim` 逐行处理中：
+
+```
+对每行 row:
+    if (特殊toe阈值启用 AND (row < 2 OR row >= totalRows - 2)):
+        effectiveThreshold = 200
+    else:
+        effectiveThreshold = g_tsaPrmtDynamic[0x3c]   ← 标准CMF阈值
+    
+    CMF_ProcessDimUnit(dim=1, row, effectiveThreshold, ...)
+```
+
+**设计意图**: 最边缘的 2 行（上下各 2 行）的共模特性与内部行显著不同——边缘行的传感器电极只有一侧有邻居，导致其共模波动幅度更大。使用固定高阈值 200 防止 CMF 在这几行过度修正。200 是一个远大于正常阈值的常数，意味着边缘行的共模修正几乎被抑制。
+
+---
+
+### 15.4 第四层：CTD_EC — 坐标边缘补偿（核心算法）
+
+这是边缘修正中最数学化的一层，直接修改触摸点的输出坐标。它补偿的是**传感器边缘电场畸变**导致的坐标非线性。
+
+#### 15.4.1 触发条件
+
+`CTD_ECUpdatePosToEC` 先调用 `Touch_SetEdgeDist` 更新边缘距离，然后 `CTD_ECProcessDim1` 和 `CTD_ECProcessDim2` 分别处理 dim1 (X) 和 dim2 (Y)。
+
+每个维度的补偿由 `field_0x204` 标志位控制：
+
+| 标志 | 含义 | 补偿方向 |
+|---|---|---|
+| `bit 0 (1)` | dim1 近边（左边缘） | 从左边界向内补偿 |
+| `bit 1 (2)` | dim1 远边（右边缘） | 从右边界向内补偿 |
+| `bit 2 (4)` | dim2 近边（上边缘） | 从上边界向内补偿 |
+| `bit 3 (8)` | dim2 远边（下边缘） | 从下边界向内补偿 |
+
+每帧先清除 `0x100`/`0x200` 标志（`field_0x1f0`），仅在补偿实际改变了坐标时才重新设置。
+
+#### 15.4.2 补偿参数加载
+
+从 `g_tsaPrmtFlash[1]` 的子区域加载 16 字节运行时参数表到 `g_tsaPrmtRam`：
+
+| 补偿方向 | Flash 源字段 |
+|---|---|
+| dim1 近边 | `flash[1].field_0x00..0x10` |
+| dim1 远边 | `flash[1].field_0x11..0x21` |
+| dim2 近边 | `flash[1].field_0x22..0x32` |
+| dim2 远边 | `flash[1].field_0x33..0x43` |
+
+参数表结构（`g_tsaPrmtRam`, 每 4 字节一个分段）:
+```
+[0]: count (有效分段数 - 1)
+每分段 [4*i .. 4*i+3]:
+    [0]: 未使用
+    [1]: sizeThreshold  — 触摸尺寸阈值 (byte)
+    [2]: offsetBase     — LUT 基索引 (byte)
+    [3]: offsetNext     — LUT 下一索引 (byte)
+```
+
+#### 15.4.3 补偿强度计算 — CTD_ECGetOffset
+
+输入: `edgeDist`（触摸点边缘距离，来自 `field_0x196`/`0x197`）、`touchSize`（触摸面积，来自 `field_0x194`）
+
+```
+1. 按触摸尺寸查分段:
+   在 g_tsaPrmtRam 中找到第一个 sizeThreshold >= touchSize 的分段
+
+2. 分段线性插值:
+   查 256 项 LUT 表 g_ctd256Ln:
+   baseVal = g_ctd256Ln[offsetBase]     ← 查表 (16-bit 值)
+   nextVal = g_ctd256Ln[offsetNext]     ← 查表
+
+   IF nextVal == baseVal:
+       offset = 0
+   ELSE:
+       offset = ((g_ctd256Ln[edgeDist] - baseVal) * 256) / (nextVal - baseVal)
+       offset = CLAMP(offset, 0, 255)
+```
+
+`g_ctd256Ln` 是一个 256 项的 16-bit 查找表，编码了边缘距离到补偿强度之间的非线性映射曲线。通过分段参数，算法根据触摸尺寸选择不同的曲线段，实现了**尺寸相关的边缘补偿**——大手指和小手指在边缘受到的电场畸变程度不同，需要不同强度的补偿。
+
+#### 15.4.4 坐标修正公式 — CTD_ECGetFinalOffset
+
+这是将补偿强度施加到坐标上的**二次混合函数**：
+
+```
+输入: rawPos  — 相对边界的原始位置（近边模式: rawPos = touchX - leftBoundary; 远边模式: rawPos = rightBoundary - touchX）
+      offset — 补偿强度 (0..255)
+
+计算:
+    t = rawPos - 256           // t < 0 表示还在边缘影响区内
+    IF t > 0 AND t < 64:       // rawPos ∈ (256, 320)，即距离边界 0~64 单位
+        // 二次混合: 边缘补偿权重的平滑衰减
+        weight_raw    = 4 * t                       // 原始位置权重 (随距离线性增长)
+        weight_offset = 256 - 4 * t                 // 补偿权重 (随距离线性衰减)
+        result = (rawPos * t * 4 + weight_offset * offset) / 256
+    ELSE:
+        result = rawPos          // 超出补偿范围，直通
+```
+
+**混合函数解析**:
+
+这是两个二次项的线性组合。展开来看（令 `t = rawPos - 256`, `c = offset`）:
+
+```
+result = [4·rawPos·t + (256 − 4t)·c] / 256
+       = [4·rawPos·(rawPos−256) + (256 − 4(rawPos−256))·c] / 256
+       = [4·rawPos² − 1024·rawPos + (1280 − 4·rawPos)·c] / 256
+```
+
+当 `rawPos = 256` 时，`t = 0`：
+- `weight_raw = 0`, `weight_offset = 256`
+- `result = (0 + 256·c) / 256 = c` → 全补偿
+
+当 `rawPos = 320` 时，`t = 64`：
+- `weight_raw = 256`, `weight_offset = 0`
+- `result = (320·64·4 + 0·c) / 256 = 320` → 无补偿
+
+在 `[256, 320]` 区间内平滑过渡，距离边界越远，补偿越弱，到 64 单位后完全退出。
+
+**最终坐标输出** (以 dim1 近边模式为例):
+```
+compensatedX = rawPos_compensated + leftBoundary
+if compensatedX != originalX:
+    field_0x1f0 |= 0x100     ← 标记此维度已补偿
+```
+
+#### 15.4.5 远边对称性
+
+远边模式（右/下边缘）的处理完全对称，只是方向反转：
+```
+rawPos = rightBoundary - touchX     ← 翻转方向
+compensated = CTD_ECGetFinalOffset(rawPos, 256 - offset)
+finalX = rightBoundary - compensated  ← 翻转回来
+```
+
+---
+
+### 15.5 第五层：ER (Edge Rejection) — 边缘触摸状态机
+
+这是位于 TS/TE 之后的**后处理层**，不修改信号或坐标本身，而是验证边缘触摸的合法性和状态转换。
+
+#### 15.5.1 新触摸边缘校验 — ER_TouchDownProcess
+
+每个新检测到的触摸（标志 `0x02`）在边缘处需经过额外验证：
+
+```
+1. ER_BottomMoveInCorrection(touchIdx, prevIdx)
+   → 底部边缘特定修正检查
+
+2. IF NOT ER_IsTouchNeedMoveInCorrection(touchIdx):
+      跳过（不需要边缘修正）
+   
+3. IF prevTouch->moveInFrameCount < 2:
+      前2帧：标记为边缘暂缓触摸
+      field_0x1f8 |= 0x400     ← 边缘暂缓标志
+      field_0x21c = 1           ← 状态 = 等待确认
+      prevTouch->moveInFrameCount++
+      IF touch->edgeZoneRadius < 2:
+          touch->edgeZoneRadius = 2
+   
+4. ELIF ER_MoveInCheck(touchIdx, prevIdx):
+      第3帧起：校验是否为合法边缘移入
+      校验通过 → field_0x1f0 |= 0x20; field_0x1f8 |= 0x80
+      校验不通过 → 继续暂缓
+
+5. 若已有 0x400 标志（之前已被暂缓）：
+      清除 0x400，重新评估底部移入和常规移入
+```
+
+**ER_IsTouchNeedMoveInCorrection** 的判定条件：
+```
+edge = GetDimEdge(compensatedX, compensatedY)
+GetPrmt(edge, &minDist, &maxDist)
+IF minDist == 0: 跳过（此边缘类型不需要修正）
+IF TPSensor_IsNoMoveInCorrection(): 跳过
+IF minDist < distToEdge < maxDist AND touchAge < 30帧:
+    return true  ← 需要边缘移入修正
+```
+
+**ER_MoveInCheck** 的多条件轨迹验证：
+```
+从历史缓冲取前2帧和当前帧的坐标
+
+historyDist_2to1 = SQDist(帧-2, 帧-1)      ← 前两帧间的移动量
+historyDist_1to0 = SQDist(帧-1, 当前)       ← 最近帧间移动量
+totalDist = SQDist(帧-2, 当前)              ← 总位移量
+edgeMoveDist = SQDistToEdge(帧-2, 帧-1)     ← 朝边缘方向的移动分量
+
+条件1: historyDist_2to1 >= 2500 (50²)      ← 前两帧有足够移动
+条件2: historyDist_1to0 >= 2500             ← 最近帧也有足够移动
+条件3: totalDist >= 10000 (100²)            ← 总位移足够大
+条件4: totalDist >= edgeMoveDist             ← 总位移朝向边缘方向
+
+全部满足 → 合法边缘移入，执行 ER_MoveInCorrection
+任一不满足 → 拒绝（可能是噪声/误触）
+```
+
+#### 15.5.2 边缘移出检测 — ER_MoveOutCheck
+
+检测已跟踪的触摸是否正在移出屏幕：
+
+```
+对 dim1 (X轴):
+    totalX = prevMoveDistX + prevCompensatedX + prevAccumDistX
+    
+    IF totalX < leftBoundary:
+        prevTouch->field_0x204 |= 0x10    ← 左边缘移出
+        detected = true
+    ELIF totalX >= rightBoundary - 1:
+        prevTouch->field_0x204 |= 0x20    ← 右边缘移出
+        detected = true
+
+对 dim2 (Y轴):  同上，标志 0x40 (上) / 0x80 (下)
+```
+
+#### 15.5.3 移出坐标钳制 — ER_MoveOutCorrection
+
+当移出被确认后，强制钳制输出坐标：
+
+```
+IF leftMoveOut (0x10):   compensatedX = leftBoundary
+IF rightMoveOut (0x20):  compensatedX = rightBoundary - 1
+IF topMoveOut (0x40):    compensatedY = topBoundary
+IF bottomMoveOut (0x80): compensatedY = bottomBoundary - 1
+```
+
+坐标被钳制到边界上，防止报告超出屏幕范围的坐标。
+
+#### 15.5.4 ER_Process 中的状态清理
+
+```
+对每个触摸:
+    IF 状态 == 8 OR 0x20 AND 上一帧有边缘标志(0x08):
+        IF ER_MoveOutCheck 检测到移出:
+            field_0x1f0 |= 0x40          ← 标记移出
+            ER_MoveOutCorrection         ← 钳制坐标
+            IF 状态 == 0x20:
+                field_0x21c = 0x10       ← 状态降级
+```
+
+---
+
+### 15.6 五层修正协同全景
+
+```
+┌─────────────────────────────────────────────────────┐
+│  层级        位置              修正内容              │
+├─────────────────────────────────────────────────────┤
+│  ① Peak      信号→候选点      边缘独立阈值          │
+│              确保边缘触摸可被检测                    │
+├─────────────────────────────────────────────────────┤
+│  ② BLSM      信号处理         边缘宽阈值基线更新    │
+│              防止边缘波动误冻结基线                  │
+├─────────────────────────────────────────────────────┤
+│  ③ CMF       信号处理         边缘行共模抑制减弱    │
+│              避免边缘行过度修正                      │
+├─────────────────────────────────────────────────────┤
+│  ④ CTD_EC    坐标变换         二次混合边缘补偿      │
+│              修正电场畸变导致的坐标非线性             │
+├─────────────────────────────────────────────────────┤
+│  ⑤ ER        触控跟踪         边缘触摸合法性验证    │
+│              防误触/移出钳制/移入验证                 │
+└─────────────────────────────────────────────────────┘
+```
+
+**设计哲学**: 五层修正形成了一个**纵深防御体系**。前三层（Peak/BLSM/CMF）确保边缘信号能以正确的形态进入检测流程——属于"信号层面"的修正。第四层（CTD_EC）在坐标变换时补偿物理畸变——属于"几何层面"的修正。第五层（ER）在触摸跟踪时验证边缘事件的合法性——属于"语义层面"的修正。三个层面互不重叠、缺一不可，共同保证边缘手指在全流程中得到正确处理。
+
+**W273AS2700 的关键差异**: `Peak_IsToExcludeSideRegion()` 返回 `0`（不排除边缘），同时面板名称不匹配 P116/P150/P186 导致 `TouchThold_ToeUseSpecialThold()` 也返回 `0`。这意味着**第①②③层在 W273AS2700 上实际被大幅削减**——边缘专用阈值、宽基线步长、CMF 边缘阈值 200 均不生效。该面板主要依赖第④层（CTD_EC 坐标补偿）和第⑤层（ER 边缘验证）来校正边缘触摸行为。
