@@ -162,9 +162,11 @@ private:
     std::atomic<bool> m_hasNewFrame{false};
 
     // Polling thread reads shared memory
+    mutable std::mutex m_connectionMutex;
     std::atomic<bool> m_polling{false};
     std::thread m_pollThread;
     void PollLoop();
+    void DisconnectLocked();
     HANDLE m_pollStopEvent = nullptr;
     HANDLE m_logEvent = nullptr;
     HANDLE m_penEvent = nullptr;

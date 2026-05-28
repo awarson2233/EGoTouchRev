@@ -127,6 +127,9 @@ target_include_directories(Common PUBLIC
 # Common links Solvers for SharedFrameBuffer (EngineTypes.h)
 # Forward-declare include path; Solvers target linked below after Solvers is defined
 target_link_libraries(Common PUBLIC spdlog::spdlog)
+if (WIN32)
+    target_link_libraries(Common PUBLIC advapi32)
+endif()
 
 # ImGuiCommon library: UI framework (only for diagnostic tools)
 add_library(ImGuiCommon STATIC
@@ -222,6 +225,9 @@ target_include_directories(EGoTouchApp PRIVATE
 # Link D3D11 for the ImGui DX11 backend
 target_compile_definitions(EGoTouchApp PRIVATE EGOTOUCH_DIAGNOSTICS)
 target_link_libraries(EGoTouchApp PRIVATE Device Solvers Host Common ImGuiCommon d3d11 d3dcompiler dwmapi setupapi)
+if(MSVC)
+    target_link_options(EGoTouchApp PRIVATE "/MANIFESTUAC:level='requireAdministrator'")
+endif()
 
 # --- EGoTouchService (Production Service Shell) ---
 set(SERVICE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/EGoTouchService")

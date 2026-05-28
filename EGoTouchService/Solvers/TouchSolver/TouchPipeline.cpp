@@ -1,4 +1,5 @@
 #include "TouchPipeline.h"
+#include "ConfigParse.h"
 
 namespace Solvers {
 
@@ -293,7 +294,7 @@ std::vector<ConfigParam> TouchPipeline::GetConfigSchema() const {
             const std::string segPrefix = prefix + "S" + std::to_string(segment);
             auto& seg = profile.segments[segment];
             s.emplace_back(segPrefix + "Width", segPrefix + " Width",
-                           ConfigParam::Int, const_cast<int*>(&seg.edgeWidthThreshold), 0, 255).Module("Zone & Contact");
+                           ConfigParam::Int, const_cast<int*>(&seg.touchSizeThreshold), 0, 255).Module("Zone & Contact");
             s.emplace_back(segPrefix + "LutLow", segPrefix + " LUT Low",
                            ConfigParam::Int, const_cast<int*>(&seg.lutIdxLow), 0, 255).Module("Zone & Contact");
             s.emplace_back(segPrefix + "LutHigh", segPrefix + " LUT High",
@@ -539,7 +540,7 @@ void TouchPipeline::SaveConfig(std::ostream& out) const {
         for (int segment = 0; segment < 4; ++segment) {
             const auto& seg = profile.segments[segment];
             const std::string segPrefix = prefix + "S" + std::to_string(segment);
-            out << segPrefix << "Width=" << seg.edgeWidthThreshold << "\n";
+            out << segPrefix << "Width=" << seg.touchSizeThreshold << "\n";
             out << segPrefix << "LutLow=" << seg.lutIdxLow << "\n";
             out << segPrefix << "LutHigh=" << seg.lutIdxHigh << "\n";
         }
@@ -638,144 +639,146 @@ void TouchPipeline::SaveConfig(std::ostream& out) const {
 // ══════════════════════════════════════════════════════════════════════
 void TouchPipeline::LoadConfig(const std::string& key,
                                 const std::string& value) {
-    auto toBool = [](const std::string& v) { return v=="1"||v=="true"; };
+    auto toBool = [&](const std::string& v) { return ParseConfigBool(key, v); };
     auto loadECProfile = [&](const std::string& k) {
         const char* edgeNames[4] = {"Dim1Near", "Dim1Far", "Dim2Near", "Dim2Far"};
         for (int edge = 0; edge < 4; ++edge) {
             auto& profile = m_edgeComp.m_profiles[edge];
             const std::string prefix = std::string("EC") + edgeNames[edge];
             if (k == prefix + "Segments") {
-                profile.numSegments = std::clamp(std::stoi(value), 1, 4);
+                profile.numSegments = std::clamp(ParseConfigInt(key, value), 1, 4);
                 return true;
             }
             for (int segment = 0; segment < 4; ++segment) {
                 auto& seg = profile.segments[segment];
                 const std::string segPrefix = prefix + "S" + std::to_string(segment);
                 if (k == segPrefix + "Width") {
-                    seg.edgeWidthThreshold = std::clamp(std::stoi(value), 0, 255);
+                    seg.touchSizeThreshold = std::clamp(ParseConfigInt(key, value), 0, 255);
                     return true;
                 }
                 if (k == segPrefix + "LutLow") {
-                    seg.lutIdxLow = std::clamp(std::stoi(value), 0, 255);
+                    seg.lutIdxLow = std::clamp(ParseConfigInt(key, value), 0, 255);
                     return true;
                 }
                 if (k == segPrefix + "LutHigh") {
-                    seg.lutIdxHigh = std::clamp(std::stoi(value), 0, 255);
+                    seg.lutIdxHigh = std::clamp(ParseConfigInt(key, value), 0, 255);
                     return true;
                 }
             }
         }
         return false;
     };
+
+    try {
     // Phase 1
     if      (key=="FrameParserEnabled")      m_frameParser.m_enabled = toBool(value);
     // Phase 2: Baseline
     else if (key=="BaselineEnabled")         m_baseline.m_enabled = toBool(value);
-    else if (key=="BaselineValue")           { m_baseline.m_baseline = std::stoi(value); m_baseline.Reset(); }
-    else if (key=="BaselineNoiseDeadband")   m_baseline.m_noiseDeadband = std::stoi(value);
-    else if (key=="BaselinePositiveDriftDeadband") m_baseline.m_positiveDriftDeadband = std::stoi(value);
-    else if (key=="BaselineNegativeDeadband") m_baseline.m_negativeDeadband = std::stoi(value);
-    else if (key=="BaselineTouchFreezeThreshold") m_baseline.m_touchFreezeThreshold = std::stoi(value);
-    else if (key=="BaselineReleaseHoldFrames") m_baseline.m_releaseHoldFrames = std::stoi(value);
-    else if (key=="BaselinePositiveAlphaShift") m_baseline.m_positiveAlphaShift = std::stoi(value);
-    else if (key=="BaselineNegativeAlphaShift") m_baseline.m_negativeAlphaShift = std::stoi(value);
-    else if (key=="BaselineNoiseAlphaShift") m_baseline.m_noiseAlphaShift = std::stoi(value);
-    else if (key=="BaselinePositiveMaxStep") m_baseline.m_positiveMaxStep = std::stoi(value);
-    else if (key=="BaselineNegativeMaxStep") m_baseline.m_negativeMaxStep = std::stoi(value);
-    else if (key=="BaselineAcquisitionAlphaShift") m_baseline.m_acquisitionAlphaShift = std::stoi(value);
-    else if (key=="BaselineAcquisitionMaxStep") m_baseline.m_acquisitionMaxStep = std::stoi(value);
+    else if (key=="BaselineValue")           { m_baseline.m_baseline = ParseConfigInt(key, value); m_baseline.Reset(); }
+    else if (key=="BaselineNoiseDeadband")   m_baseline.m_noiseDeadband = ParseConfigInt(key, value);
+    else if (key=="BaselinePositiveDriftDeadband") m_baseline.m_positiveDriftDeadband = ParseConfigInt(key, value);
+    else if (key=="BaselineNegativeDeadband") m_baseline.m_negativeDeadband = ParseConfigInt(key, value);
+    else if (key=="BaselineTouchFreezeThreshold") m_baseline.m_touchFreezeThreshold = ParseConfigInt(key, value);
+    else if (key=="BaselineReleaseHoldFrames") m_baseline.m_releaseHoldFrames = ParseConfigInt(key, value);
+    else if (key=="BaselinePositiveAlphaShift") m_baseline.m_positiveAlphaShift = ParseConfigInt(key, value);
+    else if (key=="BaselineNegativeAlphaShift") m_baseline.m_negativeAlphaShift = ParseConfigInt(key, value);
+    else if (key=="BaselineNoiseAlphaShift") m_baseline.m_noiseAlphaShift = ParseConfigInt(key, value);
+    else if (key=="BaselinePositiveMaxStep") m_baseline.m_positiveMaxStep = ParseConfigInt(key, value);
+    else if (key=="BaselineNegativeMaxStep") m_baseline.m_negativeMaxStep = ParseConfigInt(key, value);
+    else if (key=="BaselineAcquisitionAlphaShift") m_baseline.m_acquisitionAlphaShift = ParseConfigInt(key, value);
+    else if (key=="BaselineAcquisitionMaxStep") m_baseline.m_acquisitionMaxStep = ParseConfigInt(key, value);
     else if (key=="BaselineNoiseTrackingEnabled") m_baseline.m_noiseTrackingEnabled = toBool(value);
     // Phase 2: CMF
     else if (key=="CMFEnabled")              m_cmf.m_enabled = toBool(value);
-    else if (key=="CMFDimensionMode")        m_cmf.m_mode = static_cast<Touch::CMFProcessor::DimensionMode>(std::stoi(value));
-    else if (key=="CMFExclusionThreshold")   m_cmf.m_exclusionThreshold = std::stoi(value);
-    else if (key=="CMFMaxCorrection")        m_cmf.m_maxCorrection = std::stoi(value);
+    else if (key=="CMFDimensionMode")        m_cmf.m_mode = static_cast<Touch::CMFProcessor::DimensionMode>(ParseConfigInt(key, value));
+    else if (key=="CMFExclusionThreshold")   m_cmf.m_exclusionThreshold = ParseConfigInt(key, value);
+    else if (key=="CMFMaxCorrection")        m_cmf.m_maxCorrection = ParseConfigInt(key, value);
     // Phase 2: GridIIR
     else if (key=="GridIIREnabled")          m_gridIIR.m_enabled = toBool(value);
-    else if (key=="GateRatio")               m_gridIIR.m_gateRatio = std::stof(value);
-    else if (key=="GateStaticFloor")         m_gridIIR.m_gateStaticFloor = std::stoi(value);
-    else if (key=="DecayWeight")             m_gridIIR.m_decayWeight = std::stoi(value);
-    else if (key=="DecayStep")               m_gridIIR.m_decayStep = std::stoi(value);
-    else if (key=="NoiseFloorCutoff")        m_gridIIR.m_noiseFloorCutoff = std::stoi(value);
+    else if (key=="GateRatio")               m_gridIIR.m_gateRatio = ParseConfigFloat(key, value);
+    else if (key=="GateStaticFloor")         m_gridIIR.m_gateStaticFloor = ParseConfigInt(key, value);
+    else if (key=="DecayWeight")             m_gridIIR.m_decayWeight = ParseConfigInt(key, value);
+    else if (key=="DecayStep")               m_gridIIR.m_decayStep = ParseConfigInt(key, value);
+    else if (key=="NoiseFloorCutoff")        m_gridIIR.m_noiseFloorCutoff = ParseConfigInt(key, value);
     else if (key=="ResidualEnabled")         m_gridIIR.m_residualEnabled = toBool(value);
-    else if (key=="ResidualAlpha")           m_gridIIR.m_residualAlpha = std::stof(value);
+    else if (key=="ResidualAlpha")           m_gridIIR.m_residualAlpha = ParseConfigFloat(key, value);
     // Phase 3: PeakDetector
-    else if (key=="PeakThreshold")           m_peakDet.m_threshold = std::stoi(value);
-    else if (key=="SigTholdLimit")           m_peakDet.m_sigTholdLimit = std::stoi(value);
+    else if (key=="PeakThreshold")           m_peakDet.m_threshold = ParseConfigInt(key, value);
+    else if (key=="SigTholdLimit")           m_peakDet.m_sigTholdLimit = ParseConfigInt(key, value);
     else if (key=="Z8FilterEnabled")         m_peakDet.m_z8Filter = toBool(value);
     else if (key=="Z1FilterEnabled")         m_peakDet.m_z1Filter = toBool(value);
     else if (key=="PressureDriftFilter")     m_peakDet.m_pressureDriftFilter = toBool(value);
     else if (key=="EdgePeakFilter")          m_peakDet.m_edgePeakFilter = toBool(value);
     else if (key=="EdgeThresholdEnabled")    m_peakDet.m_edgeThresholdEnabled = toBool(value);
-    else if (key=="EdgeThreshold")           m_peakDet.m_edgeThreshold = std::stoi(value);
-    else if (key=="Z8Radius")                m_peakDet.m_z8Radius = std::stoi(value);
-    else if (key=="MaxPeaks")                m_peakDet.m_maxPeaks = std::clamp(std::stoi(value), 1, Touch::PeakDetector::kMaxStoredPeaks);
-    else if (key=="PressureDriftDebounce")   m_peakDet.m_pressureDriftDebounceLimit = std::stoi(value);
-    else if (key=="MacroZoneMinArea")        m_peakDet.m_macroZoneMinArea = std::stoi(value);
+    else if (key=="EdgeThreshold")           m_peakDet.m_edgeThreshold = ParseConfigInt(key, value);
+    else if (key=="Z8Radius")                m_peakDet.m_z8Radius = ParseConfigInt(key, value);
+    else if (key=="MaxPeaks")                m_peakDet.m_maxPeaks = std::clamp(ParseConfigInt(key, value), 1, Touch::PeakDetector::kMaxStoredPeaks);
+    else if (key=="PressureDriftDebounce")   m_peakDet.m_pressureDriftDebounceLimit = ParseConfigInt(key, value);
+    else if (key=="MacroZoneMinArea")        m_peakDet.m_macroZoneMinArea = ParseConfigInt(key, value);
     // Phase 4: ZoneExpander
     else if (key=="DilateErode")             m_contactExtractor.m_zoneExp.m_dilateErode = toBool(value);
-    else if (key=="ZoneTholdScale")          m_contactExtractor.m_zoneExp.m_tholdScaleNumer = std::stoi(value);
-    else if (key=="ZoneTholdShift")          m_contactExtractor.m_zoneExp.m_tholdScaleShift = std::stoi(value);
-    else if (key=="MaxTouches")              m_contactExtractor.m_zoneExp.m_maxTouches = std::stoi(value);
+    else if (key=="ZoneTholdScale")          m_contactExtractor.m_zoneExp.m_tholdScaleNumer = ParseConfigInt(key, value);
+    else if (key=="ZoneTholdShift")          m_contactExtractor.m_zoneExp.m_tholdScaleShift = ParseConfigInt(key, value);
+    else if (key=="MaxTouches")              m_contactExtractor.m_zoneExp.m_maxTouches = ParseConfigInt(key, value);
     // Phase 4: EdgeCompensation
     else if (key=="ECEnabled")               m_edgeComp.m_enabled = toBool(value);
-    else if (key=="ECBlendRange")            m_edgeComp.m_ecBlendRange = std::stof(value);
+    else if (key=="ECBlendRange")            m_edgeComp.m_ecBlendRange = ParseConfigFloat(key, value);
     else if (loadECProfile(key))              {}
     // Phase 3: TouchClassifier
     else if (key=="PalmEnabled")             m_touchClassifier.m_enabled = toBool(value);
-    else if (key=="PalmAreaThreshold")       m_touchClassifier.m_areaThreshold = std::stoi(value);
-    else if (key=="PalmSignalSumThreshold")  m_touchClassifier.m_signalSumThreshold = std::stoi(value);
-    else if (key=="PalmDensityThresholdLow") m_touchClassifier.m_densityThresholdLow = std::stof(value);
-    else if (key=="PalmAreaMinForDensity")   m_touchClassifier.m_areaMinForDensity = std::stoi(value);
+    else if (key=="PalmAreaThreshold")       m_touchClassifier.m_areaThreshold = ParseConfigInt(key, value);
+    else if (key=="PalmSignalSumThreshold")  m_touchClassifier.m_signalSumThreshold = ParseConfigInt(key, value);
+    else if (key=="PalmDensityThresholdLow") m_touchClassifier.m_densityThresholdLow = ParseConfigFloat(key, value);
+    else if (key=="PalmAreaMinForDensity")   m_touchClassifier.m_areaMinForDensity = ParseConfigInt(key, value);
     else if (key=="PalmElongatedEnabled")    m_touchClassifier.m_elongatedEnabled = toBool(value);
-    else if (key=="PalmElongatedMinArea")    m_touchClassifier.m_elongatedMinArea = std::stoi(value);
-    else if (key=="PalmElongatedAspectRatio")m_touchClassifier.m_elongatedAspectRatio = std::stof(value);
+    else if (key=="PalmElongatedMinArea")    m_touchClassifier.m_elongatedMinArea = ParseConfigInt(key, value);
+    else if (key=="PalmElongatedAspectRatio")m_touchClassifier.m_elongatedAspectRatio = ParseConfigFloat(key, value);
     else if (key=="PalmAnalyzerEnabled")      m_touchClassifier.m_analyzerEnabled = toBool(value);
-    else if (key=="PalmCandidateAreaThreshold") m_touchClassifier.m_candidateAreaThreshold = std::stoi(value);
-    else if (key=="PalmCandidateSignalThreshold") m_touchClassifier.m_candidateSignalThreshold = std::stoi(value);
-    else if (key=="PalmLikelyAreaThreshold")  m_touchClassifier.m_likelyAreaThreshold = std::stoi(value);
-    else if (key=="PalmFillRatioThreshold")   m_touchClassifier.m_fillRatioThreshold = std::stof(value);
-    else if (key=="PalmFlatSharpnessThreshold") m_touchClassifier.m_flatSharpnessThreshold = std::stof(value);
-    else if (key=="PalmStrongPeakProminence") m_touchClassifier.m_strongPeakProminence = std::stoi(value);
+    else if (key=="PalmCandidateAreaThreshold") m_touchClassifier.m_candidateAreaThreshold = ParseConfigInt(key, value);
+    else if (key=="PalmCandidateSignalThreshold") m_touchClassifier.m_candidateSignalThreshold = ParseConfigInt(key, value);
+    else if (key=="PalmLikelyAreaThreshold")  m_touchClassifier.m_likelyAreaThreshold = ParseConfigInt(key, value);
+    else if (key=="PalmFillRatioThreshold")   m_touchClassifier.m_fillRatioThreshold = ParseConfigFloat(key, value);
+    else if (key=="PalmFlatSharpnessThreshold") m_touchClassifier.m_flatSharpnessThreshold = ParseConfigFloat(key, value);
+    else if (key=="PalmStrongPeakProminence") m_touchClassifier.m_strongPeakProminence = ParseConfigInt(key, value);
     else if (key=="PeakEvalEnabled")          m_touchClassifier.m_peakEvalEnabled = toBool(value);
-    else if (key=="PeakEvalFingerProminence") m_touchClassifier.m_fingerProminence = std::stoi(value);
-    else if (key=="PeakEvalFingerSharpness")  m_touchClassifier.m_fingerSharpness = std::stof(value);
-    else if (key=="PeakEvalPalmSharpnessMax") m_touchClassifier.m_palmSharpnessMax = std::stof(value);
-    else if (key=="PeakEvalAmbiguousMargin")  m_touchClassifier.m_ambiguousMargin = std::stof(value);
+    else if (key=="PeakEvalFingerProminence") m_touchClassifier.m_fingerProminence = ParseConfigInt(key, value);
+    else if (key=="PeakEvalFingerSharpness")  m_touchClassifier.m_fingerSharpness = ParseConfigFloat(key, value);
+    else if (key=="PeakEvalPalmSharpnessMax") m_touchClassifier.m_palmSharpnessMax = ParseConfigFloat(key, value);
+    else if (key=="PeakEvalAmbiguousMargin")  m_touchClassifier.m_ambiguousMargin = ParseConfigFloat(key, value);
     else if (key=="PalmAwareExpansionEnabled") m_touchClassifier.m_palmAwareExpansionEnabled = toBool(value);
-    else if (key=="PalmFingerInPalmThresholdRatio") m_touchClassifier.m_fingerInPalmThresholdRatio = std::stof(value);
-    else if (key=="PalmFingerInPalmMaxRadius") m_touchClassifier.m_fingerInPalmMaxRadius = std::stoi(value);
+    else if (key=="PalmFingerInPalmThresholdRatio") m_touchClassifier.m_fingerInPalmThresholdRatio = ParseConfigFloat(key, value);
+    else if (key=="PalmFingerInPalmMaxRadius") m_touchClassifier.m_fingerInPalmMaxRadius = ParseConfigInt(key, value);
     else if (key=="PalmLikelyAllowContact")   m_touchClassifier.m_palmLikelyAllowContact = toBool(value);
     else if (key=="PalmShadowEnabled")        m_touchClassifier.m_palmShadowEnabled = toBool(value);
-    else if (key=="PalmShadowRadius")         m_touchClassifier.m_palmShadowRadius = std::stoi(value);
-    else if (key=="PalmShadowHoldFrames")     m_touchClassifier.m_palmShadowHoldFrames = std::stoi(value);
-    else if (key=="PalmShadowSeedScore")      m_touchClassifier.m_palmShadowSeedScore = std::stof(value);
+    else if (key=="PalmShadowRadius")         m_touchClassifier.m_palmShadowRadius = ParseConfigInt(key, value);
+    else if (key=="PalmShadowHoldFrames")     m_touchClassifier.m_palmShadowHoldFrames = ParseConfigInt(key, value);
+    else if (key=="PalmShadowSeedScore")      m_touchClassifier.m_palmShadowSeedScore = ParseConfigFloat(key, value);
     // Phase 5: TouchTracker
     else if (key=="TrackerEnabled")          m_tracker.m_enabled = toBool(value);
     else if (key=="UseHungarian")            m_tracker.m_useHungarian = toBool(value);
-    else if (key=="MaxTrackDistance")        m_tracker.m_maxTrackDistance = std::stof(value);
-    else if (key=="AlwaysMatchDistance")     m_tracker.m_alwaysMatchDistance = std::stof(value);
-    else if (key=="EdgeTrackBoost")          m_tracker.m_edgeTrackBoost = std::stof(value);
-    else if (key=="AccThresholdBoost")       m_tracker.m_accThresholdBoost = std::stof(value);
-    else if (key=="AccBoostSizeMm")          m_tracker.m_accBoostSizeMm = std::stof(value);
-    else if (key=="PredictionScale")         m_tracker.m_predictionScale = std::stof(value);
+    else if (key=="MaxTrackDistance")        m_tracker.m_maxTrackDistance = ParseConfigFloat(key, value);
+    else if (key=="AlwaysMatchDistance")     m_tracker.m_alwaysMatchDistance = ParseConfigFloat(key, value);
+    else if (key=="EdgeTrackBoost")          m_tracker.m_edgeTrackBoost = ParseConfigFloat(key, value);
+    else if (key=="AccThresholdBoost")       m_tracker.m_accThresholdBoost = ParseConfigFloat(key, value);
+    else if (key=="AccBoostSizeMm")          m_tracker.m_accBoostSizeMm = ParseConfigFloat(key, value);
+    else if (key=="PredictionScale")         m_tracker.m_predictionScale = ParseConfigFloat(key, value);
     else if (key=="GapRelinkEnabled")        m_tracker.m_gapRelinkEnabled = toBool(value);
-    else if (key=="GapRelinkWindowFrames")   m_tracker.m_gapRelinkWindowFrames = std::stoi(value);
-    else if (key=="TouchDownDebounceFrames") m_tracker.m_touchDownDebounceFrames = std::stoi(value);
+    else if (key=="GapRelinkWindowFrames")   m_tracker.m_gapRelinkWindowFrames = ParseConfigInt(key, value);
+    else if (key=="TouchDownDebounceFrames") m_tracker.m_touchDownDebounceFrames = ParseConfigInt(key, value);
     else if (key=="DynamicDebounceEnabled")  m_tracker.m_dynamicDebounceEnabled = toBool(value);
-    else if (key=="TouchDownDebounceMaxExtra") m_tracker.m_touchDownDebounceMaxExtra = std::stoi(value);
-    else if (key=="TouchDownWeakSignalThreshold") m_tracker.m_touchDownWeakSignalThreshold = std::stoi(value);
-    else if (key=="TouchDownSmallSizeThresholdMm") m_tracker.m_touchDownSmallSizeThresholdMm = std::stof(value);
+    else if (key=="TouchDownDebounceMaxExtra") m_tracker.m_touchDownDebounceMaxExtra = ParseConfigInt(key, value);
+    else if (key=="TouchDownWeakSignalThreshold") m_tracker.m_touchDownWeakSignalThreshold = ParseConfigInt(key, value);
+    else if (key=="TouchDownSmallSizeThresholdMm") m_tracker.m_touchDownSmallSizeThresholdMm = ParseConfigFloat(key, value);
     else if (key=="TouchDownRejectEnabled")  m_tracker.m_touchDownRejectEnabled = toBool(value);
-    else if (key=="TouchDownRejectMinSignal")m_tracker.m_touchDownRejectMinSignal = std::stoi(value);
-    else if (key=="TouchDownRejectMinSizeMm") m_tracker.m_touchDownRejectMinSizeMm = std::stof(value);
-    else if (key=="TouchDownEdgeRejectMinSignal") m_tracker.m_touchDownEdgeRejectMinSignal = std::stoi(value);
-    else if (key=="FallbackSizeMm")          m_tracker.m_fallbackSizeMm = std::stof(value);
-    else if (key=="SizeAreaScale")           m_tracker.m_sizeAreaScale = std::stof(value);
-    else if (key=="SizeSignalScale")         m_tracker.m_sizeSignalScale = std::stof(value);
+    else if (key=="TouchDownRejectMinSignal")m_tracker.m_touchDownRejectMinSignal = ParseConfigInt(key, value);
+    else if (key=="TouchDownRejectMinSizeMm") m_tracker.m_touchDownRejectMinSizeMm = ParseConfigFloat(key, value);
+    else if (key=="TouchDownEdgeRejectMinSignal") m_tracker.m_touchDownEdgeRejectMinSignal = ParseConfigInt(key, value);
+    else if (key=="FallbackSizeMm")          m_tracker.m_fallbackSizeMm = ParseConfigFloat(key, value);
+    else if (key=="SizeAreaScale")           m_tracker.m_sizeAreaScale = ParseConfigFloat(key, value);
+    else if (key=="SizeSignalScale")         m_tracker.m_sizeSignalScale = ParseConfigFloat(key, value);
     else if (key=="RxGhostFilterEnabled")    m_tracker.m_rxGhostFilterEnabled = toBool(value);
-    else if (key=="RxGhostLineDelta")        m_tracker.m_rxGhostLineDelta = std::stoi(value);
-    else if (key=="RxGhostWeakRatio")        m_tracker.m_rxGhostWeakRatio = std::stof(value);
+    else if (key=="RxGhostLineDelta")        m_tracker.m_rxGhostLineDelta = ParseConfigInt(key, value);
+    else if (key=="RxGhostWeakRatio")        m_tracker.m_rxGhostWeakRatio = ParseConfigFloat(key, value);
     else if (key=="RxGhostOnlyNew")          m_tracker.m_rxGhostOnlyNew = toBool(value);
     else if (key=="StylusSuppressGlobalEnabled") {
         m_tracker.m_stylusSuppressGlobalEnabled = toBool(value);
@@ -786,63 +789,66 @@ void TouchPipeline::LoadConfig(const std::string& key,
         m_stylusSuppress.m_stylusSuppressLocalEnabled = m_tracker.m_stylusSuppressLocalEnabled;
     }
     else if (key=="StylusSuppressLocalDistance") {
-        m_tracker.m_stylusSuppressLocalDistance = std::stof(value);
+        m_tracker.m_stylusSuppressLocalDistance = ParseConfigFloat(key, value);
         m_stylusSuppress.m_stylusSuppressLocalDistance = m_tracker.m_stylusSuppressLocalDistance;
     }
     else if (key=="StylusSuppressPenPeakThreshold") {
-        m_tracker.m_stylusSuppressPenPeakThreshold = std::stoi(value);
+        m_tracker.m_stylusSuppressPenPeakThreshold = ParseConfigInt(key, value);
         m_stylusSuppress.m_stylusSuppressPenPeakThreshold = m_tracker.m_stylusSuppressPenPeakThreshold;
     }
     else if (key=="StylusSuppressTouchSignalKeep") {
-        m_tracker.m_stylusSuppressTouchSignalKeep = std::stoi(value);
+        m_tracker.m_stylusSuppressTouchSignalKeep = ParseConfigInt(key, value);
         m_stylusSuppress.m_stylusSuppressTouchSignalKeep = m_tracker.m_stylusSuppressTouchSignalKeep;
     }
     else if (key=="StylusSuppressTouchAreaKeep") {
-        m_tracker.m_stylusSuppressTouchAreaKeep = std::stoi(value);
+        m_tracker.m_stylusSuppressTouchAreaKeep = ParseConfigInt(key, value);
         m_stylusSuppress.m_stylusSuppressTouchAreaKeep = m_tracker.m_stylusSuppressTouchAreaKeep;
     }
     else if (key=="StylusAftEnabled") {
         m_tracker.m_stylusAftEnabled = toBool(value);
         m_stylusSuppress.m_stylusAftEnabled = m_tracker.m_stylusAftEnabled;
     }
-    else if (key=="StylusAftRecentFrames")   m_tracker.m_stylusAftRecentFrames = std::stoi(value);
-    else if (key=="StylusAftRadius")         m_tracker.m_stylusAftRadius = std::stof(value);
+    else if (key=="StylusAftRecentFrames")   m_tracker.m_stylusAftRecentFrames = ParseConfigInt(key, value);
+    else if (key=="StylusAftRadius")         m_tracker.m_stylusAftRadius = ParseConfigFloat(key, value);
     else if (key=="StylusAftDebounceFrames") {
-        m_tracker.m_stylusAftDebounceFrames = std::stoi(value);
+        m_tracker.m_stylusAftDebounceFrames = ParseConfigInt(key, value);
         m_stylusSuppress.m_stylusAftDebounceFrames = m_tracker.m_stylusAftDebounceFrames;
     }
     else if (key=="StylusAftWeakSignalThreshold") {
-        m_tracker.m_stylusAftWeakSignalThreshold = std::stoi(value);
+        m_tracker.m_stylusAftWeakSignalThreshold = ParseConfigInt(key, value);
         m_stylusSuppress.m_stylusAftWeakSignalThreshold = m_tracker.m_stylusAftWeakSignalThreshold;
     }
     else if (key=="StylusAftWeakSizeThresholdMm") {
-        m_tracker.m_stylusAftWeakSizeThresholdMm = std::stof(value);
+        m_tracker.m_stylusAftWeakSizeThresholdMm = ParseConfigFloat(key, value);
         m_stylusSuppress.m_stylusAftWeakSizeThresholdMm = m_tracker.m_stylusAftWeakSizeThresholdMm;
     }
     else if (key=="StylusAftSuppressFrames") {
-        m_tracker.m_stylusAftSuppressFrames = std::stoi(value);
+        m_tracker.m_stylusAftSuppressFrames = ParseConfigInt(key, value);
         m_stylusSuppress.m_stylusAftSuppressFrames = m_tracker.m_stylusAftSuppressFrames;
     }
-    else if (key=="StylusAftPalmSuppressFrames") m_tracker.m_stylusAftPalmSuppressFrames = std::stoi(value);
-    else if (key=="StylusAftPalmAreaThreshold") m_tracker.m_stylusAftPalmAreaThreshold = std::stoi(value);
-    else if (key=="StylusAftPalmSizeThresholdMm") m_tracker.m_stylusAftPalmSizeThresholdMm = std::stof(value);
+    else if (key=="StylusAftPalmSuppressFrames") m_tracker.m_stylusAftPalmSuppressFrames = ParseConfigInt(key, value);
+    else if (key=="StylusAftPalmAreaThreshold") m_tracker.m_stylusAftPalmAreaThreshold = ParseConfigInt(key, value);
+    else if (key=="StylusAftPalmSizeThresholdMm") m_tracker.m_stylusAftPalmSizeThresholdMm = ParseConfigFloat(key, value);
     // Phase 5: CoordinateFilter
     else if (key=="CoordFilterEnabled")      m_coordFilter.m_enabled = toBool(value);
-    else if (key=="OneEuroMinCutoff")        m_coordFilter.m_minCutoff = std::stof(value);
-    else if (key=="OneEuroBeta")             m_coordFilter.m_beta = std::stof(value);
-    else if (key=="OneEuroDCutoff")          m_coordFilter.m_dCutoff = std::stof(value);
+    else if (key=="OneEuroMinCutoff")        m_coordFilter.m_minCutoff = ParseConfigFloat(key, value);
+    else if (key=="OneEuroBeta")             m_coordFilter.m_beta = ParseConfigFloat(key, value);
+    else if (key=="OneEuroDCutoff")          m_coordFilter.m_dCutoff = ParseConfigFloat(key, value);
     // Phase 6: GestureStateMachine
     else if (key=="GestureEnabled")          m_gesture.m_enabled = toBool(value);
-    else if (key=="PressCandidateFrames")    m_gesture.m_pressCandidateFrames = std::stoi(value);
-    else if (key=="PressCandidateMinSignal") m_gesture.m_pressCandidateMinSignal = std::stoi(value);
-    else if (key=="PressCandidateMinSizeMm") m_gesture.m_pressCandidateMinSizeMm = std::stof(value);
-    else if (key=="DragThreshold")           m_gesture.m_dragThreshold = std::stof(value);
-    else if (key=="LongPressFrames")         m_gesture.m_longPressFrames = std::stoi(value);
-    else if (key=="LongPressMoveTolerance")  m_gesture.m_longPressMoveTolerance = std::stof(value);
-    else if (key=="ReleasePendingFrames")    m_gesture.m_releasePendingFrames = std::stoi(value);
+    else if (key=="PressCandidateFrames")    m_gesture.m_pressCandidateFrames = ParseConfigInt(key, value);
+    else if (key=="PressCandidateMinSignal") m_gesture.m_pressCandidateMinSignal = ParseConfigInt(key, value);
+    else if (key=="PressCandidateMinSizeMm") m_gesture.m_pressCandidateMinSizeMm = ParseConfigFloat(key, value);
+    else if (key=="DragThreshold")           m_gesture.m_dragThreshold = ParseConfigFloat(key, value);
+    else if (key=="LongPressFrames")         m_gesture.m_longPressFrames = ParseConfigInt(key, value);
+    else if (key=="LongPressMoveTolerance")  m_gesture.m_longPressMoveTolerance = ParseConfigFloat(key, value);
+    else if (key=="ReleasePendingFrames")    m_gesture.m_releasePendingFrames = ParseConfigInt(key, value);
     else if (key=="BypassStateMachine")      m_gesture.m_bypassStateMachine = toBool(value);
 
     SyncStylusSuppressConfigFromTracker();
+    } catch (const ConfigParseError& error) {
+        LogConfigParseWarning("TouchPipeline", __func__, key, value, error);
+    }
 }
 
 } // namespace Solvers

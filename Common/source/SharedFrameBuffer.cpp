@@ -1,14 +1,11 @@
 #include "SharedFrameBuffer.h"
+#include "IpcSecurity.h"
 #include "Logger.h"
 #include <cstring>
-#include <sddl.h>
 
 namespace Ipc {
 
 namespace {
-
-constexpr LPCWSTR kIpcObjectSddl =
-    L"D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;IU)";
 
 void InitializeAbiHeader(SharedTripleBuffer& buffer) noexcept {
     buffer.abi.abiVersion = kSharedFrameAbiVersion;
@@ -24,27 +21,6 @@ bool HasCompatibleAbi(const SharedTripleBuffer& buffer) noexcept {
            buffer.abi.totalSize == sizeof(SharedTripleBuffer) &&
            buffer.abi.headerSize == sizeof(SharedFrameAbiHeader) &&
            buffer.abi.slotCount == SharedTripleBuffer::kSlotCount;
-}
-
-struct ScopedSecurityDescriptor {
-    PSECURITY_DESCRIPTOR value = nullptr;
-    ~ScopedSecurityDescriptor() {
-        if (value) {
-            LocalFree(value);
-        }
-    }
-};
-
-bool BuildIpcSecurityAttributes(SECURITY_ATTRIBUTES& sa,
-                                ScopedSecurityDescriptor& sd) {
-    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            kIpcObjectSddl, SDDL_REVISION_1, &sd.value, nullptr)) {
-        return false;
-    }
-    sa.nLength = sizeof(sa);
-    sa.lpSecurityDescriptor = sd.value;
-    sa.bInheritHandle = FALSE;
-    return true;
 }
 
 } // namespace
@@ -90,7 +66,7 @@ bool SharedFrameWriter::Open(const wchar_t* name) {
 bool SharedFrameWriter::Create(const wchar_t* name) {
     SECURITY_ATTRIBUTES sa{};
     ScopedSecurityDescriptor sd;
-    if (!BuildIpcSecurityAttributes(sa, sd)) {
+    if (!BuildAdminOnlySecurityAttributes(sa, sd)) {
         LOG_ERROR("Common", __func__, "IPC", "Build mapping security descriptor failed: {}",  GetLastError());
         return false;
     }
@@ -168,7 +144,7 @@ void SharedFrameWriter::Close() {
 bool SharedFrameReader::Create(const wchar_t* name) {
     SECURITY_ATTRIBUTES sa{};
     ScopedSecurityDescriptor sd;
-    if (!BuildIpcSecurityAttributes(sa, sd)) {
+    if (!BuildAdminOnlySecurityAttributes(sa, sd)) {
         LOG_ERROR("Common", __func__, "IPC", "Build mapping security descriptor failed: {}",  GetLastError());
         return false;
     }

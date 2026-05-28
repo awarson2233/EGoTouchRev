@@ -18,51 +18,52 @@ ServiceProxy::~ServiceProxy() {
 }
 
 bool ServiceProxy::Connect() {
-    // 1. Open shared memory (Service owns the Global\\ mapping)
+    std::lock_guard<std::mutex> lk(m_connectionMutex);
+    if (m_client.IsConnected()) {
+        return true;
+    }
+    if (m_pollThread.joinable()) {
+        LOG_WARN("App", __func__, "IPC", "Connect requested while polling thread is still active; cleaning up stale connection state.");
+        DisconnectLocked();
+    }
+
     if (!m_frameReader.Open(kSharedMemName)) {
         LOG_ERROR("App", __func__, "IPC", "Failed to open shared memory (Service not running?).");
+        DisconnectLocked();
         return false;
     }
-    // 2. Connect pipe to Service
     if (!m_client.Connect(3000)) {
         LOG_ERROR("App", __func__, "IPC", "Pipe connection failed.");
-        m_frameReader.Close();
+        DisconnectLocked();
         return false;
     }
-    // 4. Tell Service to enter debug mode
     auto resp = m_client.EnterDebugMode(kSharedMemName);
     if (!resp.success) {
         LOG_ERROR("App", __func__, "IPC", "EnterDebugMode rejected.");
-        m_client.Disconnect();
-        m_frameReader.Close();
+        DisconnectLocked();
         return false;
     }
 
     LoadConfig();
 
-    // 4.1 Pull dynamic debug schema (best effort)
     if (!RefreshDynamicDebugSchema()) {
         LOG_WARN("App", __func__, "IPC", "Dynamic debug schema unavailable; UI/export dynamic fields will be empty.");
     }
+    m_logEvent = OpenEventW(SYNCHRONIZE, FALSE, Ipc::kLogReadyEventName);
     if (!m_logEvent) {
-        m_logEvent = OpenEventW(SYNCHRONIZE, FALSE, Ipc::kLogReadyEventName);
-        if (!m_logEvent) {
-            LOG_WARN("App", __func__, "IPC", "OpenEvent failed for LogReadyEvent: {}", GetLastError());
-        }
+        LOG_WARN("App", __func__, "IPC", "OpenEvent failed for LogReadyEvent: {}", GetLastError());
     }
+    m_penEvent = OpenEventW(SYNCHRONIZE, FALSE, Ipc::kPenReadyEventName);
     if (!m_penEvent) {
-        m_penEvent = OpenEventW(SYNCHRONIZE, FALSE, Ipc::kPenReadyEventName);
-        if (!m_penEvent) {
-            LOG_WARN("App", __func__, "IPC", "OpenEvent failed for PenReadyEvent: {}", GetLastError());
-        }
+        LOG_WARN("App", __func__, "IPC", "OpenEvent failed for PenReadyEvent: {}", GetLastError());
     }
+    m_pollStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!m_pollStopEvent) {
-        m_pollStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-        if (!m_pollStopEvent) {
-            LOG_WARN("App", __func__, "IPC", "CreateEvent failed for PollStopEvent: {}", GetLastError());
-        }
+        LOG_WARN("App", __func__, "IPC", "CreateEvent failed for PollStopEvent: {}", GetLastError());
+        DisconnectLocked();
+        return false;
     }
-    // 5. Start polling thread
+
     m_polling.store(true);
     m_pollThread = std::thread(&ServiceProxy::PollLoop, this);
 
@@ -70,8 +71,7 @@ bool ServiceProxy::Connect() {
     return true;
 }
 
-void ServiceProxy::Disconnect() {
-    // Stop polling
+void ServiceProxy::DisconnectLocked() {
     m_polling.store(false);
     if (m_pollStopEvent) {
         SetEvent(m_pollStopEvent);
@@ -90,7 +90,6 @@ void ServiceProxy::Disconnect() {
         m_penEvent = nullptr;
     }
 
-    // Tell Service to exit debug mode
     if (m_client.IsConnected()) {
         m_client.ExitDebugMode();
         m_client.Disconnect();
@@ -98,15 +97,20 @@ void ServiceProxy::Disconnect() {
     m_frameReader.Close();
     m_fps.store(0);
     m_slaveFps.store(0);
+}
+
+void ServiceProxy::Disconnect() {
+    std::lock_guard<std::mutex> lk(m_connectionMutex);
+    DisconnectLocked();
     LOG_INFO("App", __func__, "IPC", "Disconnected.");
 }
 
 bool ServiceProxy::TryConnect() {
-    if (IsConnected()) return true;
     return Connect();
 }
 
 bool ServiceProxy::IsConnected() const {
+    std::lock_guard<std::mutex> lk(m_connectionMutex);
     return m_client.IsConnected();
 }
 

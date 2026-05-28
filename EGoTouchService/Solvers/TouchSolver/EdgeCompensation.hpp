@@ -165,7 +165,7 @@ inline void TZ_GetEdgeWidth(ZoneEdgeInfo& ei,
 // ── CTD_EC LUT and helpers (from firmware) ──
 
 struct ECSegment {
-    int edgeWidthThreshold;
+    int touchSizeThreshold;
     int lutIdxLow;
     int lutIdxHigh;
 };
@@ -220,12 +220,12 @@ static const ECProfile g_defaultECProfiles[4] = {
     { 1, { {7, 16, 96}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0} } },
 };
 
-static inline int ECGetOffset(uint8_t subIdx, uint8_t edgeW,
+static inline int ECGetOffset(uint8_t subIdx, uint8_t touchSize,
                                const ECProfile& prof) {
     int si = 0;
     const int segmentCount = std::clamp(prof.numSegments, 1, 4);
     while (si < segmentCount - 1 &&
-           prof.segments[si].edgeWidthThreshold < edgeW)
+           prof.segments[si].touchSizeThreshold < touchSize)
         si++;
     auto& s = prof.segments[si];
     const int hiIdx = std::clamp(s.lutIdxHigh, 0, 255);
@@ -289,6 +289,22 @@ public:
             const auto& ei = edgeInfos[static_cast<size_t>(i)];
             tc.edgeFlags |= ei.edgeFlags;
             tc.centroidEdgeFlags |= TZ_GetCentroidEdgeFlags(ei, tc.x, tc.y);
+
+            // Centroid-distance fallback: when the zone does not touch grid
+            // boundaries but the centroid is within the physical margin,
+            // manually set the direction bits so ProcessDim can activate.
+            constexpr float kEdgeDistFallbackMm = 5.0f;
+            const float dLeft   = tc.x - bounds.colMin;
+            const float dRight  = bounds.colMax - tc.x;
+            const float dTop    = tc.y - bounds.rowMin;
+            const float dBottom = bounds.rowMax - tc.y;
+            if (tc.centroidEdgeFlags == 0) {
+                if (dLeft   < kEdgeDistFallbackMm) tc.centroidEdgeFlags |= 0x01;
+                if (dRight  < kEdgeDistFallbackMm) tc.centroidEdgeFlags |= 0x02;
+                if (dTop    < kEdgeDistFallbackMm) tc.centroidEdgeFlags |= 0x04;
+                if (dBottom < kEdgeDistFallbackMm) tc.centroidEdgeFlags |= 0x08;
+            }
+
             const bool edge = (tc.edgeFlags & (0x20 | 0x80000)) != 0 ||
                               tc.centroidEdgeFlags != 0;
             if (!edge) continue;
@@ -301,11 +317,13 @@ public:
             ECDimResult xResult = ProcessDim(tc.x, bounds.colMin, bounds.colMax,
                                              ei, tc.centroidEdgeFlags,
                                              0x01, 0x02,
-                                             ECEdge::Dim1Near, ECEdge::Dim1Far);
+                                             ECEdge::Dim1Near, ECEdge::Dim1Far,
+                                             tc.sizeMm);
             ECDimResult yResult = ProcessDim(tc.y, bounds.rowMin, bounds.rowMax,
                                              ei, tc.centroidEdgeFlags,
                                              0x04, 0x08,
-                                             ECEdge::Dim2Near, ECEdge::Dim2Far);
+                                             ECEdge::Dim2Near, ECEdge::Dim2Far,
+                                             tc.sizeMm);
 
             if (xResult.active) {
                 tc.ecWidthX = xResult.edgeWidth;
@@ -329,7 +347,8 @@ private:
                                   uint8_t nearMask,
                                   uint8_t farMask,
                                   ECEdge nearProfile,
-                                  ECEdge farProfile) const {
+                                  ECEdge farProfile,
+                                  float touchSizeMm) const {
         ECDimResult result;
         result.nearEdge = (centroidFlags & nearMask) != 0;
         result.farEdge = (centroidFlags & farMask) != 0;
@@ -347,7 +366,8 @@ private:
 
         const uint8_t subIdx = static_cast<uint8_t>(std::min(result.rawDistQ8, 255));
         const int profileIndex = static_cast<int>(useFar ? farProfile : nearProfile);
-        const int offset = ECGetOffset(subIdx, result.edgeWidth, m_profiles[profileIndex]);
+        const uint8_t touchSizeByte = static_cast<uint8_t>(std::min(touchSizeMm, 255.0f));
+        const int offset = ECGetOffset(subIdx, touchSizeByte, m_profiles[profileIndex]);
         const int compOff = 256 - offset;
         const int blendWidth = std::max(1, static_cast<int>(m_ecBlendRange * 256.0f));
         result.finalOffQ8 = ECGetFinalOffset(result.rawDistQ8, compOff, blendWidth);

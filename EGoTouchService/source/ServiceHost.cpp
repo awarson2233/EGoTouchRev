@@ -5,6 +5,7 @@
 #include "penevt/PenEventBridge.h"
 #include "penpress/PenPressureReader.h"
 #include "IpcPipeServer.h"
+#include "IpcSecurity.h"
 #include "SharedFrameBuffer.h"
 #include "ConfigSync.h"
 #include "SolverTypes.h"
@@ -511,25 +512,22 @@ void ServiceHost::StartIpcSubsystem() {
 #endif
 
     {
-        SECURITY_DESCRIPTOR sd{};
-        InitializeSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION);
-        SetSecurityDescriptorDacl(&sd, TRUE, nullptr, FALSE);
-
+        Ipc::ScopedSecurityDescriptor sd;
         SECURITY_ATTRIBUTES sa{};
-        sa.nLength = sizeof(sa);
-        sa.lpSecurityDescriptor = &sd;
-        sa.bInheritHandle = FALSE;
-
-        m_impl->m_logEvent = CreateEventW(&sa, FALSE, FALSE, Ipc::kLogReadyEventName);
-        if (!m_impl->m_logEvent) {
-            LOG_WARN("Service", __func__, "IPC", "CreateEvent failed for LogReadyEvent: {}", GetLastError());
+        if (!Ipc::BuildAdminOnlySecurityAttributes(sa, sd)) {
+            LOG_WARN("Service", __func__, "IPC", "Build event security descriptor failed: {}", GetLastError());
         } else {
-            Common::GuiLogSink::Instance()->SetNotifyEvent(m_impl->m_logEvent);
-        }
+            m_impl->m_logEvent = CreateEventW(&sa, FALSE, FALSE, Ipc::kLogReadyEventName);
+            if (!m_impl->m_logEvent) {
+                LOG_WARN("Service", __func__, "IPC", "CreateEvent failed for LogReadyEvent: {}", GetLastError());
+            } else {
+                Common::GuiLogSink::Instance()->SetNotifyEvent(m_impl->m_logEvent);
+            }
 
-        m_impl->m_penEvent = CreateEventW(&sa, FALSE, FALSE, Ipc::kPenReadyEventName);
-        if (!m_impl->m_penEvent) {
-            LOG_WARN("Service", __func__, "IPC", "CreateEvent failed for PenReadyEvent: {}", GetLastError());
+            m_impl->m_penEvent = CreateEventW(&sa, FALSE, FALSE, Ipc::kPenReadyEventName);
+            if (!m_impl->m_penEvent) {
+                LOG_WARN("Service", __func__, "IPC", "CreateEvent failed for PenReadyEvent: {}", GetLastError());
+            }
         }
     }
 
@@ -628,12 +626,14 @@ void ServiceHost::StopIpcSubsystem() {
 
 void ServiceHost::StopPenSubsystem() {
     if (m_impl->m_penPressureReader) {
+        m_impl->m_penPressureReader->SetNotifyEvent(nullptr);
         m_impl->m_penPressureReader->Stop();
         m_impl->m_penPressureReader.reset();
         LOG_INFO("Service", __func__, "MCU", "PenPressureReader stopped.");
     }
 
     if (m_impl->m_penEventBridge) {
+        m_impl->m_penEventBridge->SetNotifyEvent(nullptr);
         m_impl->m_penEventBridge->Stop();
         m_impl->m_penEventBridge.reset();
         LOG_INFO("Service", __func__, "MCU", "PenEventBridge stopped.");
@@ -661,9 +661,8 @@ void ServiceHost::StopRuntimeSubsystem() {
 }
 
 void ServiceHost::Stop() {
-    // 逆序停止（后启动的先停止）
-    StopIpcSubsystem();
     StopPenSubsystem();
+    StopIpcSubsystem();
     StopSystemStateMonitor();
     StopRuntimeSubsystem();
 

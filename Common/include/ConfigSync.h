@@ -3,6 +3,8 @@
 // Both Service and App map the same 4-byte atomic flag.
 // App sets dirty after writing config.ini; Service checks and clears.
 
+#include "IpcSecurity.h"
+
 #include <atomic>
 #include <cstdint>
 
@@ -10,7 +12,6 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#include <sddl.h>
 
 namespace Ipc {
 
@@ -25,21 +26,11 @@ public:
 
     // Open or create the shared flag
     bool Open() {
-        // Service/UI cross-session security:
-        //   SYSTEM + Administrators: full control
-        //   Interactive Users: read/write access (no full control)
-        constexpr LPCWSTR kConfigDirtySddl =
-            L"D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;IU)";
-        PSECURITY_DESCRIPTOR sd = nullptr;
-        if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
-                kConfigDirtySddl, SDDL_REVISION_1, &sd, nullptr)) {
+        ScopedSecurityDescriptor sd;
+        SECURITY_ATTRIBUTES sa{};
+        if (!BuildAdminOnlySecurityAttributes(sa, sd)) {
             return false;
         }
-
-        SECURITY_ATTRIBUTES sa{};
-        sa.nLength = sizeof(sa);
-        sa.lpSecurityDescriptor = sd;
-        sa.bInheritHandle = FALSE;
 
         m_mapHandle = OpenFileMappingW(
             FILE_MAP_READ | FILE_MAP_WRITE, FALSE, kConfigDirtyName);
@@ -48,8 +39,6 @@ public:
                 INVALID_HANDLE_VALUE, &sa, PAGE_READWRITE,
                 0, sizeof(std::atomic<uint32_t>), kConfigDirtyName);
         }
-
-        LocalFree(sd);
 
         if (!m_mapHandle) return false;
         m_flag = static_cast<std::atomic<uint32_t>*>(

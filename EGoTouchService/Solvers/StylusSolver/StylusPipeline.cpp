@@ -1,4 +1,5 @@
 #include "StylusPipeline.h"
+#include "ConfigParse.h"
 
 #include <algorithm>
 
@@ -257,8 +258,9 @@ void StylusPipeline::SaveConfig(std::ostream& out) const {
 }
 
 void StylusPipeline::LoadConfig(const std::string& key, const std::string& value) {
-    auto toBool = [](const std::string& v) { return v == "1" || v == "true"; };
+    auto toBool = [&](const std::string& v) { return ParseConfigBool(key, v); };
 
+    try {
     if (key == "sp.preEnabled" || key == "sp.frameParserEnabled") {
         m_frameParser.m_enabled = toBool(value);
     } else if (key == "sp.solveEnabled" || key == "sp.peakDetectorEnabled") {
@@ -280,23 +282,23 @@ void StylusPipeline::LoadConfig(const std::string& key, const std::string& value
     } else if (key == "sp.fakePressureDecreaseEnabled") {
         m_postPressure.m_fakePressureDecreaseEnabled = toBool(value);
     } else if (key == "sp.btFreqShiftDebounceFrames") {
-        m_postPressure.m_btFreqShiftDebounceFrames = std::clamp(std::stoi(value), 0, 255);
+        m_postPressure.m_btFreqShiftDebounceFrames = std::clamp(ParseConfigInt(key, value), 0, 255);
     } else if (key == "sp.pressureEdgeEnterThreshold") {
         m_postPressure.m_pressureEdgeEnterThreshold =
-            static_cast<uint16_t>(std::clamp(std::stoi(value), 0, 0xFFFF));
+            static_cast<uint16_t>(std::clamp(ParseConfigInt(key, value), 0, 0xFFFF));
     } else if (key == "sp.pressureEdgeExitThreshold") {
         m_postPressure.m_pressureEdgeExitThreshold =
-            static_cast<uint16_t>(std::clamp(std::stoi(value), 0, 0xFFFF));
+            static_cast<uint16_t>(std::clamp(ParseConfigInt(key, value), 0, 0xFFFF));
     } else if (key == "sp.tipDownPressureThreshold") {
-        m_pressureSolver.m_tipDownPressureThreshold = static_cast<uint16_t>(std::clamp(std::stoi(value), 0, 4095));
+        m_pressureSolver.m_tipDownPressureThreshold = static_cast<uint16_t>(std::clamp(ParseConfigInt(key, value), 0, 4095));
     } else if (key == "sp.btPressSignalSuppressEnterThreshold") {
         m_pressureSolver.m_btPressSignalSuppressEnterThreshold =
-            static_cast<uint16_t>(std::clamp(std::stoi(value), 0, 0xFFFF));
+            static_cast<uint16_t>(std::clamp(ParseConfigInt(key, value), 0, 0xFFFF));
     } else if (key == "sp.btPressSignalSuppressExitThreshold") {
         m_pressureSolver.m_btPressSignalSuppressExitThreshold =
-            static_cast<uint16_t>(std::clamp(std::stoi(value), 0, 0xFFFF));
+            static_cast<uint16_t>(std::clamp(ParseConfigInt(key, value), 0, 0xFFFF));
     } else if (key == "sp.signalFloor") {
-        m_coordinateSolver.m_signalFloor = static_cast<uint16_t>(std::clamp(std::stoi(value), 0, 0xFFFF));
+        m_coordinateSolver.m_signalFloor = static_cast<uint16_t>(std::clamp(ParseConfigInt(key, value), 0, 0xFFFF));
     } else if (key == "sp.edgeCoorEnabled") {
         m_edgeCoorProcess.m_enabled = toBool(value);
         if (!m_edgeCoorProcess.m_enabled) {
@@ -311,10 +313,10 @@ void StylusPipeline::LoadConfig(const std::string& key, const std::string& value
         }
     } else if (key == "sp.noiseSignalRatioThold") {
         m_noisePostProcess.m_signalRatioThreshold =
-            static_cast<uint8_t>(std::clamp(std::stoi(value), 1, 16));
+            static_cast<uint8_t>(std::clamp(ParseConfigInt(key, value), 1, 16));
     } else if (key == "sp.noiseSignalDropRatio") {
         m_noisePostProcess.m_signalMagnitudeDropRatio =
-            static_cast<uint8_t>(std::clamp(std::stoi(value), 1, 16));
+            static_cast<uint8_t>(std::clamp(ParseConfigInt(key, value), 1, 16));
     } else if (key == "sp.linearFilterEnabled") {
         m_linearFilterProcess.m_enabled = toBool(value);
         if (!m_linearFilterProcess.m_enabled) {
@@ -326,9 +328,9 @@ void StylusPipeline::LoadConfig(const std::string& key, const std::string& value
             m_coorReviseProcess.Reset();
         }
     } else if (key == "sp.coorReviseFactorDim1") {
-        m_coorReviseProcess.m_factorDim1 = std::clamp(std::stoi(value), 0, 255);
+        m_coorReviseProcess.m_factorDim1 = std::clamp(ParseConfigInt(key, value), 0, 255);
     } else if (key == "sp.coorReviseFactorDim2") {
-        m_coorReviseProcess.m_factorDim2 = std::clamp(std::stoi(value), 0, 255);
+        m_coorReviseProcess.m_factorDim2 = std::clamp(ParseConfigInt(key, value), 0, 255);
     } else if (key == "sp.coorSpeedEnabled") {
         m_coorSpeedProcess.m_enabled = toBool(value);
         if (!m_coorSpeedProcess.m_enabled) {
@@ -345,11 +347,14 @@ void StylusPipeline::LoadConfig(const std::string& key, const std::string& value
             m_aftCoorProcess.Reset();
         }
     } else if (key == "sp.lockSensorTxCount") {
-        m_aftCoorProcess.m_sensorTxCount = std::max(1, std::stoi(value));
+        m_aftCoorProcess.m_sensorTxCount = std::max(1, ParseConfigInt(key, value));
     } else if (key == "sp.lockSensorRxCount") {
-        m_aftCoorProcess.m_sensorRxCount = std::max(1, std::stoi(value));
+        m_aftCoorProcess.m_sensorRxCount = std::max(1, ParseConfigInt(key, value));
     } else if (key == "sp.lockBypass") {
         m_aftCoorProcess.m_bypassLock = toBool(value);
+    }
+    } catch (const ConfigParseError& error) {
+        LogConfigParseWarning("StylusPipeline", __func__, key, value, error);
     }
 }
 

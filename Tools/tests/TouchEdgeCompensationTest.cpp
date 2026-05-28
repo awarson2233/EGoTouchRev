@@ -31,7 +31,7 @@ Solvers::ZoneEdgeInfo MakeEdgeInfo(uint8_t minCol, uint8_t maxCol,
 void TestDefaultProfilesMatchW273() {
     Solvers::Touch::EdgeCompensator compensator;
     Require(compensator.m_profiles[0].numSegments == 1, "Dim1 near should use one EC segment");
-    Require(compensator.m_profiles[0].segments[0].edgeWidthThreshold == 7, "Dim1 near threshold should match TSAPrmt");
+    Require(compensator.m_profiles[0].segments[0].touchSizeThreshold == 7, "Dim1 near threshold should match TSAPrmt");
     Require(compensator.m_profiles[0].segments[0].lutIdxLow == 16, "Dim1 near low LUT should match TSAPrmt");
     Require(compensator.m_profiles[0].segments[0].lutIdxHigh == 224, "Dim1 near high LUT should match TSAPrmt");
     Require(compensator.m_profiles[2].segments[0].lutIdxHigh == 96, "Dim2 near high LUT should match TSAPrmt");

@@ -1,4 +1,5 @@
 #include "TouchSolver/TouchPipeline.h"
+#include "StylusPipeline.h"
 
 #include <cmath>
 #include <iostream>
@@ -138,11 +139,11 @@ void TestEdgeCompensationProfileRoundTrip() {
     pipeline.m_edgeComp.m_enabled = false;
     pipeline.m_edgeComp.m_ecBlendRange = 0.5f;
     pipeline.m_edgeComp.m_profiles[0].numSegments = 4;
-    pipeline.m_edgeComp.m_profiles[0].segments[0].edgeWidthThreshold = 11;
+    pipeline.m_edgeComp.m_profiles[0].segments[0].touchSizeThreshold = 11;
     pipeline.m_edgeComp.m_profiles[0].segments[0].lutIdxLow = 7;
     pipeline.m_edgeComp.m_profiles[0].segments[0].lutIdxHigh = 31;
     pipeline.m_edgeComp.m_profiles[3].numSegments = 2;
-    pipeline.m_edgeComp.m_profiles[3].segments[3].edgeWidthThreshold = 222;
+    pipeline.m_edgeComp.m_profiles[3].segments[3].touchSizeThreshold = 222;
     pipeline.m_edgeComp.m_profiles[3].segments[3].lutIdxLow = 44;
     pipeline.m_edgeComp.m_profiles[3].segments[3].lutIdxHigh = 199;
 
@@ -169,7 +170,7 @@ void TestEdgeCompensationProfileRoundTrip() {
                 "EC blend range should round-trip");
     Require(loaded.m_edgeComp.m_profiles[0].numSegments == 4,
             "Dim1 near segment count should round-trip");
-    Require(loaded.m_edgeComp.m_profiles[0].segments[0].edgeWidthThreshold == 11,
+    Require(loaded.m_edgeComp.m_profiles[0].segments[0].touchSizeThreshold == 11,
             "Dim1 near segment width should round-trip");
     Require(loaded.m_edgeComp.m_profiles[0].segments[0].lutIdxLow == 7,
             "Dim1 near LUT low should round-trip");
@@ -177,7 +178,7 @@ void TestEdgeCompensationProfileRoundTrip() {
             "Dim1 near LUT high should round-trip");
     Require(loaded.m_edgeComp.m_profiles[3].numSegments == 2,
             "Dim2 far segment count should round-trip");
-    Require(loaded.m_edgeComp.m_profiles[3].segments[3].edgeWidthThreshold == 222,
+    Require(loaded.m_edgeComp.m_profiles[3].segments[3].touchSizeThreshold == 222,
             "Dim2 far segment width should round-trip");
     Require(loaded.m_edgeComp.m_profiles[3].segments[3].lutIdxLow == 44,
             "Dim2 far LUT low should round-trip");
@@ -226,6 +227,40 @@ void TestStylusSuppressSchemaContainsNewKeys() {
             "schema should expose Dim2 far EC LUT high");
 }
 
+void TestInvalidConfigValuesAreIgnored() {
+    Solvers::TouchPipeline touch;
+    touch.m_peakDet.m_threshold = 1234;
+    touch.m_gridIIR.m_gateRatio = 0.25f;
+    touch.m_tracker.m_enabled = true;
+
+    touch.LoadConfig("PeakThreshold", "abc");
+    touch.LoadConfig("GateRatio", "nan");
+    touch.LoadConfig("TrackerEnabled", "maybe");
+
+    Require(touch.m_peakDet.m_threshold == 1234,
+            "invalid touch integer config should preserve current value");
+    RequireNear(touch.m_gridIIR.m_gateRatio, 0.25f, 0.0001f,
+                "invalid touch float config should preserve current value");
+    Require(touch.m_tracker.m_enabled,
+            "invalid touch boolean config should preserve current value");
+
+    Solvers::StylusPipeline stylus;
+    stylus.m_postPressure.m_btFreqShiftDebounceFrames = 12;
+    stylus.m_aftCoorProcess.m_sensorTxCount = 40;
+    stylus.m_aftCoorProcess.m_bypassLock = true;
+
+    stylus.LoadConfig("sp.btFreqShiftDebounceFrames", "999999999999999999999");
+    stylus.LoadConfig("sp.lockSensorTxCount", "abc");
+    stylus.LoadConfig("sp.lockBypass", "maybe");
+
+    Require(stylus.m_postPressure.m_btFreqShiftDebounceFrames == 12,
+            "out-of-range stylus integer config should preserve current value");
+    Require(stylus.m_aftCoorProcess.m_sensorTxCount == 40,
+            "invalid stylus integer config should preserve current value");
+    Require(stylus.m_aftCoorProcess.m_bypassLock,
+            "invalid stylus boolean config should preserve current value");
+}
+
 } // namespace
 
 int main() {
@@ -233,6 +268,7 @@ int main() {
         TestStylusSuppressRoundTrip();
         TestEdgeCompensationProfileRoundTrip();
         TestStylusSuppressSchemaContainsNewKeys();
+        TestInvalidConfigValuesAreIgnored();
         std::cout << "[TEST] TouchPipeline config round-trip tests passed.\n";
         return 0;
     } catch (const std::exception& ex) {
