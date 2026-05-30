@@ -14,17 +14,17 @@ class TouchTracker {
 public:
     bool m_enabled = true;
     int   m_maxTouchCount = 20;
-    float m_maxTrackDistance = 6.0f;
-    float m_alwaysMatchDistance = 2.2f;
+    float m_maxTrackDistance = 4.985f;
+    float m_alwaysMatchDistance = 2.0f;
     float m_edgeTrackBoost = 1.5f;
     float m_accThresholdBoost = 4.0f;
     float m_accBoostSizeMm = 1.6f;
     float m_predictionScale = 1.0f;
     bool  m_gapRelinkEnabled = true;
-    int   m_gapRelinkWindowFrames = 2;
-    int   m_touchDownDebounceFrames = 0;
+    int   m_gapRelinkWindowFrames = 4;
+    int   m_touchDownDebounceFrames = 1;
     bool  m_dynamicDebounceEnabled = true;
-    int   m_touchDownDebounceMaxExtra = 2;
+    int   m_touchDownDebounceMaxExtra = 4;
     int   m_touchDownWeakSignalThreshold = 180;
     float m_touchDownSmallSizeThresholdMm = 1.3f;
     bool  m_touchDownRejectEnabled = true;
@@ -34,7 +34,7 @@ public:
     float m_fallbackSizeMm = 1.0f;
     float m_sizeAreaScale = 0.22f;
     float m_sizeSignalScale = 0.35f;
-    bool  m_rxGhostFilterEnabled = false;
+    bool  m_rxGhostFilterEnabled = true;
     int   m_rxGhostLineDelta = 0;
     float m_rxGhostWeakRatio = 0.5f;
     bool  m_rxGhostOnlyNew = true;

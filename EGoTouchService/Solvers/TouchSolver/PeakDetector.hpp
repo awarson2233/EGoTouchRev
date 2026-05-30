@@ -18,15 +18,15 @@ class PeakDetector {
 public:
     static constexpr int kMaxStoredPeaks = 100;
 
-    int  m_threshold = 130;
-    int  m_sigTholdLimit = 300;
+    int  m_threshold = 350;
+    int  m_sigTholdLimit = 1000;
     bool m_z8Filter = true;
-    bool m_z1Filter = false;
+    bool m_z1Filter = true;
     bool m_pressureDriftFilter = true;
     bool m_edgePeakFilter = true;
-    bool m_edgeThresholdEnabled = false;
+    bool m_edgeThresholdEnabled = true;
     int  m_edgeThreshold = 300;
-    int  m_z8Radius = 2;
+    int  m_z8Radius = 1;
     int  m_localMaxRadius = 1;
     bool m_closePeakSaddleFilter = true;
     int  m_closePeakRadius = 2;
@@ -34,7 +34,7 @@ public:
     float m_closePeakMinSaddleRatio = 0.08f;
     int  m_maxPeaks = 20;
     int  m_pressureDriftDebounceLimit = 3;
-    int  m_macroZoneMinArea = 3;
+    int  m_macroZoneMinArea = 4;
 
     // ────────────────────────────────────────────────────────
     // Public entry — mirrors TSACore Peak_Process()

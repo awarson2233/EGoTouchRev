@@ -11,8 +11,8 @@ namespace Solvers { namespace Touch {
 class CoordinateFilter {
 public:
     bool  m_enabled = true;
-    float m_minCutoff = 5.0f;
-    float m_beta = 0.05f;
+    float m_minCutoff = 4.404f;
+    float m_beta = 0.5f;
     float m_dCutoff = 1.0f;
 
     inline bool Process(HeatmapFrame& frame) {

@@ -17,18 +17,18 @@ public:
     static constexpr int kCellCount = kRows * kCols;
 
     bool m_enabled = true;
-    int  m_baseline = 0x7FFE;
+    int  m_baseline = 32768;
 
-    int  m_noiseDeadband = 16;
-    int  m_positiveDriftDeadband = 12;
-    int  m_negativeDeadband = 12;
-    int  m_touchFreezeThreshold = 130;
-    int  m_releaseHoldFrames = 6;
+    int  m_noiseDeadband = 90;
+    int  m_positiveDriftDeadband = 14;
+    int  m_negativeDeadband = 13;
+    int  m_touchFreezeThreshold = 305;
+    int  m_releaseHoldFrames = 60;
     int  m_positiveAlphaShift = 7;
     int  m_negativeAlphaShift = 5;
     int  m_noiseAlphaShift = 6;
-    int  m_positiveMaxStep = 4;
-    int  m_negativeMaxStep = 12;
+    int  m_positiveMaxStep = 20;
+    int  m_negativeMaxStep = 20;
     int  m_acquisitionAlphaShift = 3;
     int  m_acquisitionMaxStep = 128;
     bool m_noiseTrackingEnabled = true;
