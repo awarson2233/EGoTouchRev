@@ -152,61 +152,41 @@ void TestBaselineSettleFramesRoundTrip() {
             "baseline settle frames should round-trip");
 }
 
-void TestEdgeCompensationProfileRoundTrip() {
+void TestEdgeCompensationIsHardcoded() {
     Solvers::TouchPipeline pipeline;
-    pipeline.m_edgeComp.m_enabled = false;
-    pipeline.m_edgeComp.m_ecStrength = 0.42f;
-    pipeline.m_edgeComp.m_ecBlendRange = 0.5f;
-    pipeline.m_edgeComp.m_profiles[0].numSegments = 4;
-    pipeline.m_edgeComp.m_profiles[0].segments[0].touchSizeThreshold = 11;
-    pipeline.m_edgeComp.m_profiles[0].segments[0].lutIdxLow = 7;
-    pipeline.m_edgeComp.m_profiles[0].segments[0].lutIdxHigh = 31;
-    pipeline.m_edgeComp.m_profiles[3].numSegments = 2;
-    pipeline.m_edgeComp.m_profiles[3].segments[3].touchSizeThreshold = 222;
-    pipeline.m_edgeComp.m_profiles[3].segments[3].lutIdxLow = 44;
-    pipeline.m_edgeComp.m_profiles[3].segments[3].lutIdxHigh = 199;
 
     std::ostringstream out;
     pipeline.SaveConfig(out);
     const std::string saved = out.str();
 
-    Require(saved.find("ECEnabled=0") != std::string::npos,
-            "saved config should include EC enabled flag");
-    Require(saved.find("ECStrength=0.42") != std::string::npos,
-            "saved config should include EC strength");
-    Require(saved.find("ECBlendRange=0.5") != std::string::npos,
-            "saved config should include EC blend range");
-    Require(saved.find("ECDim1NearSegments=4") != std::string::npos,
-            "saved config should include Dim1 near segment count");
-    Require(saved.find("ECDim1NearS0Width=11") != std::string::npos,
-            "saved config should include Dim1 near segment width");
-    Require(saved.find("ECDim2FarS3LutHigh=199") != std::string::npos,
-            "saved config should include Dim2 far LUT high");
+    Require(saved.find("ECEnabled=") == std::string::npos,
+            "saved config should not include EC enabled flag");
+    Require(saved.find("ECStrength=") == std::string::npos,
+            "saved config should not include EC strength");
+    Require(saved.find("ECBlendRange=") == std::string::npos,
+            "saved config should not include EC blend range");
+    Require(saved.find("ECDim1NearSegments=") == std::string::npos,
+            "saved config should not include EC profile segments");
+    Require(saved.find("ECDim1NearS0Width=") == std::string::npos,
+            "saved config should not include EC profile widths");
+    Require(saved.find("ECDim2FarS3LutHigh=") == std::string::npos,
+            "saved config should not include EC profile LUTs");
 
-    Solvers::TouchPipeline loaded;
-    LoadFromSavedText(loaded, saved);
+    pipeline.LoadConfig("ECEnabled", "0");
+    pipeline.LoadConfig("ECStrength", "0.42");
+    pipeline.LoadConfig("ECBlendRange", "0.25");
+    pipeline.LoadConfig("ECDim1NearSegments", "1");
+    pipeline.LoadConfig("ECDim1NearS0Width", "11");
 
-    Require(!loaded.m_edgeComp.m_enabled, "EC enabled flag should round-trip");
-    RequireNear(loaded.m_edgeComp.m_ecStrength, 0.42f, 0.0001f,
-                "EC strength should round-trip");
-    RequireNear(loaded.m_edgeComp.m_ecBlendRange, 0.5f, 0.0001f,
-                "EC blend range should round-trip");
-    Require(loaded.m_edgeComp.m_profiles[0].numSegments == 4,
-            "Dim1 near segment count should round-trip");
-    Require(loaded.m_edgeComp.m_profiles[0].segments[0].touchSizeThreshold == 11,
-            "Dim1 near segment width should round-trip");
-    Require(loaded.m_edgeComp.m_profiles[0].segments[0].lutIdxLow == 7,
-            "Dim1 near LUT low should round-trip");
-    Require(loaded.m_edgeComp.m_profiles[0].segments[0].lutIdxHigh == 31,
-            "Dim1 near LUT high should round-trip");
-    Require(loaded.m_edgeComp.m_profiles[3].numSegments == 2,
-            "Dim2 far segment count should round-trip");
-    Require(loaded.m_edgeComp.m_profiles[3].segments[3].touchSizeThreshold == 222,
-            "Dim2 far segment width should round-trip");
-    Require(loaded.m_edgeComp.m_profiles[3].segments[3].lutIdxLow == 44,
-            "Dim2 far LUT low should round-trip");
-    Require(loaded.m_edgeComp.m_profiles[3].segments[3].lutIdxHigh == 199,
-            "Dim2 far LUT high should round-trip");
+    Require(pipeline.m_edgeComp.m_enabled, "EC enabled flag should stay hardcoded");
+    RequireNear(pipeline.m_edgeComp.m_ecStrength, 1.0f, 0.0001f,
+                "EC strength should stay hardcoded");
+    RequireNear(pipeline.m_edgeComp.m_ecBlendRange, 0.505f, 0.0001f,
+                "EC blend range should stay hardcoded");
+    Require(pipeline.m_edgeComp.m_profiles[0].numSegments == 3,
+            "EC segment count should stay hardcoded");
+    Require(pipeline.m_edgeComp.m_profiles[0].segments[0].touchSizeThreshold == 64,
+            "EC profile width should stay hardcoded");
 }
 
 void TestStylusSuppressSchemaContainsNewKeys() {
@@ -242,14 +222,16 @@ void TestStylusSuppressSchemaContainsNewKeys() {
             "schema should expose palm shadow hold frames");
     Require(hasKey("PalmShadowSeedScore"),
             "schema should expose palm shadow seed score");
-    Require(hasKey("ECDim1NearSegments"),
-            "schema should expose Dim1 near EC segment count");
-    Require(hasKey("ECDim1NearS0Width"),
-            "schema should expose Dim1 near EC segment width");
-    Require(hasKey("ECDim1NearS0LutLow"),
-            "schema should expose Dim1 near EC LUT low");
-    Require(hasKey("ECDim2FarS3LutHigh"),
-            "schema should expose Dim2 far EC LUT high");
+    Require(!hasKey("ECStrength"),
+            "schema should not expose EC strength");
+    Require(!hasKey("ECDim1NearSegments"),
+            "schema should not expose Dim1 near EC segment count");
+    Require(!hasKey("ECDim1NearS0Width"),
+            "schema should not expose Dim1 near EC segment width");
+    Require(!hasKey("ECDim1NearS0LutLow"),
+            "schema should not expose Dim1 near EC LUT low");
+    Require(!hasKey("ECDim2FarS3LutHigh"),
+            "schema should not expose Dim2 far EC LUT high");
 }
 
 void TestInvalidConfigValuesAreIgnored() {
@@ -288,7 +270,7 @@ int main() {
     try {
         TestStylusSuppressRoundTrip();
         TestBaselineSettleFramesRoundTrip();
-        TestEdgeCompensationProfileRoundTrip();
+        TestEdgeCompensationIsHardcoded();
         TestStylusSuppressSchemaContainsNewKeys();
         TestInvalidConfigValuesAreIgnored();
         std::cout << "[TEST] TouchPipeline config round-trip tests passed.\n";

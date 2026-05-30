@@ -118,6 +118,7 @@ void TestStrengthScalesCorrectionAmplitude() {
     fullCompensator.Process(fullContacts, edgeInfos, Solvers::EdgeBounds{});
 
     Solvers::Touch::EdgeCompensator reducedCompensator;
+    reducedCompensator.m_ecStrength = 0.35f;
     std::vector<Solvers::TouchContact> reducedContacts(1);
     reducedContacts[0].x = 0.5f;
     reducedContacts[0].y = 20.0f;
@@ -125,8 +126,8 @@ void TestStrengthScalesCorrectionAmplitude() {
 
     const float fullDelta = std::fabs(fullContacts[0].x - 0.5f);
     const float reducedDelta = std::fabs(reducedContacts[0].x - 0.5f);
-    Require(reducedDelta > 0.0f, "default EC strength should still apply correction");
-    Require(reducedDelta < fullDelta, "default EC strength should reduce correction amplitude");
+    Require(reducedDelta > 0.0f, "reduced EC strength should still apply correction");
+    Require(reducedDelta < fullDelta, "reduced EC strength should reduce correction amplitude");
 }
 
 void TestEdgeWidthScansThreshold() {

@@ -99,6 +99,7 @@ option(HIMAX_ENABLE_NEON "Enable ARM NEON intrinsics when available" ON)
 # Use the source directory as the root for subprojects/resources so paths
 # resolve correctly whether building in-tree or out-of-tree.
 set(COMMON_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/Common")
+set(IPC_ROOT "${COMMON_ROOT}/IPCCore")
 set(IMGUI_ROOT "${COMMON_ROOT}/imgui-docking")
 
 # Collect ImGui source files
@@ -112,6 +113,8 @@ file(GLOB IMGUI_SOURCES
 
 file(GLOB COMMON_SOURCES "${COMMON_ROOT}/source/*.cpp")
 file(GLOB COMMON_HEADERS "${COMMON_ROOT}/include/*.h")
+file(GLOB IPC_SOURCES "${IPC_ROOT}/source/*.cpp")
+file(GLOB IPC_HEADERS "${IPC_ROOT}/include/Ipc/*.h")
 
 add_subdirectory("${COMMON_ROOT}/spdlog-1.17.0" "spdlog_build")
 
@@ -129,6 +132,20 @@ target_include_directories(Common PUBLIC
 target_link_libraries(Common PUBLIC spdlog::spdlog)
 if (WIN32)
     target_link_libraries(Common PUBLIC advapi32)
+endif()
+
+# IPCCore library: IPC protocol ABI, named pipe transport, and shared-memory transport
+add_library(IPCCore STATIC
+    ${IPC_SOURCES}
+    ${IPC_HEADERS}
+)
+
+target_include_directories(IPCCore PUBLIC
+    "${IPC_ROOT}/include"
+)
+target_link_libraries(IPCCore PUBLIC Common)
+if (WIN32)
+    target_link_libraries(IPCCore PRIVATE advapi32)
 endif()
 
 # ImGuiCommon library: UI framework (only for diagnostic tools)
@@ -213,7 +230,7 @@ add_library(DVRCore STATIC
 target_include_directories(DVRCore PUBLIC
     "${DVR_ROOT}/include"
 )
-target_link_libraries(DVRCore PUBLIC Solvers Common)
+target_link_libraries(DVRCore PUBLIC Solvers IPCCore Common)
 
 # --- EGoTouchApp (Debug Diagnostics Workbench) ---
 file(GLOB APP_SOURCES "${APP_ROOT}/source/*.cpp")
@@ -239,7 +256,7 @@ target_include_directories(EGoTouchApp PRIVATE
 
 # Link D3D11 for the ImGui DX11 backend
 target_compile_definitions(EGoTouchApp PRIVATE EGOTOUCH_DIAGNOSTICS)
-target_link_libraries(EGoTouchApp PRIVATE DVRCore Device Solvers Host Common ImGuiCommon d3d11 d3dcompiler dwmapi setupapi)
+target_link_libraries(EGoTouchApp PRIVATE DVRCore IPCCore Device Solvers Host Common ImGuiCommon d3d11 d3dcompiler dwmapi setupapi)
 if(MSVC)
     target_link_options(EGoTouchApp PRIVATE "/MANIFESTUAC:level='requireAdministrator'")
 endif()
@@ -255,7 +272,7 @@ add_executable(EGoTouchService
 target_include_directories(EGoTouchService PRIVATE
     "${SERVICE_ROOT}/include"
 )
-target_link_libraries(EGoTouchService PRIVATE DVRCore Device Host Common advapi32 setupapi hid)
+target_link_libraries(EGoTouchService PRIVATE DVRCore IPCCore Device Host Common advapi32 setupapi hid)
 
 # EGoTouchService uses wmain (console subsystem) for service/console dual mode
 if(MSVC)

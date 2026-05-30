@@ -94,10 +94,6 @@ void DiagnosticsWorkbench::DrawInspectorPanel() {
             DrawBtMcuPanel();
             ImGui::EndTabItem();
         }
-        if (ImGui::BeginTabItem("System Events")) {
-            DrawSystemEventsPanel();
-            ImGui::EndTabItem();
-        }
         ImGui::EndTabBar();
     }
     ImGui::End();

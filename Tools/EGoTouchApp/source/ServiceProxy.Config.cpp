@@ -1,5 +1,5 @@
 #include "ServiceProxyInternal.h"
-#include "IpcProtocol.h"
+#include "Ipc/IpcProtocol.h"
 #include "Logger.h"
 #include <cstring>
 #include <fstream>

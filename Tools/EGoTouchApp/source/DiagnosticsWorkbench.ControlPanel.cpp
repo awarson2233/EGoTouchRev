@@ -73,7 +73,17 @@ void DiagnosticsWorkbench::DrawControlPanel() {
         }
 
         ImGui::Separator();
+        ImGui::TextUnformatted("Service Actions");
 
+        if (connected) {
+            if (!allowLiveControl) ImGui::BeginDisabled();
+            if (ImGui::Button("Toggle Runtime", ImVec2(-1, 0))) {
+                m_proxy->StartRemoteRuntime();
+            }
+            if (!allowLiveControl) ImGui::EndDisabled();
+        }
+
+        ImGui::Separator();
         if (!connected || !allowLiveControl) ImGui::BeginDisabled();
 
         auto clamp_u8 = [](int value) -> uint8_t {
@@ -91,71 +101,64 @@ void DiagnosticsWorkbench::DrawControlPanel() {
             }
         };
 
-            ImGui::TextUnformatted("AFE Mode Control");
-            m_afeIdleParam = std::clamp(m_afeIdleParam, 0, 255);
-            ImGui::InputInt("Idle Param", &m_afeIdleParam);
-            if (ImGui::Button("Enter Idle")) {
-                send_afe_command("EnterIdle", AFE_Command::EnterIdle, m_afeIdleParam);
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Exit Idle")) {
-                send_afe_command("ForceExitIdle", AFE_Command::ForceExitIdle, 0);
-            }
-
-            m_afeCalibrationParam = std::clamp(m_afeCalibrationParam, 0, 255);
-            ImGui::InputInt("Calibration Param", &m_afeCalibrationParam);
-            if (ImGui::Button("Start Calibration")) {
-                send_afe_command("StartCalibration", AFE_Command::StartCalibration, m_afeCalibrationParam);
-            }
-
-            m_afeClearStatusParam = std::clamp(m_afeClearStatusParam, 0, 255);
-            ImGui::InputInt("Clear Status Param", &m_afeClearStatusParam);
-            if (ImGui::Button("Clear Status")) {
-                send_afe_command("ClearStatus", AFE_Command::ClearStatus, m_afeClearStatusParam);
-            }
-
-            m_afeForceScanRateIdx = std::clamp(m_afeForceScanRateIdx, 0, 255);
-            ImGui::InputInt("Force Scan Rate Idx", &m_afeForceScanRateIdx);
-            if (ImGui::Button("Force To Scan Rate")) {
-                send_afe_command("ForceToScanRate", AFE_Command::ForceToScanRate, m_afeForceScanRateIdx);
-            }
-
-            // --- 120Hz / 240Hz 快速切换 ---
-            ImGui::Separator();
-            {
-                const ImVec4 col120(0.15f, 0.7f, 0.25f, 1.f); // green
-                const ImVec4 col240(0.8f, 0.4f, 0.1f, 1.f);   // orange
-                const char*  label      = m_scanRateIs240Hz ? "Switch to 120 Hz" : "Switch to 240 Hz";
-                const ImVec4 btnColor   = m_scanRateIs240Hz ? col120 : col240;
-                const char*  stateLabel = m_scanRateIs240Hz ? "Current: 240 Hz" : "Current: 120 Hz";
-                const ImVec4 stateColor = m_scanRateIs240Hz ? col240 : col120;
-
-                ImGui::TextColored(stateColor, "%s", stateLabel);
-                ImGui::PushStyleColor(ImGuiCol_Button, btnColor);
-                if (ImGui::Button(label, ImVec2(-1, 0))) {
-                    m_scanRateIs240Hz = !m_scanRateIs240Hz;
-                    const uint8_t rateIdx = m_scanRateIs240Hz ? 1 : 0;
-                    send_afe_command(m_scanRateIs240Hz ? "ScanRate240Hz" : "ScanRate120Hz",
-                                     AFE_Command::ForceToScanRate, rateIdx);
-                }
-                ImGui::PopStyleColor();
-            }
-
-            ImGui::TextWrapped("AFE Last Action: %s", m_lastAfeActionStatus.c_str());
-
-            if (!connected || !allowLiveControl) ImGui::EndDisabled();
-    }
-
-    // Start/Stop Runtime toggle
-    if (m_proxy && m_proxy->IsConnected()) {
-        if (!allowLiveControl) ImGui::BeginDisabled();
-        if (ImGui::Button("Toggle Runtime")) {
-            m_proxy->StartRemoteRuntime();
+        ImGui::TextUnformatted("AFE Mode Control");
+        m_afeIdleParam = std::clamp(m_afeIdleParam, 0, 255);
+        ImGui::InputInt("Idle Param", &m_afeIdleParam);
+        if (ImGui::Button("Enter Idle")) {
+            send_afe_command("EnterIdle", AFE_Command::EnterIdle, m_afeIdleParam);
         }
-        if (!allowLiveControl) ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Exit Idle")) {
+            send_afe_command("ForceExitIdle", AFE_Command::ForceExitIdle, 0);
+        }
+
+        m_afeCalibrationParam = std::clamp(m_afeCalibrationParam, 0, 255);
+        ImGui::InputInt("Calibration Param", &m_afeCalibrationParam);
+        if (ImGui::Button("Start Calibration")) {
+            send_afe_command("StartCalibration", AFE_Command::StartCalibration, m_afeCalibrationParam);
+        }
+
+        m_afeClearStatusParam = std::clamp(m_afeClearStatusParam, 0, 255);
+        ImGui::InputInt("Clear Status Param", &m_afeClearStatusParam);
+        if (ImGui::Button("Clear Status")) {
+            send_afe_command("ClearStatus", AFE_Command::ClearStatus, m_afeClearStatusParam);
+        }
+
+        m_afeForceScanRateIdx = std::clamp(m_afeForceScanRateIdx, 0, 255);
+        ImGui::InputInt("Force Scan Rate Idx", &m_afeForceScanRateIdx);
+        if (ImGui::Button("Force To Scan Rate")) {
+            send_afe_command("ForceToScanRate", AFE_Command::ForceToScanRate, m_afeForceScanRateIdx);
+        }
+
+        ImGui::Separator();
+        {
+            const ImVec4 col120(0.15f, 0.7f, 0.25f, 1.f);
+            const ImVec4 col240(0.8f, 0.4f, 0.1f, 1.f);
+            const char*  label      = m_scanRateIs240Hz ? "Switch to 120 Hz" : "Switch to 240 Hz";
+            const ImVec4 btnColor   = m_scanRateIs240Hz ? col120 : col240;
+            const char*  stateLabel = m_scanRateIs240Hz ? "Current: 240 Hz" : "Current: 120 Hz";
+            const ImVec4 stateColor = m_scanRateIs240Hz ? col240 : col120;
+
+            ImGui::TextColored(stateColor, "%s", stateLabel);
+            ImGui::PushStyleColor(ImGuiCol_Button, btnColor);
+            if (ImGui::Button(label, ImVec2(-1, 0))) {
+                m_scanRateIs240Hz = !m_scanRateIs240Hz;
+                const uint8_t rateIdx = m_scanRateIs240Hz ? 1 : 0;
+                send_afe_command(m_scanRateIs240Hz ? "ScanRate240Hz" : "ScanRate120Hz",
+                                 AFE_Command::ForceToScanRate, rateIdx);
+            }
+            ImGui::PopStyleColor();
+        }
+
+        ImGui::TextWrapped("AFE Last Action: %s", m_lastAfeActionStatus.c_str());
+
+        if (!connected || !allowLiveControl) ImGui::EndDisabled();
     }
 
-    ImGui::SameLine();
+    ImGui::Separator();
+    ImGui::TextUnformatted("System Events");
+    DrawSystemEventsPanel();
+
     if (!allowLiveControl) ImGui::BeginDisabled();
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
     if (ImGui::Button("Save Global Parameters")) {
@@ -182,10 +185,6 @@ void DiagnosticsWorkbench::DrawControlPanel() {
     }
     if (m_proxy) {
         ImGui::Text("VHF: %s", m_proxy->IsVhfEnabled() ? "Enabled" : "Disabled");
-        bool vhfTranspose = m_proxy->IsVhfTransposeEnabled();
-        if (ImGui::Checkbox("Flip VHF Orientation", &vhfTranspose)) {
-            m_proxy->SetVhfTranspose(vhfTranspose);
-        }
     }
     if (!m_proxy || !allowLiveControl) ImGui::EndDisabled();
 
@@ -218,27 +217,6 @@ void DiagnosticsWorkbench::DrawControlPanel() {
         }
         if (!allowLiveControl) ImGui::EndDisabled();
     }
-
-
-    ImGui::Separator();
-    ImGui::Text("Auto-Capture (Debug)");
-    const bool replayModeNow = m_proxy && (m_proxy->GetFrameSourceMode() == FrameSourceMode::Playback);
-    if (replayModeNow && m_autoCaptureMode != 0) {
-        m_autoCaptureMode = 0;
-    }
-    if (replayModeNow) ImGui::BeginDisabled();
-    const char* captureModes[] = { "Disabled", "Peak Appear", "Touch Drop" };
-    ImGui::Combo("Capture Mode", &m_autoCaptureMode, captureModes, IM_ARRAYSIZE(captureModes));
-    if (m_autoCaptureMode == 1) {
-        ImGui::SliderInt("Target Peaks", &m_autoExportTargetPeaks, 1, 5, "%d Peaks");
-    } else if (m_autoCaptureMode == 2) {
-        ImGui::TextWrapped("Captures the frame when all tracked contacts disappear (peaks drop to 0 from >0).");
-    }
-    if (replayModeNow) {
-        ImGui::EndDisabled();
-        ImGui::TextDisabled("Auto-capture is disabled in Replay mode.");
-    }
-
 
 
     ImGui::Checkbox("Auto-refresh Heatmap", &m_autoRefresh);

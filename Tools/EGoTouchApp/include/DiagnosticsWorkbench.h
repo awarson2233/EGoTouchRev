@@ -46,7 +46,7 @@ private:
     void DrawMasterSuffixTable();
     void DrawSlaveSuffixTable();
 
-    // Tool panels (drawn inside Inspector tabs)
+    // Tool panels
     void DrawBtMcuPanel();
     void DrawSystemEventsPanel();
     void DrawDvrPanel();

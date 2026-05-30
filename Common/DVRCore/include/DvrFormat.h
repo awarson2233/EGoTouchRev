@@ -1,7 +1,7 @@
 #pragma once
 
 #include "FrameLayout.h"
-#include "IpcProtocol.h"
+#include "Ipc/IpcProtocol.h"
 
 #include <algorithm>
 #include <array>

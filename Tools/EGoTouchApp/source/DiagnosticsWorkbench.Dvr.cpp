@@ -62,6 +62,24 @@ void DiagnosticsWorkbench::DrawDvrPanel() {
     }
 
     ImGui::Separator();
+    ImGui::Text("Auto-Capture (Debug)");
+    if (playbackModeNow && m_autoCaptureMode != 0) {
+        m_autoCaptureMode = 0;
+    }
+    if (playbackModeNow) ImGui::BeginDisabled();
+    const char* captureModes[] = { "Disabled", "Peak Appear", "Touch Drop" };
+    ImGui::Combo("Capture Mode", &m_autoCaptureMode, captureModes, IM_ARRAYSIZE(captureModes));
+    if (m_autoCaptureMode == 1) {
+        ImGui::SliderInt("Target Peaks", &m_autoExportTargetPeaks, 1, 5, "%d Peaks");
+    } else if (m_autoCaptureMode == 2) {
+        ImGui::TextWrapped("Captures the frame when all tracked contacts disappear (peaks drop to 0 from >0).");
+    }
+    if (playbackModeNow) {
+        ImGui::EndDisabled();
+        ImGui::TextDisabled("Auto-capture is disabled in Replay mode.");
+    }
+
+    ImGui::Separator();
     ImGui::TextUnformatted("DVR Playback");
     ImGui::TextWrapped("Import root: %s", kExportRootDir);
 

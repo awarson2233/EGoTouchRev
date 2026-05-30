@@ -1,7 +1,7 @@
 #pragma once
 
 #include "DvrFormat.h"
-#include "IpcProtocol.h"
+#include "Ipc/IpcProtocol.h"
 
 #include <cstdint>
 #include <string>

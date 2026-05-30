@@ -4,15 +4,15 @@
 #include "runtime/DeviceRuntime.h"
 #include "penevt/PenEventBridge.h"
 #include "penpress/PenPressureReader.h"
-#include "IpcPipeServer.h"
-#include "IpcSecurity.h"
-#include "SharedFrameBuffer.h"
-#include "ConfigSync.h"
+#include "Ipc/IpcPipeServer.h"
+#include "Ipc/IpcSecurity.h"
+#include "Ipc/SharedFrameBuffer.h"
+#include "Ipc/ConfigSync.h"
 #include "SolverTypes.h"
 
 #include "GuiLogSink.h"
 #include "Logger.h"
-#include "IpcProtocol.h"
+#include "Ipc/IpcProtocol.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN

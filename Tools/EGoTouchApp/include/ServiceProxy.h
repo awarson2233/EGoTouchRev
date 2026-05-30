@@ -3,12 +3,12 @@
 // Connects to EGoTouchService via Named Pipe + Shared Memory.
 
 #include "PenButtonConfig.h"
-#include "IpcPipeClient.h"
-#include "SharedFrameBuffer.h"
-#include "ConfigSync.h"
+#include "Ipc/IpcPipeClient.h"
+#include "Ipc/SharedFrameBuffer.h"
+#include "Ipc/ConfigSync.h"
 #include "SolverTypes.h"
 #include "ServiceProxyTypes.h"
-#include "IpcProtocol.h"
+#include "Ipc/IpcProtocol.h"
 #include "TouchSolver/TouchPipeline.h"
 #include "StylusPipeline.h"
 #include "ConcurrentRingBuffer.h"

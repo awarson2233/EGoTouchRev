@@ -269,32 +269,6 @@ std::vector<ConfigParam> TouchPipeline::GetConfigSchema() const {
                    ConfigParam::Int, const_cast<int*>(&m_contactExtractor.m_zoneExp.m_tholdScaleShift), 0, 15).Module("Zone & Contact");
     s.emplace_back("MaxTouches", "Max Contact Outputs",
                    ConfigParam::Int, const_cast<int*>(&m_contactExtractor.m_zoneExp.m_maxTouches), 1, 50).Module("Zone & Contact");
-    s.emplace_back("ECEnabled", "Edge Compensation Enabled",
-                   ConfigParam::Bool, const_cast<bool*>(&m_edgeComp.m_enabled)).Module("Zone & Contact");
-    s.emplace_back("ECStrength", "EC Strength",
-                   ConfigParam::Float, const_cast<float*>(&m_edgeComp.m_ecStrength), 0.0f, 1.0f).Module("Zone & Contact");
-    s.emplace_back("ECFullCompRange", "EC Full Comp Range (sensor pitches)",
-                   ConfigParam::Float, const_cast<float*>(&m_edgeComp.m_ecFullCompRange), 0.5f, 1.0f).Module("Zone & Contact");
-    s.emplace_back("ECBlendRange", "EC Blend Range",
-                   ConfigParam::Float, const_cast<float*>(&m_edgeComp.m_ecBlendRange), 0.0f, 5.0f).Module("Zone & Contact");
-    const char* ecEdgeNames[4] = {"Dim1Near", "Dim1Far", "Dim2Near", "Dim2Far"};
-    for (int edge = 0; edge < 4; ++edge) {
-        auto& profile = m_edgeComp.m_profiles[edge];
-        const std::string prefix = std::string("EC") + ecEdgeNames[edge];
-        s.emplace_back(prefix + "Segments", prefix + " Segments",
-                       ConfigParam::Int, const_cast<int*>(&profile.numSegments), 1, 4).Module("Zone & Contact");
-        for (int segment = 0; segment < 4; ++segment) {
-            const std::string segPrefix = prefix + "S" + std::to_string(segment);
-            auto& seg = profile.segments[segment];
-            s.emplace_back(segPrefix + "Width", segPrefix + " Width",
-                           ConfigParam::Int, const_cast<int*>(&seg.touchSizeThreshold), 0, 255).Module("Zone & Contact");
-            s.emplace_back(segPrefix + "LutLow", segPrefix + " LUT Low",
-                           ConfigParam::Int, const_cast<int*>(&seg.lutIdxLow), 0, 255).Module("Zone & Contact");
-            s.emplace_back(segPrefix + "LutHigh", segPrefix + " LUT High",
-                           ConfigParam::Int, const_cast<int*>(&seg.lutIdxHigh), 0, 255).Module("Zone & Contact");
-        }
-    }
-
     // ── Touch Classification ──
     s.emplace_back("PalmEnabled", "Touch Classification Enabled",
                    ConfigParam::Bool, const_cast<bool*>(&m_touchClassifier.m_enabled)).Module("Touch Classification");
@@ -514,24 +488,6 @@ void TouchPipeline::SaveConfig(std::ostream& out) const {
     out << "ZoneTholdScale=" << m_contactExtractor.m_zoneExp.m_tholdScaleNumer << "\n";
     out << "ZoneTholdShift=" << m_contactExtractor.m_zoneExp.m_tholdScaleShift << "\n";
     out << "MaxTouches=" << m_contactExtractor.m_zoneExp.m_maxTouches << "\n";
-    // Phase 4: EdgeCompensation
-    out << "ECEnabled=" << (m_edgeComp.m_enabled?"1":"0") << "\n";
-    out << "ECStrength=" << m_edgeComp.m_ecStrength << "\n";
-    out << "ECFullCompRange=" << m_edgeComp.m_ecFullCompRange << "\n";
-    out << "ECBlendRange=" << m_edgeComp.m_ecBlendRange << "\n";
-    const char* ecEdgeNames[4] = {"Dim1Near", "Dim1Far", "Dim2Near", "Dim2Far"};
-    for (int edge = 0; edge < 4; ++edge) {
-        const auto& profile = m_edgeComp.m_profiles[edge];
-        const std::string prefix = std::string("EC") + ecEdgeNames[edge];
-        out << prefix << "Segments=" << profile.numSegments << "\n";
-        for (int segment = 0; segment < 4; ++segment) {
-            const auto& seg = profile.segments[segment];
-            const std::string segPrefix = prefix + "S" + std::to_string(segment);
-            out << segPrefix << "Width=" << seg.touchSizeThreshold << "\n";
-            out << segPrefix << "LutLow=" << seg.lutIdxLow << "\n";
-            out << segPrefix << "LutHigh=" << seg.lutIdxHigh << "\n";
-        }
-    }
     // Phase 3: TouchClassifier
     out << "PalmEnabled=" << (m_touchClassifier.m_enabled?"1":"0") << "\n";
     out << "PalmAreaThreshold=" << m_touchClassifier.m_areaThreshold << "\n";
@@ -627,35 +583,6 @@ void TouchPipeline::SaveConfig(std::ostream& out) const {
 void TouchPipeline::LoadConfig(const std::string& key,
                                 const std::string& value) {
     auto toBool = [&](const std::string& v) { return ParseConfigBool(key, v); };
-    auto loadECProfile = [&](const std::string& k) {
-        const char* edgeNames[4] = {"Dim1Near", "Dim1Far", "Dim2Near", "Dim2Far"};
-        for (int edge = 0; edge < 4; ++edge) {
-            auto& profile = m_edgeComp.m_profiles[edge];
-            const std::string prefix = std::string("EC") + edgeNames[edge];
-            if (k == prefix + "Segments") {
-                profile.numSegments = std::clamp(ParseConfigInt(key, value), 1, 4);
-                return true;
-            }
-            for (int segment = 0; segment < 4; ++segment) {
-                auto& seg = profile.segments[segment];
-                const std::string segPrefix = prefix + "S" + std::to_string(segment);
-                if (k == segPrefix + "Width") {
-                    seg.touchSizeThreshold = std::clamp(ParseConfigInt(key, value), 0, 255);
-                    return true;
-                }
-                if (k == segPrefix + "LutLow") {
-                    seg.lutIdxLow = std::clamp(ParseConfigInt(key, value), 0, 255);
-                    return true;
-                }
-                if (k == segPrefix + "LutHigh") {
-                    seg.lutIdxHigh = std::clamp(ParseConfigInt(key, value), 0, 255);
-                    return true;
-                }
-            }
-        }
-        return false;
-    };
-
     try {
     // Phase 1
     if      (key=="FrameParserEnabled")      m_frameParser.m_enabled = toBool(value);
@@ -699,12 +626,6 @@ void TouchPipeline::LoadConfig(const std::string& key,
     else if (key=="ZoneTholdScale")          m_contactExtractor.m_zoneExp.m_tholdScaleNumer = ParseConfigInt(key, value);
     else if (key=="ZoneTholdShift")          m_contactExtractor.m_zoneExp.m_tholdScaleShift = ParseConfigInt(key, value);
     else if (key=="MaxTouches")              m_contactExtractor.m_zoneExp.m_maxTouches = ParseConfigInt(key, value);
-    // Phase 4: EdgeCompensation
-    else if (key=="ECEnabled")               m_edgeComp.m_enabled = toBool(value);
-    else if (key=="ECStrength")              m_edgeComp.m_ecStrength = std::clamp(ParseConfigFloat(key, value), 0.0f, 1.0f);
-    else if (key=="ECFullCompRange")         m_edgeComp.m_ecFullCompRange = std::clamp(ParseConfigFloat(key, value), 0.5f, 1.0f);
-    else if (key=="ECBlendRange")            m_edgeComp.m_ecBlendRange = ParseConfigFloat(key, value);
-    else if (loadECProfile(key))              {}
     // Phase 3: TouchClassifier
     else if (key=="PalmEnabled")             m_touchClassifier.m_enabled = toBool(value);
     else if (key=="PalmAreaThreshold")       m_touchClassifier.m_areaThreshold = ParseConfigInt(key, value);
