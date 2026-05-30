@@ -328,6 +328,28 @@ if (EGO_BUILD_TESTS)
     target_link_libraries(SolversRawdataBenchmarkTest PRIVATE DVRCore Solvers Common)
 
 
+    if (WIN32 AND TARGET IPCCore)
+        add_executable(IPCCoreProtocolAbiTest
+            Common/IPCCore/tests/IpcProtocolAbiTest.cpp
+        )
+        target_link_libraries(IPCCoreProtocolAbiTest PRIVATE IPCCore)
+
+        add_executable(IPCCoreSecurityAttributesTest
+            Common/IPCCore/tests/IpcSecurityAttributesTest.cpp
+        )
+        target_link_libraries(IPCCoreSecurityAttributesTest PRIVATE IPCCore)
+
+        add_executable(IPCCoreSharedFrameBufferTest
+            Common/IPCCore/tests/IpcSharedFrameBufferTest.cpp
+        )
+        target_link_libraries(IPCCoreSharedFrameBufferTest PRIVATE IPCCore)
+
+        add_executable(IPCCorePipeLoopbackTest
+            Common/IPCCore/tests/IpcPipeLoopbackTest.cpp
+        )
+        target_link_libraries(IPCCorePipeLoopbackTest PRIVATE IPCCore)
+    endif()
+
     add_executable(TouchTrackerSilentGapTest
         Tools/tests/TouchTrackerSilentGapTest.cpp
     )
@@ -429,6 +451,33 @@ if (EGO_BUILD_TESTS)
     target_link_libraries(PenPressurePacketParserTest PRIVATE Device Common)
 
     add_test(NAME HostSystemStateMonitorTest COMMAND HostSystemStateMonitorTest)
+    if (WIN32 AND TARGET IPCCore)
+        add_test(NAME IPCCoreProtocolAbiTest COMMAND IPCCoreProtocolAbiTest)
+        set_tests_properties(IPCCoreProtocolAbiTest PROPERTIES
+            LABELS "ipccore;unit;device-free"
+            TIMEOUT 10
+        )
+
+        add_test(NAME IPCCoreSecurityAttributesTest COMMAND IPCCoreSecurityAttributesTest)
+        set_tests_properties(IPCCoreSecurityAttributesTest PROPERTIES
+            LABELS "ipccore;unit;windows;device-free"
+            TIMEOUT 10
+        )
+
+        add_test(NAME IPCCoreSharedFrameBufferTest COMMAND IPCCoreSharedFrameBufferTest)
+        set_tests_properties(IPCCoreSharedFrameBufferTest PROPERTIES
+            LABELS "ipccore;integration;windows;shared-memory;device-free"
+            TIMEOUT 20
+            RESOURCE_LOCK "ipccore-shared-memory"
+        )
+
+        add_test(NAME IPCCorePipeLoopbackTest COMMAND IPCCorePipeLoopbackTest)
+        set_tests_properties(IPCCorePipeLoopbackTest PROPERTIES
+            LABELS "ipccore;integration;windows;named-pipe;admin;device-free"
+            TIMEOUT 20
+            RESOURCE_LOCK "ipccore-named-pipe"
+        )
+    endif()
     add_test(NAME TouchTrackerSilentGapTest COMMAND TouchTrackerSilentGapTest)
     add_test(NAME TouchBaselineReacquireTest COMMAND TouchBaselineReacquireTest)
     add_test(NAME TouchTrackerStylusSuppressTest COMMAND TouchTrackerStylusSuppressTest)
