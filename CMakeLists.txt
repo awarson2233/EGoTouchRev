@@ -394,16 +394,46 @@ if (EGO_BUILD_TESTS)
     )
     target_link_libraries(ServiceProxyConfigMergeTest PRIVATE DVRCore Solvers Common)
 
-    add_executable(DvrRuntimeConfigRoundTripTest
-        Tools/tests/DvrRuntimeConfigRoundTripTest.cpp
-        Tools/EGoTouchApp/source/ServiceProxy.Dvr.cpp
-        Tools/EGoTouchApp/source/ServiceProxy.DynamicDebug.cpp
-        Tools/EGoTouchApp/source/ServiceProxy.cpp
+    function(add_dvrcore_test target source labels timeout)
+        add_executable(${target} ${source})
+        target_link_libraries(${target} PRIVATE DVRCore Solvers Common)
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test-workdirs/${target}")
+        add_test(NAME ${target} COMMAND ${target})
+        set_tests_properties(${target} PROPERTIES
+            LABELS "${labels}"
+            TIMEOUT ${timeout}
+            WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test-workdirs/${target}"
+        )
+    endfunction()
+
+    add_dvrcore_test(DvrCoreFormatLayoutTest
+        Common/DVRCore/tests/DvrCoreFormatLayoutTest.cpp
+        "dvrcore;unit;device-free"
+        10
     )
-    target_include_directories(DvrRuntimeConfigRoundTripTest PRIVATE
-        "${APP_ROOT}/include"
+    add_dvrcore_test(DvrCoreBinaryRoundTripTest
+        Common/DVRCore/tests/DvrCoreBinaryRoundTripTest.cpp
+        "dvrcore;roundtrip;device-free"
+        15
     )
-    target_link_libraries(DvrRuntimeConfigRoundTripTest PRIVATE DVRCore Solvers Common)
+    add_dvrcore_test(DvrCoreRuntimeConfigRoundTripTest
+        Common/DVRCore/tests/DvrCoreRuntimeConfigRoundTripTest.cpp
+        "dvrcore;runtime-config;roundtrip;device-free"
+        15
+    )
+    add_dvrcore_test(DvrCoreFixtureCompatibilityTest
+        Common/DVRCore/tests/DvrCoreFixtureCompatibilityTest.cpp
+        "dvrcore;fixture;compatibility;device-free"
+        15
+    )
+    target_compile_definitions(DvrCoreFixtureCompatibilityTest PRIVATE
+        EGO_TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Common/DVRCore/tests/fixtures"
+    )
+    add_dvrcore_test(DvrCoreCorruptionNegativeTest
+        Common/DVRCore/tests/DvrCoreCorruptionNegativeTest.cpp
+        "dvrcore;negative;corruption;device-free"
+        15
+    )
 
     add_executable(StylusLinearFilterProcessTest
         Tools/tests/StylusLinearFilterProcessTest.cpp
@@ -486,7 +516,6 @@ if (EGO_BUILD_TESTS)
     add_test(NAME TouchPalmRejectionMvpTest COMMAND TouchPalmRejectionMvpTest)
     add_test(NAME TouchCloseSplitTest COMMAND TouchCloseSplitTest)
     add_test(NAME ServiceProxyConfigMergeTest COMMAND ServiceProxyConfigMergeTest)
-    add_test(NAME DvrRuntimeConfigRoundTripTest COMMAND DvrRuntimeConfigRoundTripTest)
     add_test(NAME StylusLinearFilterProcessTest COMMAND StylusLinearFilterProcessTest)
     add_test(NAME StylusHpp3PostPressureProcessTest COMMAND StylusHpp3PostPressureProcessTest)
     add_test(NAME VhfReporterStylusPacketTest COMMAND VhfReporterStylusPacketTest)
