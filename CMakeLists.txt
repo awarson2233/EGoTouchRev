@@ -221,6 +221,7 @@ endif()
 # --- DVR Module ---
 set(APP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/Tools/EGoTouchApp")
 set(DVR_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/Common/DVRCore")
+set(IPCCORE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/Common/IPCCore")
 file(GLOB DVR_SOURCES "${DVR_ROOT}/source/*.cpp")
 file(GLOB DVR_HEADERS "${DVR_ROOT}/include/*.h")
 
@@ -231,6 +232,7 @@ add_library(DVRCore STATIC
 
 target_include_directories(DVRCore PUBLIC
     "${DVR_ROOT}/include"
+    "${IPCCORE_ROOT}/include/Ipc"
 )
 target_link_libraries(DVRCore PUBLIC Solvers IPCCore Common)
 
@@ -252,6 +254,7 @@ add_executable(EGoTouchApp
 
 target_include_directories(EGoTouchApp PRIVATE
     "${APP_ROOT}/include"
+    "${IPCCORE_ROOT}/include/Ipc"
     "${IMGUI_ROOT}"
     "${IMGUI_ROOT}/backends"
 )
@@ -386,14 +389,16 @@ if (EGO_BUILD_TESTS)
     )
     target_link_libraries(TouchCloseSplitTest PRIVATE Solvers Common)
 
-    add_executable(ServiceProxyConfigMergeTest
-        Tools/tests/ServiceProxyConfigMergeTest.cpp
+    add_executable(EGoTouchApp_ServiceProxyConfigMergeTest
+        Tools/EGoTouchApp/tests/ServiceProxyConfigMergeTest.cpp
         Tools/EGoTouchApp/source/ServiceProxy.cpp
     )
-    target_include_directories(ServiceProxyConfigMergeTest PRIVATE
+    target_include_directories(EGoTouchApp_ServiceProxyConfigMergeTest PRIVATE
         "${APP_ROOT}/include"
+        "${APP_ROOT}/source"
+        "${IPCCORE_ROOT}/include/Ipc"
     )
-    target_link_libraries(ServiceProxyConfigMergeTest PRIVATE DVRCore Solvers Common)
+    target_link_libraries(EGoTouchApp_ServiceProxyConfigMergeTest PRIVATE DVRCore Solvers Common)
 
     function(add_dvrcore_test target source labels timeout)
         add_executable(${target} ${source})
@@ -435,6 +440,41 @@ if (EGO_BUILD_TESTS)
         "dvrcore;negative;corruption;device-free"
         15
     )
+
+    add_executable(EGoTouchApp_ServiceProxyRuntimeConfigSnapshotTest
+        Tools/EGoTouchApp/tests/ServiceProxyRuntimeConfigSnapshotTest.cpp
+        Tools/EGoTouchApp/source/ServiceProxy.cpp
+    )
+    target_include_directories(EGoTouchApp_ServiceProxyRuntimeConfigSnapshotTest PRIVATE
+        "${APP_ROOT}/include"
+        "${APP_ROOT}/source"
+        "${IPCCORE_ROOT}/include/Ipc"
+    )
+    target_link_libraries(EGoTouchApp_ServiceProxyRuntimeConfigSnapshotTest PRIVATE DVRCore Solvers Common)
+
+    add_executable(EGoTouchApp_ServiceProxyDvrBridgeTest
+        Tools/EGoTouchApp/tests/ServiceProxyDvrBridgeTest.cpp
+        Tools/EGoTouchApp/source/ServiceProxy.Dvr.cpp
+        Tools/EGoTouchApp/source/ServiceProxy.DynamicDebug.cpp
+        Tools/EGoTouchApp/source/ServiceProxy.cpp
+    )
+    target_include_directories(EGoTouchApp_ServiceProxyDvrBridgeTest PRIVATE
+        "${APP_ROOT}/include"
+        "${APP_ROOT}/source"
+        "${IPCCORE_ROOT}/include/Ipc"
+    )
+    target_link_libraries(EGoTouchApp_ServiceProxyDvrBridgeTest PRIVATE DVRCore Solvers Common)
+
+    add_executable(EGoTouchApp_DiagnosticsWorkbenchLogicTest
+        Tools/EGoTouchApp/tests/DiagnosticsWorkbenchLogicTest.cpp
+        Tools/EGoTouchApp/source/DiagnosticsWorkbenchLogic.cpp
+    )
+    target_include_directories(EGoTouchApp_DiagnosticsWorkbenchLogicTest PRIVATE
+        "${APP_ROOT}/include"
+        "${APP_ROOT}/source"
+        "${IPCCORE_ROOT}/include/Ipc"
+    )
+    target_link_libraries(EGoTouchApp_DiagnosticsWorkbenchLogicTest PRIVATE DVRCore Solvers Common)
 
     add_executable(StylusLinearFilterProcessTest
         Tools/tests/StylusLinearFilterProcessTest.cpp
@@ -489,7 +529,26 @@ if (EGO_BUILD_TESTS)
     add_test(NAME TouchEdgeCompensationTest COMMAND TouchEdgeCompensationTest)
     add_test(NAME TouchPalmRejectionMvpTest COMMAND TouchPalmRejectionMvpTest)
     add_test(NAME TouchCloseSplitTest COMMAND TouchCloseSplitTest)
-    add_test(NAME ServiceProxyConfigMergeTest COMMAND ServiceProxyConfigMergeTest)
+    add_test(NAME EGoTouchApp.ServiceProxyConfigMergeTest COMMAND EGoTouchApp_ServiceProxyConfigMergeTest)
+    set_tests_properties(EGoTouchApp.ServiceProxyConfigMergeTest PROPERTIES
+        LABELS "App;EGoTouchApp;ServiceProxy;PureLogic"
+        TIMEOUT 30
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+    add_test(NAME EGoTouchApp.ServiceProxyRuntimeConfigSnapshotTest COMMAND EGoTouchApp_ServiceProxyRuntimeConfigSnapshotTest)
+    set_tests_properties(EGoTouchApp.ServiceProxyRuntimeConfigSnapshotTest PROPERTIES
+        LABELS "App;EGoTouchApp;ServiceProxy;PureLogic"
+        TIMEOUT 30
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+    add_test(NAME EGoTouchApp.ServiceProxyDvrBridgeTest COMMAND EGoTouchApp_ServiceProxyDvrBridgeTest)
+    set_tests_properties(EGoTouchApp.ServiceProxyDvrBridgeTest PROPERTIES
+        LABELS "App;EGoTouchApp;ServiceProxy;DVRBridge;IntegrationLight"
+        TIMEOUT 60
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+    add_test(NAME EGoTouchApp.DiagnosticsWorkbenchLogicTest COMMAND EGoTouchApp_DiagnosticsWorkbenchLogicTest)
+    set_tests_properties(EGoTouchApp.DiagnosticsWorkbenchLogicTest PROPERTIES
+        LABELS "App;EGoTouchApp;DiagnosticsWorkbench;PureLogic"
+        TIMEOUT 30
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME StylusLinearFilterProcessTest COMMAND StylusLinearFilterProcessTest)
     add_test(NAME StylusHpp3PostPressureProcessTest COMMAND StylusHpp3PostPressureProcessTest)
 endif()

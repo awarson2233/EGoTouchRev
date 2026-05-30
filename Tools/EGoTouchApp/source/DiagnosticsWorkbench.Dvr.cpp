@@ -1,4 +1,5 @@
 #include "DiagnosticsWorkbench.h"
+#include "DiagnosticsWorkbenchInternal.h"
 #include "ServiceProxy.h"
 #include "imgui.h"
 #ifndef WIN32_LEAN_AND_MEAN
@@ -22,9 +23,7 @@ void DiagnosticsWorkbench::ExitPlaybackToLivePreview() {
 void DiagnosticsWorkbench::ExportSelectedDvrDatasetToCsv() {
     if (!m_proxy) return;
 
-    std::filesystem::path outputDir(kExportRootDir);
-    outputDir /= "dvr";
-    outputDir /= "dvr" + std::to_string(static_cast<unsigned long long>(m_currentFrame.timestamp));
+    const std::filesystem::path outputDir = BuildDvrCsvExportPath(kExportRootDir, m_currentFrame.timestamp);
 
     std::string error;
     if (m_proxy->ExportLoadedDvrDatasetToCsv(outputDir, &error)) {
@@ -98,29 +97,14 @@ void DiagnosticsWorkbench::DrawDvrPanel() {
         ofn.lpstrTitle = L"Select DVR Export File";
         if (GetOpenFileNameW(&ofn)) {
             const std::filesystem::path selectedFile(filePath);
-            std::error_code ec;
-            const auto canonicalRoot = std::filesystem::weakly_canonical(m_dvrImportDirectory, ec);
-            if (ec) {
-                m_lastDvrImportStatus = "Import failed: export root is unavailable";
+            const auto validation = ValidateDvrImportSelection(m_dvrImportDirectory, selectedFile);
+            if (!validation.ok) {
+                m_lastDvrImportStatus = validation.status;
             } else {
-                const auto canonicalFile = std::filesystem::weakly_canonical(selectedFile, ec);
-                if (ec) {
-                    m_lastDvrImportStatus = "Import failed: selected file is unavailable";
-                } else if (canonicalFile.extension() != ".dvrbin") {
-                    m_lastDvrImportStatus = "Import failed: please select a .dvrbin file";
-                } else {
-                    const auto relativeToRoot = canonicalFile.lexically_relative(canonicalRoot);
-                    const bool inRoot = !relativeToRoot.empty() &&
-                        (*relativeToRoot.begin() != std::filesystem::path(".."));
-                    if (!inRoot) {
-                        m_lastDvrImportStatus = "Import failed: selection must stay under configured export root";
-                    } else {
-                        const bool ok = m_proxy->LoadDvrDataset(canonicalFile);
-                        m_lastDvrImportStatus = ok
-                            ? m_proxy->GetPlaybackStatusMessage()
-                            : m_proxy->GetPlaybackStatusMessage();
-                    }
-                }
+                const bool ok = m_proxy->LoadDvrDataset(validation.canonicalPath);
+                m_lastDvrImportStatus = ok
+                    ? m_proxy->GetPlaybackStatusMessage()
+                    : m_proxy->GetPlaybackStatusMessage();
             }
         }
     }

@@ -1,4 +1,5 @@
 #include "DiagnosticsWorkbench.h"
+#include "DiagnosticsWorkbenchInternal.h"
 #include "ServiceProxy.h"
 #include "ConfigUIRenderer.h"
 #include "GuiLogSink.h"
@@ -33,48 +34,12 @@ ImVec4 StatusColor(bool ok) {
 }
 
 ImVec4 FpsColor(int fps) {
-    if (fps >= 100) return GoodColor();
-    if (fps >= 50) return WarnColor();
-    return BadColor();
-}
-
-const char* FrameSourceModeLabel(FrameSourceMode mode) {
-    switch (mode) {
-    case FrameSourceMode::Live: return "Live";
-    case FrameSourceMode::Playback: return "Playback";
-    default: return "Unknown";
+    switch (ClassifyFps(fps)) {
+    case FpsStatusClass::Good: return GoodColor();
+    case FpsStatusClass::Warn: return WarnColor();
+    case FpsStatusClass::Bad:
+    default: return BadColor();
     }
-}
-
-const char* TouchStateLabel(int state) {
-    switch (state) {
-    case Solvers::TouchStateDown: return "Down";
-    case Solvers::TouchStateMove: return "Move";
-    case Solvers::TouchStateUp: return "Up";
-    default: return "UNK";
-    }
-}
-
-const char* TouchReportEventLabel(int event) {
-    switch (event) {
-    case Solvers::TouchReportIdle: return "Idle";
-    case Solvers::TouchReportDown: return "Down";
-    case Solvers::TouchReportMove: return "Move";
-    case Solvers::TouchReportUp: return "Up";
-    default: return "UNK";
-    }
-}
-
-std::string TouchPacketBytes(const Solvers::TouchPacket& packet) {
-    std::ostringstream oss;
-    oss << std::hex << std::setfill('0');
-    for (size_t i = 0; i < packet.bytes.size(); ++i) {
-        oss << std::setw(2) << static_cast<unsigned int>(packet.bytes[i]);
-        if (i + 1 < packet.bytes.size()) {
-            oss << ' ';
-        }
-    }
-    return oss.str();
 }
 
 } // namespace

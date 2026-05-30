@@ -281,24 +281,43 @@ std::string ModeString(bool full) {
 
 } // namespace
 
-DvrRuntimeConfigSnapshot ServiceProxy::CaptureRuntimeConfigSnapshot() const {
+DvrRuntimeConfigSnapshot BuildRuntimeConfigSnapshotFromState(
+    const ServiceRuntimeConfigState& serviceState,
+    const AppRuntimeConfigState& appRuntimeState,
+    const Solvers::TouchPipeline& touchPipeline,
+    const Solvers::StylusPipeline& stylusPipeline) {
     DvrRuntimeConfigSnapshot snapshot;
 
-    const bool desiredModeFull = m_srvDesiredModeFull.load(std::memory_order_relaxed);
-    const bool activeModeFull = m_srvActiveModeFull.load(std::memory_order_relaxed);
-    AppendRuntimeConfigValue(snapshot, "Service", "desired_mode", "Desired Service Mode", RuntimeConfigValueType::String, 0, ModeString(desiredModeFull));
-    AppendRuntimeConfigValue(snapshot, "Service", "active_mode", "Active Service Mode", RuntimeConfigValueType::String, 0, ModeString(activeModeFull));
-    AppendRuntimeConfigValue(snapshot, "Service", "auto_mode", "Service Auto Mode", RuntimeConfigValueType::Bool, m_srvAutoMode.load(std::memory_order_relaxed) ? 1ull : 0ull);
-    AppendRuntimeConfigValue(snapshot, "Service", "stylus_vhf_enabled", "Stylus VHF Enabled", RuntimeConfigValueType::Bool, m_srvStylusVhfEnabled.load(std::memory_order_relaxed) ? 1ull : 0ull);
-    AppendRuntimeConfigValue(snapshot, "Service", "pen_button_mode", "Pen Button Mode", RuntimeConfigValueType::UInt8, static_cast<uint8_t>(m_srvPenButtonMode.load(std::memory_order_relaxed)));
-    AppendRuntimeConfigValue(snapshot, "Service", "pen_button_route", "Pen Button Route", RuntimeConfigValueType::UInt8, static_cast<uint8_t>(m_srvPenButtonRoute.load(std::memory_order_relaxed)));
-    AppendRuntimeConfigValue(snapshot, "AppRuntime", "vhf_enabled", "Touch VHF Enabled", RuntimeConfigValueType::Bool, m_vhfEnabled.load(std::memory_order_relaxed) ? 1ull : 0ull);
-    AppendRuntimeConfigValue(snapshot, "AppRuntime", "vhf_transpose", "Touch VHF Transpose", RuntimeConfigValueType::Bool, m_vhfTranspose.load(std::memory_order_relaxed) ? 1ull : 0ull);
-    AppendRuntimeConfigValue(snapshot, "AppRuntime", "master_parser_only", "Master Parser Only", RuntimeConfigValueType::Bool, m_masterParserOnly.load(std::memory_order_relaxed) ? 1ull : 0ull);
+    AppendRuntimeConfigValue(snapshot, "Service", "desired_mode", "Desired Service Mode", RuntimeConfigValueType::String, 0, ModeString(serviceState.desiredModeFull));
+    AppendRuntimeConfigValue(snapshot, "Service", "active_mode", "Active Service Mode", RuntimeConfigValueType::String, 0, ModeString(serviceState.activeModeFull));
+    AppendRuntimeConfigValue(snapshot, "Service", "auto_mode", "Service Auto Mode", RuntimeConfigValueType::Bool, serviceState.autoMode ? 1ull : 0ull);
+    AppendRuntimeConfigValue(snapshot, "Service", "stylus_vhf_enabled", "Stylus VHF Enabled", RuntimeConfigValueType::Bool, serviceState.stylusVhfEnabled ? 1ull : 0ull);
+    AppendRuntimeConfigValue(snapshot, "Service", "pen_button_mode", "Pen Button Mode", RuntimeConfigValueType::UInt8, static_cast<uint8_t>(serviceState.penButtonMode));
+    AppendRuntimeConfigValue(snapshot, "Service", "pen_button_route", "Pen Button Route", RuntimeConfigValueType::UInt8, static_cast<uint8_t>(serviceState.penButtonRoute));
+    AppendRuntimeConfigValue(snapshot, "AppRuntime", "vhf_enabled", "Touch VHF Enabled", RuntimeConfigValueType::Bool, appRuntimeState.vhfEnabled ? 1ull : 0ull);
+    AppendRuntimeConfigValue(snapshot, "AppRuntime", "vhf_transpose", "Touch VHF Transpose", RuntimeConfigValueType::Bool, appRuntimeState.vhfTranspose ? 1ull : 0ull);
+    AppendRuntimeConfigValue(snapshot, "AppRuntime", "master_parser_only", "Master Parser Only", RuntimeConfigValueType::Bool, appRuntimeState.masterParserOnly ? 1ull : 0ull);
 
-    AppendPipelineRuntimeConfig(snapshot, "TouchPipeline", m_pipeline.GetConfigSchema());
-    AppendPipelineRuntimeConfig(snapshot, "StylusPipeline", m_stylusPipeline.GetConfigSchema());
+    AppendPipelineRuntimeConfig(snapshot, "TouchPipeline", touchPipeline.GetConfigSchema());
+    AppendPipelineRuntimeConfig(snapshot, "StylusPipeline", stylusPipeline.GetConfigSchema());
     return snapshot;
+}
+
+DvrRuntimeConfigSnapshot ServiceProxy::CaptureRuntimeConfigSnapshot() const {
+    ServiceRuntimeConfigState serviceState{};
+    serviceState.desiredModeFull = m_srvDesiredModeFull.load(std::memory_order_relaxed);
+    serviceState.activeModeFull = m_srvActiveModeFull.load(std::memory_order_relaxed);
+    serviceState.autoMode = m_srvAutoMode.load(std::memory_order_relaxed);
+    serviceState.stylusVhfEnabled = m_srvStylusVhfEnabled.load(std::memory_order_relaxed);
+    serviceState.penButtonMode = m_srvPenButtonMode.load(std::memory_order_relaxed);
+    serviceState.penButtonRoute = m_srvPenButtonRoute.load(std::memory_order_relaxed);
+
+    AppRuntimeConfigState appRuntimeState{};
+    appRuntimeState.vhfEnabled = m_vhfEnabled.load(std::memory_order_relaxed);
+    appRuntimeState.vhfTranspose = m_vhfTranspose.load(std::memory_order_relaxed);
+    appRuntimeState.masterParserOnly = m_masterParserOnly.load(std::memory_order_relaxed);
+
+    return BuildRuntimeConfigSnapshotFromState(serviceState, appRuntimeState, m_pipeline, m_stylusPipeline);
 }
 
 std::string MergeServiceProxyConfigSections(

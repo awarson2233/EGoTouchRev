@@ -58,7 +58,17 @@ Dvr::DvrFrameSlot MakeFrameSlot() {
     return frame;
 }
 
-void TestRuntimeConfigRoundTrip() {
+void TestResolveReplayBinaryPathBridge() {
+    const auto dvrbinPath = std::filesystem::path("C:/captures/session.dvrbin");
+    Require(App::ResolveReplayBinaryPath(dvrbinPath) == Dvr::ResolveReplayBinaryPath(dvrbinPath),
+            "App ResolveReplayBinaryPath should forward .dvrbin paths to DVRCore");
+
+    const auto directoryPath = std::filesystem::path("C:/captures/session");
+    Require(App::ResolveReplayBinaryPath(directoryPath) == Dvr::ResolveReplayBinaryPath(directoryPath),
+            "App ResolveReplayBinaryPath should forward directory paths to DVRCore");
+}
+
+void TestRuntimeConfigBridgeRoundTrip() {
     const auto path = std::filesystem::temp_directory_path() / "egotouch_runtime_config_roundtrip.dvrbin";
     const std::vector<Dvr::DvrFrameSlot> frames{MakeFrameSlot()};
     const auto snapshot = MakeRuntimeConfigSnapshot();
@@ -122,9 +132,10 @@ void TestDvrWithoutRuntimeConfigRemainsReadable() {
 
 int main() {
     try {
-        TestRuntimeConfigRoundTrip();
+        TestResolveReplayBinaryPathBridge();
+        TestRuntimeConfigBridgeRoundTrip();
         TestDvrWithoutRuntimeConfigRemainsReadable();
-        std::cout << "[TEST] DVR runtime config round-trip tests passed.\n";
+        std::cout << "[TEST] ServiceProxy DVR bridge tests passed.\n";
         return 0;
     } catch (const std::exception& ex) {
         std::cerr << "[TEST] " << ex.what() << "\n";

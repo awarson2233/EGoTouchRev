@@ -29,6 +29,28 @@ std::string BuildTouchPipelineConfigSection(
     const TouchPipelineModuleEnableState* persistedModuleState = nullptr);
 std::string BuildStylusPipelineConfigSection(
     const Solvers::StylusPipeline& pipeline);
+
+struct ServiceRuntimeConfigState {
+    bool desiredModeFull = true;
+    bool activeModeFull = true;
+    bool autoMode = true;
+    bool stylusVhfEnabled = true;
+    PenButtonMode penButtonMode = PenButtonMode::OemCustom;
+    PenButtonRoute penButtonRoute = PenButtonRoute::VhfOnly;
+};
+
+struct AppRuntimeConfigState {
+    bool vhfEnabled = true;
+    bool vhfTranspose = false;
+    bool masterParserOnly = false;
+};
+
+DvrRuntimeConfigSnapshot BuildRuntimeConfigSnapshotFromState(
+    const ServiceRuntimeConfigState& serviceState,
+    const AppRuntimeConfigState& appRuntimeState,
+    const Solvers::TouchPipeline& touchPipeline,
+    const Solvers::StylusPipeline& stylusPipeline);
+
 std::string MergeServiceProxyConfigSections(
     std::string_view existingText,
     std::string_view serviceSection,
