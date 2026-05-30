@@ -68,24 +68,12 @@ static const std::wstring kDevicePathInterrupt = L"\\\\.\\Global\\SPBTESTTOOL_MA
 
 namespace {
 
-enum class ServiceConfigField : uint8_t {
-    Mode = 0,
-    AutoMode = 1,
-    StylusVhfEnabled = 2,
-    PenButtonMode = 3,
-    PenButtonRoute = 4,
-};
-
 enum class DebugDerivedSourceIndex : int16_t {
     MasterWasRead = 0,
     ContactCount = 1,
     PeakCount = 2,
     FrameTimestamp = 3,
 };
-
-constexpr uint8_t ToFieldBit(ServiceConfigField field) {
-    return static_cast<uint8_t>(1u << static_cast<uint8_t>(field));
-}
 
 constexpr uint8_t ToPersistedFieldBits() {
     return Ipc::ToBits(Ipc::ServiceConfigFieldWire::Mode) |
@@ -249,10 +237,6 @@ std::optional<std::string> MapLegacyTouchKey(const std::string& section,
     return std::nullopt;
 }
 
-const char* ServiceModeToConfig(ServiceMode mode) {
-    return mode == ServiceMode::Full ? "full" : "touch_only";
-}
-
 std::string BuildBackupPath(const std::string& configPath) {
     namespace fs = std::filesystem;
     const fs::path source(configPath);
@@ -352,45 +336,8 @@ ServiceHost::~ServiceHost() {
 }
 
 // ── 模式解析 ──────────────────────────────────────────
-ServiceHost::ServiceConfigState ServiceHost::ParseServiceConfig(const std::string& configPath) const {
-    ServiceConfigState parsed{};
-
-    std::ifstream cfg(configPath);
-    if (!cfg.is_open()) {
-        return parsed;
-    }
-
-    std::string line;
-    bool inServiceSection = false;
-    while (std::getline(cfg, line)) {
-        const std::string trimmed = TrimCopy(line);
-        if (trimmed.empty() || trimmed[0] == ';' || trimmed[0] == '#') continue;
-        if (trimmed.front() == '[' && trimmed.back() == ']') {
-            inServiceSection = (trimmed == "[Service]");
-            continue;
-        }
-        if (!inServiceSection) continue;
-
-        std::string key;
-        std::string val;
-        if (!ParseIniKeyValue(trimmed, key, val)) continue;
-
-        if (key == "mode") {
-            parsed.mode = (val == "touch_only") ? ServiceMode::TouchOnly : ServiceMode::Full;
-        } else if (key == "auto_mode") {
-            parsed.autoMode = ParseBoolValue(val);
-        } else if (key == "stylus_vhf_enabled") {
-            parsed.stylusVhfEnabled = ParseBoolValue(val);
-        } else if (key == "pen_button_mode") {
-            int ival = std::atoi(val.c_str());
-            parsed.penButtonMode = static_cast<PenButtonMode>(std::clamp(ival, 0, 2));
-        } else if (key == "pen_button_route") {
-            int ival = std::atoi(val.c_str());
-            parsed.penButtonRoute = static_cast<PenButtonRoute>(std::clamp(ival, 0, 2));
-        }
-    }
-
-    return parsed;
+ServiceConfigState ServiceHost::ParseServiceConfig(const std::string& configPath) const {
+    return Service::ParseServiceConfig(configPath);
 }
 
 void ServiceHost::ApplyServiceConfigToRuntime(const ServiceConfigState& config) {
@@ -410,8 +357,8 @@ ServiceHost::ReloadServiceConfigResult ServiceHost::HandleReloadServiceConfig(
     const bool stylusVhfChanged = (m_configState.stylusVhfEnabled != reloadedConfig.stylusVhfEnabled);
 
     if (modeChanged) {
-        result.changedFields |= ToFieldBit(ServiceConfigField::Mode);
-        result.restartRequiredFields |= ToFieldBit(ServiceConfigField::Mode);
+        result.changedFields |= ToServiceConfigFieldBit(ServiceConfigField::Mode);
+        result.restartRequiredFields |= ToServiceConfigFieldBit(ServiceConfigField::Mode);
         LOG_WARN("Service", __func__, "IPC",
                  "[Service].mode changed from {} to {}; runtime topology remains {} until service restart.",
                  ServiceModeToConfig(m_configState.mode),
@@ -420,14 +367,14 @@ ServiceHost::ReloadServiceConfigResult ServiceHost::HandleReloadServiceConfig(
     }
 
     if (autoModeChanged) {
-        result.changedFields |= ToFieldBit(ServiceConfigField::AutoMode);
+        result.changedFields |= ToServiceConfigFieldBit(ServiceConfigField::AutoMode);
         LOG_INFO("Service", __func__, "IPC",
                  "[Service].auto_mode reloaded to {} (immediate apply).",
                  reloadedConfig.autoMode ? 1 : 0);
     }
 
     if (stylusVhfChanged) {
-        result.changedFields |= ToFieldBit(ServiceConfigField::StylusVhfEnabled);
+        result.changedFields |= ToServiceConfigFieldBit(ServiceConfigField::StylusVhfEnabled);
         LOG_INFO("Service", __func__, "IPC",
                  "[Service].stylus_vhf_enabled reloaded to {} (immediate apply).",
                  reloadedConfig.stylusVhfEnabled ? 1 : 0);
@@ -437,14 +384,14 @@ ServiceHost::ReloadServiceConfigResult ServiceHost::HandleReloadServiceConfig(
     const bool penButtonRouteChanged = (m_configState.penButtonRoute != reloadedConfig.penButtonRoute);
 
     if (penButtonModeChanged) {
-        result.changedFields |= ToFieldBit(ServiceConfigField::PenButtonMode);
+        result.changedFields |= ToServiceConfigFieldBit(ServiceConfigField::PenButtonMode);
         LOG_INFO("Service", __func__, "IPC",
                  "[Service].pen_button_mode reloaded to {} (immediate apply).",
                  static_cast<int>(reloadedConfig.penButtonMode));
     }
 
     if (penButtonRouteChanged) {
-        result.changedFields |= ToFieldBit(ServiceConfigField::PenButtonRoute);
+        result.changedFields |= ToServiceConfigFieldBit(ServiceConfigField::PenButtonRoute);
         LOG_INFO("Service", __func__, "IPC",
                  "[Service].pen_button_route reloaded to {} (immediate apply).",
                  static_cast<int>(reloadedConfig.penButtonRoute));
@@ -458,10 +405,10 @@ ServiceHost::ReloadServiceConfigResult ServiceHost::HandleReloadServiceConfig(
             reloadedConfig.autoMode, reloadedConfig.stylusVhfEnabled,
             reloadedConfig.penButtonMode, reloadedConfig.penButtonRoute);
         result.appliedFields |= static_cast<uint8_t>(
-            (autoModeChanged ? ToFieldBit(ServiceConfigField::AutoMode) : 0u) |
-            (stylusVhfChanged ? ToFieldBit(ServiceConfigField::StylusVhfEnabled) : 0u) |
-            (penButtonModeChanged ? ToFieldBit(ServiceConfigField::PenButtonMode) : 0u) |
-            (penButtonRouteChanged ? ToFieldBit(ServiceConfigField::PenButtonRoute) : 0u));
+            (autoModeChanged ? ToServiceConfigFieldBit(ServiceConfigField::AutoMode) : 0u) |
+            (stylusVhfChanged ? ToServiceConfigFieldBit(ServiceConfigField::StylusVhfEnabled) : 0u) |
+            (penButtonModeChanged ? ToServiceConfigFieldBit(ServiceConfigField::PenButtonMode) : 0u) |
+            (penButtonRouteChanged ? ToServiceConfigFieldBit(ServiceConfigField::PenButtonRoute) : 0u));
     }
 
     m_configState = reloadedConfig;

@@ -2,6 +2,7 @@
 /// 双模式启动：Windows SCM 服务 或 --console 控制台调试
 /// 管理命令：--install / --uninstall
 
+#include "ServiceEntry.h"
 #include "ServiceShell.h"
 #include "Logger.h"
 #include "GuiLogSink.h"
@@ -115,56 +116,52 @@ static bool UninstallService() {
     return ok != FALSE;
 }
 
-// ── 主入口 ──────────────────────────────────────────────
+// ── 主入口 seam ─────────────────────────────────────────
 
-int wmain(int argc, wchar_t* argv[]) {
-    // 解析管理命令（不需要 Logger）
-    if (argc >= 2) {
-        std::wstring_view arg1(argv[1]);
-        if (arg1 == L"--install")   return InstallService()   ? 0 : 1;
-        if (arg1 == L"--uninstall") return UninstallService() ? 0 : 1;
+class ProductionServiceEntryActions final : public Service::IServiceEntryActions {
+public:
+    bool InstallService() override { return ::InstallService(); }
+    bool UninstallService() override { return ::UninstallService(); }
+
+    void InitializeServiceProcess() override {
+        // Hide console window — logs are forwarded to App via IPC GetLogs
+        if (HWND hw = GetConsoleWindow()) ShowWindow(hw, SW_HIDE);
+
+        EnsureDataDirectory();
+
+        // Elevate process priority for real-time touch processing
+        if (!SetPriorityClass(GetCurrentProcess(), REALTIME_PRIORITY_CLASS)) {
+            // Fallback: try HIGH if REALTIME fails (e.g. insufficient privileges)
+            SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
+        }
+
+        Common::Logger::Init("EGoTouchService", "C:/ProgramData/EGoTouchRev/logs/",
+                              Common::GuiLogSink::Instance());
+
+        LOG_INFO("Service", __func__, "Boot", "Process priority set to REALTIME_PRIORITY_CLASS.");
     }
 
-    // Hide console window — logs are forwarded to App via IPC GetLogs
-    if (HWND hw = GetConsoleWindow()) ShowWindow(hw, SW_HIDE);
-
-    EnsureDataDirectory();
-
-    // Elevate process priority for real-time touch processing
-    if (!SetPriorityClass(GetCurrentProcess(), REALTIME_PRIORITY_CLASS)) {
-        // Fallback: try HIGH if REALTIME fails (e.g. insufficient privileges)
-        SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
-    }
-
-    Common::Logger::Init("EGoTouchService", "C:/ProgramData/EGoTouchRev/logs/",
-                          Common::GuiLogSink::Instance());
-
-    LOG_INFO("Service", __func__, "Boot", "Process priority set to REALTIME_PRIORITY_CLASS.");
-
-    const bool consoleMode =
-        (argc >= 2 && std::wstring_view(argv[1]) == L"--console");
-
-    if (consoleMode) {
+    void RunConsole() override {
         Service::ServiceShell::Instance()->RunAsConsole();
-    } else {
+    }
+
+    bool StartScmDispatcher() override {
         SERVICE_TABLE_ENTRYW table[] = {
             { const_cast<wchar_t*>(Service::kServiceName),
               Service::ServiceShell::SvcMain },
             { nullptr, nullptr }
         };
-
-        if (!StartServiceCtrlDispatcherW(table)) {
-            DWORD err = GetLastError();
-            if (err == ERROR_FAILED_SERVICE_CONTROLLER_CONNECT) {
-                // 双击运行或无 SCM 环境 → 退回控制台
-                LOG_WARN("Service", __func__, "Boot", "Not launched by SCM (err={}), falling back to console mode.", err);
-                Service::ServiceShell::Instance()->RunAsConsole();
-            } else {
-                LOG_ERROR("Service", __func__, "Boot", "StartServiceCtrlDispatcherW failed, err={}.", err);
-            }
-        }
+        return StartServiceCtrlDispatcherW(table) != FALSE;
     }
 
+    DWORD LastErrorCode() const override {
+        return GetLastError();
+    }
+};
+
+int wmain(int argc, wchar_t* argv[]) {
+    ProductionServiceEntryActions actions;
+    const int result = Service::ServiceEntryMain(argc, argv, actions);
     Common::Logger::Shutdown();
-    return 0;
+    return result;
 }

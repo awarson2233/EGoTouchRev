@@ -1,6 +1,6 @@
 #pragma once
 
-#include "PenButtonConfig.h"
+#include "ServiceConfigCore.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -27,12 +27,6 @@ struct HeatmapFrame;
 
 namespace Service {
 
-/// 服务运行模式
-enum class ServiceMode {
-    Full,       ///< 触摸 + 手写笔（PenEventBridge + PenPressureReader + StylusPipeline 全部启用）
-    TouchOnly,  ///< 仅触摸（跳过手写笔模块 / StylusPipeline）
-};
-
 /// 模块加载器：负责创建、连接、启停所有子模块。
 /// 不知道 SCM 的存在，可以独立测试。
 class ServiceHost {
@@ -53,20 +47,6 @@ public:
 
 private:
     struct Impl;
-
-    struct ServiceConfigState {
-        ServiceMode mode = ServiceMode::Full;
-        bool autoMode = true;
-        bool stylusVhfEnabled = true;
-        PenButtonMode penButtonMode = PenButtonMode::OemCustom;
-        PenButtonRoute penButtonRoute = PenButtonRoute::VhfOnly;
-    };
-
-    struct ReloadServiceConfigResult {
-        uint8_t changedFields = 0;
-        uint8_t appliedFields = 0;
-        uint8_t restartRequiredFields = 0;
-    };
 
     ServiceConfigState m_configState{};
     ServiceMode m_runtimeMode = ServiceMode::Full;

@@ -269,6 +269,15 @@ endif()
 # --- EGoTouchService (Production Service Shell) ---
 set(SERVICE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/EGoTouchService")
 
+add_library(EGoTouchServiceCore STATIC
+    "${SERVICE_ROOT}/source/ServiceConfigCore.cpp"
+    "${SERVICE_ROOT}/source/ServiceEntryCore.cpp"
+)
+target_include_directories(EGoTouchServiceCore PUBLIC
+    "${SERVICE_ROOT}/include"
+)
+target_link_libraries(EGoTouchServiceCore PUBLIC Common advapi32)
+
 add_executable(EGoTouchService
     "${SERVICE_ROOT}/source/ServiceEntry.cpp"
     "${SERVICE_ROOT}/source/ServiceShell.cpp"
@@ -277,7 +286,7 @@ add_executable(EGoTouchService
 target_include_directories(EGoTouchService PRIVATE
     "${SERVICE_ROOT}/include"
 )
-target_link_libraries(EGoTouchService PRIVATE DVRCore IPCCore Device Host Common advapi32 setupapi hid)
+target_link_libraries(EGoTouchService PRIVATE EGoTouchServiceCore DVRCore IPCCore Device Host Common advapi32 setupapi hid)
 
 # EGoTouchService uses wmain (console subsystem) for service/console dual mode
 if(MSVC)
@@ -522,6 +531,33 @@ if (EGO_BUILD_TESTS)
             RESOURCE_LOCK "ipccore-named-pipe"
         )
     endif()
+
+    set(SERVICE_TEST_ROOT "${SERVICE_ROOT}/tests")
+
+    add_executable(ServiceConfigParserTest
+        "${SERVICE_TEST_ROOT}/unit/ServiceConfigParserTest.cpp"
+        "${SERVICE_TEST_ROOT}/support/TempConfig.cpp"
+    )
+    target_include_directories(ServiceConfigParserTest PRIVATE "${SERVICE_TEST_ROOT}/support")
+    target_link_libraries(ServiceConfigParserTest PRIVATE EGoTouchServiceCore)
+
+    add_executable(ServiceHostConfigMutationTest
+        "${SERVICE_TEST_ROOT}/unit/ServiceHostConfigMutationTest.cpp"
+    )
+    target_include_directories(ServiceHostConfigMutationTest PRIVATE "${SERVICE_TEST_ROOT}/support")
+    target_link_libraries(ServiceHostConfigMutationTest PRIVATE EGoTouchServiceCore)
+
+    add_executable(ServiceEntryArgumentRoutingTest
+        "${SERVICE_TEST_ROOT}/unit/ServiceEntryArgumentRoutingTest.cpp"
+    )
+    target_include_directories(ServiceEntryArgumentRoutingTest PRIVATE "${SERVICE_TEST_ROOT}/support")
+    target_link_libraries(ServiceEntryArgumentRoutingTest PRIVATE EGoTouchServiceCore)
+
+    add_executable(ServiceHostLifecycleFakeIntegrationTest
+        "${SERVICE_TEST_ROOT}/integration/ServiceHostLifecycleFakeIntegrationTest.cpp"
+    )
+    target_include_directories(ServiceHostLifecycleFakeIntegrationTest PRIVATE "${SERVICE_TEST_ROOT}/support")
+    target_link_libraries(ServiceHostLifecycleFakeIntegrationTest PRIVATE EGoTouchServiceCore)
     add_test(NAME TouchTrackerSilentGapTest COMMAND TouchTrackerSilentGapTest)
     add_test(NAME TouchBaselineReacquireTest COMMAND TouchBaselineReacquireTest)
     add_test(NAME TouchTrackerStylusSuppressTest COMMAND TouchTrackerStylusSuppressTest)
@@ -551,6 +587,27 @@ if (EGO_BUILD_TESTS)
         WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME StylusLinearFilterProcessTest COMMAND StylusLinearFilterProcessTest)
     add_test(NAME StylusHpp3PostPressureProcessTest COMMAND StylusHpp3PostPressureProcessTest)
+    add_test(NAME ServiceConfigParserTest COMMAND ServiceConfigParserTest)
+    add_test(NAME ServiceHostConfigMutationTest COMMAND ServiceHostConfigMutationTest)
+    add_test(NAME ServiceEntryArgumentRoutingTest COMMAND ServiceEntryArgumentRoutingTest)
+    add_test(NAME ServiceHostLifecycleFakeIntegrationTest COMMAND ServiceHostLifecycleFakeIntegrationTest)
+
+    set_tests_properties(ServiceConfigParserTest PROPERTIES
+        LABELS "unit;service;windows"
+        TIMEOUT 10
+        WORKING_DIRECTORY "$<TARGET_FILE_DIR:ServiceConfigParserTest>")
+    set_tests_properties(ServiceHostConfigMutationTest PROPERTIES
+        LABELS "unit;service;windows"
+        TIMEOUT 10
+        WORKING_DIRECTORY "$<TARGET_FILE_DIR:ServiceHostConfigMutationTest>")
+    set_tests_properties(ServiceEntryArgumentRoutingTest PROPERTIES
+        LABELS "unit;service;windows"
+        TIMEOUT 10
+        WORKING_DIRECTORY "$<TARGET_FILE_DIR:ServiceEntryArgumentRoutingTest>")
+    set_tests_properties(ServiceHostLifecycleFakeIntegrationTest PROPERTIES
+        LABELS "integration;service;windows"
+        TIMEOUT 10
+        WORKING_DIRECTORY "$<TARGET_FILE_DIR:ServiceHostLifecycleFakeIntegrationTest>")
 endif()
 
 
