@@ -6,6 +6,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -223,6 +224,30 @@ void TestEdgeCompensationIsHardcoded() {
             "EC profile width should stay hardcoded");
 }
 
+void TestMasterParserOnlyKeepsRawHeatmapSemantics() {
+    constexpr uint16_t kRawParserOnlyValue = 1234;
+    std::vector<uint8_t> raw(static_cast<size_t>(Frame::kMasterFrameSize), 0);
+    for (int i = 0; i < Frame::kMatrixCells; ++i) {
+        const size_t offset = static_cast<size_t>(Frame::kMatrixOffset + i * 2);
+        raw[offset] = static_cast<uint8_t>(kRawParserOnlyValue & 0xFF);
+        raw[offset + 1] = static_cast<uint8_t>(kRawParserOnlyValue >> 8);
+    }
+
+    Solvers::HeatmapFrame frame;
+    frame.rawPtr = raw.data();
+    frame.rawLen = raw.size();
+    frame.contacts.push_back({});
+
+    Solvers::TouchPipeline pipeline;
+    pipeline.m_baseline.m_baseline = kRawParserOnlyValue;
+    pipeline.ProcessMasterParserOnly(frame);
+
+    Require(frame.heatmapMatrix[0][0] == static_cast<int16_t>(kRawParserOnlyValue),
+            "master parser only should expose raw heatmap values without baseline subtraction");
+    Require(frame.contacts.empty(),
+            "master parser only should still clear touch outputs");
+}
+
 void TestInvalidConfigValuesAreIgnored() {
     Solvers::TouchPipeline touch;
     touch.m_baseline.m_noFingerMaxStep = 12;
@@ -255,6 +280,7 @@ int main() {
         TestCurrentTouchConfigKeysAreHardcoded();
         TestBaselineFingerStateConfigRoundTrip();
         TestEdgeCompensationIsHardcoded();
+        TestMasterParserOnlyKeepsRawHeatmapSemantics();
         TestInvalidConfigValuesAreIgnored();
         std::cout << "[TEST] TouchPipeline config round-trip tests passed.\n";
         return 0;

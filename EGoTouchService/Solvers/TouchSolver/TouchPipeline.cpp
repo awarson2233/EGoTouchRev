@@ -166,12 +166,14 @@ bool TouchPipeline::Process(HeatmapFrame& frame) {
 
     const bool masterValid = frame.masterWasRead && frame.masterSuffixValid;
     const bool hasCurrentFinger = masterValid && frame.masterSuffix.hasFinger();
+    const bool hasLiveTouchState = m_tracker.HasLiveTracks() || m_gesture.HasLiveState();
     const Touch::BaselineInputState baselineInput{
         masterValid,
-        masterValid ? (hasCurrentFinger ? Touch::FingerState::Finger : Touch::FingerState::NoFinger)
+        masterValid ? (hasCurrentFinger ? Touch::FingerState::Finger
+                                        : (hasLiveTouchState ? Touch::FingerState::Unknown
+                                                            : Touch::FingerState::NoFinger))
                     : Touch::FingerState::Unknown,
     };
-    const bool hasLiveTouchState = m_tracker.HasLiveTracks() || m_gesture.HasLiveState();
     // ── Phase 2: Signal Conditioning ────────────────────────────────
     m_baseline.Process(frame, baselineInput);
 
