@@ -20,6 +20,42 @@ uint8_t PayloadByteOrZero(const Himax::Pen::PenEvent &ev) noexcept {
   return ev.payload.empty() ? 0 : ev.payload[0];
 }
 
+struct PenButtonRoutePlan {
+  bool vhf = false;
+  bool win32 = false;
+};
+
+PenButtonRoutePlan DefaultPenButtonRouteForMode(PenButtonMode mode) noexcept {
+  switch (mode) {
+  case PenButtonMode::OemCustom:
+    return {.vhf = true, .win32 = false};
+  case PenButtonMode::NativeBarrel:
+  case PenButtonMode::NativeEraser:
+    return {.vhf = false, .win32 = true};
+  default:
+    return {.vhf = true, .win32 = false};
+  }
+}
+
+PenButtonRoutePlan ResolvePenButtonRoute(PenButtonMode mode,
+                                         PenButtonRoute route,
+                                         bool routeExplicit) noexcept {
+  if (!routeExplicit && route == PenButtonRoute::VhfOnly) {
+    return DefaultPenButtonRouteForMode(mode);
+  }
+
+  switch (route) {
+  case PenButtonRoute::VhfOnly:
+    return {.vhf = true, .win32 = false};
+  case PenButtonRoute::Win32Only:
+    return {.vhf = false, .win32 = true};
+  case PenButtonRoute::VhfAndWin32:
+    return {.vhf = true, .win32 = true};
+  default:
+    return DefaultPenButtonRouteForMode(mode);
+  }
+}
+
 const char *FactoryStatusEventName(Himax::Pen::PenUsbEventCode code) noexcept {
   using EC = Himax::Pen::PenUsbEventCode;
   switch (code) {
@@ -158,16 +194,17 @@ DeviceRuntime::StopRequestResult DeviceRuntime::RequestStop() {
 
 void DeviceRuntime::ApplyServicePolicy(bool autoMode, bool stylusVhfEnabled,
                                        PenButtonMode penButtonMode,
-                                       PenButtonRoute penButtonRoute) {
+                                       PenButtonRoute penButtonRoute,
+                                       bool penButtonRouteExplicit) {
   SetAutoMode(autoMode);
   SetStylusVhfEnabled(stylusVhfEnabled);
   SetPenButtonMode(penButtonMode);
-  SetPenButtonRoute(penButtonRoute);
+  SetPenButtonRoute(penButtonRoute, penButtonRouteExplicit);
   LOG_INFO(
       "Runtime", __func__, "Policy",
-      "Applied: autoMode={} stylusVhfEnabled={} penBtnMode={} penBtnRoute={}",
+      "Applied: autoMode={} stylusVhfEnabled={} penBtnMode={} penBtnRoute={} penBtnRouteExplicit={}",
       autoMode, stylusVhfEnabled, static_cast<int>(penButtonMode),
-      static_cast<int>(penButtonRoute));
+      static_cast<int>(penButtonRoute), penButtonRouteExplicit);
 }
 
 bool DeviceRuntime::IsShutdownRequested() const {
@@ -230,7 +267,11 @@ bool DeviceRuntime::IsVhfTransposeEnabled() const {
 }
 
 void DeviceRuntime::SetMasterParserOnlyMode(bool enabled) {
-  m_masterParserOnly.store(enabled, std::memory_order_relaxed);
+  const bool wasEnabled =
+      m_masterParserOnly.exchange(enabled, std::memory_order_acq_rel);
+  if (!wasEnabled && enabled) {
+    m_vhfReporter.FlushTouchAllUp();
+  }
 }
 
 void DeviceRuntime::IngestBtMcuPressure(uint16_t p) {
@@ -639,33 +680,51 @@ void DeviceRuntime::OnStreaming() {
 void DeviceRuntime::HandlePenButtonStatusCode(uint8_t statusCode,
                                               uint8_t rawEventPayload,
                                               const char *source) {
-  const auto penButtonMode = GetPenButtonMode();
-  switch (penButtonMode) {
-  case PenButtonMode::OemCustom:
-    m_vhfReporter.SetBarrelButtonState(true);
-    LOG_INFO("Runtime", __func__, "MCU",
-             "{}: statusCode={} raw={} mode=OEM vhf=1 win32=0", source,
-             statusCode, rawEventPayload);
-    break;
+  const auto mode = GetPenButtonMode();
+  const auto route = GetPenButtonRoute();
+  const auto plan = ResolvePenButtonRoute(
+      mode, route, m_penButtonRouteExplicit.load(std::memory_order_acquire));
 
-  case PenButtonMode::NativeBarrel: {
-    const bool ok = m_synthPenButton.InjectWinF22Shortcut();
-    LOG_INFO("Runtime", __func__, "MCU",
-             "{}: statusCode={} raw={} mode=Barrel shortcut=Win+F22 win32={}",
-             source, statusCode, rawEventPayload, ok ? 1 : 0);
-    break;
+  bool vhfQueued = false;
+  bool win32Ok = false;
+  bool win32Attempted = false;
+
+  if (plan.vhf) {
+    switch (mode) {
+    case PenButtonMode::OemCustom:
+    case PenButtonMode::NativeBarrel:
+      m_vhfReporter.SetBarrelButtonState(true);
+      vhfQueued = true;
+      break;
+    case PenButtonMode::NativeEraser:
+      // Status-code events are edge-like button gestures, not an eraser state
+      // lifetime. Avoid latching VHF inverted/eraser bits; persistent VHF eraser
+      // state is driven only by explicit EraserToggle events.
+      break;
+    }
   }
 
-  case PenButtonMode::NativeEraser: {
-    POINT pt{};
-    GetCursorPos(&pt);
-    const bool ok = m_synthPenButton.InjectEraserPulse(pt);
-    LOG_INFO("Runtime", __func__, "MCU",
-             "{}: statusCode={} raw={} mode=Eraser vhf=0 win32={}", source,
-             statusCode, rawEventPayload, ok ? 1 : 0);
-    break;
+  if (plan.win32) {
+    win32Attempted = true;
+    switch (mode) {
+    case PenButtonMode::OemCustom:
+    case PenButtonMode::NativeBarrel:
+      win32Ok = m_synthPenButton.InjectWinF22Shortcut();
+      break;
+    case PenButtonMode::NativeEraser: {
+      POINT pt{};
+      GetCursorPos(&pt);
+      win32Ok = m_synthPenButton.InjectEraserPulse(pt);
+      break;
+    }
+    }
   }
-  }
+
+  LOG_INFO("Runtime", __func__, "MCU",
+           "{}: statusCode={} raw={} mode={} route={} vhf={} win32={} win32_ok={}",
+           source, statusCode, rawEventPayload, ToString(mode), ToString(route),
+           vhfQueued ? 1 : 0, win32Attempted ? 1 : 0,
+           win32Ok ? 1 : 0);
 }
 
 void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
@@ -811,13 +870,31 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
       eraserState = m_penState.eraserToggle;
     }
 
-    const auto penButtonMode = GetPenButtonMode();
-    if (penButtonMode == PenButtonMode::OemCustom) {
+    const auto mode = GetPenButtonMode();
+    const auto route = GetPenButtonRoute();
+    const auto plan = ResolvePenButtonRoute(
+        mode, route, m_penButtonRouteExplicit.load(std::memory_order_acquire));
+    bool vhfQueued = false;
+    bool win32Attempted = false;
+    bool win32Ok = false;
+
+    if (plan.vhf && (mode == PenButtonMode::OemCustom ||
+                     mode == PenButtonMode::NativeEraser)) {
       m_vhfReporter.SetEraserState(eraserState);
+      vhfQueued = true;
     }
-    // 在 NativeBarrel/NativeEraser 模式下，0x7F 仅记录日志不动作
-    LOG_INFO("Runtime", __func__, "MCU", "EraserToggle: state={} mode={}",
-             eraserState, static_cast<int>(penButtonMode));
+
+    if (plan.win32 && eraserState != 0 && mode == PenButtonMode::NativeEraser) {
+      POINT pt{};
+      GetCursorPos(&pt);
+      win32Attempted = true;
+      win32Ok = m_synthPenButton.InjectEraserPulse(pt);
+    }
+
+    LOG_INFO("Runtime", __func__, "MCU",
+             "EraserToggle: state={} mode={} route={} vhf={} win32={} win32_ok={}",
+             eraserState, ToString(mode), ToString(route), vhfQueued ? 1 : 0,
+             win32Attempted ? 1 : 0, win32Ok ? 1 : 0);
     break;
   }
 

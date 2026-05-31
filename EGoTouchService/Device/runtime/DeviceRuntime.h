@@ -158,11 +158,15 @@ public:
     bool IsStylusVhfEnabled() const { return m_stylusVhfEnabled.load(); }
     void ApplyServicePolicy(bool autoMode, bool stylusVhfEnabled,
                             PenButtonMode penButtonMode = PenButtonMode::OemCustom,
-                            PenButtonRoute penButtonRoute = PenButtonRoute::VhfOnly);
+                            PenButtonRoute penButtonRoute = PenButtonRoute::VhfOnly,
+                            bool penButtonRouteExplicit = false);
 
     void SetPenButtonMode(PenButtonMode m) { m_penButtonMode.store(m, std::memory_order_release); }
     PenButtonMode GetPenButtonMode() const { return m_penButtonMode.load(std::memory_order_acquire); }
-    void SetPenButtonRoute(PenButtonRoute r) { m_penButtonRoute.store(r, std::memory_order_release); }
+    void SetPenButtonRoute(PenButtonRoute r, bool explicitRoute = true) {
+        m_penButtonRoute.store(r, std::memory_order_release);
+        m_penButtonRouteExplicit.store(explicitRoute, std::memory_order_release);
+    }
     PenButtonRoute GetPenButtonRoute() const { return m_penButtonRoute.load(std::memory_order_acquire); }
 
     // Pipeline/VHF façade methods for Phase 0 contract freeze.
@@ -238,6 +242,7 @@ private:
     std::atomic<bool> m_masterParserOnly{false};
     std::atomic<PenButtonMode> m_penButtonMode{PenButtonMode::OemCustom};
     std::atomic<PenButtonRoute> m_penButtonRoute{PenButtonRoute::VhfOnly};
+    std::atomic<bool> m_penButtonRouteExplicit{false};
     SyntheticPenButtonInjector m_synthPenButton;
     Himax::Chip m_chip;
     Solvers::TouchPipeline m_touchPipeline;

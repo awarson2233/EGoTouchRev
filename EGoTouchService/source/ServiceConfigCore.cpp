@@ -80,6 +80,7 @@ ServiceConfigState ParseServiceConfig(const std::string& configPath) {
         } else if (key == "pen_button_route") {
             const int ival = std::atoi(val.c_str());
             parsed.penButtonRoute = static_cast<PenButtonRoute>(std::clamp(ival, 0, 2));
+            parsed.penButtonRouteExplicit = true;
         }
     }
 
@@ -95,7 +96,9 @@ ReloadServiceConfigResult DiffServiceConfig(const ServiceConfigState& current,
     const bool autoModeChanged = (current.autoMode != reloaded.autoMode);
     const bool stylusVhfChanged = (current.stylusVhfEnabled != reloaded.stylusVhfEnabled);
     const bool penButtonModeChanged = (current.penButtonMode != reloaded.penButtonMode);
-    const bool penButtonRouteChanged = (current.penButtonRoute != reloaded.penButtonRoute);
+    const bool penButtonRouteChanged =
+        (current.penButtonRoute != reloaded.penButtonRoute) ||
+        (current.penButtonRouteExplicit != reloaded.penButtonRouteExplicit);
 
     if (modeChanged) {
         result.changedFields |= ToServiceConfigFieldBit(ServiceConfigField::Mode);

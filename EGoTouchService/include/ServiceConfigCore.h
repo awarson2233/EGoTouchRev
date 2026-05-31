@@ -19,6 +19,7 @@ struct ServiceConfigState {
     bool stylusVhfEnabled = true;
     PenButtonMode penButtonMode = PenButtonMode::OemCustom;
     PenButtonRoute penButtonRoute = PenButtonRoute::VhfOnly;
+    bool penButtonRouteExplicit = false;
 };
 
 struct ReloadServiceConfigResult {

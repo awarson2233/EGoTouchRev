@@ -37,8 +37,9 @@ public:
     void SetStylusPacketEmitWhenInvalid(bool v);
 
     // 开关
-    void SetEnabled(bool v) { m_enabled.store(v, std::memory_order_relaxed); }
+    void SetEnabled(bool v);
     bool IsEnabled() const { return m_enabled.load(std::memory_order_relaxed); }
+    void FlushTouchAllUp();
 
     void SetTransposeEnabled(bool v) {
         m_transpose.store(v, std::memory_order_relaxed);
@@ -74,8 +75,10 @@ private:
     void WriteTouchPacketsLocked(
         const std::array<Solvers::TouchPacket, 2>& packets);
     void WriteTouchAllUpLocked();
+    void WriteStylusNeutralLocked();
     void WriteStylusPacketLocked(const uint8_t* data, size_t len);
 
+    bool CanDispatchWriteLocked() const;
     bool EnsureDeviceOpenLocked();
     void CloseDeviceLocked();
     void ScheduleReopenLocked();
@@ -87,6 +90,7 @@ private:
     std::atomic<bool> m_enabled{true};
     std::atomic<bool> m_transpose{false};
     std::atomic<bool> m_hadTouchLastFrame{false};
+    std::atomic<bool> m_hadStylusActiveLastFrame{false};
     std::atomic<uint8_t> m_eraserState{0};
     std::atomic<bool> m_barrelButtonState{false};
 
@@ -94,6 +98,7 @@ private:
     int m_stylusSensorCols = 60;
 
     mutable std::mutex m_mu;
+    bool m_closed = false;
     bool m_emitStylusPacketWhenInvalid = true;
     HANDLE m_handle = INVALID_HANDLE_VALUE;
     std::chrono::steady_clock::time_point m_nextOpenAttempt{};

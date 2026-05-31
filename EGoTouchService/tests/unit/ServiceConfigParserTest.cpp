@@ -16,6 +16,7 @@ bool MissingFileUsesDefaults() {
     REQUIRE_EQ(cfg.stylusVhfEnabled, true);
     REQUIRE_EQ(static_cast<int>(cfg.penButtonMode), static_cast<int>(PenButtonMode::OemCustom));
     REQUIRE_EQ(static_cast<int>(cfg.penButtonRoute), static_cast<int>(PenButtonRoute::VhfOnly));
+    REQUIRE_EQ(cfg.penButtonRouteExplicit, false);
     return true;
 }
 
@@ -44,6 +45,7 @@ auto_mode=1
     REQUIRE_EQ(cfg.stylusVhfEnabled, true);
     REQUIRE_EQ(static_cast<int>(cfg.penButtonMode), 1);
     REQUIRE_EQ(static_cast<int>(cfg.penButtonRoute), 2);
+    REQUIRE_EQ(cfg.penButtonRouteExplicit, true);
     return true;
 }
 
@@ -69,6 +71,7 @@ stylus_vhf_enabled=0
     cfg = Service::ParseServiceConfig(disabled.Path());
     REQUIRE_EQ(cfg.autoMode, false);
     REQUIRE_EQ(cfg.stylusVhfEnabled, false);
+    REQUIRE_EQ(cfg.penButtonRouteExplicit, false);
     return true;
 }
 
@@ -82,6 +85,7 @@ pen_button_route=-99
     auto cfg = Service::ParseServiceConfig(low.Path());
     REQUIRE_EQ(static_cast<int>(cfg.penButtonMode), 0);
     REQUIRE_EQ(static_cast<int>(cfg.penButtonRoute), 0);
+    REQUIRE_EQ(cfg.penButtonRouteExplicit, true);
 
     TempConfigFile high("service-config-parser-clamp-high");
     high.Write(R"ini(
@@ -92,6 +96,7 @@ pen_button_route=7
     cfg = Service::ParseServiceConfig(high.Path());
     REQUIRE_EQ(static_cast<int>(cfg.penButtonMode), 2);
     REQUIRE_EQ(static_cast<int>(cfg.penButtonRoute), 2);
+    REQUIRE_EQ(cfg.penButtonRouteExplicit, true);
     return true;
 }
 
