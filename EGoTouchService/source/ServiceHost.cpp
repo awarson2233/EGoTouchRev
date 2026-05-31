@@ -1015,6 +1015,16 @@ void ServiceHost::HandleIpcEnterDebugMode(Ipc::IpcResponse& resp) {
                 }
                 Ipc::SharedFrameData sharedFrame{};
                 Ipc::PopulateSharedFrameDataFromSolverFrame(sharedFrame, f);
+                const RuntimeSnapshot runtime = m_deviceRuntime->GetSnapshot();
+                sharedFrame.workerState = static_cast<int8_t>(runtime.state);
+                sharedFrame.streaming = runtime.state == workerState::streaming;
+                sharedFrame.lastFrameProcessUs = -1;
+                sharedFrame.avgFrameProcessUs = -1;
+                sharedFrame.acquisitionFps = -1;
+                sharedFrame.slaveAcquisitionFps = -1;
+                sharedFrame.vhfEnabled = m_deviceRuntime->IsVhfEnabled();
+                sharedFrame.vhfDeviceOpen = m_deviceRuntime->IsVhfDeviceOpen();
+                sharedFrame.vhfTranspose = m_deviceRuntime->IsVhfTransposeEnabled();
                 m_impl->m_frameWriter.Write(sharedFrame);
             });
         m_impl->m_debugMode = true;

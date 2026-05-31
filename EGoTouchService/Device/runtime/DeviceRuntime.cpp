@@ -213,8 +213,20 @@ void DeviceRuntime::SetVhfEnabled(bool enabled) {
   m_vhfReporter.SetEnabled(enabled);
 }
 
+bool DeviceRuntime::IsVhfEnabled() const {
+  return m_vhfReporter.IsEnabled();
+}
+
+bool DeviceRuntime::IsVhfDeviceOpen() const {
+  return m_vhfReporter.IsDeviceOpen();
+}
+
 void DeviceRuntime::SetVhfTransposeEnabled(bool enabled) {
   m_vhfReporter.SetTransposeEnabled(enabled);
+}
+
+bool DeviceRuntime::IsVhfTransposeEnabled() const {
+  return m_vhfReporter.IsTransposeEnabled();
 }
 
 void DeviceRuntime::SetMasterParserOnlyMode(bool enabled) {
@@ -818,7 +830,9 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
 
 bool DeviceRuntime::OnQuit() {
   if (m_autoMode.load()) {
-    (void)m_chip.Deinit(false);
+    if (auto res = m_chip.Deinit(false); !res) {
+      LOG_WARN("Runtime", __func__, "quit", "Chip deinit failed during quit.");
+    }
   }
   return true; // signal WorkerMain to return
 }

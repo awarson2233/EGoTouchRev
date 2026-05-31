@@ -30,10 +30,18 @@ public:
     bool IsRunning() const { return m_running.load(); }
 
 private:
+    enum class ServerState {
+        Idle,
+        Connecting,
+        Reading,
+        Handling,
+    };
+
     void ServerLoop();
 
     CommandHandler   m_handler;
     std::atomic<bool> m_running{false};
+    std::atomic<ServerState> m_state{ServerState::Idle};
     std::thread      m_thread;
 };
 

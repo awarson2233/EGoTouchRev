@@ -138,6 +138,16 @@ bool IpcPipeServer::Start() {
 
 void IpcPipeServer::Stop() {
     m_running.store(false);
+
+    if (m_thread.joinable()) {
+        // Cancel only pipe wait/read states. Command handlers can perform their own
+        // synchronous I/O, so cancelling while Handling could interrupt unrelated work.
+        const ServerState state = m_state.load(std::memory_order_acquire);
+        if (state == ServerState::Connecting || state == ServerState::Reading) {
+            CancelSynchronousIo(m_thread.native_handle());
+        }
+    }
+
     HANDLE h = CreateFileW(
         kPipeName, GENERIC_READ | GENERIC_WRITE,
         0, nullptr, OPEN_EXISTING, 0, nullptr);
@@ -155,6 +165,7 @@ void IpcPipeServer::ServerLoop() {
     }
 
     while (m_running.load()) {
+        m_state.store(ServerState::Idle, std::memory_order_release);
         HANDLE pipe = CreateNamedPipeW(
             kPipeName,
             PIPE_ACCESS_DUPLEX,
@@ -166,9 +177,11 @@ void IpcPipeServer::ServerLoop() {
             break;
         }
 
+        m_state.store(ServerState::Connecting, std::memory_order_release);
         BOOL connected = ConnectNamedPipe(pipe, nullptr)
                          ? TRUE
                          : (GetLastError() == ERROR_PIPE_CONNECTED);
+        m_state.store(ServerState::Idle, std::memory_order_release);
         if (!connected || !m_running.load()) {
             CloseHandle(pipe);
             continue;
@@ -182,10 +195,13 @@ void IpcPipeServer::ServerLoop() {
         while (m_running.load()) {
             IpcRequest req{};
             DWORD bytesRead = 0;
+            m_state.store(ServerState::Reading, std::memory_order_release);
             BOOL ok = ReadFile(pipe, &req, sizeof(req),
                                &bytesRead, nullptr);
+            m_state.store(ServerState::Idle, std::memory_order_release);
             if (!ok || bytesRead < sizeof(IpcCommand)) break;
 
+            m_state.store(ServerState::Handling, std::memory_order_release);
             IpcResponse resp{};
             if (!clientValidated) {
                 if (!ValidateClient(pipe, client)) {
@@ -194,6 +210,7 @@ void IpcPipeServer::ServerLoop() {
                     WriteFile(pipe, &resp, sizeof(resp),
                               &bytesWritten, nullptr);
                     LOG_WARN("IPC", __func__, "IPC", "Rejected non-elevated or non-admin pipe client.");
+                    m_state.store(ServerState::Idle, std::memory_order_release);
                     break;
                 }
                 clientValidated = true;
@@ -209,11 +226,13 @@ void IpcPipeServer::ServerLoop() {
                 MarkFailure(resp, IpcStatusCode::InvalidState);
             }
 
+            m_state.store(ServerState::Idle, std::memory_order_release);
             DWORD bytesWritten = 0;
             WriteFile(pipe, &resp, sizeof(resp),
                       &bytesWritten, nullptr);
         }
 
+        m_state.store(ServerState::Idle, std::memory_order_release);
         DisconnectNamedPipe(pipe);
         CloseHandle(pipe);
         LOG_INFO("IPC", __func__, "IPC", "Client disconnected.");

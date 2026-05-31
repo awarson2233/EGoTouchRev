@@ -22,7 +22,7 @@ constexpr const wchar_t* kSharedFrameName = L"Global\\EGoTouchSharedFrame";
 constexpr const wchar_t* kFrameReadyEventName = L"Global\\EGoTouchFrameReady";
 
 // Stable shared-memory ABI contract for Phase 0.
-constexpr uint32_t kSharedFrameAbiVersion = 3;
+constexpr uint32_t kSharedFrameAbiVersion = 5;
 constexpr uint32_t kSharedFrameAbiCapabilities = 0;
 constexpr uint32_t kSharedFrameAbiReserved = 0;
 
@@ -85,6 +85,20 @@ struct SharedStylusPacket {
     uint8_t reportId = 0x08;
     uint8_t length   = 13;
     uint8_t bytes[13]{};
+};
+
+constexpr int kSharedStylusRawGridDim = 9;
+
+struct SharedStylusRawGridBlock {
+    uint16_t anchorRow = 0x00FF;
+    uint16_t anchorCol = 0x00FF;
+    int16_t  grid[kSharedStylusRawGridDim][kSharedStylusRawGridDim]{};
+    bool     valid = false;
+};
+
+struct SharedStylusRawGrid {
+    SharedStylusRawGridBlock tx1{};
+    SharedStylusRawGridBlock tx2{};
 };
 
 // Common-owned POD diagnostics mirror for the shared-memory ABI.
@@ -174,7 +188,7 @@ struct SharedStylusDiagnostics {
 // The actual shared memory layout (all POD, no virtual, no STL)
 struct SharedFrameData {
     // RuntimeSnapshot (flat)
-    uint8_t  workerState       = 0;
+    int8_t   workerState       = 0;
     bool     streaming         = false;
     int64_t  lastFrameProcessUs = 0;
     int64_t  avgFrameProcessUs  = 0;
@@ -217,6 +231,7 @@ struct SharedFrameData {
     uint32_t stylusStatus        = 0;
     uint16_t stylusPressure      = 0;
     uint16_t stylusBtRawPressure[4]{};
+    SharedStylusRawGrid stylusRawGrid{};
 
     // ASA/HPP fields
     uint8_t  stylusAsaMode      = 0;
@@ -256,11 +271,10 @@ struct SharedFrameData {
 // ─────────────────────────────────────────────────────────────
 // Triple-buffered shared memory layout
 //
-// Writer writes to slots[writeIdx], then atomically publishes:
-//   readyIdx = writeIdx; writeIdx = next_free_slot;
-// Reader always reads from slots[readyIdx] — never contends with Writer.
-//
-// This eliminates the SeqLock retry loop entirely.
+// Writer marks the target slot dirty before overwriting its payload, then
+// publishes the slot frame id plus an even clean generation before updating
+// readyIdx/frameId. Reader copies only when the slot generation is clean and
+// unchanged before/after the payload copy.
 struct SharedTripleBuffer {
     static constexpr uint32_t kSlotCount = 3;
 
@@ -278,6 +292,13 @@ struct SharedTripleBuffer {
     alignas(64) std::atomic<uint64_t> frameId{0};      // monotonic frame counter
     alignas(64) std::atomic<uint64_t> slaveFrameId{0};
     alignas(64) std::atomic<uint64_t> masterFrameId{0};
+
+    // Per-slot frame ids prove that readyIdx and frameId describe the same slot.
+    alignas(64) std::atomic<uint64_t> slotFrameIds[kSlotCount]{};
+
+    // Per-slot seqlock generations: odd = dirty/in-progress, even = clean/published.
+    // This is intentionally separate from frameId to avoid ABA when a slot is reused.
+    alignas(64) std::atomic<uint64_t> slotSequences[kSlotCount]{};
 
     // The three frame slots
     SharedFrameData slots[kSlotCount]{};
@@ -318,6 +339,24 @@ inline void PopulateStylusPacketFromLegacySharedFrame(StylusType& stylus,
         (void)stylus;
         (void)src;
     }
+}
+
+template <typename SrcBlock>
+inline void PopulateSharedStylusRawGridBlock(SharedStylusRawGridBlock& dst,
+                                             const SrcBlock& src) {
+    dst.anchorRow = src.anchorRow;
+    dst.anchorCol = src.anchorCol;
+    dst.valid = src.valid;
+    std::memcpy(dst.grid, src.grid, sizeof(dst.grid));
+}
+
+template <typename DstBlock>
+inline void PopulateStylusRawGridBlockFromShared(DstBlock& dst,
+                                                 const SharedStylusRawGridBlock& src) {
+    dst.anchorRow = src.anchorRow;
+    dst.anchorCol = src.anchorCol;
+    dst.valid = src.valid;
+    std::memcpy(dst.grid, src.grid, sizeof(src.grid));
 }
 
 template <typename HeatmapFrame>
@@ -412,6 +451,8 @@ inline void PopulateSharedFrameDataFromSolverFrame(SharedFrameData& dst,
     for (int i = 0; i < 4; ++i) {
         dst.stylusBtRawPressure[i] = stylus.input.btSample.rawPressure[static_cast<size_t>(i)];
     }
+    PopulateSharedStylusRawGridBlock(dst.stylusRawGrid.tx1, stylus.runtime.rawGrid.asaGrid.tx1);
+    PopulateSharedStylusRawGridBlock(dst.stylusRawGrid.tx2, stylus.runtime.rawGrid.asaGrid.tx2);
     dst.stylusRecheckEnabled = stylus.interop.recheckEnabled;
     dst.stylusRecheckPassed = stylus.interop.recheckPassed;
     dst.stylusRecheckOverlap = stylus.interop.recheckOverlap;
@@ -603,6 +644,8 @@ inline void PopulateSolverFrameFromSharedFrameData(HeatmapFrame& out,
     for (int i = 0; i < 4; ++i) {
         stylus.input.btSample.rawPressure[static_cast<size_t>(i)] = src.stylusBtRawPressure[i];
     }
+    PopulateStylusRawGridBlockFromShared(stylus.runtime.rawGrid.asaGrid.tx1, src.stylusRawGrid.tx1);
+    PopulateStylusRawGridBlockFromShared(stylus.runtime.rawGrid.asaGrid.tx2, src.stylusRawGrid.tx2);
     stylus.interop.recheckEnabled = src.stylusRecheckEnabled;
     stylus.interop.recheckPassed = src.stylusRecheckPassed;
     stylus.interop.recheckOverlap = src.stylusRecheckOverlap;

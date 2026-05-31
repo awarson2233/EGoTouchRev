@@ -5,6 +5,7 @@
 namespace Ipc {
 
 bool IpcPipeClient::Connect(DWORD timeoutMs) {
+    std::lock_guard<std::mutex> lock(m_pipeMutex);
     if (m_pipe != INVALID_HANDLE_VALUE) return true;
 
     if (!WaitNamedPipeW(kPipeName, timeoutMs)) {
@@ -29,27 +30,36 @@ bool IpcPipeClient::Connect(DWORD timeoutMs) {
 }
 
 void IpcPipeClient::Disconnect() {
+    std::lock_guard<std::mutex> lock(m_pipeMutex);
     if (m_pipe != INVALID_HANDLE_VALUE) {
         CloseHandle(m_pipe);
         m_pipe = INVALID_HANDLE_VALUE;
     }
 }
 
+bool IpcPipeClient::IsConnected() const {
+    std::lock_guard<std::mutex> lock(m_pipeMutex);
+    return m_pipe != INVALID_HANDLE_VALUE;
+}
+
 IpcResponse IpcPipeClient::Send(const IpcRequest& req) {
     IpcResponse resp{};
+    std::lock_guard<std::mutex> lock(m_pipeMutex);
     if (m_pipe == INVALID_HANDLE_VALUE) return resp;
 
     DWORD bytesWritten = 0;
     if (!WriteFile(m_pipe, &req, sizeof(req), &bytesWritten, nullptr)) {
         LOG_ERROR("IPC", __func__, "IPC", "WriteFile failed: {}",  GetLastError());
-        Disconnect();
+        CloseHandle(m_pipe);
+        m_pipe = INVALID_HANDLE_VALUE;
         return resp;
     }
 
     DWORD bytesRead = 0;
     if (!ReadFile(m_pipe, &resp, sizeof(resp), &bytesRead, nullptr)) {
         LOG_ERROR("IPC", __func__, "IPC", "ReadFile failed: {}",  GetLastError());
-        Disconnect();
+        CloseHandle(m_pipe);
+        m_pipe = INVALID_HANDLE_VALUE;
         return resp;
     }
     return resp;

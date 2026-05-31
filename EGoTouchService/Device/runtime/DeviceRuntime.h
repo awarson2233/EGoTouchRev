@@ -171,7 +171,10 @@ public:
     void SavePipelineConfig(std::ostream& out) const;
     void SaveStylusPipelineConfig(std::ostream& out) const;
     void SetVhfEnabled(bool enabled);
+    bool IsVhfEnabled() const;
+    bool IsVhfDeviceOpen() const;
     void SetVhfTransposeEnabled(bool enabled);
+    bool IsVhfTransposeEnabled() const;
     void SetMasterParserOnlyMode(bool enabled);
 
     /// 注入 BT MCU 压感值（由 PenBridge 线程写入，StylusPipeline 帧内读取）

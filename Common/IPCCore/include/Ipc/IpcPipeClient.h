@@ -3,6 +3,8 @@
 
 #include "Ipc/IpcProtocol.h"
 
+#include <mutex>
+
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -19,7 +21,7 @@ public:
 
     bool Connect(DWORD timeoutMs = 5000);
     void Disconnect();
-    bool IsConnected() const { return m_pipe != INVALID_HANDLE_VALUE; }
+    bool IsConnected() const;
 
     // Send a command and receive response
     IpcResponse Send(const IpcRequest& req);
@@ -38,6 +40,7 @@ public:
     IpcResponse PersistConfig();
 
 private:
+    mutable std::mutex m_pipeMutex;
     HANDLE m_pipe = INVALID_HANDLE_VALUE;
 };
 
