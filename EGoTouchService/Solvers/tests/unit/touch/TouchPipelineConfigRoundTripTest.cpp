@@ -148,42 +148,42 @@ void TestCurrentTouchConfigKeysAreHardcoded() {
 
     void TestBaselineFingerStateConfigRoundTrip() {
         Solvers::TouchPipeline pipeline;
-        pipeline.m_baseline.m_freezeCandidateThreshold = 420;
-        pipeline.m_baseline.m_noFingerAlphaShift = 2;
-        pipeline.m_baseline.m_noFingerMaxStep = 768;
-        pipeline.m_baseline.m_fingerBackgroundAlphaShift = 4;
-        pipeline.m_baseline.m_fingerBackgroundMaxStep = 384;
+        pipeline.m_baseline.m_backgroundAlphaShift = 4;
+        pipeline.m_baseline.m_backgroundMaxStep = 384;
+        pipeline.m_baseline.m_recoveryAlphaShift = 1;
+        pipeline.m_baseline.m_recoveryMaxStep = 128;
+        pipeline.m_baseline.m_recoveryMaxFrames = 15;
 
         std::ostringstream out;
         pipeline.SaveConfig(out);
         const std::string saved = out.str();
 
-        RequirePresentSubstring(saved, "BaselineFreezeCandidateThreshold=420");
-        RequirePresentSubstring(saved, "BaselineNoFingerAlphaShift=2");
-        RequirePresentSubstring(saved, "BaselineNoFingerMaxStep=768");
-        RequirePresentSubstring(saved, "BaselineFingerBackgroundAlphaShift=4");
-        RequirePresentSubstring(saved, "BaselineFingerBackgroundMaxStep=384");
+        RequirePresentSubstring(saved, "BaselineBackgroundAlphaShift=4");
+        RequirePresentSubstring(saved, "BaselineBackgroundMaxStep=384");
+        RequirePresentSubstring(saved, "BaselineRecoveryAlphaShift=1");
+        RequirePresentSubstring(saved, "BaselineRecoveryMaxStep=128");
+        RequirePresentSubstring(saved, "BaselineRecoveryMaxFrames=15");
 
         const auto schema = pipeline.GetConfigSchema();
-        RequireSchemaPresent(schema, "BaselineFreezeCandidateThreshold");
-        RequireSchemaPresent(schema, "BaselineNoFingerAlphaShift");
-        RequireSchemaPresent(schema, "BaselineNoFingerMaxStep");
-        RequireSchemaPresent(schema, "BaselineFingerBackgroundAlphaShift");
-        RequireSchemaPresent(schema, "BaselineFingerBackgroundMaxStep");
+        RequireSchemaPresent(schema, "BaselineBackgroundAlphaShift");
+        RequireSchemaPresent(schema, "BaselineBackgroundMaxStep");
+        RequireSchemaPresent(schema, "BaselineRecoveryAlphaShift");
+        RequireSchemaPresent(schema, "BaselineRecoveryMaxStep");
+        RequireSchemaPresent(schema, "BaselineRecoveryMaxFrames");
 
         Solvers::TouchPipeline loaded;
         LoadFromSavedText(loaded, saved);
 
-        Require(loaded.m_baseline.m_freezeCandidateThreshold == 420,
-            "baseline freeze candidate threshold should round-trip");
-        Require(loaded.m_baseline.m_noFingerAlphaShift == 2,
-            "baseline no-finger alpha shift should round-trip");
-        Require(loaded.m_baseline.m_noFingerMaxStep == 768,
-            "baseline no-finger max step should round-trip");
-        Require(loaded.m_baseline.m_fingerBackgroundAlphaShift == 4,
-            "baseline finger background alpha shift should round-trip");
-        Require(loaded.m_baseline.m_fingerBackgroundMaxStep == 384,
-            "baseline finger background max step should round-trip");
+        Require(loaded.m_baseline.m_backgroundAlphaShift == 4,
+            "baseline background alpha shift should round-trip");
+        Require(loaded.m_baseline.m_backgroundMaxStep == 384,
+            "baseline background max step should round-trip");
+        Require(loaded.m_baseline.m_recoveryAlphaShift == 1,
+            "baseline recovery alpha shift should round-trip");
+        Require(loaded.m_baseline.m_recoveryMaxStep == 128,
+            "baseline recovery max step should round-trip");
+        Require(loaded.m_baseline.m_recoveryMaxFrames == 15,
+            "baseline recovery max frames should round-trip");
     }
 
 void TestEdgeCompensationIsHardcoded() {

@@ -14,7 +14,7 @@
 #include "MasterFrameParser.hpp"
 
 // ── Phase 2: Signal Conditioning ──
-#include "BaselineSubtraction.hpp"
+#include "BaselineTracker.hpp"
 #include "CMFProcessor.hpp"
 
 // ── Phase 3: Feature Extraction ──
@@ -54,7 +54,6 @@ public:
     /// Main entry: processes one frame through all 6 phases.
     bool Process(HeatmapFrame& frame);
     bool ProcessMasterParserOnly(HeatmapFrame& frame);
-    void RequestBaselineReacquire(int frames = 8);
 
     /// Pipeline name for config file section header.
     std::string GetName() const { return "TouchPipeline"; }
@@ -76,7 +75,7 @@ public:
     // ── Public module access (for direct parameter tuning from UI thread) ──
     // NOTE: Write access must be done when pipeline is idle or via config reload.
     Touch::MasterFrameParser         m_frameParser;
-    Touch::BaselineSubtraction       m_baseline;
+    Touch::BaselineTracker            m_baseline;
     Touch::CMFProcessor              m_cmf;
     Touch::MacroZoneDetector         m_macroZoneDet;
     Touch::PeakDetector              m_peakDet;

@@ -14,17 +14,15 @@ bool IsFrozenCurrentTouchConfigKey(std::string_view key) {
         "BaselineEnabled",
         "BaselineValue",
         "BaselineNoiseDeadband",
-        "BaselinePositiveDriftDeadband",
+        "BaselinePositiveDeadband",
         "BaselineNegativeDeadband",
-        "BaselineTouchFreezeThreshold",
+        "BaselinePeakThreshold",
         "BaselineReleaseHoldFrames",
         "BaselinePositiveAlphaShift",
         "BaselineNegativeAlphaShift",
         "BaselineNoiseAlphaShift",
         "BaselinePositiveMaxStep",
         "BaselineNegativeMaxStep",
-        "BaselineAcquisitionAlphaShift",
-        "BaselineAcquisitionMaxStep",
         "BaselineNoiseTrackingEnabled",
         "CMFEnabled",
         "CMFDimensionMode",
@@ -150,10 +148,6 @@ bool TouchPipeline::ProcessMasterParserOnly(HeatmapFrame& frame) {
     return true;
 }
 
-void TouchPipeline::RequestBaselineReacquire(int frames) {
-    m_baseline.RequestReacquireFrames(frames);
-}
-
 bool TouchPipeline::Process(HeatmapFrame& frame) {
     const size_t desiredContactCapacity = static_cast<size_t>(
         std::max(m_contactExtractor.m_zoneExp.m_maxTouches, m_tracker.m_maxTouchCount));
@@ -167,15 +161,8 @@ bool TouchPipeline::Process(HeatmapFrame& frame) {
     const bool masterValid = frame.masterWasRead && frame.masterSuffixValid;
     const bool hasCurrentFinger = masterValid && frame.masterSuffix.hasFinger();
     const bool hasLiveTouchState = m_tracker.HasLiveTracks() || m_gesture.HasLiveState();
-    const Touch::BaselineInputState baselineInput{
-        masterValid,
-        masterValid ? (hasCurrentFinger ? Touch::FingerState::Finger
-                                        : (hasLiveTouchState ? Touch::FingerState::Unknown
-                                                            : Touch::FingerState::NoFinger))
-                    : Touch::FingerState::Unknown,
-    };
     // ── Phase 2: Signal Conditioning ────────────────────────────────
-    m_baseline.Process(frame, baselineInput);
+    m_baseline.Process(frame, hasCurrentFinger);
 
     if (!hasCurrentFinger && !hasLiveTouchState) {
         ResetIdleOutputs(frame);
@@ -344,38 +331,38 @@ std::vector<ConfigParam> TouchPipeline::GetConfigSchema() const {
                    ConfigParam::Int, const_cast<int*>(&m_baseline.m_baseline), 0, 65535).Module("Signal Conditioning");
     s.emplace_back("BaselineNoiseDeadband", "Baseline Noise Deadband",
                    ConfigParam::Int, const_cast<int*>(&m_baseline.m_noiseDeadband), 0, 100).Module("Signal Conditioning");
-    s.emplace_back("BaselinePositiveDriftDeadband", "Baseline Positive Drift Deadband",
-                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_positiveDriftDeadband), 0, 200).Module("Signal Conditioning");
+    s.emplace_back("BaselinePositiveDeadband", "Baseline Positive Deadband",
+                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_positiveDeadband), 0, 200).Module("Signal Conditioning");
     s.emplace_back("BaselineNegativeDeadband", "Baseline Negative Deadband",
                    ConfigParam::Int, const_cast<int*>(&m_baseline.m_negativeDeadband), 0, 200).Module("Signal Conditioning");
-    s.emplace_back("BaselineTouchFreezeThreshold", "Baseline Touch Freeze Threshold",
-                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_touchFreezeThreshold), 1, 1000).Module("Signal Conditioning");
-    s.emplace_back("BaselineFreezeCandidateThreshold", "Baseline Freeze Candidate Threshold",
-                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_freezeCandidateThreshold), 1, 2000).Module("Signal Conditioning");
+    s.emplace_back("BaselinePeakThreshold", "Baseline Peak Threshold",
+                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_peakThreshold), 1, 2000).Module("Signal Conditioning");
     s.emplace_back("BaselineReleaseHoldFrames", "Baseline Release Hold Frames",
-                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_releaseHoldFrames), 0, 60).Module("Signal Conditioning");
+                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_releaseHoldFrames), 0, 255).Module("Signal Conditioning");
     s.emplace_back("BaselinePositiveAlphaShift", "Baseline Positive Alpha Shift",
                    ConfigParam::Int, const_cast<int*>(&m_baseline.m_positiveAlphaShift), 0, 15).Module("Signal Conditioning");
     s.emplace_back("BaselineNegativeAlphaShift", "Baseline Negative Alpha Shift",
                    ConfigParam::Int, const_cast<int*>(&m_baseline.m_negativeAlphaShift), 0, 15).Module("Signal Conditioning");
     s.emplace_back("BaselineNoiseAlphaShift", "Baseline Noise Alpha Shift",
                    ConfigParam::Int, const_cast<int*>(&m_baseline.m_noiseAlphaShift), 0, 15).Module("Signal Conditioning");
-    s.emplace_back("BaselinePositiveMaxStep", "Baseline Positive Max Step",
-                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_positiveMaxStep), 0, 100).Module("Signal Conditioning");
-    s.emplace_back("BaselineNegativeMaxStep", "Baseline Negative Max Step",
-                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_negativeMaxStep), 0, 100).Module("Signal Conditioning");
-    s.emplace_back("BaselineAcquisitionAlphaShift", "Baseline Acquisition Alpha Shift",
-                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_acquisitionAlphaShift), 0, 15).Module("Signal Conditioning");
-    s.emplace_back("BaselineAcquisitionMaxStep", "Baseline Acquisition Max Step",
-                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_acquisitionMaxStep), 1, 1024).Module("Signal Conditioning");
+    s.emplace_back("BaselineBackgroundAlphaShift", "Baseline Background Alpha Shift",
+                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_backgroundAlphaShift), 0, 15).Module("Signal Conditioning");
     s.emplace_back("BaselineNoFingerAlphaShift", "Baseline No-Finger Alpha Shift",
                    ConfigParam::Int, const_cast<int*>(&m_baseline.m_noFingerAlphaShift), 0, 15).Module("Signal Conditioning");
+    s.emplace_back("BaselinePositiveMaxStep", "Baseline Positive Max Step",
+                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_positiveMaxStep), 0, 200).Module("Signal Conditioning");
+    s.emplace_back("BaselineNegativeMaxStep", "Baseline Negative Max Step",
+                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_negativeMaxStep), 0, 200).Module("Signal Conditioning");
+    s.emplace_back("BaselineBackgroundMaxStep", "Baseline Background Max Step",
+                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_backgroundMaxStep), 1, 2048).Module("Signal Conditioning");
     s.emplace_back("BaselineNoFingerMaxStep", "Baseline No-Finger Max Step",
                    ConfigParam::Int, const_cast<int*>(&m_baseline.m_noFingerMaxStep), 1, 2048).Module("Signal Conditioning");
-    s.emplace_back("BaselineFingerBackgroundAlphaShift", "Baseline Finger Background Alpha Shift",
-                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_fingerBackgroundAlphaShift), 0, 15).Module("Signal Conditioning");
-    s.emplace_back("BaselineFingerBackgroundMaxStep", "Baseline Finger Background Max Step",
-                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_fingerBackgroundMaxStep), 1, 1024).Module("Signal Conditioning");
+    s.emplace_back("BaselineRecoveryAlphaShift", "Baseline Recovery Alpha Shift",
+                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_recoveryAlphaShift), 0, 15).Module("Signal Conditioning");
+    s.emplace_back("BaselineRecoveryMaxStep", "Baseline Recovery Max Step",
+                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_recoveryMaxStep), 1, 2048).Module("Signal Conditioning");
+    s.emplace_back("BaselineRecoveryMaxFrames", "Baseline Recovery Max Frames",
+                   ConfigParam::Int, const_cast<int*>(&m_baseline.m_recoveryMaxFrames), 1, 120).Module("Signal Conditioning");
     s.emplace_back("BaselineNoiseTrackingEnabled", "Baseline Noise Tracking Enabled",
                    ConfigParam::Bool, const_cast<bool*>(&m_baseline.m_noiseTrackingEnabled)).Module("Signal Conditioning");
 
@@ -612,22 +599,22 @@ void TouchPipeline::SaveConfig(std::ostream& out) const {
     configOut << "BaselineEnabled=" << (m_baseline.m_enabled?"1":"0") << "\n";
     configOut << "BaselineValue=" << m_baseline.m_baseline << "\n";
     configOut << "BaselineNoiseDeadband=" << m_baseline.m_noiseDeadband << "\n";
-    configOut << "BaselinePositiveDriftDeadband=" << m_baseline.m_positiveDriftDeadband << "\n";
+    configOut << "BaselinePositiveDeadband=" << m_baseline.m_positiveDeadband << "\n";
     configOut << "BaselineNegativeDeadband=" << m_baseline.m_negativeDeadband << "\n";
-    configOut << "BaselineTouchFreezeThreshold=" << m_baseline.m_touchFreezeThreshold << "\n";
-    configOut << "BaselineFreezeCandidateThreshold=" << m_baseline.m_freezeCandidateThreshold << "\n";
+    configOut << "BaselinePeakThreshold=" << m_baseline.m_peakThreshold << "\n";
     configOut << "BaselineReleaseHoldFrames=" << m_baseline.m_releaseHoldFrames << "\n";
     configOut << "BaselinePositiveAlphaShift=" << m_baseline.m_positiveAlphaShift << "\n";
     configOut << "BaselineNegativeAlphaShift=" << m_baseline.m_negativeAlphaShift << "\n";
     configOut << "BaselineNoiseAlphaShift=" << m_baseline.m_noiseAlphaShift << "\n";
+    configOut << "BaselineBackgroundAlphaShift=" << m_baseline.m_backgroundAlphaShift << "\n";
+    configOut << "BaselineNoFingerAlphaShift=" << m_baseline.m_noFingerAlphaShift << "\n";
     configOut << "BaselinePositiveMaxStep=" << m_baseline.m_positiveMaxStep << "\n";
     configOut << "BaselineNegativeMaxStep=" << m_baseline.m_negativeMaxStep << "\n";
-    configOut << "BaselineAcquisitionAlphaShift=" << m_baseline.m_acquisitionAlphaShift << "\n";
-    configOut << "BaselineAcquisitionMaxStep=" << m_baseline.m_acquisitionMaxStep << "\n";
-    configOut << "BaselineNoFingerAlphaShift=" << m_baseline.m_noFingerAlphaShift << "\n";
+    configOut << "BaselineBackgroundMaxStep=" << m_baseline.m_backgroundMaxStep << "\n";
     configOut << "BaselineNoFingerMaxStep=" << m_baseline.m_noFingerMaxStep << "\n";
-    configOut << "BaselineFingerBackgroundAlphaShift=" << m_baseline.m_fingerBackgroundAlphaShift << "\n";
-    configOut << "BaselineFingerBackgroundMaxStep=" << m_baseline.m_fingerBackgroundMaxStep << "\n";
+    configOut << "BaselineRecoveryAlphaShift=" << m_baseline.m_recoveryAlphaShift << "\n";
+    configOut << "BaselineRecoveryMaxStep=" << m_baseline.m_recoveryMaxStep << "\n";
+    configOut << "BaselineRecoveryMaxFrames=" << m_baseline.m_recoveryMaxFrames << "\n";
     configOut << "BaselineNoiseTrackingEnabled=" << (m_baseline.m_noiseTrackingEnabled?"1":"0") << "\n";
     // Phase 2: CMF
     configOut << "CMFEnabled=" << (m_cmf.m_enabled?"1":"0") << "\n";
@@ -767,22 +754,22 @@ void TouchPipeline::LoadConfig(const std::string& key,
     else if (key=="BaselineEnabled")         m_baseline.m_enabled = toBool(value);
     else if (key=="BaselineValue")           { m_baseline.m_baseline = ParseConfigInt(key, value); m_baseline.Reset(); }
     else if (key=="BaselineNoiseDeadband")   m_baseline.m_noiseDeadband = ParseConfigInt(key, value);
-    else if (key=="BaselinePositiveDriftDeadband") m_baseline.m_positiveDriftDeadband = ParseConfigInt(key, value);
+    else if (key=="BaselinePositiveDeadband") m_baseline.m_positiveDeadband = ParseConfigInt(key, value);
     else if (key=="BaselineNegativeDeadband") m_baseline.m_negativeDeadband = ParseConfigInt(key, value);
-    else if (key=="BaselineTouchFreezeThreshold") m_baseline.m_touchFreezeThreshold = ParseConfigInt(key, value);
-    else if (key=="BaselineFreezeCandidateThreshold") m_baseline.m_freezeCandidateThreshold = std::clamp(ParseConfigInt(key, value), 1, 2000);
+    else if (key=="BaselinePeakThreshold") m_baseline.m_peakThreshold = ParseConfigInt(key, value);
     else if (key=="BaselineReleaseHoldFrames") m_baseline.m_releaseHoldFrames = ParseConfigInt(key, value);
     else if (key=="BaselinePositiveAlphaShift") m_baseline.m_positiveAlphaShift = ParseConfigInt(key, value);
     else if (key=="BaselineNegativeAlphaShift") m_baseline.m_negativeAlphaShift = ParseConfigInt(key, value);
     else if (key=="BaselineNoiseAlphaShift") m_baseline.m_noiseAlphaShift = ParseConfigInt(key, value);
+    else if (key=="BaselineBackgroundAlphaShift") m_baseline.m_backgroundAlphaShift = ParseConfigInt(key, value);
+    else if (key=="BaselineNoFingerAlphaShift") m_baseline.m_noFingerAlphaShift = std::clamp(ParseConfigInt(key, value), 0, 15);
     else if (key=="BaselinePositiveMaxStep") m_baseline.m_positiveMaxStep = ParseConfigInt(key, value);
     else if (key=="BaselineNegativeMaxStep") m_baseline.m_negativeMaxStep = ParseConfigInt(key, value);
-    else if (key=="BaselineAcquisitionAlphaShift") m_baseline.m_acquisitionAlphaShift = ParseConfigInt(key, value);
-    else if (key=="BaselineAcquisitionMaxStep") m_baseline.m_acquisitionMaxStep = ParseConfigInt(key, value);
-    else if (key=="BaselineNoFingerAlphaShift") m_baseline.m_noFingerAlphaShift = std::clamp(ParseConfigInt(key, value), 0, 15);
+    else if (key=="BaselineBackgroundMaxStep") m_baseline.m_backgroundMaxStep = ParseConfigInt(key, value);
     else if (key=="BaselineNoFingerMaxStep") m_baseline.m_noFingerMaxStep = std::clamp(ParseConfigInt(key, value), 1, 2048);
-    else if (key=="BaselineFingerBackgroundAlphaShift") m_baseline.m_fingerBackgroundAlphaShift = std::clamp(ParseConfigInt(key, value), 0, 15);
-    else if (key=="BaselineFingerBackgroundMaxStep") m_baseline.m_fingerBackgroundMaxStep = std::clamp(ParseConfigInt(key, value), 1, 1024);
+    else if (key=="BaselineRecoveryAlphaShift") m_baseline.m_recoveryAlphaShift = std::clamp(ParseConfigInt(key, value), 0, 15);
+    else if (key=="BaselineRecoveryMaxStep") m_baseline.m_recoveryMaxStep = std::clamp(ParseConfigInt(key, value), 1, 2048);
+    else if (key=="BaselineRecoveryMaxFrames") m_baseline.m_recoveryMaxFrames = std::clamp(ParseConfigInt(key, value), 1, 120);
     else if (key=="BaselineNoiseTrackingEnabled") m_baseline.m_noiseTrackingEnabled = toBool(value);
     // Phase 2: CMF
     else if (key=="CMFEnabled")              m_cmf.m_enabled = toBool(value);

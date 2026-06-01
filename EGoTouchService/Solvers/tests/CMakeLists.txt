@@ -48,8 +48,8 @@ endfunction()
 ego_add_solvers_config(SolversConfig_TouchPipelineRoundTrip touch
     unit/touch/TouchPipelineConfigRoundTripTest.cpp
 )
-ego_add_solvers_unit(SolversUnit_TouchBaselineSubtraction touch
-    unit/touch/TouchBaselineSubtractionTest.cpp
+ego_add_solvers_unit(SolversUnit_TouchBaselineTracker touch
+    unit/touch/TouchBaselineTrackerTest.cpp
 )
 ego_add_solvers_unit(SolversUnit_TouchTrackerGapRelink touch
     unit/touch/TouchTrackerGapRelinkTest.cpp
