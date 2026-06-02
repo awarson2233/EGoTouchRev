@@ -1,8 +1,32 @@
 #include "StylusPipeline.h"
+#include "StylusPipelineConfigKeys.h"
 #include "ConfigParse.h"
 
 #include <algorithm>
 #include <ostream>
+
+namespace {
+#if EGOTOUCH_CONFIG_ENABLED
+Solvers::StylusConfig::StylusPipelineMembers MakeConfigMembers(Solvers::StylusPipeline& p) {
+    Solvers::StylusConfig::StylusPipelineMembers m{};
+    m.frameParser = &p.m_frameParser;
+    m.featureExtractor = &p.m_featureExtractor;
+    m.coordinateSolver = &p.m_coordinateSolver;
+    m.tiltProcess = &p.m_tiltProcess;
+    m.pressureSolver = &p.m_pressureSolver;
+    m.postPressure = &p.m_postPressure;
+    m.edgeCoorProcess = &p.m_edgeCoorProcess;
+    m.edgeCoorPostProcess = &p.m_edgeCoorPostProcess;
+    m.noisePostProcess = &p.m_noisePostProcess;
+    m.linearFilterProcess = &p.m_linearFilterProcess;
+    m.coorReviseProcess = &p.m_coorReviseProcess;
+    m.coorSpeedProcess = &p.m_coorSpeedProcess;
+    m.coorIIRProcess = &p.m_coorIIRProcess;
+    m.aftCoorProcess = &p.m_aftCoorProcess;
+    return m;
+}
+#endif
+} // namespace
 
 namespace Solvers {
 
@@ -70,6 +94,42 @@ void StylusPipeline::FinalizeTerminalFrame(HeatmapFrame& frame) {
     m_commit.Commit(frame);
 }
 
+std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
+#if EGOTOUCH_CONFIG_ENABLED
+    auto m = MakeConfigMembers(const_cast<StylusPipeline&>(*this));
+    return StylusConfig::GetConfigSchema(m);
+#else
+    return {};
+#endif
+}
+
+void StylusPipeline::SaveConfig(std::ostream& out) const {
+#if EGOTOUCH_CONFIG_ENABLED
+    auto m = MakeConfigMembers(const_cast<StylusPipeline&>(*this));
+    StylusConfig::SaveConfig(m, out);
+#else
+    (void)out;
+#endif
+}
+
+void StylusPipeline::LoadConfig(const std::string& key, const std::string& value) {
+#if EGOTOUCH_CONFIG_ENABLED
+    std::string canonicalKey = key;
+    if (canonicalKey == "sp.preEnabled") {
+        canonicalKey = "sp.frameParserEnabled";
+    } else if (canonicalKey == "sp.solveEnabled") {
+        canonicalKey = "sp.peakDetectorEnabled";
+    }
+
+    auto m = MakeConfigMembers(*this);
+    StylusConfig::LoadConfig(m, canonicalKey, value);
+#else
+    (void)key;
+    (void)value;
+#endif
+}
+
+#if 0  // Legacy handwritten config implementation kept for review/reference.
 std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
     std::vector<ConfigParam> schema;
     schema.reserve(41);
@@ -373,6 +433,8 @@ void StylusPipeline::LoadConfig(const std::string& key, const std::string& value
         LogConfigParseWarning("StylusPipeline", __func__, key, value, error);
     }
 }
+
+#endif
 
 void StylusPipeline::SetBtMcuPressure(uint16_t pressure) {
     StylusBtInputSnapshot next{};

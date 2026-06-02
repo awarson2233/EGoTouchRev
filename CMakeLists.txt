@@ -189,6 +189,7 @@ add_library(Solvers STATIC
     EGoTouchService/Solvers/TouchSolver/TouchPipelineConfigKeys.cpp
     # StylusSolver (official ASA pipeline — modules are header-only .hpp)
     EGoTouchService/Solvers/StylusSolver/StylusPipeline.cpp
+    EGoTouchService/Solvers/StylusSolver/StylusPipelineConfigKeys.cpp
 )
 
 target_compile_definitions(Solvers PUBLIC

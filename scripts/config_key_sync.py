@@ -59,7 +59,7 @@ class ConfigKeyDef:
     """单个配置键的完整定义。"""
     key: str
     display: str = ""
-    type: str = "int"                     # int | float | bool
+    type: str = "int"                     # int | float | bool | uint8 | uint16
     member: str = ""                      # C++ 成员字段路径
     default_raw: Optional[str] = None     # YAML 中的默认值字符串
     default_cpp: Optional[str] = None     # 从 C++ constexpr 提取的默认值
@@ -89,12 +89,12 @@ class ConfigKeyDef:
     @property
     def cpp_type(self) -> str:
         """映射到 C++ 类型名。"""
-        return {"int": "int", "float": "float", "bool": "bool"}.get(self.type, "int")
+        return {"int": "int", "float": "float", "bool": "bool", "uint8": "uint8_t", "uint16": "uint16_t"}.get(self.type, "int")
 
     @property
     def cpp_constexpr_name(self) -> str:
         """生成 constexpr 常量名。"""
-        return f"k{self.key}"
+        return f"k{_cpp_key_ident(self.key)}"
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -269,40 +269,50 @@ def parse_cpp_extract_keys(cpp_paths: list[Path]) -> dict[str, ConfigKeyDef]:
       5. *ConfigKeys.h 中的 constexpr kKeyName = ...         → 默认值
     """
     keys: dict[str, ConfigKeyDef] = {}
+    global_name_constants: dict[str, str] = {}
+    for prepass_path in cpp_paths:
+        if not prepass_path.exists():
+            continue
+        prepass_content = _strip_if0_blocks(prepass_path.read_text(encoding="utf-8"))
+        global_name_constants.update({m.group(1): m.group(2) for m in re.finditer(
+            r'constexpr\s+const\s+char\*\s+k(\w+)Name\s*=\s*"([\w.]+)"\s*;',
+            prepass_content
+        )})
 
     for cpp_path in cpp_paths:
         if not cpp_path.exists():
             continue
         content = _strip_if0_blocks(cpp_path.read_text(encoding="utf-8"))
+        name_constants = dict(global_name_constants)
 
         # ── 1. 提取 LoadConfig 分支中的键名 ──
         for m in re.finditer(
-            r'(?:if|else\s+if)\s*\(\s*key\s*==\s*(?:"(\w+)"|k(\w+)Name)\s*\)',
+            r'(?:if|else\s+if)\s*\(\s*key\s*==\s*(?:"([\w.]+)"|k(\w+)Name)\s*\)',
             content
         ):
-            key_name = m.group(1) or m.group(2)
+            key_name = m.group(1) or name_constants.get(m.group(2), m.group(2))
             _ensure_key(keys, key_name).in_cpp_load = True
 
         # ── 2. 提取 SaveConfig 序列化行中的键名 ──
         for m in re.finditer(
-            r'(?:configOut|out)\s*<<\s*(?:"(\w+)="|k(\w+)Name\s*<<\s*"=")',
+            r'(?:configOut|out)\s*<<\s*(?:"([\w.]+)="|k(\w+)Name\s*<<\s*"=")',
             content
         ):
-            key_name = m.group(1) or m.group(2)
+            key_name = m.group(1) or name_constants.get(m.group(2), m.group(2))
             _ensure_key(keys, key_name).in_cpp_save = True
 
         # ── 3. 提取 GetConfigSchema 中的元数据 ──
         # emplace_back("KeyName", "Display Name", ConfigParam::Bool, ...)
         # emplace_back(kKeyNameName, "Display Name", ConfigParam::Bool, ...)
         for m in re.finditer(
-            r'emplace_back\(\s*(?:"(\w+)"|k(\w+)Name)\s*,\s*"([^"]*)"\s*,\s*ConfigParam::(\w+)',
+            r'emplace_back\(\s*(?:"([\w.]+)"|k(\w+)Name)\s*,\s*"([^"]*)"\s*,\s*ConfigParam::(\w+)',
             content
         ):
-            key_name = m.group(1) or m.group(2)
+            key_name = m.group(1) or name_constants.get(m.group(2), m.group(2))
             display = m.group(3)
             type_str = m.group(4).lower()
             # ConfigParam::Bool → bool, ConfigParam::Int → int, etc.
-            type_map = {"bool": "bool", "int": "int", "float": "float"}
+            type_map = {"bool": "bool", "int": "int", "float": "float", "uint8": "uint8", "uint16": "uint16"}
             k = _ensure_key(keys, key_name)
             k.in_cpp_schema = True
             if display and display != key_name:
@@ -319,17 +329,17 @@ def parse_cpp_extract_keys(cpp_paths: list[Path]) -> dict[str, ConfigKeyDef]:
                 if '}' in line or ';' in line and '"' not in line:
                     frozen_section = False
                     continue
-                m = re.search(r'"(\w+)"', line)
+                m = re.search(r'"([\w.]+)"', line)
                 if m:
                     _ensure_key(keys, m.group(1)).in_cpp_frozen = True
 
         # ── 5. 提取 constexpr 默认值 (来自生成的 ConfigKeys.h) ──
         for m in re.finditer(
-            r'constexpr\s+(int|float|bool)\s+k(\w+)\s*=\s*([^;]+);',
+            r'constexpr\s+(int|float|bool|uint8_t|uint16_t)\s+k(\w+)\s*=\s*([^;]+);',
             content
         ):
-            key_name = m.group(2)
-            cpp_type = m.group(1)
+            key_name = name_constants.get(m.group(2), m.group(2))
+            cpp_type = {"uint8_t": "uint8", "uint16_t": "uint16"}.get(m.group(1), m.group(1))
             default_val = m.group(3).strip()
             # 去除可能的类型转换 (如 static_cast<int>(true))
             default_val = re.sub(r'static_cast<\w+>\((.*?)\)', r'\1', default_val)
@@ -340,11 +350,11 @@ def parse_cpp_extract_keys(cpp_paths: list[Path]) -> dict[str, ConfigKeyDef]:
 
         # ── 5b. 也搜索 constexpr 在命名空间内的形式 ──
         for m in re.finditer(
-            r'constexpr\s+(int|float|bool)\s+(\w+)\s*=\s*([^;]+);',
+            r'constexpr\s+(int|float|bool|uint8_t|uint16_t)\s+(\w+)\s*=\s*([^;]+);',
             content
         ):
-            key_name = m.group(2)
-            cpp_type = m.group(1)
+            key_name = name_constants.get(m.group(2), m.group(2))
+            cpp_type = {"uint8_t": "uint8", "uint16_t": "uint16"}.get(m.group(1), m.group(1))
             default_val = m.group(3).strip()
             default_val = re.sub(r'static_cast<\w+>\((.*?)\)', r'\1', default_val)
             if key_name in keys:
@@ -441,6 +451,8 @@ def diff_keys(yaml_keys: list[ConfigKeyDef],
 def generate_config_header(keys: list[ConfigKeyDef], module_name: str) -> str:
     """从 YAML 键列表生成 ConfigKeys.h 内容。"""
     active_keys = [k for k in keys if k.release == "active"]
+    if module_name == "stylus_pipeline":
+        return _generate_stylus_config_header(keys, module_name)
 
     lines = [
         "// Auto-generated by scripts/config_key_sync.py — DO NOT EDIT",
@@ -448,6 +460,7 @@ def generate_config_header(keys: list[ConfigKeyDef], module_name: str) -> str:
         "",
         "#pragma once",
         "",
+        "#include <cstdint>",
         "#include <iosfwd>",
         "#include <string>",
         "#include <vector>",
@@ -483,12 +496,12 @@ def generate_config_header(keys: list[ConfigKeyDef], module_name: str) -> str:
         for k in active_keys:
             if k.effective_default is not None:
                 cpp_default = _to_cpp_literal(k.effective_default, k.type)
-                lines.append(f"constexpr {k.cpp_type} k{k.key} = {cpp_default};")
+                lines.append(f"constexpr {k.cpp_type} k{_cpp_key_ident(k.key)} = {cpp_default};")
         lines.append("")
 
     lines.append("// ── Active key name constants ──")
     for k in active_keys:
-        lines.append(f'constexpr const char* k{k.key}Name = "{k.key}";')
+        lines.append(f'constexpr const char* k{_cpp_key_ident(k.key)}Name = "{k.key}";')
     lines.append("")
 
     lines.append("#if EGOTOUCH_CONFIG_ENABLED")
@@ -533,6 +546,8 @@ def generate_config_header(keys: list[ConfigKeyDef], module_name: str) -> str:
 
 def generate_config_source(keys: list[ConfigKeyDef], module_name: str) -> str:
     """从 YAML 键列表生成 ConfigKeys.cpp 内容。"""
+    if module_name == "stylus_pipeline":
+        return _generate_stylus_config_source(keys, module_name)
     if module_name != "touch_pipeline":
         return _generate_unsupported_config_source(module_name)
 
@@ -578,13 +593,13 @@ def generate_config_source(keys: list[ConfigKeyDef], module_name: str) -> str:
         ptr_type = k.cpp_type
         if k.min_val is not None and k.max_val is not None:
             lines.append(
-                f'    s.emplace_back(k{k.key}Name, "{_cpp_string(k.display or k.key)}", '
+                f'    s.emplace_back(k{_cpp_key_ident(k.key)}Name, "{_cpp_string(k.display or k.key)}", '
                 f'ConfigParam::{cpp_type_enum}, const_cast<{ptr_type}*>(&{member}), '
                 f'{_to_cpp_range_literal(k.min_val)}, {_to_cpp_range_literal(k.max_val)}).Module("{_cpp_string(k.module)}");'
             )
         else:
             lines.append(
-                f'    s.emplace_back(k{k.key}Name, "{_cpp_string(k.display or k.key)}", '
+                f'    s.emplace_back(k{_cpp_key_ident(k.key)}Name, "{_cpp_string(k.display or k.key)}", '
                 f'ConfigParam::{cpp_type_enum}, const_cast<{ptr_type}*>(&{member})).Module("{_cpp_string(k.module)}");'
             )
 
@@ -599,9 +614,9 @@ def generate_config_source(keys: list[ConfigKeyDef], module_name: str) -> str:
     for k in active_keys:
         member = _touch_member_expr(k.member)
         if k.type == "bool":
-            lines.append(f'    out << k{k.key}Name << "=" << ({member} ? "1" : "0") << "\\n";')
+            lines.append(f'    out << k{_cpp_key_ident(k.key)}Name << "=" << ({member} ? "1" : "0") << "\\n";')
         else:
-            lines.append(f'    out << k{k.key}Name << "=" << {member} << "\\n";')
+            lines.append(f'    out << k{_cpp_key_ident(k.key)}Name << "=" << {member} << "\\n";')
     lines.extend([
         "}",
         "",
@@ -625,7 +640,7 @@ def generate_config_source(keys: list[ConfigKeyDef], module_name: str) -> str:
             continue
 
         if k.type in ("int", "float") and (k.min_val is not None or k.max_val is not None):
-            lines.append(f'        {prefix} (key == k{k.key}Name) {{')
+            lines.append(f'        {prefix} (key == k{_cpp_key_ident(k.key)}Name) {{')
             lines.append(f'            {k.cpp_type} v = {parse_expr};')
             if k.min_val is not None:
                 min_literal = _to_cpp_range_literal(k.min_val)
@@ -636,7 +651,7 @@ def generate_config_source(keys: list[ConfigKeyDef], module_name: str) -> str:
             lines.append(f'            {member} = v;')
             lines.append('        }')
         else:
-            lines.append(f'        {prefix} (key == k{k.key}Name) {{ {member} = {parse_expr}; }}')
+            lines.append(f'        {prefix} (key == k{_cpp_key_ident(k.key)}Name) {{ {member} = {parse_expr}; }}')
 
     lines.extend([
         "    } catch (const ConfigParseError& error) {",
@@ -653,6 +668,212 @@ def generate_config_source(keys: list[ConfigKeyDef], module_name: str) -> str:
 
     return "\n".join(lines)
 
+
+
+def _stylus_member_expr(member: str) -> str:
+    root_map = {
+        "m_frameParser": "frameParser",
+        "m_featureExtractor": "featureExtractor",
+        "m_coordinateSolver": "coordinateSolver",
+        "m_tiltProcess": "tiltProcess",
+        "m_pressureSolver": "pressureSolver",
+        "m_postPressure": "postPressure",
+        "m_edgeCoorProcess": "edgeCoorProcess",
+        "m_edgeCoorPostProcess": "edgeCoorPostProcess",
+        "m_noisePostProcess": "noisePostProcess",
+        "m_linearFilterProcess": "linearFilterProcess",
+        "m_coorReviseProcess": "coorReviseProcess",
+        "m_coorSpeedProcess": "coorSpeedProcess",
+        "m_coorIIRProcess": "coorIIRProcess",
+        "m_aftCoorProcess": "aftCoorProcess",
+    }
+    root, sep, rest = member.partition('.')
+    if root not in root_map:
+        raise ValueError(f"unsupported stylus member root: {member}")
+    return f"m.{root_map[root]}->{rest}" if sep else f"*m.{root_map[root]}"
+
+
+def _generate_stylus_config_header(keys: list[ConfigKeyDef], module_name: str) -> str:
+    active_keys = [k for k in keys if k.release == "active"]
+    lines = [
+        "// Auto-generated by scripts/config_key_sync.py — DO NOT EDIT",
+        "// Source: config/{module}_config.yaml".format(module=module_name),
+        "",
+        "#pragma once",
+        "",
+        "#include <cstdint>",
+        "#include <iosfwd>",
+        "#include <string>",
+        "#include <vector>",
+        "",
+        '#include "SolverBuildConfig.h"',
+        "",
+        "namespace Solvers {",
+        "struct ConfigParam;",
+        "namespace Stylus {",
+        "class StylusFrameParser;",
+        "class GridFeatureExtractor;",
+        "class CoordinateSolver;",
+        "class TiltProcess;",
+        "class PressureSolver;",
+        "class Hpp3PostPressureProcess;",
+        "class EdgeCoorProcess;",
+        "class EdgeCoorPostProcess;",
+        "class Hpp3NoisePostProcess;",
+        "class LinearFilterProcess;",
+        "class CoorReviseProcess;",
+        "class CoorSpeedProcess;",
+        "class CoorIIRProcess;",
+        "class AftCoorProcess;",
+        "} // namespace Stylus",
+        "",
+        "namespace StylusConfig {",
+        "",
+    ]
+    if active_keys:
+        lines.append("// ── Active config key defaults (shared by Debug/Release) ──")
+        for k in active_keys:
+            if k.effective_default is not None:
+                lines.append(f"constexpr {k.cpp_type} k{_cpp_key_ident(k.key)} = {_to_cpp_literal(k.effective_default, k.type)};")
+        lines.append("")
+    lines.append("// ── Active key name constants ──")
+    for k in active_keys:
+        lines.append(f'constexpr const char* k{_cpp_key_ident(k.key)}Name = "{_cpp_string(k.key)}";')
+    lines.extend([
+        "",
+        "#if EGOTOUCH_CONFIG_ENABLED",
+        "",
+        "struct StylusPipelineMembers {",
+        "    Stylus::StylusFrameParser* frameParser;",
+        "    Stylus::GridFeatureExtractor* featureExtractor;",
+        "    Stylus::CoordinateSolver* coordinateSolver;",
+        "    Stylus::TiltProcess* tiltProcess;",
+        "    Stylus::PressureSolver* pressureSolver;",
+        "    Stylus::Hpp3PostPressureProcess* postPressure;",
+        "    Stylus::EdgeCoorProcess* edgeCoorProcess;",
+        "    Stylus::EdgeCoorPostProcess* edgeCoorPostProcess;",
+        "    Stylus::Hpp3NoisePostProcess* noisePostProcess;",
+        "    Stylus::LinearFilterProcess* linearFilterProcess;",
+        "    Stylus::CoorReviseProcess* coorReviseProcess;",
+        "    Stylus::CoorSpeedProcess* coorSpeedProcess;",
+        "    Stylus::CoorIIRProcess* coorIIRProcess;",
+        "    Stylus::AftCoorProcess* aftCoorProcess;",
+        "};",
+        "",
+        "void LoadConfig(StylusPipelineMembers& m, const std::string& key, const std::string& value);",
+        "void SaveConfig(const StylusPipelineMembers& m, std::ostream& out);",
+        "std::vector<ConfigParam> GetConfigSchema(StylusPipelineMembers& m);",
+        "",
+        "#endif  // EGOTOUCH_CONFIG_ENABLED",
+        "",
+        "}  // namespace StylusConfig",
+        "}  // namespace Solvers",
+        "",
+    ])
+    return "\n".join(lines)
+
+
+def _generate_stylus_config_source(keys: list[ConfigKeyDef], module_name: str) -> str:
+    active_keys = [k for k in keys if k.release == "active" and k.member]
+    type_enum = {"int": "Int", "float": "Float", "bool": "Bool", "uint8": "UInt8", "uint16": "UInt16"}
+    reset_on_false = {
+        "sp.tiltProcessEnabled": "m.tiltProcess->Reset();",
+        "sp.postPressureEnabled": "m.postPressure->Reset();",
+        "sp.edgeCoorEnabled": "m.edgeCoorProcess->Reset();",
+        "sp.noisePostEnabled": "m.noisePostProcess->Reset();",
+        "sp.linearFilterEnabled": "m.linearFilterProcess->Reset();",
+        "sp.coorReviseEnabled": "m.coorReviseProcess->Reset();",
+        "sp.coorSpeedEnabled": "m.coorSpeedProcess->Reset();",
+        "sp.iirFilterEnabled": "m.coorIIRProcess->Reset();",
+        "sp.aftCoorEnabled": "m.aftCoorProcess->Reset();",
+    }
+    lines = [
+        "// Auto-generated by scripts/config_key_sync.py — DO NOT EDIT",
+        "// Source: config/{module}_config.yaml".format(module=module_name),
+        "",
+        '#include "StylusPipelineConfigKeys.h"',
+        '#include "SolverBuildConfig.h"',
+        "",
+        "#if EGOTOUCH_CONFIG_ENABLED",
+        "",
+        '#include "StylusPipeline.h"',
+        '#include "ConfigParse.h"',
+        "",
+        "#include <algorithm>",
+        "#include <ostream>",
+        "",
+        "namespace Solvers {",
+        "namespace StylusConfig {",
+        "",
+        "// ── GetConfigSchema ──",
+        "std::vector<ConfigParam> GetConfigSchema(StylusPipelineMembers& m) {",
+        "    std::vector<ConfigParam> s;",
+    ]
+    if active_keys:
+        lines.append(f"    s.reserve({len(active_keys)});")
+    lines.append("")
+    current_module = None
+    for k in active_keys:
+        if k.module != current_module:
+            if current_module is not None:
+                lines.append("")
+            current_module = k.module
+            if current_module:
+                lines.append(f"    // ── {current_module} ──")
+        member = _stylus_member_expr(k.member)
+        ptr_type = k.cpp_type
+        if k.min_val is not None and k.max_val is not None:
+            lines.append(f'    s.emplace_back(k{_cpp_key_ident(k.key)}Name, "{_cpp_string(k.display or k.key)}", ConfigParam::{type_enum[k.type]}, const_cast<{ptr_type}*>(&{member}), {_to_cpp_range_literal(k.min_val)}, {_to_cpp_range_literal(k.max_val)}).Module("{_cpp_string(k.module)}");')
+        else:
+            lines.append(f'    s.emplace_back(k{_cpp_key_ident(k.key)}Name, "{_cpp_string(k.display or k.key)}", ConfigParam::{type_enum[k.type]}, const_cast<{ptr_type}*>(&{member})).Module("{_cpp_string(k.module)}");')
+    lines.extend(["", "    return s;", "}", "", "// ── SaveConfig ──", "void SaveConfig(const StylusPipelineMembers& m, std::ostream& out) {"])
+    for k in active_keys:
+        member = _stylus_member_expr(k.member)
+        ident = _cpp_key_ident(k.key)
+        if k.type == "bool":
+            lines.append(f'    out << k{ident}Name << "=" << ({member} ? "1" : "0") << "\\n";')
+        elif k.type == "uint8":
+            lines.append(f'    out << k{ident}Name << "=" << static_cast<int>({member}) << "\\n";')
+        else:
+            lines.append(f'    out << k{ident}Name << "=" << {member} << "\\n";')
+    lines.extend(["}", "", "// ── LoadConfig ──", "void LoadConfig(StylusPipelineMembers& m, const std::string& key, const std::string& value) {", "    auto toBool = [&](const std::string& v) { return ParseConfigBool(key, v); };", "    try {"])
+    for i, k in enumerate(active_keys):
+        prefix = "if" if i == 0 else "else if"
+        member = _stylus_member_expr(k.member)
+        ident = _cpp_key_ident(k.key)
+        lines.append(f'        {prefix} (key == k{ident}Name) {{')
+        if k.type == "bool":
+            lines.append(f"            {member} = toBool(value);")
+            if k.key in reset_on_false:
+                lines.append(f"            if (!{member}) {{ {reset_on_false[k.key]} }}")
+        else:
+            parse_expr = "ParseConfigFloat(key, value)" if k.type == "float" else "ParseConfigInt(key, value)"
+            if k.min_val is not None or k.max_val is not None:
+                lines.append(f"            int v = {parse_expr};")
+                if k.min_val is not None:
+                    lines.append(f"            if (v < {_to_cpp_range_literal(k.min_val)}) v = {_to_cpp_range_literal(k.min_val)};")
+                if k.max_val is not None:
+                    lines.append(f"            if (v > {_to_cpp_range_literal(k.max_val)}) v = {_to_cpp_range_literal(k.max_val)};")
+                if k.type in ("uint8", "uint16"):
+                    lines.append(f"            {member} = static_cast<{k.cpp_type}>(v);")
+                else:
+                    lines.append(f"            {member} = v;")
+            else:
+                lines.append(f"            {member} = {parse_expr};")
+        lines.append("        }")
+    lines.extend([
+        "    } catch (const ConfigParseError& error) {",
+        '        LogConfigParseWarning("StylusPipeline", __func__, key, value, error);',
+        "    }",
+        "}",
+        "",
+        "}  // namespace StylusConfig",
+        "}  // namespace Solvers",
+        "",
+        "#endif  // EGOTOUCH_CONFIG_ENABLED",
+        "",
+    ])
+    return "\n".join(lines)
 
 def _generate_unsupported_config_source(module_name: str) -> str:
     ns = "TouchConfig" if module_name == "touch_pipeline" else "StylusConfig"
@@ -699,6 +920,10 @@ def _touch_member_expr(member: str) -> str:
     return f"m.{root_map[root]}->{rest}" if sep else f"*m.{root_map[root]}"
 
 
+def _cpp_key_ident(key: str) -> str:
+    return "".join(part[:1].upper() + part[1:] for part in re.split(r"[^0-9A-Za-z]+", key) if part)
+
+
 def _cpp_string(value: str) -> str:
     return value.replace('\\', '\\\\').replace('"', '\\"')
 
@@ -714,6 +939,8 @@ def _to_cpp_literal(value: str, type_str: str) -> str:
         return "true" if v in ("true", "1", "yes") else "false"
     elif type_str == "float":
         return value.rstrip('f') + 'f'
+    elif type_str in ("uint8", "uint16"):
+        return value
     else:
         return value
 
