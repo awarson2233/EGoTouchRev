@@ -33,6 +33,8 @@ public:
     BtHidChannel& operator=(const BtHidChannel&) = delete;
 
     void Start();
+    /// MUST be called before destruction so the worker cannot dispatch into
+    /// already-destroyed subclass state.
     void Stop();
     bool IsRunning() const { return m_running.load(); }
 
