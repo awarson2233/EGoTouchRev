@@ -8,6 +8,7 @@
 #include "Ipc/IpcSecurity.h"
 #include "Ipc/SharedFrameBuffer.h"
 #include "Ipc/ConfigSync.h"
+#include "SolverBuildConfig.h"
 #include "SolverTypes.h"
 
 #include "GuiLogSink.h"
@@ -23,6 +24,8 @@
 #include <array>
 #include <cctype>
 #include <cstring>
+#include <cwchar>
+#include <cwctype>
 #include <fstream>
 #include <filesystem>
 #include <iomanip>
@@ -32,6 +35,90 @@
 #include <string>
 #include <string_view>
 #include <ctime>
+#include <utility>
+#include <vector>
+
+#if EGOTOUCH_CONFIG_ENABLED
+static std::string g_overrideConfigPath;
+static bool g_commandLineParsed = false;
+
+static std::string WStringToUtf8(const std::wstring& input) {
+    if (input.empty()) return {};
+    const int required = WideCharToMultiByte(CP_UTF8, 0, input.data(), static_cast<int>(input.size()), nullptr, 0, nullptr, nullptr);
+    if (required <= 0) return {};
+    std::string output(static_cast<size_t>(required), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, input.data(), static_cast<int>(input.size()), output.data(), required, nullptr, nullptr);
+    return output;
+}
+
+static std::vector<std::wstring> TokenizeCommandLine(const wchar_t* commandLine) {
+    std::vector<std::wstring> args;
+    if (!commandLine) return args;
+
+    const wchar_t* p = commandLine;
+    while (*p) {
+        while (*p && std::iswspace(*p)) ++p;
+        if (!*p) break;
+
+        std::wstring arg;
+        bool inQuotes = false;
+        while (*p) {
+            if (*p == L'"') {
+                inQuotes = !inQuotes;
+                ++p;
+                continue;
+            }
+            if (!inQuotes && std::iswspace(*p)) break;
+            arg.push_back(*p++);
+        }
+        args.push_back(std::move(arg));
+        while (*p && std::iswspace(*p)) ++p;
+    }
+
+    return args;
+}
+
+static void ParseCommandLine(int argc, wchar_t* argv[]) {
+    for (int i = 1; i < argc; ++i) {
+        if (wcscmp(argv[i], L"--config") == 0 && i + 1 < argc) {
+            const wchar_t* val = argv[i + 1];
+            if (val[0] == L'-' && val[1] == L'-') {
+                LOG_WARN("ServiceHost", "CLI", "Args", "--config expects a path, got flag: {}", WStringToUtf8(val));
+                continue;
+            }
+            g_overrideConfigPath = WStringToUtf8(val);
+            ++i;
+            LOG_INFO("ServiceHost", "CLI", "Args", "Overriding config path: {}", g_overrideConfigPath);
+        }
+    }
+}
+
+static void EnsureCommandLineParsed() {
+    if (g_commandLineParsed) return;
+    g_commandLineParsed = true;
+
+    auto args = TokenizeCommandLine(GetCommandLineW());
+    std::vector<wchar_t*> argv;
+    argv.reserve(args.size());
+    for (auto& arg : args) {
+        argv.push_back(arg.data());
+    }
+    ParseCommandLine(static_cast<int>(argv.size()), argv.data());
+}
+
+static std::string GetConfigPath() {
+    EnsureCommandLineParsed();
+    if (!g_overrideConfigPath.empty()) {
+        return g_overrideConfigPath;
+    }
+    return "C:/ProgramData/EGoTouchRev/config.ini";
+}
+#else
+// Release: returns empty string — callers should skip file I/O when path is empty
+static std::string GetConfigPath() {
+    return "";
+}
+#endif
 
 namespace Service {
 
@@ -57,9 +144,6 @@ struct ServiceHost::Impl {
     Solvers::HeatmapFrame m_latestDebugFrame;
     bool m_hasLatestDebugFrame = false;
 };
-
-// ── 固化路径 ──
-static const std::string kConfigPath  = "C:/ProgramData/EGoTouchRev/config.ini";
 
 // ── 设备路径 ──
 static const std::wstring kDevicePathMaster    = L"\\\\.\\Global\\SPBTESTTOOL_MASTER";
@@ -270,6 +354,10 @@ bool WriteCanonicalConfig(const std::string& configPath,
                           PenButtonRoute penButtonRoute,
                           bool penButtonRouteExplicit,
                           const DeviceRuntime& runtime) {
+    if (configPath.empty()) {
+        return true;
+    }
+
     std::ofstream out(configPath, std::ios::trunc);
     if (!out.is_open()) return false;
 
@@ -533,12 +621,15 @@ void ServiceHost::StartPenSubsystem() {
 }
 
 bool ServiceHost::Start() {
-    m_configState = ParseServiceConfig(kConfigPath);
+    const std::string configPath = GetConfigPath();
+    if (!configPath.empty()) {
+        m_configState = ParseServiceConfig(configPath);
+    }
     m_runtimeMode = m_configState.mode;
     LOG_INFO("Service", __func__, "Boot", "Service mode: {}, AutoMode: {}",
              ServiceModeToConfig(m_configState.mode), m_configState.autoMode);
 
-    if (!StartRuntimeAndPipeline(kConfigPath)) {
+    if (!StartRuntimeAndPipeline(configPath)) {
         return false;
     }
 
@@ -632,6 +723,10 @@ LoadPipelineConfigResult LoadPipelineConfig(
     StylusLoader&& loadStylus)
 {
     LoadPipelineConfigResult result;
+    if (configPath.empty()) {
+        return result;
+    }
+
     std::ifstream in(configPath);
     if (!in.is_open()) return result;
     result.fileOpened = true;
@@ -963,6 +1058,11 @@ void ServiceHost::BuildDebugSchema() {
 }
 
 void ServiceHost::BuildDefaultPipeline(const std::string& configPath) {
+    if (configPath.empty()) {
+        LOG_INFO("Service", __func__, "Boot", "Config file I/O disabled; using built-in pipeline defaults.");
+        return;
+    }
+
     // TouchPipeline is self-contained: no processor registration needed.
     // Just load config.
     auto loadTouch = [this](const std::string& key, const std::string& value) {
@@ -1136,7 +1236,8 @@ void ServiceHost::HandleIpcPersistConfig(Ipc::IpcResponse& resp) {
         return;
     }
 
-    if (!WriteCanonicalConfig(kConfigPath, m_configState.mode, m_configState.autoMode, m_configState.stylusVhfEnabled, m_configState.penButtonMode, m_configState.penButtonRoute, m_configState.penButtonRouteExplicit, *m_deviceRuntime)) {
+    const std::string configPath = GetConfigPath();
+    if (!WriteCanonicalConfig(configPath, m_configState.mode, m_configState.autoMode, m_configState.stylusVhfEnabled, m_configState.penButtonMode, m_configState.penButtonRoute, m_configState.penButtonRouteExplicit, *m_deviceRuntime)) {
         Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InternalError);
         return;
     }
@@ -1146,12 +1247,26 @@ void ServiceHost::HandleIpcPersistConfig(Ipc::IpcResponse& resp) {
     std::memcpy(resp.data, &result, sizeof(result));
     resp.dataLen = static_cast<uint16_t>(sizeof(result));
     Ipc::MarkSuccess(resp);
-    LOG_INFO("Service", __func__, "IPC", "Canonical config persisted to {}.", kConfigPath);
+    if (configPath.empty()) {
+        LOG_INFO("Service", __func__, "IPC", "PersistConfig skipped; config file I/O disabled.");
+    } else {
+        LOG_INFO("Service", __func__, "IPC", "Canonical config persisted to {}.", configPath);
+    }
 }
 
 void ServiceHost::HandleIpcReloadConfig(Ipc::IpcResponse& resp) {
     if (!m_deviceRuntime) {
         Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidState);
+        return;
+    }
+
+    const std::string configPath = GetConfigPath();
+    if (configPath.empty()) {
+        Ipc::ReloadConfigSummaryWire summary{};
+        std::memcpy(resp.data, &summary, sizeof(summary));
+        resp.dataLen = static_cast<uint16_t>(sizeof(summary));
+        Ipc::MarkSuccess(resp);
+        LOG_INFO("Service", __func__, "IPC", "ReloadConfig skipped; config file I/O disabled.");
         return;
     }
 
@@ -1161,36 +1276,36 @@ void ServiceHost::HandleIpcReloadConfig(Ipc::IpcResponse& resp) {
     auto loadStylus = [this](const std::string& key, const std::string& value) {
         m_deviceRuntime->LoadStylusPipelineConfig(key, value);
     };
-    const auto loadResult = LoadPipelineConfig(kConfigPath, loadTouch, loadStylus);
+    const auto loadResult = LoadPipelineConfig(configPath, loadTouch, loadStylus);
     if (!loadResult.fileOpened) {
-        LOG_WARN("Service", __func__, "IPC", "ReloadConfig failed: config file not found: {}", kConfigPath);
+        LOG_WARN("Service", __func__, "IPC", "ReloadConfig failed: config file not found: {}", configPath);
         Ipc::MarkFailure(resp, Ipc::IpcStatusCode::NotFound);
         return;
     }
 
-    const auto reloadedConfig = ParseServiceConfig(kConfigPath);
+    const auto reloadedConfig = ParseServiceConfig(configPath);
     const auto reloadState = HandleReloadServiceConfig(reloadedConfig);
-    const bool missingCanonicalServiceSection = !HasIniSection(kConfigPath, "Service");
+    const bool missingCanonicalServiceSection = !HasIniSection(configPath, "Service");
 
     if (loadResult.migrated || missingCanonicalServiceSection) {
         std::string backupPath;
-        if (BackupConfigFile(kConfigPath, backupPath)) {
-            if (WriteCanonicalConfig(kConfigPath, m_configState.mode, m_configState.autoMode, m_configState.stylusVhfEnabled, m_configState.penButtonMode, m_configState.penButtonRoute, m_configState.penButtonRouteExplicit, *m_deviceRuntime)) {
+        if (BackupConfigFile(configPath, backupPath)) {
+            if (WriteCanonicalConfig(configPath, m_configState.mode, m_configState.autoMode, m_configState.stylusVhfEnabled, m_configState.penButtonMode, m_configState.penButtonRoute, m_configState.penButtonRouteExplicit, *m_deviceRuntime)) {
                 LOG_INFO("Service", __func__, "IPC",
                          "Reloaded legacy config from {} and rewrote canonical sections. Backup: {}",
-                         kConfigPath, backupPath);
+                         configPath, backupPath);
             } else {
                 LOG_WARN("Service", __func__, "IPC",
                          "Reloaded legacy config from {} but failed to rewrite canonical config.",
-                         kConfigPath);
+                         configPath);
             }
         } else {
             LOG_WARN("Service", __func__, "IPC",
                      "Reloaded legacy config from {} but failed to create backup before migration.",
-                     kConfigPath);
+                     configPath);
         }
     } else {
-        LOG_INFO("Service", __func__, "IPC", "Config reloaded from {}.", kConfigPath);
+        LOG_INFO("Service", __func__, "IPC", "Config reloaded from {}.", configPath);
     }
 
     if (reloadState.restartRequiredFields != 0u) {

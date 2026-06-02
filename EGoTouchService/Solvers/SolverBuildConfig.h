@@ -9,6 +9,13 @@
 #define EGOTOUCH_CONFIG_ENABLED 0
 #endif
 
+// Config system: enabled in Debug/Diagnostic builds, hardcoded in Release
+#if defined(_DEBUG) || defined(EGOTOUCH_DIAGNOSTICS)
+#define EGOTOUCH_CONFIG_ENABLED 1
+#else
+#define EGOTOUCH_CONFIG_ENABLED 0
+#endif
+
 #if defined(_M_ARM64) || defined(__aarch64__) || defined(__ARM_NEON)
 #if defined(__clang__)
 #pragma clang diagnostic push
