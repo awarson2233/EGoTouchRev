@@ -1,13 +1,86 @@
 <?xml version="1.0" encoding="utf-8"?>
 <WixLocalization Culture="zh-CN" xmlns="http://wixtoolset.org/schemas/v4/wxl">
+
+  <!-- ═══════════════════════════════════════════════════════════
+       语言与包级信息
+       ═══════════════════════════════════════════════════════════ -->
   <String Id="Language" Value="2052" />
   <String Id="ProductName" Value="EGoTouch Controller Software" />
-  <String Id="ProductNameTest" Value="EGoTouch Controller Software (Test Version)" />
+  <String Id="ProductNameTest" Value="EGoTouch Controller Software（测试版）" />
   <String Id="Manufacturer" Value="EGoTouch Team" />
-  <String Id="DowngradeError" Value="已经安装了更高版本的 [ProductName]。" />
+  <String Id="DowngradeError" Value="已安装更高版本的 [ProductName]，安装无法继续。请先卸载现有版本后再试。" />
   <String Id="LicenseRtf" Value="scripts\EULA_zh-CN.rtf" />
-  <String Id="ServiceDisplayName" Value="EGoTouch Capacitive Touch Driver" />
-  <String Id="ServiceDescription" Value="EGoTouch 电容触控控制器驱动服务 — 管理触摸屏帧采集、算法处理与 HID 注入。" />
-  <String Id="ServiceDisplayNameTest" Value="EGoTouch Capacitive Touch Driver (Test)" />
-  <String Id="ServiceDescriptionTest" Value="EGoTouch 电容触控控制器驱动服务 — 测试版本。" />
+
+  <!-- ═══════════════════════════════════════════════════════════
+       系统服务信息
+       ═══════════════════════════════════════════════════════════ -->
+  <String Id="ServiceDisplayName" Value="EGoTouch 电容触控控制器驱动" />
+  <String Id="ServiceDescription" Value="EGoTouch 电容触控控制器驱动服务 — 负责触摸屏帧采集、算法处理与 HID 报告注入。该服务随系统自动启动，以 SYSTEM 账户运行，无需用户干预。" />
+  <String Id="ServiceDisplayNameTest" Value="EGoTouch 电容触控控制器驱动（测试版）" />
+  <String Id="ServiceDescriptionTest" Value="EGoTouch 电容触控控制器驱动服务（测试版）— 包含诊断上位机 EGoTouchApp 与 BT MCU 协议测试工具 BtMcuTestTool，适用于开发调试场景。" />
+
+  <!-- ═══════════════════════════════════════════════════════════
+       WixUI_InstallDir 欢迎页
+       ═══════════════════════════════════════════════════════════ -->
+  <String Id="WelcomeDlgTitle" Value="{\WixUI_Font_Title}欢迎安装 [ProductName]" />
+  <String Id="WelcomeDlgDescription" Value="{\WixUI_Font_Normal}本向导将引导您完成 [ProductName] 的安装。&#xA;&#xA;安装程序将部署 EGoTouch 触控驱动服务到您的设备，并以系统服务形式注册，随 Windows 自动启动。&#xA;&#xA;请单击"下一步"继续，或单击"取消"退出安装向导。" />
+
+  <!-- ═══════════════════════════════════════════════════════════
+       WixUI_InstallDir 许可协议页
+       ═══════════════════════════════════════════════════════════ -->
+  <String Id="LicenseAgreementDlgTitle" Value="{\WixUI_Font_Title}最终用户许可协议" />
+  <String Id="LicenseAgreementDlgDescription" Value="{\WixUI_Font_Normal}请仔细阅读以下许可协议。如您同意协议条款，请选择"我接受许可协议条款"后单击"下一步"继续安装。" />
+
+  <!-- ═══════════════════════════════════════════════════════════
+       WixUI_InstallDir 安装目录选择页
+       ═══════════════════════════════════════════════════════════ -->
+  <String Id="InstallDirDlgTitle" Value="{\WixUI_Font_Title}选择安装目录" />
+  <String Id="InstallDirDlgDescription" Value="{\WixUI_Font_Normal}请选择 [ProductName] 的安装路径。默认安装到以下目录，如需更改请单击"浏览"选择其他位置。&#xA;&#xA;建议使用默认路径以确保 Windows 服务管理器能正确访问安装目录。" />
+
+  <!-- ═══════════════════════════════════════════════════════════
+       WixUI_InstallDir 安装进度页
+       ═══════════════════════════════════════════════════════════ -->
+  <String Id="ProgressDlgTitleInstalling" Value="{\WixUI_Font_Title}正在安装 [ProductName]" />
+  <String Id="ProgressDlgTitleChanging" Value="{\WixUI_Font_Title}正在更改 [ProductName]" />
+  <String Id="ProgressDlgTitleRepairing" Value="{\WixUI_Font_Title}正在修复 [ProductName]" />
+  <String Id="ProgressDlgTitleRemoving" Value="{\WixUI_Font_Title}正在卸载 [ProductName]" />
+  <String Id="ProgressDlgTextInstalling" Value="请稍候，安装程序正在部署文件并注册系统服务…" />
+  <String Id="ProgressDlgTextChanging" Value="请稍候，安装程序正在应用更改…" />
+  <String Id="ProgressDlgTextRepairing" Value="请稍候，安装程序正在修复损坏的组件…" />
+  <String Id="ProgressDlgTextRemoving" Value="请稍候，安装程序正在停止服务并清理文件…" />
+
+  <!-- ═══════════════════════════════════════════════════════════
+       WixUI_InstallDir 安装完成页
+       ═══════════════════════════════════════════════════════════ -->
+  <String Id="ExitDlgTitle" Value="{\WixUI_Font_Title}[ProductName] 安装完成" />
+  <String Id="ExitDlgDescription" Value="{\WixUI_Font_Normal}安装程序已将 [ProductName] 成功安装到您的设备。&#xA;&#xA;系统服务 EGoTouchService 已自动启动并在后台运行。您可以通过 Windows 服务管理器查看其运行状态。&#xA;&#xA;单击"完成"退出安装向导。" />
+
+  <!-- 安装失败/取消页 -->
+  <String Id="UserExitTitle" Value="{\WixUI_Font_Title}[ProductName] 安装已取消" />
+  <String Id="UserExitDescription1" Value="{\WixUI_Font_Normal}安装向导已被中断。[ProductName] 未完成安装。&#xA;&#xA;您可以稍后重新运行本安装程序。" />
+  <String Id="FatalErrorTitle" Value="{\WixUI_Font_Title}[ProductName] 安装失败" />
+  <String Id="FatalErrorDescription1" Value="{\WixUI_Font_Normal}安装过程中发生错误，[ProductName] 未能安装。&#xA;&#xA;请检查您的管理员权限后重试，或联系技术支持获取帮助。" />
+
+  <!-- ═══════════════════════════════════════════════════════════
+       WixUI_InstallDir 通用按钮和标签
+       ═══════════════════════════════════════════════════════════ -->
+  <String Id="BrowseDlgTitle" Value="{\WixUI_Font_Title}浏览目标文件夹" />
+  <String Id="BrowseDlgDescription" Value="{\WixUI_Font_Normal}请选择一个安装目录，然后单击"确定"。" />
+  <String Id="PrepareDlgTitle" Value="{\WixUI_Font_Title}正在准备安装" />
+  <String Id="PrepareDlgDescription" Value="{\WixUI_Font_Normal}请稍候，安装程序正在计算空间占用并准备安装参数…" />
+  <String Id="MaintenanceWelcomeDlgTitle" Value="{\WixUI_Font_Title}[ProductName] 维护" />
+  <String Id="MaintenanceWelcomeDlgDescription" Value="{\WixUI_Font_Normal}请选择要对 [ProductName] 执行的操作：&#xA;    • 更改 — 添加或移除组件&#xA;    • 修复 — 重新安装所有已安装的程序文件&#xA;    • 卸载 — 从计算机中移除 [ProductName]" />
+  <String Id="ResumeDlgTitle" Value="{\WixUI_Font_Title}继续 [ProductName] 安装" />
+  <String Id="ResumeDlgDescription" Value="{\WixUI_Font_Normal}安装程序检测到上次安装未完成。请单击"下一步"继续，或单击"取消"中止。" />
+  <String Id="MaintenanceTypeDlgTitle" Value="{\WixUI_Font_Title}选择维护类型" />
+  <String Id="MaintenanceTypeDlgDescription" Value="{\WixUI_Font_Normal}选择要执行的操作类型，然后单击"下一步"继续。" />
+  <String Id="VerifyReadyDlgInstallTitle" Value="{\WixUI_Font_Title}准备安装 [ProductName]" />
+  <String Id="VerifyReadyDlgInstallText" Value="安装程序已准备就绪，将开始安装 [ProductName]。&#xA;&#xA;如需查看或更改安装设置，请单击"上一步"。单击"安装"以开始安装。&#xA;&#xA;安装目录：[INSTALLFOLDER]" />
+  <String Id="VerifyReadyDlgChangeTitle" Value="{\WixUI_Font_Title}准备更改 [ProductName]" />
+  <String Id="VerifyReadyDlgChangeText" Value="安装程序已准备就绪，将更改 [ProductName]。&#xA;&#xA;如需查看或更改设置，请单击"上一步"。单击"更改"以应用更改。" />
+  <String Id="VerifyReadyDlgRepairTitle" Value="{\WixUI_Font_Title}准备修复 [ProductName]" />
+  <String Id="VerifyReadyDlgRepairText" Value="安装程序已准备就绪，将修复 [ProductName]。&#xA;&#xA;单击"修复"以开始修复。" />
+  <String Id="VerifyReadyDlgRemoveTitle" Value="{\WixUI_Font_Title}准备卸载 [ProductName]" />
+  <String Id="VerifyReadyDlgRemoveText" Value="安装程序已准备就绪，将从您的设备卸载 [ProductName]。&#xA;&#xA;卸载将停止并移除系统服务，但不会删除用户数据或日志文件。&#xA;&#xA;单击"卸载"以开始卸载。" />
+
 </WixLocalization>

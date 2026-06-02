@@ -1,59 +1,58 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
-  <!-- 
-    核心声明区：
-    - UpgradeCode 必须全局唯一，绝不能改，用于覆盖更新旧版本。
-    - 我们使用 -arch arm64 命令行参数来设定原生架构
+  <!--
+    EGoTouchRev 核心服务安装包
+    - UpgradeCode 全局唯一，永不修改，用于覆盖更新旧版本。
+    - -arch arm64 由命令行参数设定原生架构。
   -->
   <Package Name="!(loc.ProductName)" Manufacturer="!(loc.Manufacturer)" Version="$(var.BuildVersion)"
-           UpgradeCode="434AC770-0762-431A-9ABC-DB2F9DB289AC" 
+           UpgradeCode="434AC770-0762-431A-9ABC-DB2F9DB289AC"
            Scope="perMachine"
            Language="!(loc.Language)">
 
-    <!-- 支持自动覆盖升级：只要 UpgradeCode 不变，且提升 Version 号，它就会自动卸载旧版并覆盖安装新版 -->
+    <!-- 支持自动覆盖升级：UpgradeCode 不变 + Version 提升 → 自动卸载旧版覆盖安装 -->
     <MajorUpgrade DowngradeErrorMessage="!(loc.DowngradeError)" AllowSameVersionUpgrades="yes" />
 
-    <!-- 开启基础的安装界面 UI (会提供一个“我同意”“下一步”“安装”的向导) -->
-    <ui:WixUI Id="WixUI_Minimal" />
+    <!-- 安装向导界面：WixUI_InstallDir 提供欢迎页 + 许可协议 + 安装目录 + 进度 + 完成 -->
+    <ui:WixUI Id="WixUI_InstallDir" />
+
+    <!-- 许可协议 RTF -->
     <WixVariable Id="WixUILicenseRtf" Value="!(loc.LicenseRtf)" />
 
-    <!-- 用 CAB 文件打包我们所有零散文件并嵌在单个 MSI 内 -->
-    <MediaTemplate EmbedCab="yes" />
-
-    <!-- 定义原生的 64 位安装路径：C:\Program Files -->
+    <!-- 安装目录页：用户可自定义安装路径，默认 C:\Program Files\EGoTouchRev -->
     <StandardDirectory Id="ProgramFiles6432Folder">
       <Directory Id="INSTALLFOLDER" Name="EGoTouchRev" />
     </StandardDirectory>
 
-    <!-- 我们的核心组件（服务, 配置文件） -->
+    <!-- 通过 CAB 将所有文件打包进单个 MSI -->
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- 核心组件 -->
     <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
-      
-      <!-- 2. 部署核心服务：EGoTouchService。这段配置极为强大，不需要你去写冗长脆弱的命令行了 -->
+
       <Component Id="EGoTouchServiceComp" Guid="FCF77309-64AC-4F98-8424-B1D6144D9757">
         <File Id="EGoTouchServiceEXE" Source="build\EGoTouchService.exe" KeyPath="yes" />
-        
-        <!-- 让系统 Installer 原生去把服务注册进系统注册表 -->
-        <ServiceInstall 
+
+        <!-- 由 Windows Installer 原生注册系统服务 -->
+        <ServiceInstall
             Id="EGoTouchServiceInstaller"
             Type="ownProcess"
             Name="EGoTouchService"
             DisplayName="!(loc.ServiceDisplayName)"
             Description="!(loc.ServiceDescription)"
-            Start="auto"           
+            Start="auto"
             Account="LocalSystem"
             ErrorControl="normal" />
-            
-        <!-- 这个动作控制 Installer 在什么时候启动/停止这个服务 -->
-        <ServiceControl Id="StartWixService" Name="EGoTouchService" 
-                        Start="install" 
-                        Stop="both" 
+
+        <!-- 控制在安装/卸载时自动启停服务 -->
+        <ServiceControl Id="StartWixService" Name="EGoTouchService"
+                        Start="install"
+                        Stop="both"
                         Remove="uninstall" />
       </Component>
 
-
     </ComponentGroup>
 
-    <!-- 功能树，MSI 要求必须有一个或多个 Feature -->
     <Feature Id="MainFeature" Title="EGoTouch Core" Level="1">
       <ComponentGroupRef Id="ProductComponents" />
     </Feature>

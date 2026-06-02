@@ -1,13 +1,85 @@
 <?xml version="1.0" encoding="utf-8"?>
 <WixLocalization Culture="en-US" xmlns="http://wixtoolset.org/schemas/v4/wxl">
+
+  <!-- ═══════════════════════════════════════════════════════════
+       Language & Package Info
+       ═══════════════════════════════════════════════════════════ -->
   <String Id="Language" Value="1033" />
   <String Id="ProductName" Value="EGoTouch Controller Software" />
   <String Id="ProductNameTest" Value="EGoTouch Controller Software (Test Version)" />
   <String Id="Manufacturer" Value="EGoTouch Team" />
-  <String Id="DowngradeError" Value="A newer version of [ProductName] is already installed." />
-  <String Id="LicenseRtf" Value="scripts\EULA.rtf" />
+  <String Id="DowngradeError" Value="A newer version of [ProductName] is already installed. Please uninstall the newer version before proceeding." />
+  <String Id="LicenseRtf" Value="scripts\EULA_en-US.rtf" />
+
+  <!-- ═══════════════════════════════════════════════════════════
+       System Service Info
+       ═══════════════════════════════════════════════════════════ -->
   <String Id="ServiceDisplayName" Value="EGoTouch Capacitive Touch Driver" />
-  <String Id="ServiceDescription" Value="EGoTouch Capacitive Touch Driver Service - Manages touch frame acquisition, algorithm processing, and HID injection." />
+  <String Id="ServiceDescription" Value="EGoTouch Capacitive Touch Controller Driver Service — manages touch frame acquisition, algorithmic processing, and HID report injection. This service starts automatically with Windows and runs under the SYSTEM account." />
   <String Id="ServiceDisplayNameTest" Value="EGoTouch Capacitive Touch Driver (Test)" />
-  <String Id="ServiceDescriptionTest" Value="EGoTouch Capacitive Touch Driver Service - Test Version." />
+  <String Id="ServiceDescriptionTest" Value="EGoTouch Capacitive Touch Controller Driver Service (Test Version) — includes the EGoTouchApp diagnostic workbench and BtMcuTestTool protocol validator for development and debugging." />
+
+  <!-- ═══════════════════════════════════════════════════════════
+       WixUI_InstallDir — Welcome
+       ═══════════════════════════════════════════════════════════ -->
+  <String Id="WelcomeDlgTitle" Value="{\WixUI_Font_Title}Welcome to [ProductName] Setup" />
+  <String Id="WelcomeDlgDescription" Value="{\WixUI_Font_Normal}This wizard will guide you through the installation of [ProductName].&#xA;&#xA;The installer will deploy the EGoTouch touch controller driver service to your device and register it as a system service that starts automatically with Windows.&#xA;&#xA;Click Next to continue, or Cancel to exit Setup." />
+
+  <!-- ═══════════════════════════════════════════════════════════
+       WixUI_InstallDir — License Agreement
+       ═══════════════════════════════════════════════════════════ -->
+  <String Id="LicenseAgreementDlgTitle" Value="{\WixUI_Font_Title}End-User License Agreement" />
+  <String Id="LicenseAgreementDlgDescription" Value="{\WixUI_Font_Normal}Please read the following license agreement carefully. If you accept the terms, select &quot;I accept the license agreement&quot; and click Next to continue." />
+
+  <!-- ═══════════════════════════════════════════════════════════
+       WixUI_InstallDir — Installation Folder
+       ═══════════════════════════════════════════════════════════ -->
+  <String Id="InstallDirDlgTitle" Value="{\WixUI_Font_Title}Select Installation Folder" />
+  <String Id="InstallDirDlgDescription" Value="{\WixUI_Font_Normal}Choose the installation directory for [ProductName]. The default location is recommended to ensure proper access by the Windows Service Manager.&#xA;&#xA;Click Browse to select a different folder, or Next to accept the default." />
+
+  <!-- ═══════════════════════════════════════════════════════════
+       WixUI_InstallDir — Progress
+       ═══════════════════════════════════════════════════════════ -->
+  <String Id="ProgressDlgTitleInstalling" Value="{\WixUI_Font_Title}Installing [ProductName]" />
+  <String Id="ProgressDlgTitleChanging" Value="{\WixUI_Font_Title}Changing [ProductName]" />
+  <String Id="ProgressDlgTitleRepairing" Value="{\WixUI_Font_Title}Repairing [ProductName]" />
+  <String Id="ProgressDlgTitleRemoving" Value="{\WixUI_Font_Title}Removing [ProductName]" />
+  <String Id="ProgressDlgTextInstalling" Value="Please wait while Setup deploys files and registers the system service…" />
+  <String Id="ProgressDlgTextChanging" Value="Please wait while Setup applies the requested changes…" />
+  <String Id="ProgressDlgTextRepairing" Value="Please wait while Setup repairs damaged components…" />
+  <String Id="ProgressDlgTextRemoving" Value="Please wait while Setup stops the service and removes files…" />
+
+  <!-- ═══════════════════════════════════════════════════════════
+       WixUI_InstallDir — Exit
+       ═══════════════════════════════════════════════════════════ -->
+  <String Id="ExitDlgTitle" Value="{\WixUI_Font_Title}[ProductName] Setup Completed" />
+  <String Id="ExitDlgDescription" Value="{\WixUI_Font_Normal}[ProductName] has been successfully installed on your device.&#xA;&#xA;The EGoTouchService system service has been started and is running in the background. You can check its status at any time via the Windows Services Manager.&#xA;&#xA;Click Finish to exit Setup." />
+
+  <String Id="UserExitTitle" Value="{\WixUI_Font_Title}[ProductName] Setup Cancelled" />
+  <String Id="UserExitDescription1" Value="{\WixUI_Font_Normal}Setup was interrupted before [ProductName] could be fully installed.&#xA;&#xA;You may run this installer again at any time to complete the installation." />
+  <String Id="FatalErrorTitle" Value="{\WixUI_Font_Title}[ProductName] Setup Failed" />
+  <String Id="FatalErrorDescription1" Value="{\WixUI_Font_Normal}An error occurred during installation. [ProductName] was not installed.&#xA;&#xA;Please verify that you are running with administrator privileges, then try again. Contact technical support if the problem persists." />
+
+  <!-- ═══════════════════════════════════════════════════════════
+       WixUI_InstallDir — Common Dialogs
+       ═══════════════════════════════════════════════════════════ -->
+  <String Id="BrowseDlgTitle" Value="{\WixUI_Font_Title}Browse for Destination Folder" />
+  <String Id="BrowseDlgDescription" Value="{\WixUI_Font_Normal}Select an installation folder, then click OK." />
+  <String Id="PrepareDlgTitle" Value="{\WixUI_Font_Title}Preparing Installation" />
+  <String Id="PrepareDlgDescription" Value="{\WixUI_Font_Normal}Please wait while Setup computes space requirements and prepares installation parameters…" />
+  <String Id="MaintenanceWelcomeDlgTitle" Value="{\WixUI_Font_Title}[ProductName] Maintenance" />
+  <String Id="MaintenanceWelcomeDlgDescription" Value="{\WixUI_Font_Normal}Select the operation you wish to perform on [ProductName]:&#xA;    • Change — add or remove components&#xA;    • Repair — reinstall all installed program files&#xA;    • Remove — uninstall [ProductName] from this computer" />
+  <String Id="ResumeDlgTitle" Value="{\WixUI_Font_Title}Resume [ProductName] Installation" />
+  <String Id="ResumeDlgDescription" Value="{\WixUI_Font_Normal}Setup detected an incomplete previous installation. Click Next to resume, or Cancel to abort." />
+  <String Id="MaintenanceTypeDlgTitle" Value="{\WixUI_Font_Title}Select Maintenance Type" />
+  <String Id="MaintenanceTypeDlgDescription" Value="{\WixUI_Font_Normal}Choose the type of maintenance to perform, then click Next." />
+  <String Id="VerifyReadyDlgInstallTitle" Value="{\WixUI_Font_Title}Ready to Install [ProductName]" />
+  <String Id="VerifyReadyDlgInstallText" Value="Setup is ready to begin installing [ProductName].&#xA;&#xA;Click Back to review or change settings. Click Install to begin installation.&#xA;&#xA;Installation folder: [INSTALLFOLDER]" />
+  <String Id="VerifyReadyDlgChangeTitle" Value="{\WixUI_Font_Title}Ready to Change [ProductName]" />
+  <String Id="VerifyReadyDlgChangeText" Value="Setup is ready to apply changes to [ProductName].&#xA;&#xA;Click Back to review settings, or Change to apply." />
+  <String Id="VerifyReadyDlgRepairTitle" Value="{\WixUI_Font_Title}Ready to Repair [ProductName]" />
+  <String Id="VerifyReadyDlgRepairText" Value="Setup is ready to repair [ProductName].&#xA;&#xA;Click Repair to begin." />
+  <String Id="VerifyReadyDlgRemoveTitle" Value="{\WixUI_Font_Title}Ready to Remove [ProductName]" />
+  <String Id="VerifyReadyDlgRemoveText" Value="Setup is ready to remove [ProductName] from your computer.&#xA;&#xA;Uninstalling will stop and remove the system service, but will not delete user data or log files.&#xA;&#xA;Click Remove to begin uninstallation." />
+
 </WixLocalization>
