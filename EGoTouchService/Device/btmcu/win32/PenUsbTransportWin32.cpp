@@ -35,6 +35,10 @@ public:
         m_readOv = {};
         m_readOv.hEvent = m_readEvent;
         m_readPending = false;
+        m_writeOv = {};
+        m_writeOv.hEvent = m_writeEvent;
+        m_writeBytes = 0;
+        m_writePending = false;
         return {};
     }
 
@@ -126,45 +130,71 @@ public:
     }
 
     ChipResult<> WritePacket(std::span<const uint8_t> bytes) override {
-        HANDLE handle = INVALID_HANDLE_VALUE;
-        HANDLE writeEvent = nullptr;
-        {
-            std::lock_guard<std::mutex> lk(m_handleMu);
-            if (m_handle == INVALID_HANDLE_VALUE || !m_writeEvent) {
-                return std::unexpected(ChipError::InvalidOperation);
-            }
-            handle = m_handle;
-            writeEvent = m_writeEvent;
-            ::ResetEvent(m_writeEvent);
-        }
         if (bytes.empty()) {
             return std::unexpected(ChipError::InvalidOperation);
         }
 
+        HANDLE writeEvent = nullptr;
         DWORD bytesWritten = 0;
-        OVERLAPPED overlapped{};
-        overlapped.hEvent = writeEvent;
-
-        BOOL ok = ::WriteFile(handle, bytes.data(), static_cast<DWORD>(bytes.size()), &bytesWritten, &overlapped);
-        if (!ok) {
-            DWORD err = ::GetLastError();
-            if (err != ERROR_IO_PENDING) {
-                return std::unexpected(ChipError::CommunicationError);
+        bool writePending = false;
+        {
+            std::lock_guard<std::mutex> lk(m_handleMu);
+            if (m_handle == INVALID_HANDLE_VALUE || !m_writeEvent || m_writePending) {
+                return std::unexpected(ChipError::InvalidOperation);
             }
+            writeEvent = m_writeEvent;
+            m_writeBytes = 0;
+            m_writeOv = {};
+            m_writeOv.hEvent = m_writeEvent;
+            ::ResetEvent(m_writeEvent);
+            m_writePending = true;
 
+            BOOL ok = ::WriteFile(m_handle,
+                                  bytes.data(),
+                                  static_cast<DWORD>(bytes.size()),
+                                  &m_writeBytes,
+                                  &m_writeOv);
+            if (ok) {
+                bytesWritten = m_writeBytes;
+                m_writePending = false;
+            } else {
+                DWORD err = ::GetLastError();
+                if (err != ERROR_IO_PENDING) {
+                    m_writePending = false;
+                    return std::unexpected(ChipError::CommunicationError);
+                }
+                writePending = true;
+            }
+        }
+
+        if (writePending) {
             DWORD waitRes = ::WaitForSingleObject(writeEvent, 2000);
             if (waitRes == WAIT_TIMEOUT) {
-                ::CancelIoEx(handle, &overlapped);
-                ::GetOverlappedResult(handle, &overlapped, &bytesWritten, TRUE);
+                std::lock_guard<std::mutex> lk(m_handleMu);
+                if (m_handle != INVALID_HANDLE_VALUE) {
+                    ::CancelIoEx(m_handle, &m_writeOv);
+                }
+                (void)DrainWriteLocked(INFINITE);
                 return std::unexpected(ChipError::Timeout);
             } else if (waitRes != WAIT_OBJECT_0) {
-                ::CancelIoEx(handle, &overlapped);
-                ::GetOverlappedResult(handle, &overlapped, &bytesWritten, TRUE);
+                std::lock_guard<std::mutex> lk(m_handleMu);
+                if (m_handle != INVALID_HANDLE_VALUE) {
+                    ::CancelIoEx(m_handle, &m_writeOv);
+                }
+                (void)DrainWriteLocked(INFINITE);
                 return std::unexpected(ChipError::CommunicationError);
             }
 
-            if (!::GetOverlappedResult(handle, &overlapped, &bytesWritten, FALSE)) {
-                return std::unexpected(ChipError::CommunicationError);
+            std::lock_guard<std::mutex> lk(m_handleMu);
+            if (m_writePending) {
+                if (!TryDrainWriteLocked(bytesWritten)) {
+                    return std::unexpected(ChipError::CommunicationError);
+                }
+            } else {
+                if (m_handle == INVALID_HANDLE_VALUE) {
+                    return std::unexpected(ChipError::CommunicationError);
+                }
+                bytesWritten = m_writeBytes;
             }
         }
 
@@ -202,10 +232,43 @@ private:
         return TryDrainReadLocked(ignored);
     }
 
+    bool TryDrainWriteLocked(DWORD& bytesTransferred) {
+        if (m_handle == INVALID_HANDLE_VALUE || !m_writePending) {
+            m_writePending = false;
+            return true;
+        }
+
+        if (!::GetOverlappedResult(m_handle, &m_writeOv, &bytesTransferred, FALSE)) {
+            const DWORD err = ::GetLastError();
+            if (err == ERROR_IO_INCOMPLETE) {
+                return false;
+            }
+        }
+        m_writeBytes = bytesTransferred;
+        m_writePending = false;
+        return true;
+    }
+
+    bool DrainWriteLocked(DWORD waitMs) {
+        if (!m_writePending || !m_writeEvent) {
+            return true;
+        }
+        if (::WaitForSingleObject(m_writeEvent, waitMs) != WAIT_OBJECT_0) {
+            return false;
+        }
+        DWORD ignored = 0;
+        return TryDrainWriteLocked(ignored);
+    }
+
     void CloseLocked() {
         if (m_handle != INVALID_HANDLE_VALUE) {
             ::CancelIoEx(m_handle, nullptr);
             if (m_readPending && !DrainReadLocked(INFINITE)) {
+                // Preserve the handle, event, OVERLAPPED storage and pending flag
+                // rather than freeing resources that the kernel may still signal.
+                return;
+            }
+            if (m_writePending && !DrainWriteLocked(INFINITE)) {
                 // Preserve the handle, event, OVERLAPPED storage and pending flag
                 // rather than freeing resources that the kernel may still signal.
                 return;
@@ -222,6 +285,7 @@ private:
             m_writeEvent = nullptr;
         }
         m_readPending = false;
+        m_writePending = false;
     }
 
     mutable std::mutex m_handleMu;
@@ -229,9 +293,12 @@ private:
     HANDLE m_readEvent = nullptr;
     HANDLE m_writeEvent = nullptr;
     OVERLAPPED m_readOv{};
+    OVERLAPPED m_writeOv{};
     std::array<uint8_t, 64> m_readBuffer{};
     DWORD m_readBytes = 0;
+    DWORD m_writeBytes = 0;
     bool m_readPending = false;
+    bool m_writePending = false;
 };
 
 std::unique_ptr<IPenUsbTransport> CreatePenUsbTransportWin32() {
