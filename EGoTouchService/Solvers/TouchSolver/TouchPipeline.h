@@ -38,7 +38,8 @@
 #include <atomic>
 #include <string>
 #include <vector>
-#include <iostream>
+#include <array>
+#include <iosfwd>    // std::ostream 前向声明
 
 namespace Solvers {
 

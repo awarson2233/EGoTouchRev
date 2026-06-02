@@ -2,13 +2,13 @@
 #include "ConfigParse.h"
 
 #include <algorithm>
+#include <ostream>
 
 namespace Solvers {
 
 bool StylusPipeline::Process(HeatmapFrame& frame) {
     frame.stylus.ResetRuntime();
-    const StylusBtInputSnapshot bt = ReadLatestBtSample();
-    frame.stylus.input.btSample = bt;
+    ReadLatestBtSample(frame.stylus.input.btSample);
 
     m_frameParser.Process(frame);
     if (frame.stylus.runtime.flow.terminal) {
@@ -81,6 +81,7 @@ bool StylusPipeline::Process(HeatmapFrame& frame) {
 
 std::vector<ConfigParam> StylusPipeline::GetConfigSchema() const {
     std::vector<ConfigParam> schema;
+    schema.reserve(41);
     schema.emplace_back("sp.frameParserEnabled", "Frame Parser Enabled",
                         ConfigParam::Bool, const_cast<bool*>(&m_frameParser.m_enabled))
         .Module("Frame Parser");
@@ -383,34 +384,35 @@ void StylusPipeline::LoadConfig(const std::string& key, const std::string& value
 }
 
 void StylusPipeline::SetBtMcuPressure(uint16_t pressure) {
+    StylusBtInputSnapshot next{};
+    next.pressure[3] = pressure;
+    next.hasSample = true;
+
     std::lock_guard<std::mutex> lk(m_btMutex);
-    m_btSample.pressure.fill(0);
-    m_btSample.rawPressure.fill(0);
-    m_btSample.pressure[3] = pressure;
-    m_btSample.freq1 = 0;
-    m_btSample.freq2 = 0;
-    m_btSample.seq += 1;
-    m_btSample.hasSample = true;
-    m_btSample.hasFreq = false;
+    next.seq = m_btSample.seq + 1;
+    m_btSample = next;
 }
 
 void StylusPipeline::SetBtMcuPressurePacket(const std::array<uint16_t, 4>& pressure,
                                             const std::array<uint16_t, 4>& rawPressure,
                                             uint8_t freq1,
                                             uint8_t freq2) {
+    StylusBtInputSnapshot next{};
+    next.pressure = pressure;
+    next.rawPressure = rawPressure;
+    next.freq1 = freq1;
+    next.freq2 = freq2;
+    next.hasSample = true;
+    next.hasFreq = true;
+
     std::lock_guard<std::mutex> lk(m_btMutex);
-    m_btSample.pressure = pressure;
-    m_btSample.rawPressure = rawPressure;
-    m_btSample.freq1 = freq1;
-    m_btSample.freq2 = freq2;
-    m_btSample.seq += 1;
-    m_btSample.hasSample = true;
-    m_btSample.hasFreq = true;
+    next.seq = m_btSample.seq + 1;
+    m_btSample = next;
 }
 
-StylusBtInputSnapshot StylusPipeline::ReadLatestBtSample() const {
+void StylusPipeline::ReadLatestBtSample(StylusBtInputSnapshot& out) const {
     std::lock_guard<std::mutex> lk(m_btMutex);
-    return m_btSample;
+    out = m_btSample;
 }
 
 } // namespace Solvers
