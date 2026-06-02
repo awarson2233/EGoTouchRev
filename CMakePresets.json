@@ -1,0 +1,83 @@
+{
+  "version": 2,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 20,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "arm64-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "architecture": {
+        "value": "arm64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": {
+          "type": "BOOL",
+          "value": "ON"
+        },
+        "CMAKE_C_COMPILER": {
+          "type": "FILEPATH",
+          "value": "C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/Llvm/ARM64/bin/clang-cl.exe"
+        },
+        "CMAKE_CXX_COMPILER": {
+          "type": "FILEPATH",
+          "value": "C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/Llvm/ARM64/bin/clang-cl.exe"
+        },
+        "CMAKE_C_COMPILER_TARGET": "arm64-pc-windows-msvc",
+        "CMAKE_CXX_COMPILER_TARGET": "arm64-pc-windows-msvc",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "hostOS": "Windows",
+          "intelliSenseMode": "windows-msvc-arm64"
+        }
+      }
+    },
+    {
+      "name": "arm64-Debug",
+      "displayName": "arm64 Debug",
+      "inherits": "arm64-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "arm64-Release",
+      "displayName": "arm64 Release",
+      "inherits": "arm64-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "arm64-Debug",
+      "displayName": "arm64 Debug Build",
+      "configurePreset": "arm64-Debug"
+    },
+    {
+      "name": "arm64-Release",
+      "displayName": "arm64 Release Build",
+      "configurePreset": "arm64-Release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "arm64-Debug",
+      "displayName": "arm64 Debug Test",
+      "configurePreset": "arm64-Debug"
+    },
+    {
+      "name": "arm64-Release",
+      "displayName": "arm64 Release Test",
+      "configurePreset": "arm64-Release"
+    }
+  ]
+}

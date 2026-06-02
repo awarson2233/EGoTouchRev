@@ -9,9 +9,9 @@ on:
 
 jobs:
   build-arm64:
-    # Use the native GitHub-hosted Windows ARM64 runner
+    # Use the native GitHub-hosted Windows ARM64 runner.
     runs-on: windows-11-arm
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -25,9 +25,7 @@ jobs:
           arch: arm64
 
       - name: CMake Configure (clang-cl)
-        # On a native ARM64 host, we can use the ARM64-native clang-cl
-        # No need for cross-compilation flags (CMAKE_SYSTEM_NAME etc.)
-        # but we preserve them to be explicit.
+        # On a native ARM64 host, we can use the ARM64-native clang-cl.
         run: |
           cmake -G "Ninja" -S . -B build `
                 -DCMAKE_BUILD_TYPE=Release `
@@ -40,65 +38,12 @@ jobs:
         run: cmake --build build --config Release --parallel
 
       - name: Run Unit Tests (Native)
-        # Since we are on an ARM64 host, we can now actually RUN the tests!
+        # Since we are on an ARM64 host, we can run hardware-independent tests.
         working-directory: build
         run: |
-          # Only running HostSystemStateMonitorTest as it doesn't require hardware
+          # Only running HostSystemStateMonitorTest as it doesn't require hardware.
           if (Test-Path "HostSystemStateMonitorTest.exe") {
             .\HostSystemStateMonitorTest.exe
+          } else {
+            Write-Host "HostSystemStateMonitorTest.exe not found; skipping smoke test."
           }
-
-      - name: Determine Version
-        id: version
-        run: |
-          $version = "1.0.0"
-          if ($env:GITHUB_REF -match "^refs/tags/v?(.*)$") {
-            $version = $matches[1]
-          }
-          echo "APP_VERSION=$version" >> $env:GITHUB_ENV
-          echo "Resolved Version: $version"
-
-      - name: Install WiX Toolset
-        run: dotnet tool install --global wix
-
-      - name: Build Installer (Release & Test)
-        run: |
-          wix eula accept wix7
-          wix extension add -g WixToolset.UI.wixext
-          wix build -ext WixToolset.UI.wixext -arch arm64 -d BuildVersion=$env:APP_VERSION scripts\EGoTouchSetup.wxs -loc scripts\zh-CN.wxl -out build\EGoTouchSetup_arm64.msi
-          wix build -ext WixToolset.UI.wixext -arch arm64 -d BuildVersion=$env:APP_VERSION scripts\EGoTouchTestSetup.wxs -loc scripts\zh-CN.wxl -out build\EGoTouchTestSetup_arm64.msi
-
-      - name: Package Installer Artifacts
-        run: |
-          $artifactDir = "build\artifacts\EGoTouch-Installers-ARM64-Release"
-          New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
-
-          $installers = @(
-            "build\EGoTouchSetup_arm64.msi",
-            "build\EGoTouchTestSetup_arm64.msi"
-          )
-
-          foreach ($installer in $installers) {
-            if (-not (Test-Path $installer)) {
-              throw "Missing WiX installer artifact: $installer"
-            }
-            Copy-Item $installer $artifactDir
-          }
-
-          $checksumLines = foreach ($installer in Get-ChildItem -Path $artifactDir -Filter "*.msi") {
-            $hash = Get-FileHash -Path $installer.FullName -Algorithm SHA256
-            "$($hash.Hash)  $($installer.Name)"
-          }
-          $checksumLines | Set-Content -Path "$artifactDir\SHA256SUMS.txt" -Encoding UTF8
-
-          Compress-Archive -Path "$artifactDir\*" -DestinationPath "build\EGoTouch-Installers-ARM64-Release.zip" -Force
-
-      - name: Upload Release Installer Package
-        uses: actions/upload-artifact@v4
-        with:
-          name: EGoTouch-Installers-ARM64-Release
-          path: |
-            build\EGoTouch-Installers-ARM64-Release.zip
-            build\artifacts\EGoTouch-Installers-ARM64-Release
-          if-no-files-found: error
-          retention-days: 30

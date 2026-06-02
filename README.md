@@ -22,10 +22,12 @@ Developed entirely through clean-room reverse engineering, this project aims to 
 
 ## 💻 Installation
 
-We provide a **Pure ARM64 MSI Installer** packaged using the bleeding-edge WiX Toolset v4.
+We provide **Pure ARM64 MSI Installers** packaged using WiX Toolset v4. Commit and PR builds only compile and run smoke tests; release installers are built from `vMAJOR.MINOR.PATCH` tags and attached directly to GitHub Releases.
 
 ### Easy Install (End-Users)
-1. Download the latest `EGoTouch_ARM64_v1.X.msi` from the [Releases](#) page.
+1. Download the latest `EGoTouchSetup_arm64_vX.Y.Z.msi` from the [Releases](#) page.
+   - `EGoTouchSetup_arm64_vX.Y.Z.msi`: core service installer.
+   - `EGoTouchTestSetup_arm64_vX.Y.Z.msi`: service plus diagnostic tools.
 2. Double click to run the setup wizard.
 3. The installer will automatically deploy the binaries and configure `EGoTouchService` to launch silently in the background.
 
@@ -33,17 +35,23 @@ We provide a **Pure ARM64 MSI Installer** packaged using the bleeding-edge WiX T
 
 ### Build from Source (Developers)
 
-This project relies on **CMake** for code compilation and **WiX v4** for MSI packaging.
+This project relies on **CMake** for code compilation and **WiX v4** for MSI packaging. Release automation uses the Git tag as the public version, while WiX receives the numeric MSI version without the leading `v`.
 
-```bash
+```powershell
 # 1. Compile the binaries
-mkdir build & cd build
-cmake .. -G "Ninja"
-ninja
+cmake -G "Ninja" -S . -B build `
+      -DCMAKE_BUILD_TYPE=Release `
+      -DCMAKE_C_COMPILER=clang-cl `
+      -DCMAKE_CXX_COMPILER=clang-cl `
+      -DHIMAX_ENABLE_NEON=ON `
+      -DEGO_BUILD_TESTS=ON
+cmake --build build --config Release --parallel
 
-# 2. Package the MSI Installer (Requires .NET)
-cd ..
-wix build -arch arm64 scripts/EGoTouchSetup.wxs -ext WixToolset.UI.wixext -loc scripts/zh-CN.wxl -o build/EGoTouch_ARM64_v1.0.msi
+# 2. Package the MSI Installer (Requires .NET and WiX)
+dotnet tool install --global wix
+wix eula accept wix7
+wix extension add -g WixToolset.UI.wixext
+wix build -ext WixToolset.UI.wixext -arch arm64 -d BuildVersion=1.2.3 scripts\EGoTouchSetup.wxs -loc scripts\zh-CN.wxl -out build\EGoTouchSetup_arm64_v1.2.3.msi
 ```
 
 ---

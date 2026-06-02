@@ -1,0 +1,141 @@
+name: Publish ARM64 MSI Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-arm64-release:
+    # Use the native GitHub-hosted Windows ARM64 runner.
+    runs-on: windows-11-arm
+    outputs:
+      release_tag: ${{ steps.version.outputs.release_tag }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Resolve release version
+        id: version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag -notmatch '^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') {
+            throw "Release tag '$tag' must match vMAJOR.MINOR.PATCH, for example v1.2.3."
+          }
+
+          $major = [int]$matches[1]
+          $minor = [int]$matches[2]
+          $patch = [int]$matches[3]
+
+          if ($major -gt 255 -or $minor -gt 255 -or $patch -gt 65535) {
+            throw "MSI ProductVersion '$major.$minor.$patch' is out of range: major/minor <= 255 and patch <= 65535."
+          }
+
+          $msiVersion = "$major.$minor.$patch"
+          "RELEASE_TAG=$tag" >> $env:GITHUB_ENV
+          "MSI_VERSION=$msiVersion" >> $env:GITHUB_ENV
+          "release_tag=$tag" >> $env:GITHUB_OUTPUT
+          "msi_version=$msiVersion" >> $env:GITHUB_OUTPUT
+
+          Write-Host "Release tag: $tag"
+          Write-Host "MSI version: $msiVersion"
+
+      - name: Configure MSVC for ARM64
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: arm64
+
+      - name: CMake Configure (clang-cl)
+        # On a native ARM64 host, we can use the ARM64-native clang-cl.
+        run: |
+          cmake -G "Ninja" -S . -B build `
+                -DCMAKE_BUILD_TYPE=Release `
+                -DCMAKE_C_COMPILER=clang-cl `
+                -DCMAKE_CXX_COMPILER=clang-cl `
+                -DHIMAX_ENABLE_NEON=ON `
+                -DEGO_BUILD_TESTS=ON
+
+      - name: CMake Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Run Unit Tests (Native)
+        # Since we are on an ARM64 host, we can run hardware-independent tests.
+        working-directory: build
+        run: |
+          # Only running HostSystemStateMonitorTest as it doesn't require hardware.
+          if (Test-Path "HostSystemStateMonitorTest.exe") {
+            .\HostSystemStateMonitorTest.exe
+          } else {
+            Write-Host "HostSystemStateMonitorTest.exe not found; skipping smoke test."
+          }
+
+      - name: Install WiX Toolset
+        run: dotnet tool install --global wix
+
+      - name: Build Installers
+        run: |
+          wix eula accept wix7
+          wix extension add -g WixToolset.UI.wixext
+
+          $assetDir = "build\release-assets"
+          New-Item -ItemType Directory -Force -Path $assetDir | Out-Null
+
+          wix build -ext WixToolset.UI.wixext -arch arm64 -d BuildVersion=$env:MSI_VERSION scripts\EGoTouchSetup.wxs -loc scripts\zh-CN.wxl -out "$assetDir\EGoTouchSetup_arm64_$($env:RELEASE_TAG).msi"
+          wix build -ext WixToolset.UI.wixext -arch arm64 -d BuildVersion=$env:MSI_VERSION scripts\EGoTouchTestSetup.wxs -loc scripts\zh-CN.wxl -out "$assetDir\EGoTouchTestSetup_arm64_$($env:RELEASE_TAG).msi"
+
+      - name: Generate SHA256 checksums
+        run: |
+          $assetDir = "build\release-assets"
+          $installers = @(
+            "$assetDir\EGoTouchSetup_arm64_$($env:RELEASE_TAG).msi",
+            "$assetDir\EGoTouchTestSetup_arm64_$($env:RELEASE_TAG).msi"
+          )
+
+          $checksumLines = foreach ($installer in $installers) {
+            if (-not (Test-Path $installer)) {
+              throw "Missing WiX installer artifact: $installer"
+            }
+            $hash = Get-FileHash -Path $installer -Algorithm SHA256
+            "$($hash.Hash)  $(Split-Path -Leaf $installer)"
+          }
+
+          $checksumFile = "$assetDir\EGoTouch_arm64_$($env:RELEASE_TAG)_SHA256SUMS.txt"
+          $checksumLines | Set-Content -Path $checksumFile -Encoding UTF8
+
+      - name: Upload release assets artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: egotouch-arm64-${{ github.ref_name }}
+          path: build/release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-release:
+    runs-on: ubuntu-24.04
+    needs: build-arm64-release
+
+    steps:
+      - name: Download release assets artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: egotouch-arm64-${{ needs.build-arm64-release.outputs.release_tag }}
+          path: release-assets
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.build-arm64-release.outputs.release_tag }}
+          name: EGoTouch ${{ needs.build-arm64-release.outputs.release_tag }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release-assets/*.msi
+            release-assets/*SHA256SUMS.txt
