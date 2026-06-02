@@ -248,6 +248,16 @@ void VhfReporter::DispatchStylus(Solvers::HeatmapFrame& frame,
     if (!writeEnabled ||
         !m_enabled.load(std::memory_order_relaxed) ||
         !stylusPacket.packet.valid) {
+        if (!writeEnabled) {
+            const bool hadStylus = m_hadStylusActiveLastFrame.exchange(
+                false, std::memory_order_acq_rel);
+            if (hadStylus) {
+                std::lock_guard<std::mutex> lk(m_mu);
+                if (!m_closed && m_handle != INVALID_HANDLE_VALUE) {
+                    WriteStylusNeutralLocked();
+                }
+            }
+        }
         return;
     }
 
