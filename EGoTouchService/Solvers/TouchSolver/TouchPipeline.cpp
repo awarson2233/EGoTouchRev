@@ -5,7 +5,6 @@
 #include <array>
 #include <cstdint>
 #include <ostream>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
