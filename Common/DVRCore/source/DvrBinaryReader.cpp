@@ -394,16 +394,13 @@ bool TryReadBoolStridedField(const std::vector<uint8_t>& record,
 
 bool ValidateCriticalRequiredFieldsPresent(const std::vector<Dvr2FieldDef>& fields,
                                            std::string* outError) {
-    static constexpr std::array<std::string_view, 3> kCriticalRequiredFields{
-        "timestamp",
-        "masterWasRead",
-        "heatmapMatrix",
-    };
     static const std::vector<Dvr2FieldDef> kCanonicalFields = DvrFmt::BuildFrameSchema();
 
-    for (std::string_view path : kCriticalRequiredFields) {
-        const auto* canonical = DvrFmt::FindField(kCanonicalFields, path);
-        if (!canonical || (canonical->flags & DvrFmt::kDvrFieldRequired) == 0) continue;
+    for (const auto& canonical : kCanonicalFields) {
+        if ((canonical.flags & DvrFmt::kDvrFieldRequired) == 0) continue;
+
+        const auto* pathEnd = std::find(canonical.path, canonical.path + sizeof(canonical.path), '\0');
+        const std::string_view path(canonical.path, static_cast<size_t>(pathEnd - canonical.path));
         if (!DvrFmt::FindField(fields, path)) {
             if (outError) {
                 *outError = "DVR2 frame missing required field: ";
