@@ -186,6 +186,7 @@ set(SOLVERS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/EGoTouchService/Solvers")
 add_library(Solvers STATIC
     # TouchSolver (linear orchestrator — all algorithm modules are header-only .hpp)
     EGoTouchService/Solvers/TouchSolver/TouchPipeline.cpp
+    EGoTouchService/Solvers/TouchSolver/TouchPipelineConfigKeys.cpp
     # StylusSolver (official ASA pipeline — modules are header-only .hpp)
     EGoTouchService/Solvers/StylusSolver/StylusPipeline.cpp
 )

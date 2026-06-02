@@ -1,4 +1,5 @@
 #include "TouchPipeline.h"
+#include "TouchPipelineConfigKeys.h"
 #include "ConfigParse.h"
 
 #include <algorithm>
@@ -263,6 +264,14 @@ bool IsFrozenCurrentTouchConfigKey(std::string_view key) {
 
     return std::binary_search(kFrozenKeys.begin(), kFrozenKeys.end(), key);
 }
+
+#if EGOTOUCH_CONFIG_ENABLED
+Solvers::TouchConfig::TouchPipelineMembers MakeConfigMembers(Solvers::TouchPipeline& p) {
+    Solvers::TouchConfig::TouchPipelineMembers m{};
+    m.baseline = &p.m_baseline;
+    return m;
+}
+#endif
 
 TouchConfigKey FindTouchConfigKey(std::string_view key) {
     constexpr std::array<std::pair<std::string_view, TouchConfigKey>, 124> kTable = {{
@@ -601,6 +610,49 @@ std::array<uint8_t, 2400> TouchPipeline::GetZoneEdge() const {
 #endif
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// GetConfigSchema — delegated to generated config keys
+// ══════════════════════════════════════════════════════════════════════
+std::vector<ConfigParam> TouchPipeline::GetConfigSchema() const {
+#if EGOTOUCH_CONFIG_ENABLED
+    auto m = MakeConfigMembers(const_cast<TouchPipeline&>(*this));
+    return TouchConfig::GetConfigSchema(m);
+#else
+    return {};
+#endif
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// SaveConfig — delegated to generated config keys
+// ══════════════════════════════════════════════════════════════════════
+void TouchPipeline::SaveConfig(std::ostream& out) const {
+#if EGOTOUCH_CONFIG_ENABLED
+    auto m = MakeConfigMembers(const_cast<TouchPipeline&>(*this));
+    TouchConfig::SaveConfig(m, out);
+#else
+    (void)out;
+#endif
+    // Release: no-op
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// LoadConfig — delegated to generated config keys
+// ══════════════════════════════════════════════════════════════════════
+void TouchPipeline::LoadConfig(const std::string& key,
+                                const std::string& value) {
+#if EGOTOUCH_CONFIG_ENABLED
+    if (IsFrozenCurrentTouchConfigKey(key)) return;
+
+    auto m = MakeConfigMembers(*this);
+    TouchConfig::LoadConfig(m, key, value);
+#else
+    (void)key;
+    (void)value;
+#endif
+    // Release: no-op (ignore INI values)
+}
+
+#if 0  // Legacy handwritten config implementation kept for review/reference.
 // ══════════════════════════════════════════════════════════════════════
 // GetConfigSchema — unified from all sub-modules
 // ══════════════════════════════════════════════════════════════════════
@@ -1416,4 +1468,5 @@ void TouchPipeline::LoadConfig(const std::string& key,
         LogConfigParseWarning("TouchPipeline", __func__, key, value, error);
     }
 }
+#endif  // Legacy handwritten config implementation kept for review/reference.
 } // namespace Solvers

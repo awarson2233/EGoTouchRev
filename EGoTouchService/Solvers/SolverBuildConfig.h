@@ -3,8 +3,10 @@
 // Diagnostic fields are available in Debug builds and for the diagnostic App
 #if defined(_DEBUG) || defined(EGOTOUCH_DIAGNOSTICS)
 #define EGOTOUCH_DIAG 1
+#define EGOTOUCH_CONFIG_ENABLED 1
 #else
 #define EGOTOUCH_DIAG 0
+#define EGOTOUCH_CONFIG_ENABLED 0
 #endif
 
 #if defined(_M_ARM64) || defined(__aarch64__) || defined(__ARM_NEON)
