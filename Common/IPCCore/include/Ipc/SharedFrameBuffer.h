@@ -785,6 +785,10 @@ public:
     uint64_t LastSlaveFrameId() const;
     uint64_t LastMasterFrameId() const;
     const SharedTripleBuffer* RawBuffer() const { return m_buf; }
+    /// ⚠️  UNSAFE — returns a raw pointer to the current ready slot WITHOUT
+    /// seqlock protection. The writer may overwrite this slot while the caller
+    /// reads it, producing torn data. Prefer Read() for safe access with
+    /// built-in integrity checking.
     const SharedFrameData* Raw() const {
         return m_buf ? &m_buf->slots[m_buf->readyIdx.load(std::memory_order_acquire)] : nullptr;
     }
