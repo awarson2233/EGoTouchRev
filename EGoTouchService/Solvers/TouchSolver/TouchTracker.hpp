@@ -362,8 +362,8 @@ inline TouchContact TouchTracker::BuildLiftOffContact(const TrackState& track,
 }
 
 inline int TouchTracker::AllocateId(const TrackState* reservedNextTracks, int reservedCount) const {
-    for (int i = 0; i < m_maxTouchCount; ++i) {
-        const int candidate = ((m_nextIdSeed - 1 + i) % m_maxTouchCount) + 1;
+    for (int i = 0; i < kMaxTracks; ++i) {
+        const int candidate = ((m_nextIdSeed - 1 + i) % kMaxTracks) + 1;
         bool used = false;
         for (int j = 0; j < reservedCount; ++j) {
             if (reservedNextTracks[j].id == candidate) {
