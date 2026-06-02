@@ -649,6 +649,13 @@ void DeviceRuntime::OnStreaming() {
     }
   }
 
+  // Parser-only mode may have been enabled after pipeline processing and may
+  // already have flushed all active touch contacts. Do not send a stale touch
+  // frame after that all-up flush.
+  if (dispatchTouch && m_masterParserOnly.load(std::memory_order_relaxed)) {
+    dispatchTouch = false;
+  }
+
   // VHF dispatch can block on device I/O; keep it outside m_pipelineMu.
   // touchFrame owns processed stylus/contact vectors, and rawPtr references the
   // current chip frame buffer until the next GetFrame() on this worker thread.
