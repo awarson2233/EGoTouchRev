@@ -576,8 +576,10 @@ inline bool TouchTracker::Process(HeatmapFrame& frame) {
         }
         return true;
     }
-    if (frame.touch.output.contacts.size() > static_cast<size_t>(m_maxTouchCount))
-        frame.touch.output.contacts.resize(static_cast<size_t>(m_maxTouchCount));
+    // Safety clamp: prevent out-of-bounds write if m_maxTouchCount exceeds fixed arrays
+    const int effectiveMaxTouches = (std::min)(m_maxTouchCount, kMaxTracks);
+    if (frame.touch.output.contacts.size() > static_cast<size_t>(effectiveMaxTouches))
+        frame.touch.output.contacts.resize(static_cast<size_t>(effectiveMaxTouches));
 
     constexpr int kRows = 40, kCols = 60;
     constexpr float kEdgeMargin = 2.0f;
@@ -740,8 +742,8 @@ inline bool TouchTracker::Process(HeatmapFrame& frame) {
         if (aftSuppressed) o.debugFlags = 0x101;
         else if (gapRelinked[c]) o.debugFlags = 0x21;
         else o.debugFlags = 0x01;
-        if (outCount < m_maxTouchCount) out[outCount++] = o;
-        if (nextTrackCount < m_maxTouchCount) nextTracks[nextTrackCount++] = t;
+        if (outCount < effectiveMaxTouches) out[outCount++] = o;
+        if (nextTrackCount < effectiveMaxTouches) nextTracks[nextTrackCount++] = t;
     }
 
     for (int c = 0; c < curCount; ++c) {
@@ -766,7 +768,7 @@ inline bool TouchTracker::Process(HeatmapFrame& frame) {
             if (ShouldStylusAftSuppress(o, t.age, stylusAftX, stylusAftY, hold))
                 t.stylusSuppressFrames = std::max(0, hold - 1);
         }
-        m_nextIdSeed = (t.id % m_maxTouchCount) + 1;
+        m_nextIdSeed = (t.id % effectiveMaxTouches) + 1;
         o.id = t.id;
         o.state = TouchStateDown;
         o.sizeMm = t.sizeMm;
@@ -782,8 +784,8 @@ inline bool TouchTracker::Process(HeatmapFrame& frame) {
         StoreEdgeMetadata(t, o);
         o.reportEvent = TouchReportIdle;
         o.reportFlags = 0;
-        if (outCount < m_maxTouchCount) out[outCount++] = o;
-        if (nextTrackCount < m_maxTouchCount) nextTracks[nextTrackCount++] = t;
+        if (outCount < effectiveMaxTouches) out[outCount++] = o;
+        if (nextTrackCount < effectiveMaxTouches) nextTracks[nextTrackCount++] = t;
     }
 
     for (int p = 0; p < preCount; ++p) {
@@ -800,11 +802,11 @@ inline bool TouchTracker::Process(HeatmapFrame& frame) {
             if (t.stylusSuppressFrames > 0) t.stylusSuppressFrames -= 1;
             if (t.gapFrames <= m_gapRelinkWindowFrames) {
                 TouchContact hidden = BuildSilentGapContact(t, p, kCols, kRows, kEdgeMargin);
-                if (outCount < m_maxTouchCount) out[outCount++] = hidden;
-                if (nextTrackCount < m_maxTouchCount) nextTracks[nextTrackCount++] = t;
+                if (outCount < effectiveMaxTouches) out[outCount++] = hidden;
+                if (nextTrackCount < effectiveMaxTouches) nextTracks[nextTrackCount++] = t;
             } else {
                 TouchContact up = BuildLiftOffContact(t, p, kCols, kRows, kEdgeMargin);
-                if (outCount < m_maxTouchCount) out[outCount++] = up;
+                if (outCount < effectiveMaxTouches) out[outCount++] = up;
             }
             continue;
         }
@@ -812,7 +814,7 @@ inline bool TouchTracker::Process(HeatmapFrame& frame) {
         t.missed += 1;
         if (t.stylusSuppressFrames > 0) t.stylusSuppressFrames -= 1;
         TouchContact up = BuildLiftOffContact(t, p, kCols, kRows, kEdgeMargin);
-        if (outCount < m_maxTouchCount) out[outCount++] = up;
+        if (outCount < effectiveMaxTouches) out[outCount++] = up;
     }
 
     GhostSuppressor ghostSuppressor;
@@ -820,7 +822,7 @@ inline bool TouchTracker::Process(HeatmapFrame& frame) {
     ghostSuppressor.m_rxGhostLineDelta = m_rxGhostLineDelta;
     ghostSuppressor.m_rxGhostWeakRatio = m_rxGhostWeakRatio;
     ghostSuppressor.m_rxGhostOnlyNew = m_rxGhostOnlyNew;
-    ghostSuppressor.ProcessTracked(out, outCount, m_maxTouchCount, nextTracks, nextTrackCount,
+    ghostSuppressor.ProcessTracked(out, outCount, effectiveMaxTouches, nextTracks, nextTrackCount,
                                    TouchStateUp, TouchStateDown, TouchLifeSilentGap);
 
     frame.touch.output.contacts.assign(out, out + outCount);
