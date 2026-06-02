@@ -85,8 +85,10 @@ public:
         stylus.input.checksum16 = checksum16;
         stylus.input.status = status;
 
+        const StylusInputSnapshot currentInput = stylus.input;
+
         if (available < kSlaveFrameBytes) {
-            if (TryProcessFromSlaveSuffix(frame, priorInput)) {
+            if (TryProcessFromSlaveSuffix(frame, currentInput)) {
                 return true;
             }
             parse.checksumOk = false;
