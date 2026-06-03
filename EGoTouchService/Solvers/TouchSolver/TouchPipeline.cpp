@@ -431,38 +431,61 @@ bool TouchPipeline::ProcessMasterParserOnly(HeatmapFrame& frame) {
 }
 
 bool TouchPipeline::Process(HeatmapFrame& frame) {
+    ReserveContactCapacity(frame);
+
+    if (!ProcessFrameParser(frame)) return true;
+    if (!ProcessSignalConditioning(frame)) return true;
+
+    GenerateContacts(frame);
+    PostProcessContacts(frame);
+    UpdateContactCaches(frame);
+#if EGOTOUCH_DIAG
+    UpdateDiagnosticCaches(frame);
+#endif
+    ProcessTrackingAndGesture(frame);
+    return true;
+}
+
+void TouchPipeline::ReserveContactCapacity(HeatmapFrame& frame) const {
     const size_t desiredContactCapacity = static_cast<size_t>(
         std::max(m_contactExtractor.m_zoneExp.m_maxTouches, m_tracker.m_maxTouchCount));
     if (frame.touch.output.contacts.capacity() < desiredContactCapacity) {
         frame.touch.output.contacts.reserve(desiredContactCapacity);
     }
+}
 
+bool TouchPipeline::ProcessFrameParser(HeatmapFrame& frame) {
     // ── Phase 1: Frame Parsing ──────────────────────────────────────
     m_frameParser.Process(frame);
-    if (!m_frameParser.m_enabled) {
-        ResetIdleOutputs(frame);
-        return true;
-    }
+    if (m_frameParser.m_enabled) return true;
 
-    const bool masterValid = frame.masterWasRead && frame.masterSuffixValid;
-    const bool hasCurrentFinger = masterValid && frame.masterSuffix.hasFinger();
+    ResetIdleOutputs(frame);
+    return false;
+}
+
+bool TouchPipeline::ProcessSignalConditioning(HeatmapFrame& frame) {
+    const bool hasCurrentFinger = frame.masterWasRead &&
+                                  frame.masterSuffixValid &&
+                                  frame.masterSuffix.hasFinger();
     const bool hasLiveTouchState = m_tracker.HasLiveTracks() || m_gesture.HasLiveState();
+
     // ── Phase 2: Signal Conditioning ────────────────────────────────
     m_baseline.Process(frame, hasCurrentFinger);
-
-    if (!hasCurrentFinger && !hasLiveTouchState) {
-        ResetIdleOutputs(frame);
+    if (hasCurrentFinger || hasLiveTouchState) {
+        m_cmf.Process(frame);
         return true;
     }
 
-    m_cmf.Process(frame);
+    ResetIdleOutputs(frame);
+    return false;
+}
 
+void TouchPipeline::GenerateContacts(HeatmapFrame& frame) {
     // ── Phase 3: Candidate Generation ───────────────────────────────
     frame.touch.output.contacts.clear();
     m_macroZoneDet.Process(frame, m_peakDet.m_threshold);
     const auto& macroZones = m_macroZoneDet.GetMacroZones();
     m_peakDet.Detect(frame, macroZones);
-
     const auto peaks = m_peakDet.GetPeaks();
 
     // ── Phase 4: Candidate Classification ───────────────────────────
@@ -479,20 +502,33 @@ bool TouchPipeline::Process(HeatmapFrame& frame) {
     m_contactExtractor.m_zoneExp.m_fingerInPalmThresholdRatio = m_touchClassifier.m_fingerInPalmThresholdRatio;
     m_contactExtractor.m_zoneExp.m_fingerInPalmMaxRadius = m_touchClassifier.m_fingerInPalmMaxRadius;
     m_contactExtractor.Process(frame, peaks, m_peakDet.m_threshold, peakEvaluations);
+}
 
-    // ── Phase 6: Contact Post-Processing ─────────────────────────────
+void TouchPipeline::PostProcessContacts(HeatmapFrame& frame) {
     const auto& edgeInfos = m_contactExtractor.GetEdgeInfos();
     const auto& edgeBounds = m_contactExtractor.GetEdgeBounds();
     m_edgeComp.Process(frame.touch.output.contacts, edgeInfos, edgeBounds);
     m_edgeReject.Process(frame.touch.output.contacts, edgeInfos, edgeBounds);
     m_stylusSuppress.Process(frame);
+}
 
-    m_cachedPeakCount.store(static_cast<int>(peaks.size()), std::memory_order_relaxed);
+void TouchPipeline::UpdateContactCaches(HeatmapFrame& frame) {
+    m_cachedPeakCount.store(static_cast<int>(m_peakDet.GetPeaks().size()), std::memory_order_relaxed);
     m_cachedZoneCount.store(m_contactExtractor.GetZoneCount(), std::memory_order_relaxed);
     m_cachedContactCount.store(static_cast<int>(frame.touch.output.contacts.size()), std::memory_order_relaxed);
+}
 
-    // ── Update diagnostic caches ────────────────────────────────
+void TouchPipeline::ProcessTrackingAndGesture(HeatmapFrame& frame) {
+    m_tracker.Process(frame);
+    m_coordFilter.Process(frame);
+    m_gesture.Process(frame);
+}
+
 #if EGOTOUCH_DIAG
+void TouchPipeline::UpdateDiagnosticCaches(HeatmapFrame& frame) {
+    const auto& macroZones = m_macroZoneDet.GetMacroZones();
+    const auto peaks = m_peakDet.GetPeaks();
+
     // MacroZone → touchZones colormap for IPC visualization
     frame.touch.debug.touchZones.fill(0);
     for (size_t i = 0; i < macroZones.size(); ++i) {
@@ -533,15 +569,8 @@ bool TouchPipeline::Process(HeatmapFrame& frame) {
             m_diagZoneEdgePrev = zoneEdge;
         }
     }
-#endif
-
-    m_tracker.Process(frame);
-    m_coordFilter.Process(frame);
-    // ── Phase 6: Gesture Recognition & Output ───────────────────────
-    m_gesture.Process(frame);
-
-    return true;
 }
+#endif
 
 void TouchPipeline::ResetIdleOutputs(HeatmapFrame& frame) {
     frame.touch.output.contacts.clear();
