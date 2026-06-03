@@ -13,6 +13,15 @@ void Require(bool condition, const char* message) {
     if (!condition) throw std::runtime_error(message);
 }
 
+Solvers::HeatmapFrame MakeZeroedHeatmapFrame() {
+    // HeatmapFrame's default constructor intentionally does not clear the
+    // matrix in production hot paths. Sparse synthetic tests need an explicit
+    // zero background before writing their fixture peaks.
+    Solvers::HeatmapFrame frame{};
+    std::fill(&frame.heatmapMatrix[0][0], &frame.heatmapMatrix[0][0] + 40 * 60, int16_t{0});
+    return frame;
+}
+
 Solvers::MacroZone MakeZoneFromFrame(const Solvers::HeatmapFrame& frame,
                                      std::vector<int>& pixels,
                                      int threshold) {
@@ -94,11 +103,14 @@ void BuildMergedSplitFrame(Solvers::HeatmapFrame& frame) {
 }
 
 void TestPeakDetectorPreservesTwoCloseSaddledPeaks() {
-    Solvers::HeatmapFrame frame;
+    Solvers::HeatmapFrame frame = MakeZeroedHeatmapFrame();
     BuildCloseTwoPeakFrame(frame);
 
     std::vector<int> pixels;
-    std::vector<Solvers::MacroZone> zones{MakeZoneFromFrame(frame, pixels, 130)};
+    Solvers::MacroZone zone = MakeZoneFromFrame(frame, pixels, 130);
+    Require(zone.area == 15 && pixels.size() == 15,
+            "close two-peak fixture should contain exactly 15 thresholded pixels");
+    std::vector<Solvers::MacroZone> zones{zone};
 
     Solvers::Touch::PeakDetector detector;
     detector.m_threshold = 130;
@@ -115,7 +127,7 @@ void TestPeakDetectorPreservesTwoCloseSaddledPeaks() {
 }
 
 void TestZoneExpanderPartitionsMergedTwoPeakZone() {
-    Solvers::HeatmapFrame frame;
+    Solvers::HeatmapFrame frame = MakeZeroedHeatmapFrame();
     BuildMergedSplitFrame(frame);
 
     Solvers::Touch::Peak rightPeak;
