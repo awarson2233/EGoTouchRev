@@ -1,12 +1,12 @@
-#include "StylusSolver/CoordinateSolver.hpp"
-#include "StylusSolver/CoorIIRProcess.hpp"
-#include "StylusSolver/CoorSpeedProcess.hpp"
-#include "StylusSolver/GridFeatureExtractor.hpp"
-#include "StylusSolver/Hpp3NoisePostProcess.hpp"
-#include "StylusSolver/Hpp3PostPressureProcess.hpp"
-#include "StylusSolver/LinearFilterProcess.hpp"
-#include "StylusSolver/TiltProcess.hpp"
-#include "StylusSolver/StylusFrameParser.hpp"
+#include "StylusSolver/hpp3/CoordinateSolver.hpp"
+#include "StylusSolver/hpp3/CoorIIRProcess.hpp"
+#include "StylusSolver/hpp3/CoorSpeedProcess.hpp"
+#include "StylusSolver/hpp3/GridFeatureExtractor.hpp"
+#include "StylusSolver/hpp3/Hpp3NoisePostProcess.hpp"
+#include "StylusSolver/hpp3/Hpp3PostPressureProcess.hpp"
+#include "StylusSolver/hpp3/LinearFilterProcess.hpp"
+#include "StylusSolver/hpp3/TiltProcess.hpp"
+#include "StylusSolver/shared/StylusFrameParser.hpp"
 #include "StylusSolver/StylusPipeline.h"
 
 #include <array>
@@ -321,8 +321,8 @@ void TestBypassModeResetsPostFilter() {
 
 void TestConfigRoundTrip() {
     Solvers::StylusPipeline pipeline;
-    pipeline.m_tiltProcess.m_enabled = false;
-    pipeline.m_coordinateSolver.m_signalFloor = 77;
+    pipeline.m_hpp3.m_tiltProcess.m_enabled = false;
+    pipeline.m_hpp3.m_coordinateSolver.m_signalFloor = 77;
 
     std::ostringstream out;
     pipeline.SaveConfig(out);

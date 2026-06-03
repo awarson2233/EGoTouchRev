@@ -189,18 +189,18 @@ void TestPersistedGridIIRStateIsNotInjectedWhenPipelineOmitsGridIIR() {
 
 void TestStylusPipelineConfigRoundTripCoversIirAndLockKeys() {
     Solvers::StylusPipeline saved;
-    saved.m_coorIIRProcess.m_coefLowInBand = 11;
-    saved.m_coorIIRProcess.m_coefHighInBand = 12;
-    saved.m_coorIIRProcess.m_speedTholdInBand = 13;
-    saved.m_coorIIRProcess.m_coefLowEdge = 14;
-    saved.m_coorIIRProcess.m_coefHighEdge = 15;
-    saved.m_coorIIRProcess.m_speedTholdEdge = 16;
-    saved.m_coorIIRProcess.m_speedMax = 321;
-    saved.m_coorIIRProcess.m_maxCoef = 17;
-    saved.m_aftCoorProcess.m_lockFlashInBandX = 21;
-    saved.m_aftCoorProcess.m_lockFlashInBandY = 22;
-    saved.m_aftCoorProcess.m_lockFlashEdgeX = 23;
-    saved.m_aftCoorProcess.m_lockFlashEdgeY = 24;
+    saved.m_hpp3.m_coorIIRProcess.m_coefLowInBand = 11;
+    saved.m_hpp3.m_coorIIRProcess.m_coefHighInBand = 12;
+    saved.m_hpp3.m_coorIIRProcess.m_speedTholdInBand = 13;
+    saved.m_hpp3.m_coorIIRProcess.m_coefLowEdge = 14;
+    saved.m_hpp3.m_coorIIRProcess.m_coefHighEdge = 15;
+    saved.m_hpp3.m_coorIIRProcess.m_speedTholdEdge = 16;
+    saved.m_hpp3.m_coorIIRProcess.m_speedMax = 321;
+    saved.m_hpp3.m_coorIIRProcess.m_maxCoef = 17;
+    saved.m_hpp3.m_aftCoorProcess.m_lockFlashInBandX = 21;
+    saved.m_hpp3.m_aftCoorProcess.m_lockFlashInBandY = 22;
+    saved.m_hpp3.m_aftCoorProcess.m_lockFlashEdgeX = 23;
+    saved.m_hpp3.m_aftCoorProcess.m_lockFlashEdgeY = 24;
 
     std::ostringstream out;
     saved.SaveConfig(out);
@@ -216,18 +216,18 @@ void TestStylusPipelineConfigRoundTripCoversIirAndLockKeys() {
         }
     }
 
-    Require(loaded.m_coorIIRProcess.m_coefLowInBand == 11, "IIR low in-band coefficient should round-trip");
-    Require(loaded.m_coorIIRProcess.m_coefHighInBand == 12, "IIR high in-band coefficient should round-trip");
-    Require(loaded.m_coorIIRProcess.m_speedTholdInBand == 13, "IIR in-band speed threshold should round-trip");
-    Require(loaded.m_coorIIRProcess.m_coefLowEdge == 14, "IIR low edge coefficient should round-trip");
-    Require(loaded.m_coorIIRProcess.m_coefHighEdge == 15, "IIR high edge coefficient should round-trip");
-    Require(loaded.m_coorIIRProcess.m_speedTholdEdge == 16, "IIR edge speed threshold should round-trip");
-    Require(loaded.m_coorIIRProcess.m_speedMax == 321, "IIR speed max should round-trip");
-    Require(loaded.m_coorIIRProcess.m_maxCoef == 17, "IIR max coefficient should round-trip");
-    Require(loaded.m_aftCoorProcess.m_lockFlashInBandX == 21, "AFT in-band X lock flash should round-trip");
-    Require(loaded.m_aftCoorProcess.m_lockFlashInBandY == 22, "AFT in-band Y lock flash should round-trip");
-    Require(loaded.m_aftCoorProcess.m_lockFlashEdgeX == 23, "AFT edge X lock flash should round-trip");
-    Require(loaded.m_aftCoorProcess.m_lockFlashEdgeY == 24, "AFT edge Y lock flash should round-trip");
+    Require(loaded.m_hpp3.m_coorIIRProcess.m_coefLowInBand == 11, "IIR low in-band coefficient should round-trip");
+    Require(loaded.m_hpp3.m_coorIIRProcess.m_coefHighInBand == 12, "IIR high in-band coefficient should round-trip");
+    Require(loaded.m_hpp3.m_coorIIRProcess.m_speedTholdInBand == 13, "IIR in-band speed threshold should round-trip");
+    Require(loaded.m_hpp3.m_coorIIRProcess.m_coefLowEdge == 14, "IIR low edge coefficient should round-trip");
+    Require(loaded.m_hpp3.m_coorIIRProcess.m_coefHighEdge == 15, "IIR high edge coefficient should round-trip");
+    Require(loaded.m_hpp3.m_coorIIRProcess.m_speedTholdEdge == 16, "IIR edge speed threshold should round-trip");
+    Require(loaded.m_hpp3.m_coorIIRProcess.m_speedMax == 321, "IIR speed max should round-trip");
+    Require(loaded.m_hpp3.m_coorIIRProcess.m_maxCoef == 17, "IIR max coefficient should round-trip");
+    Require(loaded.m_hpp3.m_aftCoorProcess.m_lockFlashInBandX == 21, "AFT in-band X lock flash should round-trip");
+    Require(loaded.m_hpp3.m_aftCoorProcess.m_lockFlashInBandY == 22, "AFT in-band Y lock flash should round-trip");
+    Require(loaded.m_hpp3.m_aftCoorProcess.m_lockFlashEdgeX == 23, "AFT edge X lock flash should round-trip");
+    Require(loaded.m_hpp3.m_aftCoorProcess.m_lockFlashEdgeY == 24, "AFT edge Y lock flash should round-trip");
 }
 
 void TestMergeWithEmptyServiceSectionRemovesExistingService() {
@@ -364,7 +364,7 @@ void TestMergePreservesUnrelatedSectionsAndReplacesTouchSections() {
     touchPipeline.m_baseline.m_noFingerMaxStep = 600;
     touchPipeline.m_tracker.m_enabled = true;
     Solvers::StylusPipeline stylusPipeline;
-    stylusPipeline.m_postPressure.m_btFreqShiftDebounceFrames = 2;
+    stylusPipeline.m_hpp3.m_postPressure.m_btFreqShiftDebounceFrames = 2;
 
     const std::string existing =
         "; keep header comment\n"

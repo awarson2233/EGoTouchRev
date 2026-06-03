@@ -1,5 +1,5 @@
-#include "StylusSolver/Hpp3PostPressureProcess.hpp"
-#include "StylusSolver/PressureSolver.hpp"
+#include "StylusSolver/hpp3/Hpp3PostPressureProcess.hpp"
+#include "StylusSolver/hpp3/PressureSolver.hpp"
 #include "StylusSolver/StylusPipeline.h"
 #include "StylusSolver/StylusRuntimeCommit.hpp"
 
@@ -461,13 +461,13 @@ void TestEdgeLatchExitsOnlyAboveExitThreshold() {
 
 void TestConfigRoundTripIncludesPostPressure() {
     Solvers::StylusPipeline pipeline;
-    pipeline.m_postPressure.m_enabled = false;
-    pipeline.m_postPressure.m_fakePressureDecreaseEnabled = false;
-    pipeline.m_postPressure.m_btFreqShiftDebounceFrames = 7;
-    pipeline.m_postPressure.m_pressureEdgeEnterThreshold = 1234;
-    pipeline.m_postPressure.m_pressureEdgeExitThreshold = 2345;
-    pipeline.m_pressureSolver.m_btPressSignalSuppressEnterThreshold = 3456;
-    pipeline.m_pressureSolver.m_btPressSignalSuppressExitThreshold = 4567;
+    pipeline.m_hpp3.m_postPressure.m_enabled = false;
+    pipeline.m_hpp3.m_postPressure.m_fakePressureDecreaseEnabled = false;
+    pipeline.m_hpp3.m_postPressure.m_btFreqShiftDebounceFrames = 7;
+    pipeline.m_hpp3.m_postPressure.m_pressureEdgeEnterThreshold = 1234;
+    pipeline.m_hpp3.m_postPressure.m_pressureEdgeExitThreshold = 2345;
+    pipeline.m_hpp3.m_pressureSolver.m_btPressSignalSuppressEnterThreshold = 3456;
+    pipeline.m_hpp3.m_pressureSolver.m_btPressSignalSuppressExitThreshold = 4567;
 
     std::ostringstream out;
     pipeline.SaveConfig(out);
@@ -491,19 +491,19 @@ void TestConfigRoundTripIncludesPostPressure() {
     Solvers::StylusPipeline restored;
     LoadFromSavedText(restored, saved);
 
-    Require(!restored.m_postPressure.m_enabled,
+    Require(!restored.m_hpp3.m_postPressure.m_enabled,
             "loaded config should restore post-pressure enable flag");
-    Require(!restored.m_postPressure.m_fakePressureDecreaseEnabled,
+    Require(!restored.m_hpp3.m_postPressure.m_fakePressureDecreaseEnabled,
             "loaded config should restore fake pressure flag");
-    Require(restored.m_postPressure.m_btFreqShiftDebounceFrames == 7,
+    Require(restored.m_hpp3.m_postPressure.m_btFreqShiftDebounceFrames == 7,
             "loaded config should restore BT freq debounce frames");
-    Require(restored.m_postPressure.m_pressureEdgeEnterThreshold == 1234,
+    Require(restored.m_hpp3.m_postPressure.m_pressureEdgeEnterThreshold == 1234,
             "loaded config should restore enter threshold");
-    Require(restored.m_postPressure.m_pressureEdgeExitThreshold == 2345,
+    Require(restored.m_hpp3.m_postPressure.m_pressureEdgeExitThreshold == 2345,
             "loaded config should restore exit threshold");
-    Require(restored.m_pressureSolver.m_btPressSignalSuppressEnterThreshold == 3456,
+    Require(restored.m_hpp3.m_pressureSolver.m_btPressSignalSuppressEnterThreshold == 3456,
             "loaded config should restore BT pressure suppress enter threshold");
-    Require(restored.m_pressureSolver.m_btPressSignalSuppressExitThreshold == 4567,
+    Require(restored.m_hpp3.m_pressureSolver.m_btPressSignalSuppressExitThreshold == 4567,
             "loaded config should restore BT pressure suppress exit threshold");
 }
 

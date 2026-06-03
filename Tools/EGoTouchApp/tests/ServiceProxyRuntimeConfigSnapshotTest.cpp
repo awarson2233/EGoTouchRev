@@ -101,7 +101,7 @@ void TestPipelineFieldsAndTypes() {
     touchPipeline.m_tracker.m_maxTrackDistance = 7.5f;
     touchPipeline.m_tracker.m_stylusSuppressPenPeakThreshold = 2468;
     touchPipeline.m_gesture.m_bypassStateMachine = true;
-    stylusPipeline.m_postPressure.m_btFreqShiftDebounceFrames = 2;
+    stylusPipeline.m_hpp3.m_postPressure.m_btFreqShiftDebounceFrames = 2;
 
     const auto snapshot = App::BuildRuntimeConfigSnapshotFromState({}, {}, touchPipeline, stylusPipeline);
 
