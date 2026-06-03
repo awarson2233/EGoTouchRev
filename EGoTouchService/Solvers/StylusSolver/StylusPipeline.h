@@ -1,22 +1,10 @@
 #pragma once
 
 #include "ConfigSchema.h"
-#include "AftCoorProcess.hpp"
-#include "CoorIIRProcess.hpp"
-#include "CoorReviseProcess.hpp"
-#include "CoorSpeedProcess.hpp"
-#include "CoordinateSolver.hpp"
-#include "EdgeCoorPostProcess.hpp"
-#include "EdgeCoorProcess.hpp"
-#include "GridFeatureExtractor.hpp"
-#include "Hpp3NoisePostProcess.hpp"
-#include "Hpp3PostPressureProcess.hpp"
-#include "LinearFilterProcess.hpp"
-#include "PressureSolver.hpp"
-#include "SolverTypes.h"
-#include "StylusFrameParser.hpp"
+#include "hpp3/Hpp3Pipeline.h"
+#include "shared/StylusFrameParser.hpp"
 #include "StylusRuntimeCommit.hpp"
-#include "TiltProcess.hpp"
+#include "SolverTypes.h"
 
 #include <array>
 #include <mutex>
@@ -46,21 +34,12 @@ public:
     int GetPacketSensorCols() const { return kPacketSensorCols; }
     bool GetEmitPacketWhenInvalid() const { return true; }
 
-    Stylus::StylusFrameParser m_frameParser;
-    Stylus::GridFeatureExtractor m_featureExtractor;
-    Stylus::CoordinateSolver m_coordinateSolver;
-    Stylus::TiltProcess m_tiltProcess;
-    Stylus::PressureSolver m_pressureSolver;
-    Stylus::Hpp3PostPressureProcess m_postPressure;
-    Stylus::EdgeCoorProcess m_edgeCoorProcess;
-    Stylus::EdgeCoorPostProcess m_edgeCoorPostProcess;
-    Stylus::Hpp3NoisePostProcess m_noisePostProcess;
-    Stylus::LinearFilterProcess m_linearFilterProcess;
-    Stylus::CoorReviseProcess m_coorReviseProcess;
-    Stylus::CoorSpeedProcess m_coorSpeedProcess;
-    Stylus::CoorIIRProcess m_coorIIRProcess;
-    Stylus::AftCoorProcess m_aftCoorProcess;
-    Stylus::StylusRuntimeCommit m_commit;
+    // ── Shared / protocol-agnostic stages ──
+    Stylus::StylusFrameParser    m_frameParser;     // shared/
+    Stylus::StylusRuntimeCommit  m_commit;           // root
+
+    // ── Protocol-specific sub-pipelines ──
+    Stylus::Hpp3::Pipeline       m_hpp3;             // hpp3/
 
 private:
     void FinalizeTerminalFrame(HeatmapFrame& frame);

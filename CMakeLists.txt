@@ -201,6 +201,8 @@ target_include_directories(Solvers PUBLIC
     "${SOLVERS_ROOT}"
     "${SOLVERS_ROOT}/TouchSolver"
     "${SOLVERS_ROOT}/StylusSolver"
+    "${SOLVERS_ROOT}/StylusSolver/shared"
+    "${SOLVERS_ROOT}/StylusSolver/hpp3"
 )
 target_link_libraries(Solvers PUBLIC Common)
 # Let Common see Solvers headers for SharedFrameBuffer
