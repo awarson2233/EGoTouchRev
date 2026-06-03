@@ -13,10 +13,11 @@ public:
     bool m_enabled = true;
 
     inline bool Process(HeatmapFrame& frame) {
+        frame.masterSuffixValid = false;
+        frame.slaveSuffixValid = false;
+
         if (!m_enabled) {
-            // Parser disabled: heatmapMatrix won't be filled, zero it so
-            // downstream stages (baseline/CMF/tracker) see clean data.
-            std::memset(frame.heatmapMatrix, 0, sizeof(frame.heatmapMatrix));
+            // Parser disabled: raw-byte debug path; heatmapMatrix is not decoded.
             return true;
         }
 

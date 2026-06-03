@@ -439,6 +439,10 @@ bool TouchPipeline::Process(HeatmapFrame& frame) {
 
     // ── Phase 1: Frame Parsing ──────────────────────────────────────
     m_frameParser.Process(frame);
+    if (!m_frameParser.m_enabled) {
+        ResetIdleOutputs(frame);
+        return true;
+    }
 
     const bool masterValid = frame.masterWasRead && frame.masterSuffixValid;
     const bool hasCurrentFinger = masterValid && frame.masterSuffix.hasFinger();
