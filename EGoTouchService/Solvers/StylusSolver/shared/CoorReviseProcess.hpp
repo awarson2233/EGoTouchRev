@@ -28,7 +28,7 @@ public:
     }
 
     inline void Process(HeatmapFrame& frame) {
-        auto& runtime = frame.stylus.runtime;
+        auto& runtime = frame.stylus.runtime.Active();
         auto& finalCoor = runtime.post.finalCoor;
         const auto& tilt = runtime.tilt;
 

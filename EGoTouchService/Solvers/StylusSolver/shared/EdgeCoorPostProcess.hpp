@@ -30,7 +30,7 @@ public:
     inline void Reset() {}
 
     inline void Process(HeatmapFrame& frame) const {
-        auto& runtime = frame.stylus.runtime;
+        auto& runtime = frame.stylus.runtime.Active();
 
         const auto& raw = runtime.tx1.coordinate.reportGlobalCoor;
         runtime.post.edgePostCoor = raw;

@@ -1,22 +1,37 @@
 #pragma once
 
-#include "SolverTypes.h"
+#include "StylusSolver/AsaTypes.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cstdint>
 
+namespace Solvers {
+struct HeatmapFrame;
+}
+
 namespace Solvers::Stylus::Hpp2 {
 
-static constexpr int kMaxSamples = StylusRuntimeHpp2LineProfile::kMaxSamples;
-static constexpr int kHistorySize = StylusRuntimeHpp2LineProfile::kHistorySize;
+struct LineProfile {
+    static constexpr int kMaxSamples = 100;
+    static constexpr int kHistorySize = 10;
+
+    std::array<uint16_t, kMaxSamples> raw{};
+    std::array<uint16_t, kMaxSamples> cmnBaseline{};
+    std::array<uint16_t, kMaxSamples> cmnSubtracted{};
+    std::array<uint16_t, kMaxSamples> chargerNoiseRatio{};
+    std::array<uint32_t, kHistorySize> lineSumHistory{};
+};
+
+static constexpr int kMaxSamples = LineProfile::kMaxSamples;
+static constexpr int kHistorySize = LineProfile::kHistorySize;
 static constexpr int kNumRawHistoryFrames = 10;
 static constexpr uint16_t kFreqF1 = 0x00b0;
 static constexpr uint16_t kFreqF2 = 0x00fc;
 static constexpr int kInvalidPeak = 0xff;
 static constexpr int kMaxPeaksPerDim = 4;
 
-struct Hpp2PeakUnit {
+struct PeakUnit {
     int index = -1;
     int leftBoundary = -1;
     int rightBoundary = -1;
@@ -40,9 +55,9 @@ struct Peak {
     bool valid = false;
 };
 
-using Hpp2PeakTable = std::array<Hpp2PeakUnit, kMaxPeaksPerDim>;
+using PeakTable = std::array<PeakUnit, kMaxPeaksPerDim>;
 
-struct Hpp2Settings {
+struct Settings {
     bool enabled = true;
     int sensorTxCount = 60;
     int sensorRxCount = 40;
@@ -73,7 +88,48 @@ struct Hpp2Settings {
     }
 };
 
-struct Hpp2State {
+struct Runtime : Asa::Runtime {
+    LineProfile line{};
+    uint32_t rawLineSum = 0;
+    uint16_t mainFreq = 0;
+    uint16_t auxFreq = 0;
+    uint16_t rawPressure = 0;
+    uint32_t buttonBits = 0;
+    uint16_t energyRatioPrev = 100;
+    uint16_t energyRatioPrev2 = 100;
+    uint16_t energyRatioF1Prev2 = 100;
+    uint16_t energyRatioF2Prev2 = 100;
+    bool rawAbnormal = false;
+    bool cmnAbnormal = false;
+    bool bypassCurFrame = false;
+    uint8_t selectedPeakDim1 = 0xff;
+    uint8_t selectedPeakDim2 = 0xff;
+    bool buttonPressed = false;
+    uint8_t buttonReleaseFrames = 0;
+
+    void ResetFrameFlags() {
+        Asa::Runtime::ResetFrameFlags();
+        line = {};
+        rawLineSum = 0;
+        mainFreq = 0;
+        auxFreq = 0;
+        rawPressure = 0;
+        buttonBits = 0;
+        energyRatioPrev = 100;
+        energyRatioPrev2 = 100;
+        energyRatioF1Prev2 = 100;
+        energyRatioF2Prev2 = 100;
+        rawAbnormal = false;
+        cmnAbnormal = false;
+        bypassCurFrame = false;
+        selectedPeakDim1 = 0xff;
+        selectedPeakDim2 = 0xff;
+        buttonPressed = false;
+        buttonReleaseFrames = 0;
+    }
+};
+
+struct State {
     std::array<uint32_t, kHistorySize> m_lineSumHistory{};
     std::array<std::array<std::array<uint16_t, kMaxSamples>, kNumRawHistoryFrames>, 2> m_rawHistory{}; // [freqIdx][frame][sample]
     std::array<uint32_t, 2> m_noiseSum{};
@@ -95,8 +151,8 @@ struct Hpp2State {
     bool m_freqNoiseLatchF2 = false;
     std::array<uint8_t, 2> m_prevPeakDim1ByFreq{{kInvalidPeak, kInvalidPeak}};
     std::array<uint8_t, 2> m_prevPeakDim2ByFreq{{kInvalidPeak, kInvalidPeak}};
-    Hpp2PeakTable m_peakTableDim1{};
-    Hpp2PeakTable m_peakTableDim2{};
+    PeakTable m_peakTableDim1{};
+    PeakTable m_peakTableDim2{};
     int m_peakCountDim1 = 0;
     int m_peakCountDim2 = 0;
     int m_bypassCounter = 0;
@@ -133,10 +189,11 @@ struct Hpp2State {
     }
 };
 
-struct Hpp2Context {
+struct Context {
     HeatmapFrame& frame;
-    const Hpp2Settings& settings;
-    Hpp2State& state;
+    Runtime& runtime;
+    const Settings& settings;
+    State& state;
 };
 
 } // namespace Solvers::Stylus::Hpp2

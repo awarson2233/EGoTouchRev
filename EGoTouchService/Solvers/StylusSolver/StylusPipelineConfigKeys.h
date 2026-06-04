@@ -16,15 +16,17 @@ namespace Stylus {
 namespace Hpp2 {
 class Pipeline;
 } // namespace Hpp2
-class StylusFrameParser;
+namespace Hpp3 {
 class GridFeatureExtractor;
 class CoordinateSolver;
 class TiltProcess;
 class PressureSolver;
 class Hpp3PostPressureProcess;
+class Hpp3NoisePostProcess;
+} // namespace Hpp3
+class StylusFrameParser;
 class EdgeCoorProcess;
 class EdgeCoorPostProcess;
-class Hpp3NoisePostProcess;
 class LinearFilterProcess;
 class CoorReviseProcess;
 class CoorSpeedProcess;
@@ -173,14 +175,14 @@ constexpr const char* kSpLockBypassName = "sp.lockBypass";
 struct StylusPipelineMembers {
     Stylus::Hpp2::Pipeline* hpp2;
     Stylus::StylusFrameParser* frameParser;
-    Stylus::GridFeatureExtractor* featureExtractor;
-    Stylus::CoordinateSolver* coordinateSolver;
-    Stylus::TiltProcess* tiltProcess;
-    Stylus::PressureSolver* pressureSolver;
-    Stylus::Hpp3PostPressureProcess* postPressure;
+    Stylus::Hpp3::GridFeatureExtractor* featureExtractor;
+    Stylus::Hpp3::CoordinateSolver* coordinateSolver;
+    Stylus::Hpp3::TiltProcess* tiltProcess;
+    Stylus::Hpp3::PressureSolver* pressureSolver;
+    Stylus::Hpp3::Hpp3PostPressureProcess* postPressure;
     Stylus::EdgeCoorProcess* edgeCoorProcess;
     Stylus::EdgeCoorPostProcess* edgeCoorPostProcess;
-    Stylus::Hpp3NoisePostProcess* noisePostProcess;
+    Stylus::Hpp3::Hpp3NoisePostProcess* noisePostProcess;
     Stylus::LinearFilterProcess* linearFilterProcess;
     Stylus::CoorReviseProcess* coorReviseProcess;
     Stylus::CoorSpeedProcess* coorSpeedProcess;

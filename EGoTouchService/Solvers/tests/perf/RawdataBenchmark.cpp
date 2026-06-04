@@ -891,25 +891,25 @@ RunStats RunBenchmark(BenchmarkMode mode,
         if (!slaveOk) {
             stats.slaveFailedFrames++;
         }
-        if (stylusFrame.stylus.runtime.parse.valid) {
+        if (stylusFrame.stylus.runtime.Active().parse.valid) {
             stats.stylusValidFrames++;
         }
-        if (stylusFrame.stylus.runtime.parse.hasCurrentStylusSignal) {
+        if (stylusFrame.stylus.runtime.Active().parse.hasCurrentStylusSignal) {
             stats.stylusSignalFrames++;
         }
-        switch (stylusFrame.stylus.runtime.flow.frameClass) {
-        case Asa::StylusFrameClass::Valid:
+        switch (stylusFrame.stylus.runtime.Active().flow.frameClass) {
+        case Asa::FrameClass::Valid:
             break;
-        case Asa::StylusFrameClass::ShortFrame:
+        case Asa::FrameClass::ShortFrame:
             stats.stylusShortFrames++;
             break;
-        case Asa::StylusFrameClass::NoSignal:
+        case Asa::FrameClass::NoSignal:
             stats.stylusNoSignalFrames++;
             break;
-        case Asa::StylusFrameClass::ParseFail:
+        case Asa::FrameClass::ParseFail:
             stats.stylusParseFailFrames++;
             break;
-        case Asa::StylusFrameClass::Tx1Missing:
+        case Asa::FrameClass::Tx1Missing:
             stats.stylusTx1MissingFrames++;
             break;
         }

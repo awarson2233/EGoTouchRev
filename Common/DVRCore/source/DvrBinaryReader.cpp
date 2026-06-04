@@ -452,7 +452,7 @@ bool ValidateRequiredContactFieldsPresent(const std::vector<Dvr2FieldDef>& field
 void SynthesizeRawGridFromLegacyFields(const std::vector<uint8_t>& record,
                                        const std::vector<Dvr2FieldDef>& fields,
                                        Solvers::HeatmapFrame& dst) {
-    auto& grid = dst.stylus.runtime.rawGrid.asaGrid;
+    auto& grid = dst.stylus.runtime.hpp3.rawGrid.grid;
     if (grid.tx1.valid || grid.tx2.valid) return;
 
     if (const auto* rawLenField = DvrFmt::FindField(fields, "rawDataLength")) {
@@ -463,8 +463,8 @@ void SynthesizeRawGridFromLegacyFields(const std::vector<uint8_t>& record,
             const size_t len = std::min<size_t>({rawLen, Frame::kTotalFrameSize, rawField->size});
             if (rawField->offset + len <= record.size() && len >= static_cast<size_t>(Frame::kTotalFrameSize)) {
                 const size_t slaveOffset = rawField->offset + len - static_cast<size_t>(Frame::kSlaveFrameSize);
-                const uint8_t* payload = record.data() + slaveOffset + Asa::kSlaveHeaderBytes;
-                grid = Asa::ExtractGridFromSlavePayloadBytes(payload, static_cast<size_t>(Asa::kBlockWords * 2 * sizeof(uint16_t)));
+                const uint8_t* payload = record.data() + slaveOffset + Solvers::Stylus::Hpp3::kSlaveHeaderBytes;
+                grid = Solvers::Stylus::Hpp3::ExtractGridFromSlavePayloadBytes(payload, static_cast<size_t>(Solvers::Stylus::Hpp3::kBlockWords * 2 * sizeof(uint16_t)));
                 dst.stylus.input.tx1BlockValid = grid.tx1.valid;
                 dst.stylus.input.tx2BlockValid = grid.tx2.valid;
                 if (grid.tx1.valid || grid.tx2.valid) return;
@@ -473,7 +473,7 @@ void SynthesizeRawGridFromLegacyFields(const std::vector<uint8_t>& record,
     }
 
     if (dst.slaveSuffixValid) {
-        grid = Asa::ExtractGridFromSlaveWords(dst.slaveSuffix.words, Frame::kSlaveSuffixWords);
+        grid = Solvers::Stylus::Hpp3::ExtractGridFromSlaveWords(dst.slaveSuffix.words, Frame::kSlaveSuffixWords);
         dst.stylus.input.tx1BlockValid = grid.tx1.valid;
         dst.stylus.input.tx2BlockValid = grid.tx2.valid;
     }
@@ -485,7 +485,7 @@ bool TryReadRawGridBlock(const std::vector<uint8_t>& record,
                          std::string_view anchorRowPath,
                          std::string_view anchorColPath,
                          std::string_view gridPath,
-                         Asa::FreqBlock& out,
+                         Solvers::Stylus::Hpp3::FreqBlock& out,
                          std::string* outError) {
     uint8_t valid = out.valid ? 1 : 0;
     bool present = false;
@@ -532,8 +532,8 @@ bool PopulateHeatmapFrameFromRecordBytes(const std::vector<uint8_t>& record,
     auto& stylusOutput = dst.stylus.output;
     auto& stylusInterop = dst.stylus.interop;
     auto& stylusPoint = stylusOutput.point;
-    auto& stylusPressure = dst.stylus.runtime.pressure;
-    auto& stylusRawGrid = dst.stylus.runtime.rawGrid.asaGrid;
+    auto& stylusPressure = dst.stylus.runtime.Active().pressure;
+    auto& stylusRawGrid = dst.stylus.runtime.hpp3.rawGrid.grid;
 
     if (!TryReadBoolScalarField(record, fields, "stylus.slaveValid", stylusInput.slaveValid, outError)) return false;
     if (!TryReadBoolScalarField(record, fields, "stylus.checksumOk", stylusInput.checksumOk, outError)) return false;
@@ -606,18 +606,18 @@ bool PopulateHeatmapFrameFromRecordBytes(const std::vector<uint8_t>& record,
     if (!TryReadScalarField(record, fields, "stylus.predictedAgeFrames", DvrFmt::Dvr2ValueType::UInt8, stylusPressure.predictedAgeFrames, outError)) return false;
     if (!TryReadRawGridBlock(record,
                              fields,
-                             "stylus.runtime.rawGrid.asaGrid.tx1.valid",
-                             "stylus.runtime.rawGrid.asaGrid.tx1.anchorRow",
-                             "stylus.runtime.rawGrid.asaGrid.tx1.anchorCol",
-                             "stylus.runtime.rawGrid.asaGrid.tx1.grid",
+                             "stylus.runtime.hpp3.rawGrid.grid.tx1.valid",
+                             "stylus.runtime.hpp3.rawGrid.grid.tx1.anchorRow",
+                             "stylus.runtime.hpp3.rawGrid.grid.tx1.anchorCol",
+                             "stylus.runtime.hpp3.rawGrid.grid.tx1.grid",
                              stylusRawGrid.tx1,
                              outError)) return false;
     if (!TryReadRawGridBlock(record,
                              fields,
-                             "stylus.runtime.rawGrid.asaGrid.tx2.valid",
-                             "stylus.runtime.rawGrid.asaGrid.tx2.anchorRow",
-                             "stylus.runtime.rawGrid.asaGrid.tx2.anchorCol",
-                             "stylus.runtime.rawGrid.asaGrid.tx2.grid",
+                             "stylus.runtime.hpp3.rawGrid.grid.tx2.valid",
+                             "stylus.runtime.hpp3.rawGrid.grid.tx2.anchorRow",
+                             "stylus.runtime.hpp3.rawGrid.grid.tx2.anchorCol",
+                             "stylus.runtime.hpp3.rawGrid.grid.tx2.grid",
                              stylusRawGrid.tx2,
                              outError)) return false;
 #if EGOTOUCH_DIAG

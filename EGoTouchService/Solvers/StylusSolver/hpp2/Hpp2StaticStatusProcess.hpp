@@ -1,14 +1,15 @@
 #pragma once
 
-#include "Hpp2PipelineContext.hpp"
+#include "SolverTypes.h"
+#include "Hpp2Runtime.hpp"
 #include "Hpp2PressureProcess.hpp"
 
 namespace Solvers::Stylus::Hpp2 {
 
 class Hpp2StaticStatusProcess {
 public:
-    void Process(Hpp2Context& ctx) const {
-        auto& runtime = ctx.frame.stylus.runtime;
+    void Process(Context& ctx) const {
+        auto& runtime = ctx.runtime;
         runtime.decision.tipDownCandidate =
             runtime.decision.inRangeCandidate && runtime.pressure.outputPressure != 0;
         runtime.decision.authoritativeDown = runtime.decision.tipDownCandidate;

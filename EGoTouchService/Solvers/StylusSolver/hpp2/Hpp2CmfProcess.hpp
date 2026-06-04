@@ -1,6 +1,7 @@
 #pragma once
 
-#include "Hpp2PipelineContext.hpp"
+#include "SolverTypes.h"
+#include "Hpp2Runtime.hpp"
 
 #include <algorithm>
 #include <array>
@@ -10,7 +11,7 @@ namespace Solvers::Stylus::Hpp2 {
 
 class Hpp2CmfProcess {
 public:
-    void Process(Hpp2Context& ctx) const {
+    void Process(Context& ctx) const {
         ctx.state.m_cmnSum = {};
         ctx.state.m_cmnMin = {{0xffff, 0xffff}};
         ProcessGroup(ctx, 0, 0, ctx.settings.sensorTxCount);
@@ -18,8 +19,8 @@ public:
     }
 
 private:
-    static void ProcessGroup(Hpp2Context& ctx, int group, int offset, int length) {
-        auto& hpp2 = ctx.frame.stylus.runtime.hpp2;
+    static void ProcessGroup(Context& ctx, int group, int offset, int length) {
+        auto& hpp2 = ctx.runtime;
         std::array<uint16_t, kMaxSamples> slidingMin{};
         for (int i = 0; i < length; ++i) {
             uint16_t minValue = 0xffff;

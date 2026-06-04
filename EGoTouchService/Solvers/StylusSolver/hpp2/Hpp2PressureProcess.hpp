@@ -1,6 +1,7 @@
 #pragma once
 
-#include "Hpp2PipelineContext.hpp"
+#include "SolverTypes.h"
+#include "Hpp2Runtime.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -9,13 +10,13 @@ namespace Solvers::Stylus::Hpp2 {
 
 class Hpp2PressureProcess {
 public:
-    void Process(Hpp2Context& ctx) const {
+    void Process(Context& ctx) const {
         FilterPressure(ctx);
         ApplyEdgePressureGuard(ctx);
     }
 
     static void PublishPressure(HeatmapFrame& frame) {
-        auto& runtime = frame.stylus.runtime;
+        auto& runtime = frame.stylus.runtime.hpp2;
         runtime.post.finalPressure = runtime.pressure.outputPressure;
         runtime.post.point.rawPressure = runtime.pressure.rawPressure;
         runtime.post.point.mappedPressure = runtime.pressure.mappedPressure;
@@ -23,10 +24,10 @@ public:
     }
 
 private:
-    static void FilterPressure(Hpp2Context& ctx) {
-        auto& runtime = ctx.frame.stylus.runtime;
+    static void FilterPressure(Context& ctx) {
+        auto& runtime = ctx.runtime;
         auto& pressure = runtime.pressure;
-        const uint16_t raw = static_cast<uint16_t>(std::min<uint32_t>(runtime.hpp2.rawPressure, 0x0fffu));
+        const uint16_t raw = static_cast<uint16_t>(std::min<uint32_t>(runtime.rawPressure, 0x0fffu));
         uint16_t output = raw;
         if (output != 0 && ctx.state.m_prevPressure != 0) {
             output = LimitPressureDelta(ctx.state.m_prevPressure, output,
@@ -42,8 +43,8 @@ private:
         pressure.predictedAgeFrames = 0;
     }
 
-    static void ApplyEdgePressureGuard(Hpp2Context& ctx) {
-        auto& runtime = ctx.frame.stylus.runtime;
+    static void ApplyEdgePressureGuard(Context& ctx) {
+        auto& runtime = ctx.runtime;
         auto& pressure = runtime.pressure;
         if (pressure.outputPressure == 0) {
             ctx.state.m_edgeSignalTooLowLatched = false;

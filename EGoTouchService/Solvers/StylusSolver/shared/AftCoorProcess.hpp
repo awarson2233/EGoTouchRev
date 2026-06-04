@@ -42,7 +42,7 @@ public:
     }
 
     inline void Process(HeatmapFrame& frame) {
-        auto& runtime = frame.stylus.runtime;
+        auto& runtime = frame.stylus.runtime.Active();
         auto& coor = runtime.post.finalCoor;
         const uint16_t curPressure = runtime.pressure.outputPressure;
 
@@ -150,7 +150,7 @@ private:
                static_cast<uint32_t>(physicalSize);
     }
 
-    inline void ClampToSensor(Asa::AsaCoorResult& coor) const {
+    inline void ClampToSensor(Asa::CoorResult& coor) const {
         coor.dim1 = std::clamp(coor.dim1, 0, m_sensorTxCount * Asa::kCoorUnit);
         coor.dim2 = std::clamp(coor.dim2, 0, m_sensorRxCount * Asa::kCoorUnit);
     }

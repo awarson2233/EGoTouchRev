@@ -150,7 +150,7 @@ struct DvrStylusData {
     uint8_t touchSuppressFrames = 0;
     bool pressureIsReal = false;
     uint8_t predictedAgeFrames = 0;
-    Asa::AsaGridData rawGrid{};
+    Solvers::Stylus::Hpp3::GridData rawGrid{};
     DvrStylusPacket packet{};
     DvrStylusPoint point{};
 };
@@ -243,9 +243,9 @@ struct DvrFrameSlot {
         stylus.touchNullLike = src.stylus.interop.touchNullLike;
         stylus.touchSuppressActive = src.stylus.interop.touchSuppressActive;
         stylus.touchSuppressFrames = src.stylus.interop.touchSuppressFrames;
-        stylus.pressureIsReal = src.stylus.runtime.pressure.pressureIsReal;
-        stylus.predictedAgeFrames = src.stylus.runtime.pressure.predictedAgeFrames;
-        stylus.rawGrid = src.stylus.runtime.rawGrid.asaGrid;
+        stylus.pressureIsReal = src.stylus.runtime.Active().pressure.pressureIsReal;
+        stylus.predictedAgeFrames = src.stylus.runtime.Active().pressure.predictedAgeFrames;
+        stylus.rawGrid = src.stylus.runtime.hpp3.rawGrid.grid;
         stylus.packet.valid = src.stylus.output.packet.valid ? 1 : 0;
         stylus.packet.reportId = src.stylus.output.packet.reportId;
         stylus.packet.length = src.stylus.output.packet.length;

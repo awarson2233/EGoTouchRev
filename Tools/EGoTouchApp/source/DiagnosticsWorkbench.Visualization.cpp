@@ -246,7 +246,7 @@ void DiagnosticsWorkbench::DrawSlaveHeatmap() {
 #endif
 
     if (m_currentFrame.slaveSuffixValid) {
-        Asa::AsaGridData gridData = Asa::ExtractGridFromSlaveWords(m_currentFrame.slaveSuffix.words, Frame::kSlaveSuffixWords);
+        Solvers::Stylus::Hpp3::GridData gridData = Solvers::Stylus::Hpp3::ExtractGridFromSlaveWords(m_currentFrame.slaveSuffix.words, Frame::kSlaveSuffixWords);
 
         ImVec2 canvas_sz = ImGui::GetContentRegionAvail();
         float draw_width = std::max(200.0f, canvas_sz.x * 0.42f);
@@ -254,7 +254,7 @@ void DiagnosticsWorkbench::DrawSlaveHeatmap() {
         float cell_h = cell_w;
         ImDrawList* draw_list = ImGui::GetWindowDrawList();
 
-        auto draw_grid = [&](const Asa::FreqBlock& grid, float start_x, float start_y, const char* label, float ptX, float ptY) {
+        auto draw_grid = [&](const Solvers::Stylus::Hpp3::FreqBlock& grid, float start_x, float start_y, const char* label, float ptX, float ptY) {
             ImGui::SetCursorScreenPos(ImVec2(start_x, start_y - 25.0f));
             ImGui::Text("%s (Anchor: R%d C%d)", label, grid.anchorRow, grid.anchorCol);
 

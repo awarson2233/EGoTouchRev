@@ -22,7 +22,7 @@ public:
     }
 
     inline void Process(HeatmapFrame& frame) {
-        auto& runtime = frame.stylus.runtime;
+        auto& runtime = frame.stylus.runtime.Active();
         const auto& coor = runtime.tx1.coordinate.reportGlobalCoor;
         const bool pressureActive = runtime.pressure.outputPressure > 0;
 

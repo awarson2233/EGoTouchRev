@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <array>
 
-namespace Solvers::Stylus {
+namespace Solvers::Stylus::Hpp3 {
 
 struct PitchCompensation {
     double c[4] = {0.0, 0.0, 0.0, 0.0};
@@ -23,13 +23,15 @@ public:
     bool m_enabled = true;
     uint16_t m_signalFloor = 64;
 
-    inline bool Process(HeatmapFrame& frame) const {
-        auto& runtime = frame.stylus.runtime;
+    inline bool Process(Context& ctx) const {
+        auto& runtime = ctx.runtime;
         auto& flow = runtime.flow;
-        auto& tx1 = runtime.tx1;
-        auto& tx2 = runtime.tx2;
-        const auto dim1Edge = GetAxisEdgeGeometry(runtime.rawGrid.asaGrid.tx1.anchorCol, kSensorCols);
-        const auto dim2Edge = GetAxisEdgeGeometry(runtime.rawGrid.asaGrid.tx1.anchorRow, kSensorRows);
+        auto& tx1 = runtime.tx1Grid;
+        auto& tx2 = runtime.tx2Grid;
+        auto& tx1Coordinate = runtime.tx1.coordinate;
+        auto& tx2Coordinate = runtime.tx2.coordinate;
+        const auto dim1Edge = GetAxisEdgeGeometry(runtime.rawGrid.grid.tx1.anchorCol, kSensorCols);
+        const auto dim2Edge = GetAxisEdgeGeometry(runtime.rawGrid.grid.tx1.anchorRow, kSensorRows);
 
         flow.pipelineStage = 4;
         if (!m_enabled || !tx1.feature.peak.valid) {
@@ -37,15 +39,15 @@ public:
             return true;
         }
 
-        tx1.coordinate.localGridCoor = Solve(tx1.feature.projection, dim1Edge, dim2Edge);
-        tx1.coordinate.reportGlobalCoor = tx1.coordinate.localGridCoor;
+        tx1Coordinate.localGridCoor = Solve(tx1.feature.projection, dim1Edge, dim2Edge);
+        tx1Coordinate.reportGlobalCoor = tx1Coordinate.localGridCoor;
 #if EGOTOUCH_DIAG
         {
             const auto& proj = tx1.feature.projection;
             const int peakIdx = proj.peakIdxDim1;
-            if (peakIdx >= 0 && peakIdx < Asa::kGridDim) {
+            if (peakIdx >= 0 && peakIdx < kGridDim) {
                 const int leftIdx = peakIdx > 0 ? peakIdx - 1 : 0;
-                const int rightIdx = peakIdx + 1 < Asa::kGridDim ? peakIdx + 1 : Asa::kGridDim - 1;
+                const int rightIdx = peakIdx + 1 < kGridDim ? peakIdx + 1 : kGridDim - 1;
                 tx1.triLeft = static_cast<uint16_t>(std::clamp(proj.dim1[leftIdx], 0, 65535));
                 tx1.triCenter = static_cast<uint16_t>(std::clamp(proj.dim1[peakIdx], 0, 65535));
                 tx1.triRight = static_cast<uint16_t>(std::clamp(proj.dim1[rightIdx], 0, 65535));
@@ -57,22 +59,22 @@ public:
             }
         }
 #endif
-        if (tx1.coordinate.reportGlobalCoor.valid) {
-            LocalToGlobal(tx1.coordinate.reportGlobalCoor,
-                          runtime.rawGrid.asaGrid.tx1.anchorRow,
-                          runtime.rawGrid.asaGrid.tx1.anchorCol,
+        if (tx1Coordinate.reportGlobalCoor.valid) {
+            LocalToGlobal(tx1Coordinate.reportGlobalCoor,
+                          runtime.rawGrid.grid.tx1.anchorRow,
+                          runtime.rawGrid.grid.tx1.anchorCol,
                           kAnchorCenterOffset);
-            CoordinateSolver::ClampToSensorBounds(tx1.coordinate.reportGlobalCoor);
-            ApplyPitchMap(tx1.coordinate.reportGlobalCoor);
+            CoordinateSolver::ClampToSensorBounds(tx1Coordinate.reportGlobalCoor);
+            ApplyPitchMap(tx1Coordinate.reportGlobalCoor);
         }
 
-        if (!tx1.coordinate.reportGlobalCoor.valid) {
+        if (!tx1Coordinate.reportGlobalCoor.valid) {
             flow.terminal = true;
-            flow.frameClass = Asa::StylusFrameClass::Tx1Missing;
+            flow.frameClass = Asa::FrameClass::Tx1Missing;
             return true;
         }
 
-        tx2.coordinate = {};
+        tx2Coordinate = {};
 
         auto& signal = runtime.signal;
         signal.signalX = static_cast<uint16_t>(std::clamp<int>(
@@ -85,18 +87,18 @@ public:
         signal.recheckThreshold = m_signalFloor;
         signal.recheckThresholdMulti = static_cast<uint16_t>(std::max<uint16_t>(m_signalFloor, 256));
 
-        signal.dim1EdgeActive = IsEdgeCoordinateCell(tx1.coordinate.reportGlobalCoor.dim1, kSensorCols);
-        signal.dim2EdgeActive = IsEdgeCoordinateCell(tx1.coordinate.reportGlobalCoor.dim2, kSensorRows);
+        signal.dim1EdgeActive = IsEdgeCoordinateCell(tx1Coordinate.reportGlobalCoor.dim1, kSensorCols);
+        signal.dim2EdgeActive = IsEdgeCoordinateCell(tx1Coordinate.reportGlobalCoor.dim2, kSensorRows);
         signal.dim1EdgeSignal = signal.dim1EdgeActive ? tx1.feature.dim1SelectedPeakNetSignal : 0;
         signal.dim2EdgeSignal = signal.dim2EdgeActive ? tx1.feature.dim2SelectedPeakNetSignal : 0;
 
-        runtime.decision.inRangeCandidate = tx1.coordinate.reportGlobalCoor.valid;
+        runtime.decision.inRangeCandidate = tx1Coordinate.reportGlobalCoor.valid;
         flow.terminal = false;
         return true;
     }
 
 private:
-    static constexpr int kAnchorCenterOffset = Asa::kGridDim / 2;
+    static constexpr int kAnchorCenterOffset = kGridDim / 2;
     static constexpr int kSensorCols = 60;
     static constexpr int kSensorRows = 40;
     static constexpr int kInvalidCoor = 0x7FFFFFFF;
@@ -127,7 +129,7 @@ private:
     };
 
     static inline bool IsValidLocalIndex(int idx) {
-        return idx >= 0 && idx < Asa::kGridDim;
+        return idx >= 0 && idx < kGridDim;
     }
 
     static inline AxisEdgeGeometry GetAxisEdgeGeometry(int anchor, int sensorCount) {
@@ -156,17 +158,17 @@ private:
     }
 
     static inline bool HasRequiredLowNeighbors(int edgeIdx) {
-        return edgeIdx + 2 < Asa::kGridDim;
+        return edgeIdx + 2 < kGridDim;
     }
 
     static inline bool HasRequiredHighNeighbors(int edgeIdx) {
         return edgeIdx - 2 >= 0;
     }
 
-    inline Asa::AsaCoorResult Solve(const Asa::AsaProjection& proj,
+    inline Asa::CoorResult Solve(const Projection& proj,
                                     const AxisEdgeGeometry& dim1Edge,
                                     const AxisEdgeGeometry& dim2Edge) const {
-        Asa::AsaCoorResult result{};
+        Asa::CoorResult result{};
         if (!kFactoryUseTriangle) return result;
         int32_t dim1 = SolveByTriangle(proj.dim1, proj.peakIdxDim1, kFactoryTriEdgeDim1, dim1Edge);
         int32_t dim2 = SolveByTriangle(proj.dim2, proj.peakIdxDim2, kFactoryTriEdgeDim2, dim2Edge);
@@ -176,7 +178,7 @@ private:
         dim1 = ApplyPitchCompensation(dim1, kFactoryPitchCompDim1);
         dim2 = ApplyPitchCompensation(dim2, kFactoryPitchCompDim2);
 
-        const int32_t maxDim = Asa::kGridDim * Asa::kCoorUnit - 1;
+        const int32_t maxDim = kGridDim * Asa::kCoorUnit - 1;
         result.valid = true;
         result.dim1 = std::clamp(dim1, 0, maxDim);
         result.dim2 = std::clamp(dim2, 0, maxDim);
@@ -222,7 +224,7 @@ private:
         return result;
     }
 
-    inline int32_t SolveByTriangle(const int32_t (&signal)[Asa::kGridDim],
+    inline int32_t SolveByTriangle(const int32_t (&signal)[kGridDim],
                                    int peakIdx,
                                    const TriangleEdgeParams& edge,
                                    const AxisEdgeGeometry& geometry) const {
@@ -256,13 +258,13 @@ private:
         return coor + compensation;
     }
 
-    void ApplyPitchMap(Asa::AsaCoorResult& coor) const {
+    void ApplyPitchMap(Asa::CoorResult& coor) const {
         if (!coor.valid) return;
         coor.dim1 = Asa::SensorPitchSizeMap(coor.dim1, kFactoryPitchTableDim1.data(), Asa::kCoorUnit);
         coor.dim2 = Asa::SensorPitchSizeMap(coor.dim2, kFactoryPitchTableDim2.data(), Asa::kCoorUnit);
     }
 
-    static inline void LocalToGlobal(Asa::AsaCoorResult& coor,
+    static inline void LocalToGlobal(Asa::CoorResult& coor,
                                      int anchorRow, int anchorCol, int anchorCenterOffset) {
         if (!coor.valid) return;
         const int32_t centerOff = anchorCenterOffset * Asa::kCoorUnit;
@@ -270,11 +272,11 @@ private:
         coor.dim2 += static_cast<int32_t>(anchorRow) * Asa::kCoorUnit - centerOff;
     }
 
-    static inline void ClampToSensorBounds(Asa::AsaCoorResult& coor) {
+    static inline void ClampToSensorBounds(Asa::CoorResult& coor) {
         if (!coor.valid) return;
         coor.dim1 = std::clamp(coor.dim1, 0, kSensorCols * Asa::kCoorUnit - 1);
         coor.dim2 = std::clamp(coor.dim2, 0, kSensorRows * Asa::kCoorUnit - 1);
     }
 };
 
-} // namespace Solvers::Stylus
+} // namespace Solvers::Stylus::Hpp3

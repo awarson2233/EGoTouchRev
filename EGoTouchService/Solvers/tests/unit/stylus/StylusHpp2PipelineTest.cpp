@@ -40,7 +40,7 @@ void TestHpp2FrameProducesReport() {
 
     pipeline.Process(frame);
 
-    Require(!frame.stylus.runtime.flow.terminal, "HPP2 frame should run non-terminal");
+    Require(!frame.stylus.runtime.Active().flow.terminal, "HPP2 frame should run non-terminal");
     Require(frame.stylus.output.valid, "HPP2 output should be valid");
     Require(frame.stylus.output.inRange, "HPP2 output should be in range");
     Require(frame.stylus.output.tipDown, "HPP2 pressure should produce tip-down");
@@ -79,7 +79,7 @@ void TestHpp2AbnormalRawRejects() {
 
     pipeline.Process(frame);
 
-    Require(frame.stylus.runtime.flow.terminal, "abnormal raw line sum should reject the frame");
+    Require(frame.stylus.runtime.Active().flow.terminal, "abnormal raw line sum should reject the frame");
     Require(frame.stylus.runtime.hpp2.rawAbnormal, "rawAbnormal flag should be set");
 }
 
@@ -90,7 +90,7 @@ void TestHpp2NoPeakRejects() {
 
     pipeline.Process(frame);
 
-    Require(frame.stylus.runtime.flow.terminal, "sub-floor peak signal should reject the frame");
+    Require(frame.stylus.runtime.Active().flow.terminal, "sub-floor peak signal should reject the frame");
 }
 
 void TestHpp2ButtonReleaseCounterDecrements() {

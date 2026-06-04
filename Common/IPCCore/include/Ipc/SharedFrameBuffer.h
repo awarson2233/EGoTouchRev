@@ -440,6 +440,7 @@ inline void PopulateSharedFrameDataFromSolverFrame(SharedFrameData& dst,
     PopulateLegacyStylusPacketForSharedFrame(dst.stylusPacket, src.stylus);
 
     const auto& stylus = src.stylus;
+    const auto& hpp3Runtime = stylus.runtime.hpp3;
     dst.stylusSlaveValid = stylus.input.slaveValid;
     dst.stylusChecksumOk = stylus.input.checksumOk;
     dst.stylusSlaveOffset = stylus.input.slaveWordOffset;
@@ -451,8 +452,8 @@ inline void PopulateSharedFrameDataFromSolverFrame(SharedFrameData& dst,
     for (int i = 0; i < 4; ++i) {
         dst.stylusBtRawPressure[i] = stylus.input.btSample.rawPressure[static_cast<size_t>(i)];
     }
-    PopulateSharedStylusRawGridBlock(dst.stylusRawGrid.tx1, stylus.runtime.rawGrid.asaGrid.tx1);
-    PopulateSharedStylusRawGridBlock(dst.stylusRawGrid.tx2, stylus.runtime.rawGrid.asaGrid.tx2);
+    PopulateSharedStylusRawGridBlock(dst.stylusRawGrid.tx1, hpp3Runtime.rawGrid.grid.tx1);
+    PopulateSharedStylusRawGridBlock(dst.stylusRawGrid.tx2, hpp3Runtime.rawGrid.grid.tx2);
     dst.stylusRecheckEnabled = stylus.interop.recheckEnabled;
     dst.stylusRecheckPassed = stylus.interop.recheckPassed;
     dst.stylusRecheckOverlap = stylus.interop.recheckOverlap;
@@ -633,6 +634,7 @@ inline void PopulateSolverFrameFromSharedFrameData(HeatmapFrame& out,
     PopulateStylusPacketFromLegacySharedFrame(out.stylus, src.stylusPacket);
 
     auto& stylus = out.stylus;
+    auto& hpp3Runtime = stylus.runtime.SelectHpp3();
     stylus.input.slaveValid = src.stylusSlaveValid;
     stylus.input.checksumOk = src.stylusChecksumOk;
     stylus.input.slaveWordOffset = src.stylusSlaveOffset;
@@ -644,8 +646,8 @@ inline void PopulateSolverFrameFromSharedFrameData(HeatmapFrame& out,
     for (int i = 0; i < 4; ++i) {
         stylus.input.btSample.rawPressure[static_cast<size_t>(i)] = src.stylusBtRawPressure[i];
     }
-    PopulateStylusRawGridBlockFromShared(stylus.runtime.rawGrid.asaGrid.tx1, src.stylusRawGrid.tx1);
-    PopulateStylusRawGridBlockFromShared(stylus.runtime.rawGrid.asaGrid.tx2, src.stylusRawGrid.tx2);
+    PopulateStylusRawGridBlockFromShared(hpp3Runtime.rawGrid.grid.tx1, src.stylusRawGrid.tx1);
+    PopulateStylusRawGridBlockFromShared(hpp3Runtime.rawGrid.grid.tx2, src.stylusRawGrid.tx2);
     stylus.interop.recheckEnabled = src.stylusRecheckEnabled;
     stylus.interop.recheckPassed = src.stylusRecheckPassed;
     stylus.interop.recheckOverlap = src.stylusRecheckOverlap;

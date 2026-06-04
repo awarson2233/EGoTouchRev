@@ -51,7 +51,7 @@ public:
 
 private:
     void FinalizeTerminalFrame(HeatmapFrame& frame);
-    void ReadLatestBtSample(StylusBtInputSnapshot& out) const;
+    void ReadLatestBtSample(Asa::BtInputSnapshot& out) const;
 
     bool m_lastFrameWasTerminal = false;
 
@@ -59,7 +59,7 @@ private:
     // DeviceRuntime::m_pipelineMu. This mutex provides defense-in-depth
     // if the pipeline is ever used outside that lock.
     mutable std::mutex m_btMutex;
-    StylusBtInputSnapshot m_btSample{};
+    Asa::BtInputSnapshot m_btSample{};
 
     static constexpr int kPacketSensorRows = 40;
     static constexpr int kPacketSensorCols = 60;

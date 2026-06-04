@@ -5,49 +5,16 @@
 
 #include "SolverBuildConfig.h"
 #include "StylusSolver/AsaTypes.hpp"
+#include "StylusSolver/hpp2/Hpp2Runtime.hpp"
+#include "StylusSolver/hpp3/Hpp3Runtime.hpp"
 
 namespace Solvers {
-
-struct StylusSolvePoint {
-    bool valid = false;
-    float x = 0.0f;
-    float y = 0.0f;
-    uint16_t reportX = 0;
-    uint16_t reportY = 0;
-    uint16_t pressure = 0;
-    uint16_t rawPressure = 0;
-    uint16_t mappedPressure = 0;
-    uint16_t peakTx1 = 0;
-    uint16_t peakTx2 = 0;
-    bool tiltValid = false;
-    int16_t preTiltX = 0;
-    int16_t preTiltY = 0;
-    int16_t tiltX = 0;
-    int16_t tiltY = 0;
-    float tiltMagnitude = 0.0f;
-    float tiltAzimuthDeg = 0.0f;
-    float tx1X = 0.0f;
-    float tx1Y = 0.0f;
-    float tx2X = 0.0f;
-    float tx2Y = 0.0f;
-    float confidence = 0.0f;
-};
 
 struct StylusPacket {
     bool valid = false;
     uint8_t reportId = 0x08;
     uint8_t length = 17;
     std::array<uint8_t, 17> bytes{};
-};
-
-struct StylusBtInputSnapshot {
-    std::array<uint16_t, 4> pressure{};
-    std::array<uint16_t, 4> rawPressure{};
-    uint32_t seq = 0;
-    uint8_t freq1 = 0;
-    uint8_t freq2 = 0;
-    bool hasSample = false;
-    bool hasFreq = false;
 };
 
 struct StylusInputSnapshot {
@@ -69,7 +36,7 @@ struct StylusInputSnapshot {
     bool hpp2LineValid = false;
     std::array<uint16_t, 100> hpp2LineData{}; // 60 TX + 40 RX for current preset
 
-    StylusBtInputSnapshot btSample{};
+    Asa::BtInputSnapshot btSample{};
 };
 
 struct StylusOutputState {
@@ -80,7 +47,7 @@ struct StylusOutputState {
     uint16_t pressure = 0;
     float confidence = 0.0f;
     uint8_t pipelineStage = 0;
-    StylusSolvePoint point{};
+    Asa::SolvePoint point{};
     StylusPacket packet{};
 };
 
@@ -98,253 +65,52 @@ struct StylusTouchInterop {
     uint16_t maxRawPeak = 0;
 };
 
-struct StylusRuntimeFlow {
-    bool terminal = false;
-    bool resetPost = false;
-    bool resetNoise = false;
-    uint8_t pipelineStage = 0;
-    Asa::StylusFrameClass frameClass = Asa::StylusFrameClass::ShortFrame;
-};
+struct StylusRuntime {
+    enum class Protocol : uint8_t {
+        None,
+        Hpp2,
+        Hpp3,
+    };
 
-struct StylusRuntimeParse {
-    bool valid = false;
-    bool slaveValid = false;
-    bool checksumOk = false;
-    bool isFullFrame = false;
-    bool hasCurrentStylusSignal = false;
-    uint32_t status = 0;
-    uint16_t checksum16 = 0;
-    std::array<uint8_t, Asa::kSlaveHeaderBytes> rawSlaveHdr{};
-};
+    Protocol activeProtocol = Protocol::None;
+    Stylus::Hpp2::Runtime hpp2{};
+    Stylus::Hpp3::Runtime hpp3{};
 
-struct StylusRuntimeRawGrid {
-    Asa::AsaGridData asaGrid{};
-};
+    Asa::Runtime& Active() {
+        return activeProtocol == Protocol::Hpp2 ? static_cast<Asa::Runtime&>(hpp2)
+                                                : static_cast<Asa::Runtime&>(hpp3);
+    }
 
-struct StylusRuntimeHpp2LineProfile {
-    static constexpr int kMaxSamples = 100;
-    static constexpr int kHistorySize = 10;
+    const Asa::Runtime& Active() const {
+        return activeProtocol == Protocol::Hpp2 ? static_cast<const Asa::Runtime&>(hpp2)
+                                                : static_cast<const Asa::Runtime&>(hpp3);
+    }
 
-    std::array<uint16_t, kMaxSamples> raw{};
-    std::array<uint16_t, kMaxSamples> cmnBaseline{};
-    std::array<uint16_t, kMaxSamples> cmnSubtracted{};
-    std::array<uint16_t, kMaxSamples> chargerNoiseRatio{};
-    std::array<uint32_t, kHistorySize> lineSumHistory{};
-};
+    Stylus::Hpp2::Runtime& SelectHpp2() {
+        activeProtocol = Protocol::Hpp2;
+        return hpp2;
+    }
 
-struct StylusRuntimeHpp2 {
-    StylusRuntimeHpp2LineProfile line{};
-    uint32_t rawLineSum = 0;
-    uint16_t mainFreq = 0;
-    uint16_t auxFreq = 0;
-    uint16_t rawPressure = 0;
-    uint32_t buttonBits = 0;
-    uint16_t energyRatioPrev = 100;
-    uint16_t energyRatioPrev2 = 100;
-    uint16_t energyRatioF1Prev2 = 100;
-    uint16_t energyRatioF2Prev2 = 100;
-    bool rawAbnormal = false;
-    bool cmnAbnormal = false;
-    bool bypassCurFrame = false;
-    uint8_t selectedPeakDim1 = 0xff;
-    uint8_t selectedPeakDim2 = 0xff;
-    bool buttonPressed = false;
-    uint8_t buttonReleaseFrames = 0;
-};
-
-struct StylusGridFeature {
-    int16_t grid[Asa::kGridDim][Asa::kGridDim]{};
-    Asa::GridPeakUnit peak{};
-    Asa::GridPeakTable peakTable{};
-    Asa::AsaProjection projection{};
-    Asa::AsaCoorResult refinedLocalCoor{};
-    uint16_t peakSignal = 0;
-    uint16_t dim1SelectedPeakNetSignal = 0;
-    uint16_t dim2SelectedPeakNetSignal = 0;
-    bool dim1SelectedPeakOnEdge = false;
-    bool dim2SelectedPeakOnEdge = false;
-};
-
-struct StylusCoordinateResult {
-    Asa::AsaCoorResult localGridCoor{};
-    Asa::AsaCoorResult reportGlobalCoor{};
-};
-
-struct StylusTxRuntime {
-    StylusGridFeature feature{};
-    StylusCoordinateResult coordinate{};
-#if EGOTOUCH_DIAG
-    uint16_t triLeft = 0;
-    uint16_t triCenter = 0;
-    uint16_t triRight = 0;
-    int16_t pitchComp = 0;
-#endif
-};
-
-struct StylusRuntimeSignal {
-    bool recheckEnabled = false;
-    bool recheckPassed = false;
-    bool recheckOverlap = false;
-    uint16_t recheckThreshold = 0;
-    uint16_t recheckThresholdMulti = 0;
-    bool touchNullLike = false;
-    uint16_t signalX = 0;
-    uint16_t signalY = 0;
-    uint16_t maxRawPeak = 0;
-    bool dim1EdgeActive = false;
-    bool dim2EdgeActive = false;
-    uint16_t dim1EdgeSignal = 0;
-    uint16_t dim2EdgeSignal = 0;
-    bool overlapLike = false;
-};
-
-struct StylusRuntimeTilt {
-    bool valid = false;
-    bool anomalyDamped = false;
-    uint16_t signalRatio = 0;
-    uint16_t lenLimit = 0;
-    int32_t diffDim1 = 0;
-    int32_t diffDim2 = 0;
-    int16_t preTiltDim1 = 0;
-    int16_t preTiltDim2 = 0;
-    int16_t reportTiltDim1 = 0;
-    int16_t reportTiltDim2 = 0;
-#if EGOTOUCH_DIAG
-    int32_t rawDiffDim1 = 0;
-    int32_t rawDiffDim2 = 0;
-    bool circularClamped = false;
-#endif
-};
-
-struct StylusRuntimePressure {
-    StylusBtInputSnapshot btSample{};
-    bool pressureIsReal = false;
-    bool lookaheadHoverGate = false;
-    uint16_t rawPressure = 0;
-    uint16_t mappedPressure = 0;
-    uint16_t outputPressure = 0;
-    uint32_t btSeq = 0;
-    uint8_t predictedAgeFrames = 0;
-#if EGOTOUCH_DIAG
-    uint16_t preIirPressure = 0;
-    uint8_t polySegment = 0;
-    bool btPressSuppressActive = false;
-    bool edgeSignalTooLowLatched = false;
-    bool fakePressureDecreaseActive = false;
-    uint8_t fakePressureDecreaseFramesLeft = 0;
-    uint8_t btFreqShiftDebounceFramesLeft = 0;
-#endif
-};
-
-struct StylusRuntimeDecision {
-    bool inRangeCandidate = false;
-    bool tipDownCandidate = false;
-    bool authoritativeDown = false;
-    bool immediateRelease = false;
-    bool keepInRange = false;
-    bool touchSuppressCarry = false;
-    uint8_t touchSuppressFrames = 0;
-    bool enableCoordFilter = false;
-    bool enableCoorReviser = false;
-    bool enableEdgeCorrect = false;
-};
-
-struct StylusRuntimePost {
-    Asa::AsaCoorResult postCoor{};
-    Asa::AsaCoorResult finalCoor{};
-    Asa::AsaCoorResult edgePostCoor{};
-    Asa::AsaCoorResult postIirCoor{};
-    Asa::AsaCoorResult predictedCoor{};
-    StylusSolvePoint point{};
-    bool finalValid = false;
-    uint16_t finalPressure = 0;
-    float confidence = 0.0f;
-    uint8_t linearFilterState = 0;
-    bool linearFilterActive = false;
-    int32_t linearFilterDeltaDim1 = 0;
-    int32_t linearFilterDeltaDim2 = 0;
-
-    // ── Hpp3NoiseProcess outputs ──
-    bool noiseRejected = false;
-    uint8_t noiseRejectReason = 0;  // bit0=ratio, bit1=magnitude, bit2=jump
-    bool freqBypassed = false;       // frame bypassed by frequency gate
-
-    // ── CoorSpeedProcess outputs ──
-    int32_t speedValue = 0;
-    int32_t speedAvgDx = 0;
-    int32_t speedAvgDy = 0;
-    int32_t speedShortAvgDist = 0;
-    int32_t speedFullAvgDist = 0;
-
-    // ── CoorIIRProcess output ──
-    uint16_t iirCoef = 0;
-    bool iirFilterActive = false;
-
-#if EGOTOUCH_DIAG
-    float lfLineFitSlopeA = 0.f;
-    float lfLineFitInterceptB = 0.f;
-    bool lfLineFitValid = false;
-    int32_t lfCos1000 = 0;
-    int32_t lfStraightBufCount = 0;
-    int32_t lfDragApplied = 0;
-    bool coorReviseActive = false;
-    int16_t coorReviseCorrectionDim1 = 0;
-    int16_t coorReviseCorrectionDim2 = 0;
-
-    // ── Hpp3NoiseProcess diagnostics ──
-    bool noiseValidDim1 = true;
-    bool noiseValidDim2 = true;
-    uint8_t ratioAnomalyCntDim1 = 0;
-    uint8_t ratioAnomalyCntDim2 = 0;
-    uint32_t pressSigSumDim1 = 0;
-    uint32_t pressSigSumDim2 = 0;
-    uint16_t pressCnt = 0;
-    uint32_t pressSigAvgDim1 = 0;
-    uint32_t pressSigAvgDim2 = 0;
-    int32_t coorJumpDim1 = 0;
-    int32_t coorJumpDim2 = 0;
-
-    // ── AftCoorProcess diagnostics ──
-    bool lockActiveX = false;
-    bool lockActiveY = false;
-    int32_t lockOffsetX = 0;
-    int32_t lockOffsetY = 0;
-    int32_t lockThresholdX = 0;
-    int32_t lockThresholdY = 0;
-#endif
-};
-
-struct StylusRuntimeFrame {
-    StylusRuntimeFlow flow{};
-    StylusRuntimeParse parse{};
-    StylusRuntimeRawGrid rawGrid{};
-    StylusRuntimeHpp2 hpp2{};
-    StylusTxRuntime tx1{};
-    StylusTxRuntime tx2{};
-    StylusRuntimeSignal signal{};
-    StylusRuntimeTilt tilt{};
-    StylusRuntimePressure pressure{};
-    StylusRuntimeDecision decision{};
-    StylusRuntimePost post{};
+    Stylus::Hpp3::Runtime& SelectHpp3() {
+        activeProtocol = Protocol::Hpp3;
+        return hpp3;
+    }
 
     void ResetFrameFlags() {
-        flow = {};
-        parse = {};
-        decision = {};
-        signal = {};
-        hpp2 = {};
+        activeProtocol = Protocol::None;
+        hpp2.ResetFrameFlags();
+        hpp3.ResetFrameFlags();
     }
 
     void ResetPostOutputs() {
-        tilt = {};
-        pressure = {};
-        post = {};
+        hpp2.ResetPostOutputs();
+        hpp3.ResetPostOutputs();
     }
 
 #if EGOTOUCH_DIAG
     void ResetDiagnosticFields() {
-        tx1 = {};
-        tx2 = {};
+        hpp2.ResetDiagnosticFields();
+        hpp3.ResetDiagnosticFields();
     }
 #endif
 
@@ -464,7 +230,7 @@ struct StylusFrameData {
     StylusInputSnapshot input{};
     StylusOutputState output{};
     StylusTouchInterop interop{};
-    StylusRuntimeFrame runtime{};
+    StylusRuntime runtime{};
 #if EGOTOUCH_DIAG
     StylusDebugFrame debug{};
 #endif

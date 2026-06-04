@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <cstdint>
 
-namespace Solvers::Stylus {
+namespace Solvers::Stylus::Hpp3 {
 
 class Hpp3PostPressureProcess {
 public:
@@ -15,8 +15,8 @@ public:
     uint16_t m_pressureEdgeExitThreshold = 3000;
     int m_btFreqShiftDebounceFrames = 2;
 
-    inline bool Process(HeatmapFrame& frame) {
-        auto& runtime = frame.stylus.runtime;
+    inline bool Process(Context& ctx) {
+        auto& runtime = ctx.runtime;
         auto& pressure = runtime.pressure;
         auto& decision = runtime.decision;
         const auto& coor = runtime.tx1.coordinate.reportGlobalCoor;
@@ -104,7 +104,7 @@ public:
     inline uint16_t GetPreviousOutputPressureForTest() const { return m_previousOutputPressure; }
 
 private:
-    static inline void PublishPressureToPost(StylusRuntimeFrame& runtime) {
+    static inline void PublishPressureToPost(Runtime& runtime) {
         runtime.post.finalPressure = runtime.pressure.outputPressure;
         runtime.post.point.rawPressure = runtime.pressure.rawPressure;
         runtime.post.point.mappedPressure = runtime.pressure.mappedPressure;
@@ -123,7 +123,7 @@ private:
     uint8_t m_previousFreq2 = 0;
     uint8_t m_btFreqShiftDebounceFramesLeft = 0;
 
-    inline bool ApplyBtFreqShiftGate(const StylusBtInputSnapshot& btSample) {
+    inline bool ApplyBtFreqShiftGate(const Asa::BtInputSnapshot& btSample) {
         if (btSample.hasFreq) {
             if (m_haveBtFreq &&
                 (btSample.freq1 != m_previousFreq1 || btSample.freq2 != m_previousFreq2)) {
@@ -145,7 +145,7 @@ private:
         return true;
     }
 
-    inline uint8_t FakePressureFramesForMovement(const Asa::AsaCoorResult& coor) const {
+    inline uint8_t FakePressureFramesForMovement(const Asa::CoorResult& coor) const {
         if (!m_havePreviousCoordinate || !coor.valid) {
             return 0;
         }
@@ -157,9 +157,9 @@ private:
         return 0;
     }
 
-    inline void ApplyEdgeSignalSuppression(const StylusRuntimeSignal& signal,
-                                           StylusRuntimePressure& pressure,
-                                           StylusRuntimeDecision& decision) {
+    inline void ApplyEdgeSignalSuppression(const Asa::SignalRuntime& signal,
+                                           Asa::PressureRuntime& pressure,
+                                           Asa::DecisionRuntime& decision) {
         const bool dim1OnEdge = signal.dim1EdgeActive;
         const bool dim2OnEdge = signal.dim2EdgeActive;
         const uint16_t dim1Signal = Dim1SelectedPeakSignal(signal);
@@ -193,7 +193,7 @@ private:
         }
     }
 
-    inline void UpdatePrevious(const Asa::AsaCoorResult& coor, uint16_t outputPressure) {
+    inline void UpdatePrevious(const Asa::CoorResult& coor, uint16_t outputPressure) {
         if (coor.valid) {
             m_previousDim1 = coor.dim1;
             m_previousDim2 = coor.dim2;
@@ -213,7 +213,7 @@ private:
     }
 
 #if EGOTOUCH_DIAG
-    inline void CaptureDebugState(StylusRuntimePressure& pressure) const {
+    inline void CaptureDebugState(Asa::PressureRuntime& pressure) const {
         pressure.edgeSignalTooLowLatched = m_edgeSignalTooLowLatched;
         pressure.fakePressureDecreaseActive = m_fakePressureDecreaseArmed;
         pressure.fakePressureDecreaseFramesLeft = m_fakePressureDecreaseFramesLeft;
@@ -221,11 +221,11 @@ private:
     }
 #endif
 
-    static inline uint16_t Dim1SelectedPeakSignal(const StylusRuntimeSignal& signal) {
+    static inline uint16_t Dim1SelectedPeakSignal(const Asa::SignalRuntime& signal) {
         return signal.dim1EdgeSignal != 0 ? signal.dim1EdgeSignal : signal.signalX;
     }
 
-    static inline uint16_t Dim2SelectedPeakSignal(const StylusRuntimeSignal& signal) {
+    static inline uint16_t Dim2SelectedPeakSignal(const Asa::SignalRuntime& signal) {
         return signal.dim2EdgeSignal != 0 ? signal.dim2EdgeSignal : signal.signalY;
     }
 
@@ -236,4 +236,4 @@ private:
     }
 };
 
-} // namespace Solvers::Stylus
+} // namespace Solvers::Stylus::Hpp3

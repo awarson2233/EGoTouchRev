@@ -3,7 +3,7 @@
 #include "Hpp2ButtonProcess.hpp"
 #include "Hpp2ChargerNoiseProcess.hpp"
 #include "Hpp2CmfProcess.hpp"
-#include "Hpp2PipelineContext.hpp"
+#include "Hpp2Runtime.hpp"
 #include "Hpp2CoordinateSolver.hpp"
 #include "Hpp2DataQualityProcess.hpp"
 #include "Hpp2LinePeakExtractor.hpp"
@@ -63,24 +63,24 @@ public:
     bool m_useTightPressureDelta = false;
 
     bool Process(HeatmapFrame& frame) {
-        auto& runtime = frame.stylus.runtime;
+        auto& runtime = frame.stylus.runtime.SelectHpp2();
         runtime.flow.pipelineStage = 2;
-        runtime.flow.frameClass = Asa::StylusFrameClass::Valid;
+        runtime.flow.frameClass = Asa::FrameClass::Valid;
 
-        const Hpp2Settings settings = MakeSettings();
-        Hpp2Context ctx{frame, settings, m_state};
+        const Settings settings = MakeSettings();
+        Context ctx{frame, runtime, settings, m_state};
 
         // TSACore boundary: txCount + rxCount must not exceed line profile capacity.
         if (settings.sensorTxCount <= 0 || settings.sensorRxCount <= 0 ||
             settings.sensorTxCount + settings.sensorRxCount > kMaxSamples) {
             runtime.flow.terminal = true;
-            runtime.flow.frameClass = Asa::StylusFrameClass::ParseFail;
+            runtime.flow.frameClass = Asa::FrameClass::ParseFail;
             return false;
         }
 
         if (!settings.enabled || !frame.stylus.input.hpp2LineValid) {
             runtime.flow.terminal = true;
-            runtime.flow.frameClass = Asa::StylusFrameClass::NoSignal;
+            runtime.flow.frameClass = Asa::FrameClass::NoSignal;
             m_state.m_wasInRange = false;
             return false;
         }
@@ -88,9 +88,9 @@ public:
         m_stageInput.Process(ctx);
         DispatchDataProcess(ctx);
 
-        if (runtime.hpp2.bypassCurFrame || runtime.hpp2.rawAbnormal || runtime.hpp2.cmnAbnormal) {
+        if (runtime.bypassCurFrame || runtime.rawAbnormal || runtime.cmnAbnormal) {
             runtime.flow.terminal = true;
-            runtime.post.freqBypassed = runtime.hpp2.bypassCurFrame;
+            runtime.post.freqBypassed = runtime.bypassCurFrame;
             return false;
         }
 
@@ -105,7 +105,7 @@ public:
 
         if (!m_coordinateSolver.Process(ctx)) {
             runtime.flow.terminal = true;
-            runtime.flow.frameClass = Asa::StylusFrameClass::Tx1Missing;
+            runtime.flow.frameClass = Asa::FrameClass::Tx1Missing;
             return false;
         }
 
@@ -120,7 +120,7 @@ public:
     }
 
 private:
-    Hpp2State m_state;
+    State m_state;
 
     Hpp2StageInputProcess    m_stageInput;
     Hpp2CmfProcess           m_cmfProcess;
@@ -134,7 +134,7 @@ private:
     Hpp2StaticStatusProcess  m_staticStatusProcess;
     Hpp2CoordinateSolver     m_coordinateSolver;
 
-    void DispatchDataProcess(Hpp2Context& ctx) {
+    void DispatchDataProcess(Context& ctx) {
         (void)m_dataType; // TSACore wrappers are identical in the analyzed build.
         m_cmfProcess.Process(ctx);
         m_dataQualityProcess.Process(ctx);
@@ -145,8 +145,8 @@ private:
         m_peakSelector.Process(ctx);
     }
 
-    Hpp2Settings MakeSettings() const {
-        Hpp2Settings settings{};
+    Settings MakeSettings() const {
+        Settings settings{};
         settings.enabled = m_enabled;
         settings.sensorTxCount = m_sensorTxCount;
         settings.sensorRxCount = m_sensorRxCount;

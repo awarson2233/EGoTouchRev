@@ -1,6 +1,7 @@
 #pragma once
 
-#include "Hpp2PipelineContext.hpp"
+#include "SolverTypes.h"
+#include "Hpp2Runtime.hpp"
 #include "StylusSolver/AsaTypes.hpp"
 
 #include <algorithm>

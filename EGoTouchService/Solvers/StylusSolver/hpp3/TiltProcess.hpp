@@ -7,7 +7,7 @@
 #include <cmath>
 #include <cstdint>
 
-namespace Solvers::Stylus {
+namespace Solvers::Stylus::Hpp3 {
 
 class TiltProcess {
 public:
@@ -34,12 +34,13 @@ public:
         return cur;
     }
 
-    inline bool Process(HeatmapFrame& frame) {
-        auto& stylus = frame.stylus;
-        auto& runtime = stylus.runtime;
+    inline bool Process(Context& ctx) {
+        auto& stylus = ctx.frame.stylus;
+        auto& runtime = ctx.runtime;
         auto& tilt = runtime.tilt;
         auto& tx1 = runtime.tx1;
         auto& tx2 = runtime.tx2;
+        auto& tx2Grid = runtime.tx2Grid;
 
         runtime.flow.pipelineStage = 4;
         if (!m_enabled) {
@@ -57,7 +58,7 @@ public:
             return true;
         }
 
-        if (!runtime.rawGrid.asaGrid.tx2.valid || !tx2.feature.refinedLocalCoor.valid) {
+        if (!runtime.rawGrid.grid.tx2.valid || !tx2Grid.feature.refinedLocalCoor.valid) {
             tx2.coordinate = {};
             KeepLastFrame(tilt);
             PublishTiltToPost(runtime.post.point, tilt);
@@ -69,18 +70,18 @@ public:
             ResetHistory();
         }
 
-        tx2.coordinate.localGridCoor = tx2.feature.refinedLocalCoor;
+        tx2.coordinate.localGridCoor = tx2Grid.feature.refinedLocalCoor;
         tx2.coordinate.reportGlobalCoor = tx2.coordinate.localGridCoor;
         LocalToGlobal(tx2.coordinate.reportGlobalCoor,
-                      runtime.rawGrid.asaGrid.tx2.anchorRow,
-                      runtime.rawGrid.asaGrid.tx2.anchorCol,
+                      runtime.rawGrid.grid.tx2.anchorRow,
+                      runtime.rawGrid.grid.tx2.anchorCol,
                       kAnchorCenterOffset);
         TiltProcess::ClampToSensorBounds(tx2.coordinate.reportGlobalCoor);
 
-        Asa::AsaCoorResult tx1Global = tx1.coordinate.localGridCoor;
+        Asa::CoorResult tx1Global = tx1.coordinate.localGridCoor;
         LocalToGlobal(tx1Global,
-                      runtime.rawGrid.asaGrid.tx1.anchorRow,
-                      runtime.rawGrid.asaGrid.tx1.anchorCol,
+                      runtime.rawGrid.grid.tx1.anchorRow,
+                      runtime.rawGrid.grid.tx1.anchorCol,
                       kAnchorCenterOffset);
         TiltProcess::ClampToSensorBounds(tx1Global);
 
@@ -191,7 +192,7 @@ public:
 
 private:
     static constexpr int kHistorySize = 10;
-    static constexpr int kAnchorCenterOffset = Asa::kGridDim / 2;
+    static constexpr int kAnchorCenterOffset = kGridDim / 2;
     static constexpr bool kAxisRotated = false;
     static constexpr int kDim1Length = 60;
     static constexpr int kDim2Length = 40;
@@ -215,11 +216,11 @@ private:
 
     int32_t m_lastCoordDiffDim1 = 0;
     int32_t m_lastCoordDiffDim2 = 0;
-    StylusRuntimeTilt m_lastOutput{};
+    Asa::TiltRuntime m_lastOutput{};
     bool m_haveLastOutput = false;
     bool m_prevPressureActive = false;
 
-    static inline void LocalToGlobal(Asa::AsaCoorResult& coor,
+    static inline void LocalToGlobal(Asa::CoorResult& coor,
                                      int anchorRow,
                                      int anchorCol,
                                      int anchorCenterOffset) {
@@ -229,7 +230,7 @@ private:
         coor.dim2 += static_cast<int32_t>(anchorRow) * Asa::kCoorUnit - centerOff;
     }
 
-    static inline void ClampToSensorBounds(Asa::AsaCoorResult& coor) {
+    static inline void ClampToSensorBounds(Asa::CoorResult& coor) {
         if (!coor.valid) return;
         coor.dim1 = std::clamp(coor.dim1, 0, kDim1Length * Asa::kCoorUnit - 1);
         coor.dim2 = std::clamp(coor.dim2, 0, kDim2Length * Asa::kCoorUnit - 1);
@@ -382,7 +383,7 @@ private:
         m_lastCoordDiffDim2 = 0;
     }
 
-    inline void PublishTiltToPost(StylusSolvePoint& point, const StylusRuntimeTilt& tilt) const {
+    inline void PublishTiltToPost(Asa::SolvePoint& point, const Asa::TiltRuntime& tilt) const {
         point.tiltValid = tilt.valid;
         point.preTiltX = tilt.preTiltDim1;
         point.preTiltY = tilt.preTiltDim2;
@@ -402,7 +403,7 @@ private:
         }
     }
 
-    inline void KeepLastFrame(StylusRuntimeTilt& out) const {
+    inline void KeepLastFrame(Asa::TiltRuntime& out) const {
         if (!m_haveLastOutput) {
             out = {};
             return;
@@ -411,4 +412,4 @@ private:
     }
 };
 
-} // namespace Solvers::Stylus
+} // namespace Solvers::Stylus::Hpp3

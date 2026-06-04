@@ -141,7 +141,7 @@ bool CanPersistRuntimeConfig(const RuntimeConfigSnapshot* snapshot) {
     return RuntimeConfigValuesMatchSchema(*snapshot);
 }
 
-void CopyRawGridBlockToWire(const Asa::FreqBlock& src,
+void CopyRawGridBlockToWire(const Solvers::Stylus::Hpp3::FreqBlock& src,
                             DvrFmt::Dvr2StylusRawGridBlockRecord& dst) {
     dst.anchorRow = src.anchorRow;
     dst.anchorCol = src.anchorCol;

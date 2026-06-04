@@ -865,7 +865,7 @@ uint64_t ServiceHost::EncodeDebugValue(const Solvers::HeatmapFrame& frame,
     case Ipc::DebugSourceKind::StylusField: {
         const auto& s = frame.stylus;
         const auto& point = s.output.point;
-        const auto& press = s.runtime.pressure;
+        const auto& press = s.runtime.Active().pressure;
         switch (static_cast<Ipc::DebugStylusSourceIndex>(def.sourceIndex)) {
         case Ipc::DebugStylusSourceIndex::Pressure: return EncodeU32(s.output.pressure);
         case Ipc::DebugStylusSourceIndex::SignalX: return EncodeU32(s.interop.signalX);

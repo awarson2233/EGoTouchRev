@@ -1,6 +1,7 @@
 #pragma once
 
-#include "Hpp2PipelineContext.hpp"
+#include "SolverTypes.h"
+#include "Hpp2Runtime.hpp"
 #include "Hpp2PeakSearchUtils.hpp"
 #include "StylusSolver/AsaTypes.hpp"
 
@@ -13,9 +14,9 @@ namespace Solvers::Stylus::Hpp2 {
 
 class Hpp2LinePeakExtractor {
 public:
-    void Process(Hpp2Context& ctx) const {
-        auto& runtime = ctx.frame.stylus.runtime;
-        auto& hpp2 = runtime.hpp2;
+    void Process(Context& ctx) const {
+        auto& runtime = ctx.runtime;
+        auto& hpp2 = runtime;
         SearchPeak(ctx, 0, hpp2.line.cmnSubtracted, 0, ctx.settings.sensorTxCount,
                    ctx.state.m_peakTableDim1, ctx.state.m_peakCountDim1);
         SearchPeak(ctx, 1, hpp2.line.cmnSubtracted, ctx.settings.sensorTxCount, ctx.settings.sensorRxCount,
@@ -35,24 +36,15 @@ public:
         runtime.signal.dim2EdgeActive = false;
         runtime.signal.dim1EdgeSignal = 0;
         runtime.signal.dim2EdgeSignal = 0;
-
-        runtime.tx1.feature.peak.valid = false;
-        runtime.tx1.feature.peak.peakValue = 0;
-        runtime.tx1.feature.peak.peakCol = -1;
-        runtime.tx1.feature.peak.peakRow = -1;
-        runtime.tx1.feature.dim1SelectedPeakNetSignal = 0;
-        runtime.tx1.feature.dim2SelectedPeakNetSignal = 0;
-        runtime.tx1.feature.dim1SelectedPeakOnEdge = false;
-        runtime.tx1.feature.dim2SelectedPeakOnEdge = false;
     }
 
 private:
-    static void SearchPeak(const Hpp2Context& ctx,
+    static void SearchPeak(const Context& ctx,
                            int groupId,
                            const std::array<uint16_t, kMaxSamples>& line,
                            int offset,
                            int length,
-                           Hpp2PeakTable& table,
+                           PeakTable& table,
                            int& count) {
         const auto previousTable = table;
         const int previousCount = count;
@@ -67,7 +59,7 @@ private:
                 continue;
             }
 
-            Hpp2PeakUnit unit{};
+            PeakUnit unit{};
             unit.valid = true;
             unit.index = i;
             Hpp2PeakSearchUtils::SearchPeakBoundary(line, offset, length, i, unit);
@@ -86,8 +78,8 @@ private:
         UpdatePeaksAge(table, count, previousTable, previousCount);
     }
 
-    static void InsertPeakUnit(const Hpp2PeakUnit& unit,
-                               Hpp2PeakTable& table,
+    static void InsertPeakUnit(const PeakUnit& unit,
+                               PeakTable& table,
                                int& count) {
         int slot = count < kMaxPeaksPerDim ? count : -1;
         if (slot < 0) {
@@ -108,9 +100,9 @@ private:
         table[static_cast<std::size_t>(slot)] = unit;
     }
 
-    static void UpdatePeaksAge(Hpp2PeakTable& table,
+    static void UpdatePeaksAge(PeakTable& table,
                                int count,
-                               const Hpp2PeakTable& previousTable,
+                               const PeakTable& previousTable,
                                int previousCount) {
         // Intentional simplification for HPP2 line mode: inherit only peak age.
         // TSACore also carries long-scale IIR/average/min/max history fields that

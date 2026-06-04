@@ -71,7 +71,7 @@ public:
     }
 
     inline void Process(HeatmapFrame& frame) {
-        auto& runtime = frame.stylus.runtime;
+        auto& runtime = frame.stylus.runtime.Active();
         const auto& historyRaw = runtime.tx1.coordinate.reportGlobalCoor;
         const auto& filterInput = runtime.post.edgePostCoor.valid ? runtime.post.edgePostCoor : historyRaw;
         const bool pressureActive = runtime.pressure.outputPressure > 0;
@@ -109,7 +109,7 @@ public:
 
         // ── Get3PointAvgFilter ──
         // 3-point moving average with sentinel guard (INT32_MAX = invalid/missing data)
-        Asa::AsaCoorResult avg3{};
+        Asa::CoorResult avg3{};
         if (m_historyCount >= 3) {
             const bool x2Valid = RawX(2) != kInvalidCoord;
             const bool y2Valid = RawY(2) != kInvalidCoord;
@@ -134,7 +134,7 @@ public:
         runtime.post.postCoor = avg3;
 
         // Quadratic extrapolation prediction: 3*x0 − 3*x1 + x2
-        Asa::AsaCoorResult predicted;
+        Asa::CoorResult predicted;
         if (m_historyCount >= 3) {
             predicted.valid = true;
             predicted.dim1 = 3 * RawX(0) - 3 * RawX(1) + RawX(2);
@@ -170,7 +170,7 @@ public:
 
         // ── Linear correction consumes the staged coordinate path. avg3/predicted stay as
         // diagnostics and side-channel trend data, mirroring the original split.
-        const Asa::AsaCoorResult result = Process(
+        const Asa::CoorResult result = Process(
             filterInput, pressureActive, m_sensorDim1Limit, m_sensorDim2Limit);
 
         runtime.post.finalCoor = result;
@@ -189,11 +189,11 @@ public:
 #endif
     }
 
-    inline Asa::AsaCoorResult Process(const Asa::AsaCoorResult& raw,
+    inline Asa::CoorResult Process(const Asa::CoorResult& raw,
                                       bool pressureActive,
                                       int sensorDim1Limit,
                                       int sensorDim2Limit) {
-        Asa::AsaCoorResult result = raw;
+        Asa::CoorResult result = raw;
         m_active = false;
         m_lastDeltaDim1 = 0;
         m_lastDeltaDim2 = 0;

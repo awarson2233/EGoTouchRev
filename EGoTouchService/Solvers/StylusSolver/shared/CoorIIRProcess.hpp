@@ -42,7 +42,7 @@ public:
     }
 
     inline void Process(HeatmapFrame& frame) {
-        auto& runtime = frame.stylus.runtime;
+        auto& runtime = frame.stylus.runtime.Active();
         auto& coor = runtime.post.finalCoor;
         const bool inRange = coor.valid;  // stylus detected (hover OR touch)
 

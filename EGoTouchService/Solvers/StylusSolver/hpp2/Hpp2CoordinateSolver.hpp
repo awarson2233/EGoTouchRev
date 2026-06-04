@@ -1,6 +1,7 @@
 #pragma once
 
-#include "Hpp2PipelineContext.hpp"
+#include "SolverTypes.h"
+#include "Hpp2Runtime.hpp"
 #include "Hpp2CoordinateMath.hpp"
 #include "StylusSolver/AsaTypes.hpp"
 
@@ -12,9 +13,9 @@ namespace Solvers::Stylus::Hpp2 {
 
 class Hpp2CoordinateSolver {
 public:
-    bool Process(Hpp2Context& ctx) const {
-        auto& runtime = ctx.frame.stylus.runtime;
-        const auto& hpp2 = runtime.hpp2;
+    bool Process(Context& ctx) const {
+        auto& runtime = ctx.runtime;
+        const auto& hpp2 = runtime;
         if (hpp2.selectedPeakDim1 == kInvalidPeak || hpp2.selectedPeakDim2 == kInvalidPeak) {
             return false;
         }
@@ -32,7 +33,7 @@ public:
         dim1 = Asa::SensorPitchSizeMap(dim1, kDim1PitchTable.data(), Asa::kCoorUnit);
         dim2 = Asa::SensorPitchSizeMap(dim2, kDim2PitchTable.data(), Asa::kCoorUnit);
 
-        Asa::AsaCoorResult coor{};
+        Asa::CoorResult coor{};
         coor.valid = true;
         coor.dim1 = std::clamp(dim1, 0, ctx.settings.sensorTxCount * Asa::kCoorUnit - 1);
         coor.dim2 = std::clamp(dim2, 0, ctx.settings.sensorRxCount * Asa::kCoorUnit - 1);

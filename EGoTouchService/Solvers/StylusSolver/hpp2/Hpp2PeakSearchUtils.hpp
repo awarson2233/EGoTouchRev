@@ -1,7 +1,8 @@
 #pragma once
 
 #include "Hpp2CoordinateMath.hpp"
-#include "Hpp2PipelineContext.hpp"
+#include "SolverTypes.h"
+#include "Hpp2Runtime.hpp"
 
 #include <algorithm>
 #include <array>
@@ -10,7 +11,7 @@
 namespace Solvers::Stylus::Hpp2 {
 
 struct Hpp2PeakSearchUtils {
-    static bool IsLocalPeak(const Hpp2Settings& settings,
+    static bool IsLocalPeak(const Settings& settings,
                             const std::array<uint16_t, kMaxSamples>& line,
                             int offset,
                             int length,
@@ -37,7 +38,7 @@ struct Hpp2PeakSearchUtils {
                                    int offset,
                                    int length,
                                    int peakIndex,
-                                   Hpp2PeakUnit& unit) {
+                                   PeakUnit& unit) {
         static constexpr uint32_t kBoundarySlopeQ5 = 0x23; // TSACore SearchPeakBoundary for group 0/1.
         static constexpr int kContributionPermilleFloor = 50;
         static constexpr uint32_t kAccumSignalFloor = 200;
@@ -90,7 +91,7 @@ struct Hpp2PeakSearchUtils {
     static void UpdatePeakPrpt(const std::array<uint16_t, kMaxSamples>& line,
                                int offset,
                                int length,
-                               Hpp2PeakUnit& unit) {
+                               PeakUnit& unit) {
         uint32_t regionSum = 0;
         uint16_t baselineMin = 0xffff;
         for (int i = unit.leftBoundary; i <= unit.rightBoundary; ++i) {
@@ -125,7 +126,7 @@ struct Hpp2PeakSearchUtils {
                           const std::array<uint16_t, kMaxSamples>& line,
                           int offset,
                           int length,
-                          const Hpp2PeakUnit& unit) {
+                          const PeakUnit& unit) {
         const int edgeThresholdLast = groupId == 0 ? 5000 : 4500;
         const int edgeThresholdFirst = groupId == 0 ? 5000 : 3700;
         // TSACore GetPeakPos (0x6baad7cb) takes the gravity-data path:
@@ -138,7 +139,7 @@ struct Hpp2PeakSearchUtils {
         return Hpp2CoordinateMath::SolveByTriangle(line, offset, length, unit.index, 50, edgeThresholdLast, edgeThresholdFirst);
     }
 
-    static void UpdatePeakNoiseFlags(const Hpp2Settings& settings, Hpp2PeakUnit& unit) {
+    static void UpdatePeakNoiseFlags(const Settings& settings, PeakUnit& unit) {
         // Not TSACore UpdatePeakNoisePrpt (0x6babddff).  The original computes
         // GetSignalUnstableLevel(threeNeighborSum, historyAvgSignal,
         // otherDimHistoryAvgSignal), last-output coordinate distance, and an SS
@@ -159,7 +160,7 @@ struct Hpp2PeakSearchUtils {
         }
     }
 
-    static Peak FindPeak(const Hpp2Settings& settings,
+    static Peak FindPeak(const Settings& settings,
                          const std::array<uint16_t, kMaxSamples>& line,
                          int offset,
                          int length) {
@@ -168,7 +169,7 @@ struct Hpp2PeakSearchUtils {
             if (!IsLocalPeak(settings, line, offset, length, i)) {
                 continue;
             }
-            Hpp2PeakUnit unit{};
+            PeakUnit unit{};
             unit.valid = true;
             unit.index = i;
             SearchPeakBoundary(line, offset, length, i, unit);

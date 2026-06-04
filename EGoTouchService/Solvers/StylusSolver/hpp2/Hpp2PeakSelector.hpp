@@ -1,6 +1,7 @@
 #pragma once
 
-#include "Hpp2PipelineContext.hpp"
+#include "SolverTypes.h"
+#include "Hpp2Runtime.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -10,7 +11,7 @@ namespace Solvers::Stylus::Hpp2 {
 
 class Hpp2PeakSelector {
 public:
-    void Process(Hpp2Context& ctx) const {
+    void Process(Context& ctx) const {
         // TSACore NoiseProcess also calls NoisesLog(); that path is logging-only
         // instrumentation in the analyzed flow, so the rebuild intentionally omits it.
         UpdatePeaksRank(ctx.state.m_peakTableDim1, ctx.state.m_peakCountDim1, true);
@@ -19,8 +20,8 @@ public:
     }
 
 private:
-    static void GetRealPeak(Hpp2Context& ctx) {
-        auto& hpp2 = ctx.frame.stylus.runtime.hpp2;
+    static void GetRealPeak(Context& ctx) {
+        auto& hpp2 = ctx.runtime;
         auto& state = ctx.state;
         hpp2.selectedPeakDim1 = kInvalidPeak;
         hpp2.selectedPeakDim2 = kInvalidPeak;
@@ -41,8 +42,8 @@ private:
             return;
         }
 
-        const Hpp2PeakUnit* dim1 = nullptr;
-        const Hpp2PeakUnit* dim2 = nullptr;
+        const PeakUnit* dim1 = nullptr;
+        const PeakUnit* dim2 = nullptr;
         if (state.m_peakCountDim1 > 0) {
             dim1 = UpdatePeaksWithUnit(ctx, state.m_peakTableDim1, state.m_peakCountDim1, true);
         }
@@ -61,10 +62,10 @@ private:
         PublishSelectedPeaks(ctx.frame, dim1, dim2);
     }
 
-    static void UpdatePeaksRank(Hpp2PeakTable& table, int count, bool dim1) {
+    static void UpdatePeaksRank(PeakTable& table, int count, bool dim1) {
         (void)dim1;
         // TSACore UpdatePeaksRank @ 0x6bab7c91 rank-source mapping:
-        //   TSACore offset | Hpp2PeakUnit field       | mapping
+        //   TSACore offset | PeakUnit field       | mapping
         //   +0x20          | age                      | exact: age > 0x14 adds +1.
         //   peak signal    | peakSignal               | exact: (peakSignal * 10) / strongestSignal.
         //   +0x80          | candidateCoor            | approximate: coordinate metric gate.
@@ -73,7 +74,7 @@ private:
         //   +0x39          | noiseProp != 0           | proxy: merged unavailable rank flag byte.
         //   +0x3a          | noiseProp != 0           | proxy: merged unavailable rank flag byte.
         // HPP2 line-mode does not keep the independent TSACore rank flag bytes in
-        // Hpp2PeakUnit; all unavailable flags are intentionally collapsed into the
+        // PeakUnit; all unavailable flags are intentionally collapsed into the
         // observable local noiseProp proxy.  No cross-frame previous selected peak
         // distance participates in TSACore's rank at this site.
         uint16_t strongestSignal = 0;
@@ -125,16 +126,16 @@ private:
         }
     }
 
-    static const Hpp2PeakUnit* UpdatePeaksWithUnit(Hpp2Context& ctx,
-                                                   const Hpp2PeakTable& table,
+    static const PeakUnit* UpdatePeaksWithUnit(Context& ctx,
+                                                   const PeakTable& table,
                                                    int count,
                                                    bool dim1) {
-        const Hpp2PeakUnit* selected = SelectHighestRankPeak(table, count);
+        const PeakUnit* selected = SelectHighestRankPeak(table, count);
         if (selected == nullptr) {
             return nullptr;
         }
 
-        auto& hpp2 = ctx.frame.stylus.runtime.hpp2;
+        auto& hpp2 = ctx.runtime;
         const uint8_t selectedIndex = static_cast<uint8_t>(selected->index);
         const std::size_t freqIdx = static_cast<std::size_t>(ctx.state.m_curFreqIdx);
         if (dim1) {
@@ -147,8 +148,8 @@ private:
         return selected;
     }
 
-    static const Hpp2PeakUnit* SelectHighestRankPeak(const Hpp2PeakTable& table, int count) {
-        const Hpp2PeakUnit* best = nullptr;
+    static const PeakUnit* SelectHighestRankPeak(const PeakTable& table, int count) {
+        const PeakUnit* best = nullptr;
         for (int i = 0; i < count; ++i) {
             const auto& unit = table[static_cast<std::size_t>(i)];
             if (!unit.valid) {
@@ -163,15 +164,15 @@ private:
         return best;
     }
 
-    static bool IsSelectedPeakAbnormal(const Hpp2PeakUnit& unit) {
+    static bool IsSelectedPeakAbnormal(const PeakUnit& unit) {
         // TSACore GetRealPeak checks selected-unit abnormal flag bytes after
         // UpdatePeaksWithUnit.  HPP2 line mode exposes the comparable state as
         // noiseProp bits from UpdatePeakNoiseFlags.
         return unit.noiseProp != 0;
     }
 
-    static void PublishSelectedPeaks(HeatmapFrame& frame, const Hpp2PeakUnit* dim1, const Hpp2PeakUnit* dim2) {
-        auto& runtime = frame.stylus.runtime;
+    static void PublishSelectedPeaks(HeatmapFrame& frame, const PeakUnit* dim1, const PeakUnit* dim2) {
+        auto& runtime = frame.stylus.runtime.hpp2;
         runtime.signal.signalX = dim1 != nullptr ? dim1->peakSignal : 0;
         runtime.signal.signalY = dim2 != nullptr ? dim2->peakSignal : 0;
         runtime.signal.maxRawPeak = std::max(runtime.signal.signalX, runtime.signal.signalY);
@@ -180,15 +181,6 @@ private:
         runtime.signal.dim2EdgeActive = dim2 != nullptr && dim2->onEdge;
         runtime.signal.dim1EdgeSignal = runtime.signal.dim1EdgeActive ? dim1->netSignal : 0;
         runtime.signal.dim2EdgeSignal = runtime.signal.dim2EdgeActive ? dim2->netSignal : 0;
-
-        runtime.tx1.feature.peak.valid = dim1 != nullptr && dim2 != nullptr;
-        runtime.tx1.feature.peak.peakValue = runtime.signal.maxRawPeak;
-        runtime.tx1.feature.peak.peakCol = dim1 != nullptr ? dim1->index : -1;
-        runtime.tx1.feature.peak.peakRow = dim2 != nullptr ? dim2->index : -1;
-        runtime.tx1.feature.dim1SelectedPeakNetSignal = dim1 != nullptr ? dim1->netSignal : 0;
-        runtime.tx1.feature.dim2SelectedPeakNetSignal = dim2 != nullptr ? dim2->netSignal : 0;
-        runtime.tx1.feature.dim1SelectedPeakOnEdge = runtime.signal.dim1EdgeActive;
-        runtime.tx1.feature.dim2SelectedPeakOnEdge = runtime.signal.dim2EdgeActive;
     }
 };
 

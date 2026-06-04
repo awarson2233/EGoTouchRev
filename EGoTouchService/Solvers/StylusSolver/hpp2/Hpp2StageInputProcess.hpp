@@ -1,6 +1,7 @@
 #pragma once
 
-#include "Hpp2PipelineContext.hpp"
+#include "SolverTypes.h"
+#include "Hpp2Runtime.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -9,9 +10,9 @@ namespace Solvers::Stylus::Hpp2 {
 
 class Hpp2StageInputProcess {
 public:
-    void Process(Hpp2Context& ctx) const {
+    void Process(Context& ctx) const {
         auto& input = ctx.frame.stylus.input;
-        auto& hpp2 = ctx.frame.stylus.runtime.hpp2;
+        auto& hpp2 = ctx.runtime;
         auto& state = ctx.state;
         hpp2 = {};
         hpp2.mainFreq = input.mainFreq;
@@ -47,7 +48,7 @@ public:
     }
 
 private:
-    static uint16_t RatioToHistory(const Hpp2State& state, uint32_t current, int historyIndex) {
+    static uint16_t RatioToHistory(const State& state, uint32_t current, int historyIndex) {
         if (historyIndex < 0 || historyIndex >= kHistorySize) {
             return 100;
         }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SolverTypes.h"
+#include "StylusSolver/hpp3/Hpp3Runtime.hpp"
 
 #include <array>
 #include <cstddef>
@@ -11,10 +12,10 @@ namespace Solvers::Stylus {
 
 class StylusFrameParser {
 public:
-    static constexpr std::size_t kSlaveWordCount = static_cast<std::size_t>(Asa::kBlockWords * 2);
-    static constexpr std::size_t kSlaveWordOffset = static_cast<std::size_t>(Asa::kSlaveHeaderBytes);
+    static constexpr std::size_t kSlaveWordCount = static_cast<std::size_t>(Hpp3::kBlockWords * 2);
+    static constexpr std::size_t kSlaveWordOffset = static_cast<std::size_t>(Hpp3::kSlaveHeaderBytes);
     static constexpr std::size_t kSlaveFrameBytes =
-        static_cast<std::size_t>(Asa::kSlaveHeaderBytes) + kSlaveWordCount * sizeof(uint16_t);
+        static_cast<std::size_t>(Hpp3::kSlaveHeaderBytes) + kSlaveWordCount * sizeof(uint16_t);
     static constexpr std::size_t kMinimumSlaveSignalBytes = kSlaveWordOffset + 4;
 
     bool m_enabled = true;
@@ -22,12 +23,13 @@ public:
 
     inline bool Process(HeatmapFrame& frame) const {
         auto& stylus = frame.stylus;
-        auto& flow = stylus.runtime.flow;
-        auto& parse = stylus.runtime.parse;
-        auto& rawGrid = stylus.runtime.rawGrid;
+        auto& runtime = stylus.runtime.SelectHpp3();
+        auto& flow = runtime.flow;
+        auto& parse = runtime.parse;
+        auto& rawGrid = runtime.rawGrid;
 
         flow.pipelineStage = 1;
-        flow.frameClass = Asa::StylusFrameClass::ShortFrame;
+        flow.frameClass = Asa::FrameClass::ShortFrame;
         parse = {};
         rawGrid = {};
 
@@ -71,7 +73,7 @@ public:
         parse.status = status;
         parse.checksum16 = checksum16;
         parse.checksumOk = true;
-        std::memcpy(parse.rawSlaveHdr.data(), slave, Asa::kSlaveHeaderBytes);
+        std::memcpy(rawGrid.rawSlaveHdr.data(), slave, Hpp3::kSlaveHeaderBytes);
 
         stylus.input.slaveValid = true;
         stylus.input.checksumOk = true;
@@ -88,7 +90,7 @@ public:
             parse.checksumOk = false;
             stylus.input.checksumOk = false;
             flow.terminal = true;
-            flow.frameClass = Asa::StylusFrameClass::ShortFrame;
+            flow.frameClass = Asa::FrameClass::ShortFrame;
             parse.valid = false;
             parse.hasCurrentStylusSignal = false;
             return true;
@@ -96,11 +98,11 @@ public:
 
         parse.isFullFrame = true;
         if (m_enableSlaveChecksum &&
-            !ValidateChecksum16(slave + Asa::kSlaveHeaderBytes, checksum16)) {
+            !ValidateChecksum16(slave + Hpp3::kSlaveHeaderBytes, checksum16)) {
             parse.checksumOk = false;
             stylus.input.checksumOk = false;
             flow.terminal = true;
-            flow.frameClass = Asa::StylusFrameClass::ParseFail;
+            flow.frameClass = Asa::FrameClass::ParseFail;
             parse.valid = false;
             parse.hasCurrentStylusSignal = false;
             return true;
@@ -108,28 +110,28 @@ public:
 
         if (!hasCurrentStylusSignal) {
             flow.terminal = true;
-            flow.frameClass = Asa::StylusFrameClass::NoSignal;
+            flow.frameClass = Asa::FrameClass::NoSignal;
             parse.valid = false;
             parse.hasCurrentStylusSignal = false;
             return true;
         }
 
-        const uint8_t* wordPtr = slave + Asa::kSlaveHeaderBytes;
-        rawGrid.asaGrid = Asa::ExtractGridFromSlavePayloadBytes(
+        const uint8_t* wordPtr = slave + Hpp3::kSlaveHeaderBytes;
+        rawGrid.grid = Hpp3::ExtractGridFromSlavePayloadBytes(
             wordPtr, kSlaveWordCount * sizeof(uint16_t));
         parse.hasCurrentStylusSignal = true;
-        stylus.input.tx1BlockValid = rawGrid.asaGrid.tx1.valid;
-        stylus.input.tx2BlockValid = rawGrid.asaGrid.tx2.valid;
+        stylus.input.tx1BlockValid = rawGrid.grid.tx1.valid;
+        stylus.input.tx2BlockValid = rawGrid.grid.tx2.valid;
 
-        if (!rawGrid.asaGrid.tx1.valid) {
+        if (!rawGrid.grid.tx1.valid) {
             flow.terminal = true;
-            flow.frameClass = Asa::StylusFrameClass::Tx1Missing;
+            flow.frameClass = Asa::FrameClass::Tx1Missing;
             parse.valid = false;
             return true;
         }
 
         flow.terminal = false;
-        flow.frameClass = Asa::StylusFrameClass::Valid;
+        flow.frameClass = Asa::FrameClass::Valid;
         parse.valid = true;
         parse.hasCurrentStylusSignal = true;
         return true;
@@ -143,8 +145,9 @@ public:
             return true;
         }
 
-        auto& flow = frame.stylus.runtime.flow;
-        auto& parse = frame.stylus.runtime.parse;
+        auto& runtime = frame.stylus.runtime.Active();
+        auto& flow = runtime.flow;
+        auto& parse = runtime.parse;
         flow.terminal = true;
         parse.valid = false;
         parse.slaveValid = false;
@@ -162,8 +165,9 @@ private:
         }
 
         auto& stylus = frame.stylus;
-        auto& flow = stylus.runtime.flow;
-        auto& parse = stylus.runtime.parse;
+        auto& runtime = stylus.runtime.SelectHpp2();
+        auto& flow = runtime.flow;
+        auto& parse = runtime.parse;
 
         stylus.input.auxStatusFlags = priorInput.auxStatusFlags;
         stylus.input.mainFreq = priorInput.mainFreq;
@@ -178,7 +182,7 @@ private:
         parse.checksumOk = true;
         parse.hasCurrentStylusSignal = true;
         flow.terminal = false;
-        flow.frameClass = Asa::StylusFrameClass::Valid;
+        flow.frameClass = Asa::FrameClass::Valid;
         return true;
     }
 
@@ -187,43 +191,44 @@ private:
         if (!frame.slaveSuffixValid) return false;
 
         auto& stylus = frame.stylus;
-        auto& flow = stylus.runtime.flow;
-        auto& parse = stylus.runtime.parse;
-        auto& rawGrid = stylus.runtime.rawGrid;
+        auto& runtime = stylus.runtime.SelectHpp3();
+        auto& flow = runtime.flow;
+        auto& parse = runtime.parse;
+        auto& rawGrid = runtime.rawGrid;
 
-        rawGrid.asaGrid = Asa::ExtractGridFromSlaveWords(
+        rawGrid.grid = Hpp3::ExtractGridFromSlaveWords(
             frame.slaveSuffix.words, Frame::kSlaveSuffixWords);
 
         parse.slaveValid = true;
         parse.status = priorInput.status;
         parse.checksum16 = priorInput.checksum16;
         parse.checksumOk = priorInput.checksumOk;
-        parse.hasCurrentStylusSignal = rawGrid.asaGrid.tx1.valid || rawGrid.asaGrid.tx2.valid;
+        parse.hasCurrentStylusSignal = rawGrid.grid.tx1.valid || rawGrid.grid.tx2.valid;
 
         stylus.input.slaveValid = true;
         stylus.input.checksumOk = priorInput.checksumOk;
         stylus.input.slaveWordOffset = priorInput.slaveWordOffset;
         stylus.input.checksum16 = priorInput.checksum16;
         stylus.input.status = priorInput.status;
-        stylus.input.tx1BlockValid = rawGrid.asaGrid.tx1.valid;
-        stylus.input.tx2BlockValid = rawGrid.asaGrid.tx2.valid;
+        stylus.input.tx1BlockValid = rawGrid.grid.tx1.valid;
+        stylus.input.tx2BlockValid = rawGrid.grid.tx2.valid;
 
         if (!parse.hasCurrentStylusSignal) {
             flow.terminal = true;
-            flow.frameClass = Asa::StylusFrameClass::NoSignal;
+            flow.frameClass = Asa::FrameClass::NoSignal;
             parse.valid = false;
             return true;
         }
 
-        if (!rawGrid.asaGrid.tx1.valid) {
+        if (!rawGrid.grid.tx1.valid) {
             flow.terminal = true;
-            flow.frameClass = Asa::StylusFrameClass::Tx1Missing;
+            flow.frameClass = Asa::FrameClass::Tx1Missing;
             parse.valid = false;
             return true;
         }
 
         flow.terminal = false;
-        flow.frameClass = Asa::StylusFrameClass::Valid;
+        flow.frameClass = Asa::FrameClass::Valid;
         parse.valid = true;
         return true;
     }
@@ -238,8 +243,8 @@ private:
         if (available < kMinimumSlaveSignalBytes) return false;
         const uint16_t anchorRow = ReadLe16(slave + kSlaveWordOffset);
         const uint16_t anchorCol = ReadLe16(slave + kSlaveWordOffset + 2);
-        return !(((anchorRow & 0xFFu) == Asa::kAnchorInvalid) &&
-                 ((anchorCol & 0xFFu) == Asa::kAnchorInvalid));
+        return !(((anchorRow & 0xFFu) == Hpp3::kAnchorInvalid) &&
+                 ((anchorCol & 0xFFu) == Hpp3::kAnchorInvalid));
     }
 
     static inline bool ValidateChecksum16(const uint8_t* payload, uint16_t expectedChecksum) {

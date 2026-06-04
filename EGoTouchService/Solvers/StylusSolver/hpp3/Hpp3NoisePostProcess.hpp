@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <cstdint>
 
-namespace Solvers::Stylus {
+namespace Solvers::Stylus::Hpp3 {
 
 // HPP3_NoisePostProcess — post-validates stylus signal quality after coordinate extraction.
 //
@@ -42,8 +42,8 @@ public:
 
     // ── Per-frame processing ──
 
-    inline void Process(HeatmapFrame& frame) {
-        auto& runtime = frame.stylus.runtime;
+    inline void Process(Context& ctx) {
+        auto& runtime = ctx.runtime;
 
         // ── Clear outputs ──
         runtime.post.noiseRejected = false;
@@ -153,10 +153,10 @@ private:
     uint16_t m_stableSignalY     = 0;
     uint8_t  m_ratioAnomalyCntX  = 0;
     uint8_t  m_ratioAnomalyCntY  = 0;
-    Asa::AsaCoorResult m_prevValidCoor{};
+    Asa::CoorResult m_prevValidCoor{};
     bool     m_havePrevValidCoor = false;
 
-    inline void SnapshotCoordinate(const StylusRuntimeFrame& runtime) {
+    inline void SnapshotCoordinate(const Runtime& runtime) {
         const auto& coor = runtime.tx1.coordinate.reportGlobalCoor;
         if (coor.valid) {
             m_prevValidCoor = coor;
@@ -164,7 +164,7 @@ private:
         }
     }
 
-    inline void FreezeCoordinate(StylusRuntimeFrame& runtime, bool freezeActive) {
+    inline void FreezeCoordinate(Runtime& runtime, bool freezeActive) {
         auto& coor = runtime.tx1.coordinate.reportGlobalCoor;
 
         if (!freezeActive) {
@@ -180,26 +180,26 @@ private:
         }
     }
 
-    static constexpr int kAnchorCenterOffset = Asa::kGridDim / 2;
+    static constexpr int kAnchorCenterOffset = kGridDim / 2;
     static constexpr int kSensorTxCount = 60;
     static constexpr int kSensorRxCount = 40;
 
-    static inline Asa::AsaCoorResult ResolveTx2GlobalCoor(const StylusRuntimeFrame& runtime) {
+    static inline Asa::CoorResult ResolveTx2GlobalCoor(const Runtime& runtime) {
         if (runtime.tx2.coordinate.reportGlobalCoor.valid) {
             return runtime.tx2.coordinate.reportGlobalCoor;
         }
-        Asa::AsaCoorResult coor = runtime.tx2.feature.refinedLocalCoor;
+        Asa::CoorResult coor = runtime.tx2Grid.feature.refinedLocalCoor;
         if (!coor.valid) return coor;
         LocalToGlobal(coor,
-                      runtime.rawGrid.asaGrid.tx2.anchorRow,
-                      runtime.rawGrid.asaGrid.tx2.anchorCol,
+                      runtime.rawGrid.grid.tx2.anchorRow,
+                      runtime.rawGrid.grid.tx2.anchorCol,
                       kAnchorCenterOffset);
         coor.dim1 = std::clamp(coor.dim1, 0, kSensorTxCount * Asa::kCoorUnit - 1);
         coor.dim2 = std::clamp(coor.dim2, 0, kSensorRxCount * Asa::kCoorUnit - 1);
         return coor;
     }
 
-    static inline void LocalToGlobal(Asa::AsaCoorResult& coor,
+    static inline void LocalToGlobal(Asa::CoorResult& coor,
                                      int anchorRow,
                                      int anchorCol,
                                      int anchorCenterOffset) {
@@ -216,4 +216,4 @@ private:
     }
 };
 
-} // namespace Solvers::Stylus
+} // namespace Solvers::Stylus::Hpp3

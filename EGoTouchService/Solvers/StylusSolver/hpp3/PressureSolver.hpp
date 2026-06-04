@@ -6,7 +6,7 @@
 #include <array>
 #include <cstdint>
 
-namespace Solvers::Stylus {
+namespace Solvers::Stylus::Hpp3 {
 
 struct PressureHistorySample {
     uint16_t rawPressure = 0;
@@ -41,11 +41,12 @@ public:
     uint16_t m_btPressSignalSuppressEnterThreshold = 2200;
     uint16_t m_btPressSignalSuppressExitThreshold = 3200;
 
-    inline bool Process(HeatmapFrame& frame) {
-        auto& stylus = frame.stylus;
-        auto& flow = stylus.runtime.flow;
-        auto& pressure = stylus.runtime.pressure;
-        auto& decision = stylus.runtime.decision;
+    inline bool Process(Context& ctx) {
+        auto& stylus = ctx.frame.stylus;
+        auto& runtime = ctx.runtime;
+        auto& flow = runtime.flow;
+        auto& pressure = runtime.pressure;
+        auto& decision = runtime.decision;
 
         flow.pipelineStage = 5;
         pressure = {};
@@ -75,7 +76,7 @@ public:
         }
 
         if (m_haveBtPacket) {
-            SuppressBtPressBySignal(stylus.runtime.signal, pressure);
+            SuppressBtPressBySignal(runtime.signal, pressure);
         }
 #if EGOTOUCH_DIAG
         pressure.btPressSuppressActive = m_btPressSignalSuppressLatched;
@@ -135,7 +136,7 @@ private:
     int m_historyHead = 0;
     int m_historyCount = 0;
 
-    inline void UpdateBtPacket(const StylusBtInputSnapshot& btSample) {
+    inline void UpdateBtPacket(const Asa::BtInputSnapshot& btSample) {
         if (!btSample.hasSample) return;
         if (m_haveBtPacket && btSample.seq == m_lastSeq) return;
         m_btPressBuf = btSample.pressure;
@@ -189,8 +190,8 @@ private:
         return static_cast<uint16_t>(std::clamp(mixed >> 7, 0, 0x0FFF));
     }
 
-    inline void SuppressBtPressBySignal(const StylusRuntimeSignal& signal,
-                                        StylusRuntimePressure& pressure) {
+    inline void SuppressBtPressBySignal(const Asa::SignalRuntime& signal,
+                                        Asa::PressureRuntime& pressure) {
         if (pressure.outputPressure == 0) {
             m_btPressSignalSuppressLatched = false;
         }
@@ -245,4 +246,4 @@ private:
     }
 };
 
-} // namespace Solvers::Stylus
+} // namespace Solvers::Stylus::Hpp3

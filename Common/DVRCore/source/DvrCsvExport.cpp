@@ -355,7 +355,7 @@ bool WriteFrameCsvFile(const std::filesystem::path& filePath,
         const auto& stylusOutput = frame.stylus.output;
         const auto& stylusInterop = frame.stylus.interop;
         const auto& stylusPoint = stylusOutput.point;
-        const auto& stylusRuntimePressure = frame.stylus.runtime.pressure;
+        const auto& stylusRuntimePressure = frame.stylus.runtime.Active().pressure;
         slaveRows.push_back({"SlaveValid", stylusInput.slaveValid ? "1" : "0"});
         slaveRows.push_back({"SlaveWordOffset", std::to_string(static_cast<unsigned int>(stylusInput.slaveWordOffset))});
         slaveRows.push_back({"Checksum16", std::to_string(stylusInput.checksum16)});

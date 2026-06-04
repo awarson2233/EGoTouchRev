@@ -59,7 +59,7 @@ public:
     // ── Mid-pipeline: detect edge exit using previous-frame snapshots ──
 
     inline void Process(HeatmapFrame& frame) {
-        auto& runtime = frame.stylus.runtime;
+        auto& runtime = frame.stylus.runtime.Active();
 
         m_needHighSpeed = false;
         runtime.decision.enableEdgeCorrect = false;
@@ -132,7 +132,7 @@ public:
 
     // ── End-of-pipeline: store fully-filtered coordinate and final pressure ──
 
-    inline void CaptureFinal(const StylusRuntimeFrame& runtime) {
+    inline void CaptureFinal(const Asa::Runtime& runtime) {
         m_prevPreFilterDim1  = m_nextPreFilterDim1;
         m_prevPreFilterDim2  = m_nextPreFilterDim2;
         m_prevPostFilterDim1 = runtime.post.finalCoor.dim1;
@@ -154,7 +154,7 @@ private:
     int32_t  m_nextPreFilterDim1 = 0;
     int32_t  m_nextPreFilterDim2 = 0;
 
-    inline void SnapshotPreFilter(const StylusRuntimeFrame& runtime) {
+    inline void SnapshotPreFilter(const Asa::Runtime& runtime) {
         const auto& coor = runtime.tx1.coordinate.reportGlobalCoor;
         m_nextPreFilterDim1 = coor.dim1;
         m_nextPreFilterDim2 = coor.dim2;

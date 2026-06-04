@@ -37,7 +37,7 @@ bool StylusPipeline::Process(HeatmapFrame& frame) {
 
     // ── Shared: frame parsing ──
     m_frameParser.Process(frame);
-    if (frame.stylus.runtime.flow.terminal) {
+    if (frame.stylus.runtime.Active().flow.terminal) {
         FinalizeTerminalFrame(frame);
         return true;
     }
@@ -66,7 +66,7 @@ bool StylusPipeline::Process(HeatmapFrame& frame) {
     m_edgeCoorProcess.Process(frame);
     m_edgeCoorPostProcess.Process(frame);
     m_commonPost.Process(frame);
-    m_edgeCoorProcess.CaptureFinal(frame.stylus.runtime);
+    m_edgeCoorProcess.CaptureFinal(frame.stylus.runtime.Active());
     m_commit.Commit(frame);
     return true;
 }
@@ -83,7 +83,7 @@ void StylusPipeline::FinalizeTerminalFrame(HeatmapFrame& frame) {
 #if EGOTOUCH_DIAG
     frame.stylus.runtime.ResetDiagnosticFields();
 #endif
-    m_edgeCoorProcess.CaptureFinal(frame.stylus.runtime);
+    m_edgeCoorProcess.CaptureFinal(frame.stylus.runtime.Active());
     m_commit.Commit(frame);
 }
 
@@ -123,7 +123,7 @@ void StylusPipeline::LoadConfig(const std::string& key, const std::string& value
 }
 
 void StylusPipeline::SetBtMcuPressure(uint16_t pressure) {
-    StylusBtInputSnapshot next{};
+    Asa::BtInputSnapshot next{};
     next.pressure[3] = pressure;
     next.hasSample = true;
 
@@ -136,7 +136,7 @@ void StylusPipeline::SetBtMcuPressurePacket(const std::array<uint16_t, 4>& press
                                             const std::array<uint16_t, 4>& rawPressure,
                                             uint8_t freq1,
                                             uint8_t freq2) {
-    StylusBtInputSnapshot next{};
+    Asa::BtInputSnapshot next{};
     next.pressure = pressure;
     next.rawPressure = rawPressure;
     next.freq1 = freq1;
@@ -149,7 +149,7 @@ void StylusPipeline::SetBtMcuPressurePacket(const std::array<uint16_t, 4>& press
     m_btSample = next;
 }
 
-void StylusPipeline::ReadLatestBtSample(StylusBtInputSnapshot& out) const {
+void StylusPipeline::ReadLatestBtSample(Asa::BtInputSnapshot& out) const {
     std::lock_guard<std::mutex> lk(m_btMutex);
     out = m_btSample;
 }

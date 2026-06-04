@@ -6,6 +6,7 @@
 #include "Hpp3PostPressureProcess.hpp"
 #include "PressureSolver.hpp"
 #include "TiltProcess.hpp"
+#include "Hpp3Runtime.hpp"
 #include "SolverTypes.h"
 
 namespace Solvers::Stylus::Hpp3 {
@@ -32,33 +33,35 @@ public:
 
     // ── Main HPP3 entry point before shared edge/common post ──
     bool Process(HeatmapFrame& frame) {
-        auto& runtime = frame.stylus.runtime;
+        auto& runtime = frame.stylus.runtime.SelectHpp3();
         auto& flow = runtime.flow;
+        const Settings settings{m_enabled};
+        Context ctx{frame, runtime, settings, m_state};
 
         // ── Stage 1: Grid feature extraction ──
-        m_featureExtractor.Process(frame);
+        m_featureExtractor.Process(ctx);
         if (flow.terminal) {
             return false;
         }
 
         // ── Stage 2: Coordinate solving (triangle + pitch) ──
-        m_coordinateSolver.Process(frame);
+        m_coordinateSolver.Process(ctx);
         if (flow.terminal) {
             return false;
         }
 
         // ── Stage 3: Noise post-processing + tilt ──
-        m_noisePostProcess.Process(frame);
+        m_noisePostProcess.Process(ctx);
         if (runtime.post.noiseRejected) {
             m_tiltProcess.Reset();
             runtime.tilt = {};
         } else {
-            m_tiltProcess.Process(frame);
+            m_tiltProcess.Process(ctx);
         }
 
         // ── Stage 4: Pressure pipeline ──
-        m_pressureSolver.Process(frame);
-        m_postPressure.Process(frame);
+        m_pressureSolver.Process(ctx);
+        m_postPressure.Process(ctx);
 
         return true;  // non-terminal; caller runs shared edge/common post
     }
@@ -68,6 +71,9 @@ public:
         m_tiltProcess.Reset();
         m_postPressure.Reset();
     }
+
+private:
+    State m_state{};
 };
 
 } // namespace Solvers::Stylus::Hpp3

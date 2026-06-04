@@ -1,6 +1,7 @@
 #pragma once
 
-#include "Hpp2PipelineContext.hpp"
+#include "SolverTypes.h"
+#include "Hpp2Runtime.hpp"
 #include "Hpp2PeakSearchUtils.hpp"
 
 #include <algorithm>
@@ -12,8 +13,8 @@ namespace Solvers::Stylus::Hpp2 {
 
 class Hpp2ChargerNoiseProcess {
 public:
-    void Process(Hpp2Context& ctx) const {
-        auto& hpp2 = ctx.frame.stylus.runtime.hpp2;
+    void Process(Context& ctx) const {
+        auto& hpp2 = ctx.runtime;
         auto& state = ctx.state;
         const std::size_t freqIdx = static_cast<std::size_t>(state.m_curFreqIdx);
         const int frameCount = CurrentFreqFrameCount(state);
@@ -54,8 +55,8 @@ public:
         }
     }
 
-    void RotateRawHistory(Hpp2Context& ctx) const {
-        auto& hpp2 = ctx.frame.stylus.runtime.hpp2;
+    void RotateRawHistory(Context& ctx) const {
+        auto& hpp2 = ctx.runtime;
         auto& state = ctx.state;
         const std::size_t freqIdx = static_cast<std::size_t>(state.m_curFreqIdx);
         for (int i = kNumRawHistoryFrames - 1; i > 0; --i) {
@@ -77,7 +78,7 @@ public:
     }
 
 private:
-    static int GetClearFrameIndex(const Hpp2Context& ctx, int frameCount) {
+    static int GetClearFrameIndex(const Context& ctx, int frameCount) {
         const auto& state = ctx.state;
         const std::size_t freqIdx = static_cast<std::size_t>(state.m_curFreqIdx);
         int fallbackNoiseIndex = -1;
@@ -100,7 +101,7 @@ private:
         return 0;
     }
 
-    static bool IndexValidation(const Hpp2Context& ctx, int index, uint16_t rawSample, const Peak& currentDim1, const Peak& currentDim2) {
+    static bool IndexValidation(const Context& ctx, int index, uint16_t rawSample, const Peak& currentDim1, const Peak& currentDim2) {
         if (rawSample < ctx.settings.chargerNoiseMinRawSample) {
             return true;
         }
@@ -123,7 +124,7 @@ private:
         return false;
     }
 
-    static bool IsProtectedPeakIndex(const Hpp2Context& ctx, int globalIndex, int offset, int localPeak) {
+    static bool IsProtectedPeakIndex(const Context& ctx, int globalIndex, int offset, int localPeak) {
         if (localPeak == kInvalidPeak) {
             return false;
         }
@@ -137,11 +138,11 @@ private:
         return delta >= -radius && delta <= radius;
     }
 
-    static int CurrentFreqFrameCount(const Hpp2State& state) {
+    static int CurrentFreqFrameCount(const State& state) {
         return state.m_curFreqIdx == 0 ? state.m_f1FrameCnt : state.m_f2FrameCnt;
     }
 
-    static int& CurrentFreqFrameCountRef(Hpp2State& state) {
+    static int& CurrentFreqFrameCountRef(State& state) {
         return state.m_curFreqIdx == 0 ? state.m_f1FrameCnt : state.m_f2FrameCnt;
     }
 };
