@@ -12,4 +12,5 @@ temp/
 .antigravitycli/*
 out/
 .clangd
-docs/artifacts/scripts/__pycache__/
+docs/artifacts/
+scripts/__pycache__/

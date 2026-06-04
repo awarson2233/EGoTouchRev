@@ -13,10 +13,17 @@ public:
     bool m_enabled = true;
 
     inline bool Process(HeatmapFrame& frame) {
-        if (!m_enabled) return true;
+        if (!m_enabled) {
+            // Parser disabled: heatmapMatrix won't be filled, zero it so
+            // downstream stages (baseline/CMF/tracker) see clean data.
+            std::memset(frame.heatmapMatrix, 0, sizeof(frame.heatmapMatrix));
+            return true;
+        }
 
         // Master 帧: 7B header + 4800B matrix + 256B suffix = 5063B
         if (frame.rawLen < Frame::kMasterFrameSize) {
+            // Short/incomplete frame: heatmapMatrix won't be filled.
+            std::memset(frame.heatmapMatrix, 0, sizeof(frame.heatmapMatrix));
             return true;
         }
 
