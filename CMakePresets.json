@@ -10,7 +10,7 @@
       "name": "arm64-base",
       "hidden": true,
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "binaryDir": "${sourceDir}/build/${presetName}",
       "architecture": {
         "value": "arm64",
         "strategy": "external"
@@ -22,11 +22,11 @@
         },
         "CMAKE_C_COMPILER": {
           "type": "FILEPATH",
-          "value": "C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/Llvm/ARM64/bin/clang-cl.exe"
+          "value": "C:/Program Files/LLVM/bin/clang-cl.exe"
         },
         "CMAKE_CXX_COMPILER": {
           "type": "FILEPATH",
-          "value": "C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/Llvm/ARM64/bin/clang-cl.exe"
+          "value": "C:/Program Files/LLVM/bin/clang-cl.exe"
         },
         "CMAKE_C_COMPILER_TARGET": "arm64-pc-windows-msvc",
         "CMAKE_CXX_COMPILER_TARGET": "arm64-pc-windows-msvc",
