@@ -394,16 +394,53 @@ bool TryReadBoolStridedField(const std::vector<uint8_t>& record,
 
 bool ValidateCriticalRequiredFieldsPresent(const std::vector<Dvr2FieldDef>& fields,
                                            std::string* outError) {
-    static const std::vector<Dvr2FieldDef> kCanonicalFields = DvrFmt::BuildFrameSchema();
+    // DVR2 readers are schema-driven: a legacy file should only be rejected when
+    // fields that cannot be synthesized by PopulateHeatmapFrameFromRecordBytes()
+    // are absent. Do not validate against the current writer schema here; newly
+    // added fields are handled by TryRead* defaults below.
+    constexpr std::array<std::string_view, 11> kCriticalRequiredFields{
+        "timestamp",
+        "receiveSystemEpochUs",
+        "masterWasRead",
+        "masterSuffixValid",
+        "slaveSuffixValid",
+        "heatmapMatrix",
+        "masterSuffix.words",
+        "slaveSuffix.words",
+        "contactCount",
+        "rawDataLength",
+        "rawData",
+    };
 
-    for (const auto& canonical : kCanonicalFields) {
-        if ((canonical.flags & DvrFmt::kDvrFieldRequired) == 0) continue;
-
-        const auto* pathEnd = std::find(canonical.path, canonical.path + sizeof(canonical.path), '\0');
-        const std::string_view path(canonical.path, static_cast<size_t>(pathEnd - canonical.path));
+    for (const auto path : kCriticalRequiredFields) {
         if (!DvrFmt::FindField(fields, path)) {
             if (outError) {
                 *outError = "DVR2 frame missing required field: ";
+                outError->append(path);
+            }
+            return false;
+        }
+    }
+    return true;
+}
+
+bool ValidateRequiredContactFieldsPresent(const std::vector<Dvr2FieldDef>& fields,
+                                          uint32_t contactCount,
+                                          std::string* outError) {
+    if (contactCount == 0) return true;
+
+    constexpr std::array<std::string_view, 5> kRequiredContactFields{
+        "contacts[]",
+        "contacts[].id",
+        "contacts[].x",
+        "contacts[].y",
+        "contacts[].state",
+    };
+
+    for (const auto path : kRequiredContactFields) {
+        if (!DvrFmt::FindField(fields, path)) {
+            if (outError) {
+                *outError = "DVR2 frame missing required contact field: ";
                 outError->append(path);
             }
             return false;
@@ -592,6 +629,7 @@ bool PopulateHeatmapFrameFromRecordBytes(const std::vector<uint8_t>& record,
 #endif
 
     if (!TryReadScalarField(record, fields, "contactCount", DvrFmt::Dvr2ValueType::UInt32, u32, outError)) return false;
+    if (!ValidateRequiredContactFieldsPresent(fields, u32, outError)) return false;
     uint32_t contactCapacity = DvrFmt::kMaxContacts;
     if (const auto* contactsField = DvrFmt::FindField(fields, "contacts[]")) {
         contactCapacity = std::min<uint32_t>(contactCapacity, contactsField->elementCount);
@@ -1221,6 +1259,9 @@ bool ReadBinaryFile(const std::filesystem::path& filePath,
         }
         Solvers::HeatmapFrame frame{};
         if (!PopulateHeatmapFrameFromRecordBytes(record, frameFields, frame, outError)) {
+            if (outError && outError->empty()) {
+                *outError = "failed to decode DVR2 frame record";
+            }
             return false;
         }
         outFrames.push_back(std::move(frame));

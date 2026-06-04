@@ -31,6 +31,12 @@ struct PipelineHarness {
     TouchGestureStateMachine gesture;
     uint64_t timestamp = 0;
 
+    PipelineHarness() = default;
+
+    explicit PipelineHarness(int gapRelinkWindowFrames) {
+        tracker.m_gapRelinkWindowFrames = gapRelinkWindowFrames;
+    }
+
     HeatmapFrame Run(std::initializer_list<std::pair<float, float>> points) {
         HeatmapFrame frame;
         timestamp += 8;
@@ -102,7 +108,9 @@ void TestSingleFingerSilentGapRelink() {
 void TestFastSingleFingerGapRelinkUsesPrediction() {
     PipelineHarness h;
     const int id = VisibleContacts(h.Run({{10.0f, 10.0f}}))[0]->id;
-    h.Run({{16.0f, 10.0f}});
+    const auto f2 = h.Run({{16.0f, 10.0f}});
+    const auto v2 = VisibleContacts(f2);
+    Require(v2.size() == 1 && v2[0]->id == id, "fast frame2 should keep original id to seed prediction");
 
     const auto gap = h.Run({});
     Require(VisibleContacts(gap).empty(), "fast gap frame should stay silent");
@@ -117,7 +125,9 @@ void TestFastSingleFingerGapRelinkUsesPrediction() {
 void TestFastSingleFingerTwoGapRelinkUsesPrediction() {
     PipelineHarness h;
     const int id = VisibleContacts(h.Run({{10.0f, 10.0f}}))[0]->id;
-    h.Run({{16.0f, 10.0f}});
+    const auto f2 = h.Run({{16.0f, 10.0f}});
+    const auto v2 = VisibleContacts(f2);
+    Require(v2.size() == 1 && v2[0]->id == id, "fast two-gap frame2 should keep original id to seed prediction");
 
     const auto gap1 = h.Run({});
     const auto gap2 = h.Run({});
@@ -131,7 +141,9 @@ void TestFastSingleFingerTwoGapRelinkUsesPrediction() {
 }
 
 void TestSingleFingerGapTimeout() {
-    PipelineHarness h;
+    // Use a two-frame window here to make the timeout boundary explicit and keep this test short.
+    // Other relink tests use the production default four-frame window.
+    PipelineHarness h(2);
     const int id = VisibleContacts(h.Run({{10.0f, 10.0f}}))[0]->id;
     h.Run({{12.0f, 10.0f}});
 

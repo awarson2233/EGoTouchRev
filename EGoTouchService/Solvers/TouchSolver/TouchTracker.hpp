@@ -66,6 +66,7 @@ private:
     static constexpr float kGapRelinkSecondBestRatio = 1.75f;
     static constexpr float kGapRelinkSpeedWindowScale = 0.75f;
     static constexpr float kGapRelinkHardCapScale = 2.0f;
+    static constexpr float kActiveBootstrapGateScale = 1.25f;
     static constexpr float kStylusTouchCoordScale = 1.0f / 1024.0f;
 
     enum class TrackPhase : uint8_t { Active = 0, SilentGap = 1 };
@@ -121,6 +122,7 @@ private:
     inline float EstimateSizeMm(int area, int signalSum) const;
     inline int ComputeTouchDownDebounceFrames(const TouchContact& touch) const;
     inline float ComputeTrackGateSq(const TrackState& track, const TouchContact& contact, int cols, int rows, float edgeMargin) const;
+    inline bool PassActiveBootstrapGate(const TrackState& track, const TouchContact& contact, int cols, int rows, float edgeMargin) const;
     inline void MatchAgainstSubset(const std::vector<TouchContact>& contacts, int curCount, const int* prevSubset, int subsetCount, int* curToPre) const;
     static inline void UpdateBestCandidate(float distance, int candidateId, float& best, float& second, int& bestId);
     inline bool PassGapRelinkAmbiguity(float best, float second) const;
@@ -227,6 +229,23 @@ inline float TouchTracker::ComputeTrackGateSq(const TrackState& track,
         gateDist = std::min(gateDist + extra, m_maxTrackDistance * kGapRelinkHardCapScale);
     }
     return gateDist * gateDist;
+}
+
+inline bool TouchTracker::PassActiveBootstrapGate(const TrackState& track,
+                                                  const TouchContact& contact,
+                                                  int cols,
+                                                  int rows,
+                                                  float edgeMargin) const {
+    if (track.phase != TrackPhase::Active || track.age > 1 || track.missed != 0) return false;
+    if (track.isEdge || IsEdgeTouch(track.x, track.y, cols, rows, edgeMargin)) return false;
+    if (IsEdgeContact(contact, cols, rows, edgeMargin)) return false;
+    if (contact.signalSum < m_touchDownWeakSignalThreshold * 2) return false;
+    if (EstimateSizeMm(contact.area, contact.signalSum) <= m_touchDownSmallSizeThresholdMm) return false;
+
+    float refX = 0.0f, refY = 0.0f;
+    GetMatchReference(track, refX, refY);
+    const float bootstrapGate = m_maxTrackDistance * kActiveBootstrapGateScale;
+    return DistanceSq(contact.x, contact.y, refX, refY) <= bootstrapGate * bootstrapGate;
 }
 
 inline void TouchTracker::MatchAgainstSubset(const std::vector<TouchContact>& contacts,
@@ -614,6 +633,13 @@ inline bool TouchTracker::Process(HeatmapFrame& frame) {
             const float gateSq = ComputeTrackGateSq(m_tracks[pre], frame.touch.output.contacts[c], kCols, kRows, kEdgeMargin);
             if (DistanceSq(frame.touch.output.contacts[c].x, frame.touch.output.contacts[c].y, refX, refY) > gateSq)
                 curToPre[c] = -1;
+        }
+
+        if (gapRelinkActive && curCount == 1 && activeCount == 1 && silentCount == 0 && curToPre[0] < 0) {
+            const int pre = activePrev[0];
+            if (PassActiveBootstrapGate(m_tracks[pre], frame.touch.output.contacts[0], kCols, kRows, kEdgeMargin)) {
+                curToPre[0] = pre;
+            }
         }
 
         const float alwaysMatchSq = m_alwaysMatchDistance * m_alwaysMatchDistance;

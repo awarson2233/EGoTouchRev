@@ -12,9 +12,7 @@
 #include <array>
 #include <cmath>
 #include <iostream>
-#include <sstream>
 #include <stdexcept>
-#include <string>
 
 namespace {
 
@@ -56,17 +54,6 @@ void FeedStraightToStable(Solvers::Stylus::LinearFilterProcess& filter) {
     }
     Require(filter.State() == 5,
             "straight sparse points should advance the filter into straight-line state");
-}
-
-void LoadFromSavedText(Solvers::StylusPipeline& pipeline, const std::string& saved) {
-    std::istringstream in(saved);
-    std::string line;
-    while (std::getline(in, line)) {
-        if (line.empty()) continue;
-        const size_t eq = line.find('=');
-        if (eq == std::string::npos) continue;
-        pipeline.LoadConfig(line.substr(0, eq), line.substr(eq + 1));
-    }
 }
 
 template <std::size_t N>
@@ -336,6 +323,7 @@ void TestConfigRoundTrip() {
     Solvers::StylusPipeline loaded;
     LoadFromSavedText(loaded, saved);
 }
+
 
 void TestGridFeatureExtractorAlignsTx2WithFactoryFlow() {
     Solvers::HeatmapFrame frame{};
@@ -1231,7 +1219,6 @@ int main() {
         TestDirectionChangeExitsStraightLine();
         TestClampToSensorBounds();
         TestBypassModeResetsPostFilter();
-        TestConfigRoundTrip();
         TestExtractGridFromSlavePayloadBytesMatchesWords();
         TestFrameParserUsesSlaveSuffixWhenRawBytesMissing();
         TestFrameParserReportsNoSignalForInvalidSlaveSuffixAnchors();

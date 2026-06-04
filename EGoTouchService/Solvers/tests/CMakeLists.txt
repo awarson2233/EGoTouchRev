@@ -1,8 +1,13 @@
+set(EGO_SOLVERS_CONFIG_TEST_TARGET Solvers)
+if (TARGET SolversRuntimeConfig)
+    set(EGO_SOLVERS_CONFIG_TEST_TARGET SolversRuntimeConfig)
+endif()
+
 add_library(SolversTestSupport INTERFACE)
 target_include_directories(SolversTestSupport INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/support"
 )
-target_link_libraries(SolversTestSupport INTERFACE Solvers Common)
+target_link_libraries(SolversTestSupport INTERFACE Common)
 
 file(MAKE_DIRECTORY
     "${CMAKE_CURRENT_BINARY_DIR}/unit"
@@ -11,6 +16,7 @@ file(MAKE_DIRECTORY
 
 function(ego_add_solvers_unit name category)
     add_executable(${name} ${ARGN})
+    target_compile_definitions(${name} PRIVATE EGOTOUCH_CONFIG_ENABLED=${EGO_SOLVERS_RUNTIME_CONFIG_ENABLED})
     target_link_libraries(${name} PRIVATE Solvers Common SolversTestSupport)
     add_test(NAME ${name} COMMAND ${name})
     set_tests_properties(${name} PROPERTIES
@@ -20,15 +26,25 @@ function(ego_add_solvers_unit name category)
     )
 endfunction()
 
-function(ego_add_solvers_config name category)
-    ego_add_solvers_unit(${name} ${category} ${ARGN})
+function(ego_add_solvers_config_unit name category)
+    add_executable(${name} ${ARGN})
+    target_compile_definitions(${name} PRIVATE EGOTOUCH_CONFIG_ENABLED=1)
+    target_link_libraries(${name} PRIVATE ${EGO_SOLVERS_CONFIG_TEST_TARGET} Common SolversTestSupport)
+    add_test(NAME ${name} COMMAND ${name})
     set_tests_properties(${name} PROPERTIES
         LABELS "solvers;solvers.unit;solvers.${category};solvers.config"
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/unit"
+        TIMEOUT 30
     )
+endfunction()
+
+function(ego_add_solvers_config name category)
+    ego_add_solvers_config_unit(${name} ${category} ${ARGN})
 endfunction()
 
 function(ego_add_solvers_perf name)
     add_executable(${name} ${ARGN})
+    target_compile_definitions(${name} PRIVATE EGOTOUCH_CONFIG_ENABLED=${EGO_SOLVERS_RUNTIME_CONFIG_ENABLED})
     target_link_libraries(${name} PRIVATE DVRCore Solvers Common SolversTestSupport)
     target_include_directories(${name} PRIVATE "${APP_ROOT}/include")
     add_test(
@@ -67,6 +83,9 @@ ego_add_solvers_unit(SolversUnit_TouchCloseSplit touch
     unit/touch/TouchCloseSplitTest.cpp
 )
 
+ego_add_solvers_config(SolversConfig_StylusPipelineRoundTrip stylus
+    unit/stylus/StylusPipelineConfigRoundTripTest.cpp
+)
 ego_add_solvers_unit(SolversUnit_StylusLinearFilter stylus
     unit/stylus/StylusLinearFilterTest.cpp
 )

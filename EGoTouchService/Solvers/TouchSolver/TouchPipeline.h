@@ -90,8 +90,19 @@ public:
     Touch::TouchGestureStateMachine  m_gesture;
 
 private:
+    void ReserveContactCapacity(HeatmapFrame& frame) const;
+    bool ProcessFrameParser(HeatmapFrame& frame);
+    bool ProcessSignalConditioning(HeatmapFrame& frame);
+    void GenerateContacts(HeatmapFrame& frame);
+    void PostProcessContacts(HeatmapFrame& frame);
+    void UpdateContactCaches(HeatmapFrame& frame);
+    void ProcessTrackingAndGesture(HeatmapFrame& frame);
     void ResetIdleOutputs(HeatmapFrame& frame);
     void SyncStylusSuppressConfigFromTracker();
+
+#if EGOTOUCH_DIAG
+    void UpdateDiagnosticCaches(HeatmapFrame& frame);
+#endif
 
 #if EGOTOUCH_DIAG
     mutable std::mutex m_diagMtx;

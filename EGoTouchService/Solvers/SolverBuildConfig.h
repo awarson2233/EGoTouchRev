@@ -1,18 +1,17 @@
 #pragma once
 
-// Diagnostic fields are available in Debug builds and for the diagnostic App
+// Diagnostic fields are available in Debug builds and for the diagnostic App.
+#ifndef EGOTOUCH_DIAG
 #if defined(_DEBUG) || defined(EGOTOUCH_DIAGNOSTICS)
 #define EGOTOUCH_DIAG 1
-#define EGOTOUCH_CONFIG_ENABLED 1
 #else
 #define EGOTOUCH_DIAG 0
-#define EGOTOUCH_CONFIG_ENABLED 0
+#endif
 #endif
 
-// Config system: enabled in Debug/Diagnostic builds, hardcoded in Release
-#if defined(_DEBUG) || defined(EGOTOUCH_DIAGNOSTICS)
-#define EGOTOUCH_CONFIG_ENABLED 1
-#else
+// Runtime config is independent from diagnostic fields. It is enabled only when
+// the build system explicitly defines EGOTOUCH_CONFIG_ENABLED=1.
+#ifndef EGOTOUCH_CONFIG_ENABLED
 #define EGOTOUCH_CONFIG_ENABLED 0
 #endif
 

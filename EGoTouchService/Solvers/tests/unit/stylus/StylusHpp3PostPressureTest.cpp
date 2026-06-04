@@ -6,9 +6,7 @@
 #include <array>
 #include <cstdint>
 #include <iostream>
-#include <sstream>
 #include <stdexcept>
-#include <string>
 
 namespace {
 
@@ -75,18 +73,6 @@ void SetEdge(HeatmapFrame& frame,
     signal.signalX = dim1Signal;
     signal.signalY = dim2Signal;
     signal.maxRawPeak = dim1Signal > dim2Signal ? dim1Signal : dim2Signal;
-}
-
-void LoadFromSavedText(Solvers::StylusPipeline& pipeline, const std::string& saved) {
-    std::istringstream in(saved);
-    std::string line;
-    while (std::getline(in, line)) {
-        const auto eq = line.find('=');
-        if (eq == std::string::npos) {
-            continue;
-        }
-        pipeline.LoadConfig(line.substr(0, eq), line.substr(eq + 1));
-    }
 }
 
 void TestDisabledModulePreservesRuntime() {
@@ -507,6 +493,7 @@ void TestConfigRoundTripIncludesPostPressure() {
             "loaded config should restore BT pressure suppress exit threshold");
 }
 
+
 } // namespace
 
 int main() {
@@ -527,7 +514,6 @@ int main() {
         TestSingleEdgeLowSignalSuppressesPressure();
         TestBothEdgeEnterUsesTwoThirdsThreshold();
         TestEdgeLatchExitsOnlyAboveExitThreshold();
-        TestConfigRoundTripIncludesPostPressure();
         std::cout << "[TEST] Stylus HPP3 post-pressure tests passed.\n";
         return 0;
     } catch (const std::exception& ex) {
