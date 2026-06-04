@@ -79,6 +79,29 @@ const char *FactoryStatusEventName(Himax::Pen::PenUsbEventCode code) noexcept {
     return "Unknown";
   }
 }
+
+Solvers::StylusProtocolHint ResolveProtocolHintFromStylusId(uint8_t stylusId) noexcept {
+  if (stylusId == 0) {
+    return Solvers::StylusProtocolHint::Auto;
+  }
+  if (stylusId == 1) {
+    return Solvers::StylusProtocolHint::Hpp2;
+  }
+  return Solvers::StylusProtocolHint::Hpp3;
+}
+
+const char *ToString(Solvers::StylusProtocolHint hint) noexcept {
+  switch (hint) {
+  case Solvers::StylusProtocolHint::Auto:
+    return "Auto";
+  case Solvers::StylusProtocolHint::Hpp2:
+    return "Hpp2";
+  case Solvers::StylusProtocolHint::Hpp3:
+    return "Hpp3";
+  default:
+    return "Unknown";
+  }
+}
 } // namespace
 
 // --------------- ToString helpers ---------------
@@ -287,6 +310,24 @@ void DeviceRuntime::IngestBtMcuPressurePacket(
     const std::array<uint16_t, 4> &rawPressure, uint8_t freq1, uint8_t freq2) {
   std::lock_guard<std::mutex> lk(m_pipelineMu);
   m_stylusPipeline.SetBtMcuPressurePacket(pressure, rawPressure, freq1, freq2);
+}
+
+void DeviceRuntime::ApplyPenStateToStylusPipeline() {
+  Solvers::StylusPenSession session{};
+  {
+    std::lock_guard<std::mutex> lk(m_penStateMu);
+    session.hasConnectionState = m_penState.hasConnection;
+    session.connected = m_penState.connected;
+    session.hasStylusId = m_penState.hasStylusId;
+    session.stylusId = m_penState.stylusId;
+    session.protocolHint = m_penState.hasProtocolHint
+                               ? m_penState.protocolHint
+                               : Solvers::StylusProtocolHint::Auto;
+    session.revision = m_penState.penRevision;
+  }
+
+  std::lock_guard<std::mutex> lk(m_pipelineMu);
+  m_stylusPipeline.ApplyPenSession(session);
 }
 
 // --------------- 命令注入 ---------------
@@ -756,16 +797,45 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
 
   case EC::PenConnStatus: {
     bool connected = false;
+    uint32_t revision = 0;
     {
       std::lock_guard<std::mutex> lk(m_penStateMu);
+      const bool hadConnection = m_penState.hasConnection;
+      const bool oldConnected = m_penState.connected;
+
       m_penState.hasConnection = ev.semantic.hasConnection;
       m_penState.connected =
           ev.semantic.hasConnection ? ev.semantic.connected : false;
       connected = m_penState.hasConnection && m_penState.connected;
+
+      const bool stateChanged = !hadConnection || oldConnected != m_penState.connected;
+      if (stateChanged) {
+        ++m_penState.penRevision;
+        m_penState.hasCurrentMode = false;
+        m_penState.currentMode = Himax::Pen::PenCurrentMode::Unknown;
+        m_penState.currentModeRaw = 0;
+        m_penState.hasEraserToggle = false;
+        m_penState.eraserToggle = 0;
+        m_penState.hasCurrentFunc = false;
+        m_penState.currentFunc = 0;
+      }
+
+      if (!connected) {
+        m_penState.hasStylusId = false;
+        m_penState.stylusId = 0;
+        m_penState.hasProtocolHint = false;
+        m_penState.protocolHint = Solvers::StylusProtocolHint::Auto;
+      } else if (m_penState.hasStylusId) {
+        m_penState.hasProtocolHint = true;
+        m_penState.protocolHint = ResolveProtocolHintFromStylusId(m_penState.stylusId);
+      }
+      revision = m_penState.penRevision;
     }
 
-    LOG_INFO("Runtime", __func__, "MCU", "PenConnStatus: {}.",
-             connected ? "connected" : "disconnected");
+    LOG_INFO("Runtime", __func__, "MCU", "PenConnStatus: {} revision={}",
+             connected ? "connected" : "disconnected", revision);
+
+    ApplyPenStateToStylusPipeline();
 
     command cmd{};
     if (connected) {
@@ -795,15 +865,40 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
   }
 
   case EC::PenTypeInfo: {
-    uint8_t penType = 0;
+    const bool hasStylusId = ev.semantic.hasStylusId;
+    const uint8_t penType = hasStylusId ? ev.semantic.stylusId : payload0;
+    const auto protocolHint = ResolveProtocolHintFromStylusId(penType);
+
+    bool changed = false;
+    uint8_t oldPenType = 0;
+    Solvers::StylusProtocolHint oldProtocolHint = Solvers::StylusProtocolHint::Auto;
+    uint32_t revision = 0;
     {
       std::lock_guard<std::mutex> lk(m_penStateMu);
-      m_penState.hasStylusId = ev.semantic.hasStylusId;
-      m_penState.stylusId = ev.semantic.hasStylusId ? ev.semantic.stylusId : 0;
-      penType = m_penState.stylusId;
+      oldPenType = m_penState.stylusId;
+      oldProtocolHint = m_penState.hasProtocolHint
+                            ? m_penState.protocolHint
+                            : Solvers::StylusProtocolHint::Auto;
+      changed = m_penState.hasStylusId != hasStylusId ||
+                m_penState.stylusId != penType ||
+                oldProtocolHint != protocolHint;
+
+      if (changed) {
+        ++m_penState.penRevision;
+      }
+      m_penState.hasStylusId = hasStylusId;
+      m_penState.stylusId = hasStylusId ? penType : 0;
+      m_penState.hasProtocolHint = true;
+      m_penState.protocolHint = protocolHint;
+      revision = m_penState.penRevision;
     }
 
-    LOG_INFO("Runtime", __func__, "MCU", "PenTypeInfo: pen_type={}.", penType);
+    LOG_INFO("Runtime", __func__, "MCU",
+             "PenTypeInfo: pen_type {} -> {}, protocol {} -> {}, revision={}{}",
+             oldPenType, penType, ToString(oldProtocolHint), ToString(protocolHint),
+             revision, changed ? " reset" : "");
+
+    ApplyPenStateToStylusPipeline();
 
     command cmd{};
     cmd.type = AFE_Command::SetStylusId;

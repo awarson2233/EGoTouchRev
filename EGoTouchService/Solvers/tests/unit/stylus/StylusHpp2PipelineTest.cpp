@@ -19,10 +19,11 @@ HeatmapFrame MakeHpp2Frame(int dim1Peak,
                            uint16_t dim1PeakValue,
                            uint16_t dim2PeakValue,
                            uint16_t pressure,
-                           uint32_t buttonBits = 0) {
+                           uint32_t buttonBits = 0,
+                           uint32_t auxStatusFlags = 0x1) {
     HeatmapFrame frame{};
     auto& input = frame.stylus.input;
-    input.auxStatusFlags = 0x1; // HPP2 protocol, not HPP3
+    input.auxStatusFlags = auxStatusFlags; // HPP2 protocol in Auto mode
     input.mainFreq = 0x00b0;
     input.auxFreq = 0x00fc;
     input.framePressure = pressure;
@@ -32,6 +33,20 @@ HeatmapFrame MakeHpp2Frame(int dim1Peak,
     input.hpp2LineData[static_cast<std::size_t>(dim1Peak)] = dim1PeakValue;
     input.hpp2LineData[static_cast<std::size_t>(60 + dim2Peak)] = dim2PeakValue;
     return frame;
+}
+
+Solvers::StylusPenSession MakePenSession(uint8_t stylusId,
+                                         Solvers::StylusProtocolHint protocolHint,
+                                         uint32_t revision,
+                                         bool connected = true) {
+    Solvers::StylusPenSession session{};
+    session.hasConnectionState = true;
+    session.connected = connected;
+    session.hasStylusId = connected;
+    session.stylusId = connected ? stylusId : 0;
+    session.protocolHint = connected ? protocolHint : Solvers::StylusProtocolHint::Auto;
+    session.revision = revision;
+    return session;
 }
 
 void TestHpp2FrameProducesReport() {
@@ -120,6 +135,70 @@ void TestHpp2ButtonReleaseCounterDecrements() {
     Require(!f4.stylus.runtime.hpp2.buttonPressed, "frame 4 button should be released");
 }
 
+void TestForcedHpp2IgnoresAuxFlags() {
+    Solvers::StylusPipeline pipeline;
+    pipeline.ApplyPenSession(MakePenSession(1, Solvers::StylusProtocolHint::Hpp2, 1));
+
+    HeatmapFrame frame = MakeHpp2Frame(12, 7, 2600, 2400, 512, 0u, 0u);
+    pipeline.Process(frame);
+
+    Require(frame.stylus.runtime.activeProtocol == Solvers::StylusRuntime::Protocol::Hpp2,
+            "forced HPP2 session should select HPP2 even without aux flags");
+    Require(!frame.stylus.runtime.Active().flow.terminal, "forced HPP2 frame should run non-terminal");
+    Require(frame.stylus.output.valid, "forced HPP2 output should be valid");
+    Require(frame.stylus.output.pressure == 512, "forced HPP2 pressure should be preserved");
+}
+
+void TestForcedHpp2WithoutLineDataTerminals() {
+    Solvers::StylusPipeline pipeline;
+    pipeline.ApplyPenSession(MakePenSession(1, Solvers::StylusProtocolHint::Hpp2, 1));
+
+    HeatmapFrame frame{};
+    pipeline.Process(frame);
+
+    Require(frame.stylus.runtime.activeProtocol == Solvers::StylusRuntime::Protocol::Hpp2,
+            "missing forced HPP2 data should still stay on HPP2");
+    Require(frame.stylus.runtime.Active().flow.terminal, "missing forced HPP2 line data should terminal");
+    Require(!frame.stylus.output.valid, "missing forced HPP2 line data should not emit output");
+}
+
+void TestSameProtocolPenSwitchResetsState() {
+    Solvers::StylusPipeline pipeline;
+    pipeline.ApplyPenSession(MakePenSession(1, Solvers::StylusProtocolHint::Hpp2, 1));
+
+    HeatmapFrame pressed = MakeHpp2Frame(12, 7, 2600, 2400, 512, 1u, 0u);
+    pipeline.Process(pressed);
+    Require(pressed.stylus.runtime.hpp2.buttonPressed, "first HPP2 pen should press button");
+    Require(pressed.stylus.runtime.hpp2.buttonReleaseFrames == 2,
+            "first HPP2 pen should arm release counter");
+
+    pipeline.ApplyPenSession(MakePenSession(4, Solvers::StylusProtocolHint::Hpp2, 2));
+
+    HeatmapFrame released = MakeHpp2Frame(12, 7, 2600, 2400, 512, 0u, 0u);
+    pipeline.Process(released);
+    Require(!released.stylus.runtime.hpp2.buttonPressed,
+            "same-protocol pen switch should reset HPP2 button history");
+    Require(released.stylus.runtime.hpp2.buttonReleaseFrames == 0,
+            "same-protocol pen switch should clear release counter");
+}
+
+void TestDisconnectedPenSessionTerminals() {
+    Solvers::StylusPipeline pipeline;
+    pipeline.ApplyPenSession(MakePenSession(1, Solvers::StylusProtocolHint::Hpp2, 1));
+
+    HeatmapFrame valid = MakeHpp2Frame(12, 7, 2600, 2400, 512, 0u, 0u);
+    pipeline.Process(valid);
+    Require(valid.stylus.output.valid, "connected session should process valid HPP2 data");
+
+    pipeline.ApplyPenSession(MakePenSession(0, Solvers::StylusProtocolHint::Auto, 2, false));
+
+    HeatmapFrame disconnected = MakeHpp2Frame(12, 7, 2600, 2400, 512, 0u, 0u);
+    pipeline.Process(disconnected);
+    Require(disconnected.stylus.runtime.Active().flow.terminal,
+            "disconnected pen session should terminal current frame");
+    Require(!disconnected.stylus.output.valid, "disconnected pen session should not emit output");
+}
+
 } // namespace
 
 int main() {
@@ -129,6 +208,10 @@ int main() {
         TestHpp2AbnormalRawRejects();
         TestHpp2NoPeakRejects();
         TestHpp2ButtonReleaseCounterDecrements();
+        TestForcedHpp2IgnoresAuxFlags();
+        TestForcedHpp2WithoutLineDataTerminals();
+        TestSameProtocolPenSwitchResetsState();
+        TestDisconnectedPenSessionTerminals();
     } catch (const std::exception& ex) {
         std::cerr << "[FAIL] StylusHpp2PipelineTest: " << ex.what() << "\n";
         return 1;

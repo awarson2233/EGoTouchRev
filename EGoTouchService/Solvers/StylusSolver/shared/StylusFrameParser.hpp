@@ -137,11 +137,46 @@ public:
         return true;
     }
 
+    inline bool ProcessHpp2Line(HeatmapFrame& frame) const {
+        auto& stylus = frame.stylus;
+        auto& runtime = stylus.runtime.SelectHpp2();
+        auto& flow = runtime.flow;
+        auto& parse = runtime.parse;
+
+        flow.pipelineStage = 1;
+        flow.frameClass = Asa::FrameClass::ShortFrame;
+        parse = {};
+
+        const StylusInputSnapshot priorInput = stylus.input;
+        stylus.input = {};
+        stylus.input.btSample = priorInput.btSample;
+
+        if (!m_enabled) {
+            flow.terminal = true;
+            parse.valid = false;
+            parse.slaveValid = false;
+            parse.checksumOk = false;
+            return true;
+        }
+
+        if (TryProcessFromHpp2Input(frame, priorInput, false)) {
+            return true;
+        }
+
+        flow.terminal = true;
+        flow.frameClass = Asa::FrameClass::NoSignal;
+        parse.valid = false;
+        parse.slaveValid = false;
+        parse.checksumOk = false;
+        parse.hasCurrentStylusSignal = false;
+        return true;
+    }
+
     // When no raw pointer, no slave suffix, and no grid data is available,
     // fall back to a pre-populated HPP2 line-mode input as a last resort.
     inline bool ProcessWithHpp2Fallback(HeatmapFrame& frame, const StylusInputSnapshot& priorInput) const {
         // All real-data paths have been exhausted above; HPP2 input is the final fallback.
-        if (TryProcessFromHpp2Input(frame, priorInput)) {
+        if (TryProcessFromHpp2Input(frame, priorInput, true)) {
             return true;
         }
 
@@ -157,10 +192,11 @@ public:
 
 private:
     static inline bool TryProcessFromHpp2Input(HeatmapFrame& frame,
-                                               const StylusInputSnapshot& priorInput) {
+                                               const StylusInputSnapshot& priorInput,
+                                               bool requireHpp2Flag) {
         const bool isHpp2 = (priorInput.auxStatusFlags & 0x1u) != 0 &&
                             (priorInput.auxStatusFlags & 0x2u) == 0;
-        if (!isHpp2 || !priorInput.hpp2LineValid) {
+        if ((requireHpp2Flag && !isHpp2) || !priorInput.hpp2LineValid) {
             return false;
         }
 

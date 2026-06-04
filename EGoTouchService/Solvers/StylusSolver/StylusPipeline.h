@@ -11,12 +11,28 @@
 #include "SolverTypes.h"
 
 #include <array>
+#include <cstdint>
 #include <mutex>
 #include <iosfwd>    // std::ostream 前向声明
 #include <string>
 #include <vector>
 
 namespace Solvers {
+
+enum class StylusProtocolHint : uint8_t {
+    Auto = 0,
+    Hpp2,
+    Hpp3,
+};
+
+struct StylusPenSession {
+    bool hasConnectionState = false;
+    bool connected = false;
+    bool hasStylusId = false;
+    uint8_t stylusId = 0;
+    StylusProtocolHint protocolHint = StylusProtocolHint::Auto;
+    uint32_t revision = 0;
+};
 
 class StylusPipeline : public IConfigProvider {
 public:
@@ -33,6 +49,7 @@ public:
                                 const std::array<uint16_t, 4>& rawPressure,
                                 uint8_t freq1,
                                 uint8_t freq2);
+    void ApplyPenSession(const StylusPenSession& session);
 
     int GetPacketSensorRows() const { return kPacketSensorRows; }
     int GetPacketSensorCols() const { return kPacketSensorCols; }
@@ -51,8 +68,11 @@ public:
 
 private:
     void FinalizeTerminalFrame(HeatmapFrame& frame);
+    void ResetStatefulStages();
+    void ClearBtSample();
     void ReadLatestBtSample(Asa::BtInputSnapshot& out) const;
 
+    StylusPenSession m_penSession{};
     bool m_lastFrameWasTerminal = false;
 
     // NOTE: In the current architecture, all callers are serialized by

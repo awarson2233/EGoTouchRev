@@ -107,6 +107,10 @@ struct RuntimePenState {
     bool hasStylusId = false;
     uint8_t stylusId = 0;
 
+    bool hasProtocolHint = false;
+    Solvers::StylusProtocolHint protocolHint = Solvers::StylusProtocolHint::Auto;
+    uint32_t penRevision = 0;
+
     bool hasCurrentMode = false;
     Himax::Pen::PenCurrentMode currentMode = Himax::Pen::PenCurrentMode::Unknown;
     uint8_t currentModeRaw = 0;
@@ -211,6 +215,7 @@ private:
     void HandlePenButtonStatusCode(uint8_t statusCode,
                                    uint8_t rawEventPayload,
                                    const char* source);
+    void ApplyPenStateToStylusPipeline();
 
     // ── Worker 状态处理（每个状态一个入口，Worker 只做调度） ──
     void OnReady();              // ready → 尝试 auto init

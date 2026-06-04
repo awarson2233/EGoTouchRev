@@ -35,29 +35,53 @@ bool StylusPipeline::Process(HeatmapFrame& frame) {
     frame.stylus.ResetPerFrameState();
     ReadLatestBtSample(frame.stylus.input.btSample);
 
-    // ── Shared: frame parsing ──
-    m_frameParser.Process(frame);
-    if (frame.stylus.runtime.Active().flow.terminal) {
+    if (m_penSession.hasConnectionState && !m_penSession.connected) {
+        frame.stylus.runtime.SelectHpp3().flow.terminal = true;
         FinalizeTerminalFrame(frame);
         return true;
     }
 
-    const uint32_t auxStatusFlags = frame.stylus.input.auxStatusFlags;
-    const bool isHpp2 = (auxStatusFlags & 0x1u) != 0 && (auxStatusFlags & 0x2u) == 0;
+    const auto runHpp2 = [&]() -> bool {
+        m_frameParser.ProcessHpp2Line(frame);
+        if (frame.stylus.runtime.Active().flow.terminal) {
+            return false;
+        }
+        return m_hpp2.Process(frame);
+    };
 
-    if (isHpp2) {
-        if (!m_hpp2.Process(frame)) {
+    const auto runHpp3 = [&]() -> bool {
+        m_frameParser.Process(frame);
+        if (frame.stylus.runtime.Active().flow.terminal) {
+            return false;
+        }
+        return m_hpp3.Process(frame);
+    };
+
+    bool completed = false;
+    switch (m_penSession.protocolHint) {
+    case StylusProtocolHint::Hpp2:
+        completed = runHpp2();
+        break;
+    case StylusProtocolHint::Hpp3:
+        completed = runHpp3();
+        break;
+    case StylusProtocolHint::Auto:
+    default:
+        m_frameParser.Process(frame);
+        if (frame.stylus.runtime.Active().flow.terminal) {
             FinalizeTerminalFrame(frame);
             return true;
         }
-    } else {
-        // ── HPP3: feature extraction → pressure ────────────────────
-        // Preserve the existing HPP3 path when auxStatusFlags is still zero;
-        // the current shared parser does not expose TSACore stylusFrame flags yet.
-        if (!m_hpp3.Process(frame)) {
-            FinalizeTerminalFrame(frame);
-            return true;
-        }
+
+        const uint32_t auxStatusFlags = frame.stylus.input.auxStatusFlags;
+        const bool isHpp2 = (auxStatusFlags & 0x1u) != 0 && (auxStatusFlags & 0x2u) == 0;
+        completed = isHpp2 ? m_hpp2.Process(frame) : m_hpp3.Process(frame);
+        break;
+    }
+
+    if (!completed) {
+        FinalizeTerminalFrame(frame);
+        return true;
     }
 
     m_lastFrameWasTerminal = false;
@@ -71,13 +95,41 @@ bool StylusPipeline::Process(HeatmapFrame& frame) {
     return true;
 }
 
+void StylusPipeline::ApplyPenSession(const StylusPenSession& session) {
+    const bool changed =
+        m_penSession.hasConnectionState != session.hasConnectionState ||
+        m_penSession.connected != session.connected ||
+        m_penSession.hasStylusId != session.hasStylusId ||
+        m_penSession.stylusId != session.stylusId ||
+        m_penSession.protocolHint != session.protocolHint ||
+        m_penSession.revision != session.revision;
+
+    m_penSession = session;
+    if (!changed) {
+        return;
+    }
+
+    ResetStatefulStages();
+    ClearBtSample();
+    m_lastFrameWasTerminal = true;
+}
+
+void StylusPipeline::ResetStatefulStages() {
+    m_hpp2.ResetOnTerminal();
+    m_hpp3.ResetOnTerminal();
+    m_edgeCoorProcess.Reset();
+    m_edgeCoorPostProcess.Reset();
+    m_commonPost.ResetOnTerminal();
+}
+
+void StylusPipeline::ClearBtSample() {
+    std::lock_guard<std::mutex> lk(m_btMutex);
+    m_btSample = {};
+}
+
 void StylusPipeline::FinalizeTerminalFrame(HeatmapFrame& frame) {
     if (!m_lastFrameWasTerminal) {
-        m_hpp2.ResetOnTerminal();
-        m_hpp3.ResetOnTerminal();
-        m_edgeCoorProcess.Reset();
-        m_edgeCoorPostProcess.Reset();
-        m_commonPost.ResetOnTerminal();
+        ResetStatefulStages();
     }
     m_lastFrameWasTerminal = true;
 #if EGOTOUCH_DIAG
