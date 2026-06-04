@@ -43,7 +43,10 @@ public:
     uint8_t m_chargerNoiseAbnormalChannelThreshold = 2; // TSAPrmt: ChargerNoiseJudge abnormal count must be > 2.
     uint16_t m_chargerNoisePeakProtectRadius = 2;     // TSAPrmt: IndexValidation peak-neighbor exclusion radius.
     uint16_t m_chargerNoiseMinRawSample = 50;         // TSAPrmt: IndexValidation ignores raw samples below 0x32.
-    uint16_t m_peakSignalFloor = 250;
+    uint16_t m_peakSignalFloor = 250;                 // TSACore SearchPeak: g_asaStatic.field_0x4a local peak floor.
+    int m_peakSearchNeighborDist = 2;                 // TSACore SearchPeak: +/-2 local-neighbor peak check.
+    int m_peakMinWidth = 2;                           // TSAPrmt/SearchPeakBoundary: minimum accepted peak width.
+    int m_peakMaxWidth = 20;                          // TSAPrmt/SearchPeakBoundary: maximum reasonable peak width.
     uint16_t m_pressureEdgeEnterThreshold = 1500;
     uint16_t m_pressureEdgeExitThreshold = 3000;
     uint16_t m_pressureDeltaNormal = 0x400;
@@ -113,6 +116,10 @@ public:
         m_energyRatioF2 = 100;
         m_prevPeakDim1ByFreq.fill(kInvalidPeak);
         m_prevPeakDim2ByFreq.fill(kInvalidPeak);
+        m_peakTableDim1 = {};
+        m_peakTableDim2 = {};
+        m_peakCountDim1 = 0;
+        m_peakCountDim2 = 0;
         m_cmnSum.fill(0);
         m_cmnMin.fill(0xffff);
     }
@@ -124,6 +131,24 @@ private:
     static constexpr uint16_t kFreqF1 = 0x00b0;
     static constexpr uint16_t kFreqF2 = 0x00fc;
     static constexpr int kInvalidPeak = 0xff;
+
+    struct Hpp2PeakUnit {
+        int index = -1;
+        int leftBoundary = -1;
+        int rightBoundary = -1;
+        uint16_t peakSignal = 0;
+        uint16_t netSignal = 0;
+        uint32_t signalRegionSum = 0;
+        int threeNeighborSum = 0;
+        uint16_t avgBaseline = 0;
+        int width = 0;
+        int candidateCoor = 0;
+        int age = 0;
+        int noiseProp = 0;
+        bool onEdge = false;
+        bool valid = false;
+    };
+    static constexpr int kMaxPeaksPerDim = 4;
 
     std::array<uint32_t, kHistorySize> m_lineSumHistory{};
     std::array<std::array<std::array<uint16_t, kMaxSamples>, kNumRawHistoryFrames>, 2> m_rawHistory{}; // [freqIdx][frame][sample]
@@ -146,6 +171,10 @@ private:
     bool m_freqNoiseLatchF2 = false;
     std::array<uint8_t, 2> m_prevPeakDim1ByFreq{{kInvalidPeak, kInvalidPeak}};
     std::array<uint8_t, 2> m_prevPeakDim2ByFreq{{kInvalidPeak, kInvalidPeak}};
+    std::array<Hpp2PeakUnit, kMaxPeaksPerDim> m_peakTableDim1{};
+    std::array<Hpp2PeakUnit, kMaxPeaksPerDim> m_peakTableDim2{};
+    int m_peakCountDim1 = 0;
+    int m_peakCountDim2 = 0;
 
     static constexpr std::array<double, 4> kPitchCompDim1{{
         0.0, -1.7109151490662926, 0.005959771652221362, -5.113555667385272e-06}};
@@ -241,33 +270,39 @@ private:
     void LinePeaksProcess(HeatmapFrame& frame) {
         auto& runtime = frame.stylus.runtime;
         auto& hpp2 = runtime.hpp2;
-        const Peak dim1 = FindPeak(hpp2.line.cmnSubtracted, 0, m_sensorTxCount);
-        const Peak dim2 = FindPeak(hpp2.line.cmnSubtracted, m_sensorTxCount, m_sensorRxCount);
+        SearchPeak(0, hpp2.line.cmnSubtracted, 0, m_sensorTxCount, m_peakTableDim1, m_peakCountDim1);
+        SearchPeak(1, hpp2.line.cmnSubtracted, m_sensorTxCount, m_sensorRxCount, m_peakTableDim2, m_peakCountDim2);
 
-        hpp2.selectedPeakDim1 = dim1.valid ? static_cast<uint8_t>(dim1.index) : kInvalidPeak;
-        hpp2.selectedPeakDim2 = dim2.valid ? static_cast<uint8_t>(dim2.index) : kInvalidPeak;
+        const Hpp2PeakUnit* dim1 = SelectStrongestPeak(m_peakTableDim1, m_peakCountDim1);
+        const Hpp2PeakUnit* dim2 = SelectStrongestPeak(m_peakTableDim2, m_peakCountDim2);
+
+        hpp2.selectedPeakDim1 = dim1 != nullptr ? static_cast<uint8_t>(dim1->index) : kInvalidPeak;
+        hpp2.selectedPeakDim2 = dim2 != nullptr ? static_cast<uint8_t>(dim2->index) : kInvalidPeak;
         const std::size_t freqIdx = static_cast<std::size_t>(m_curFreqIdx);
         m_prevPeakDim1ByFreq[freqIdx] = hpp2.selectedPeakDim1;
         m_prevPeakDim2ByFreq[freqIdx] = hpp2.selectedPeakDim2;
 
-        runtime.signal.signalX = dim1.signal;
-        runtime.signal.signalY = dim2.signal;
-        runtime.signal.maxRawPeak = std::max(dim1.signal, dim2.signal);
+        runtime.signal.signalX = dim1 != nullptr ? dim1->peakSignal : 0;
+        runtime.signal.signalY = dim2 != nullptr ? dim2->peakSignal : 0;
+        runtime.signal.maxRawPeak = std::max(runtime.signal.signalX, runtime.signal.signalY);
         runtime.signal.recheckEnabled = true;
         runtime.signal.recheckThreshold = m_peakSignalFloor;
         runtime.signal.recheckThresholdMulti = static_cast<uint16_t>(std::max<int>(m_peakSignalFloor, 256));
-        runtime.signal.recheckPassed = dim1.valid && dim2.valid;
-        runtime.signal.dim1EdgeActive = dim1.valid && IsEdgeIndex(dim1.index, m_sensorTxCount);
-        runtime.signal.dim2EdgeActive = dim2.valid && IsEdgeIndex(dim2.index, m_sensorRxCount);
-        runtime.signal.dim1EdgeSignal = runtime.signal.dim1EdgeActive ? dim1.signal : 0;
-        runtime.signal.dim2EdgeSignal = runtime.signal.dim2EdgeActive ? dim2.signal : 0;
+        runtime.signal.recheckPassed = dim1 != nullptr && dim2 != nullptr;
+        runtime.signal.dim1EdgeActive = dim1 != nullptr && dim1->onEdge;
+        runtime.signal.dim2EdgeActive = dim2 != nullptr && dim2->onEdge;
+        runtime.signal.dim1EdgeSignal = runtime.signal.dim1EdgeActive ? dim1->netSignal : 0;
+        runtime.signal.dim2EdgeSignal = runtime.signal.dim2EdgeActive ? dim2->netSignal : 0;
 
-        runtime.tx1.feature.peak.valid = dim1.valid && dim2.valid;
+        runtime.tx1.feature.peak.valid = dim1 != nullptr && dim2 != nullptr;
         runtime.tx1.feature.peak.peakValue = runtime.signal.maxRawPeak;
-        runtime.tx1.feature.peak.peakCol = dim1.index;
-        runtime.tx1.feature.peak.peakRow = dim2.index;
-        runtime.tx1.feature.dim1SelectedPeakNetSignal = dim1.signal;
-        runtime.tx1.feature.dim2SelectedPeakNetSignal = dim2.signal;
+        runtime.tx1.feature.peak.peakCol = dim1 != nullptr ? dim1->index : -1;
+        runtime.tx1.feature.peak.peakRow = dim2 != nullptr ? dim2->index : -1;
+        // SelectedPeakNetSignal exports the chosen slot's integrated net signal;
+        // the slot itself is still chosen by peakSignal to match TSACore's table
+        // strongest comparison on pPeakTable[slot+0x3e].
+        runtime.tx1.feature.dim1SelectedPeakNetSignal = dim1 != nullptr ? dim1->netSignal : 0;
+        runtime.tx1.feature.dim2SelectedPeakNetSignal = dim2 != nullptr ? dim2->netSignal : 0;
         runtime.tx1.feature.dim1SelectedPeakOnEdge = runtime.signal.dim1EdgeActive;
         runtime.tx1.feature.dim2SelectedPeakOnEdge = runtime.signal.dim2EdgeActive;
     }
@@ -416,6 +451,253 @@ private:
         uint16_t signal = 0;
         bool valid = false;
     };
+
+    void SearchPeak(int groupId,
+                    const std::array<uint16_t, kMaxSamples>& line,
+                    int offset,
+                    int length,
+                    std::array<Hpp2PeakUnit, kMaxPeaksPerDim>& table,
+                    int& count) {
+        const auto previousTable = table;
+        const int previousCount = count;
+        table = {};
+        count = 0;
+        if (length <= 0) {
+            return;
+        }
+
+        for (int i = 0; i < length; ++i) {
+            if (!IsLocalPeak(line, offset, length, i)) {
+                continue;
+            }
+
+            Hpp2PeakUnit unit{};
+            unit.valid = true;
+            unit.index = i;
+            SearchPeakBoundary(line, offset, length, i, unit);
+            UpdatePeakPrpt(line, offset, length, unit);
+            unit.candidateCoor = GetPeakPos(groupId, line, offset, length, unit);
+            UpdatePeakNoiseFlags(unit);
+            unit.onEdge = unit.candidateCoor < Asa::kCoorUnit ||
+                unit.candidateCoor > (length - 1) * Asa::kCoorUnit;
+
+            if (unit.netSignal < m_peakSignalFloor || unit.width < m_peakMinWidth || unit.width > m_peakMaxWidth) {
+                continue;
+            }
+            InsertPeakUnit(unit, table, count);
+        }
+
+        UpdatePeaksAge(table, count, previousTable, previousCount);
+    }
+
+    bool IsLocalPeak(const std::array<uint16_t, kMaxSamples>& line, int offset, int length, int index) const {
+        const uint16_t current = line[static_cast<std::size_t>(offset + index)];
+        if (current <= m_peakSignalFloor) {
+            return false;
+        }
+        const int neighborDist = std::max(1, m_peakSearchNeighborDist);
+        for (int delta = 1; delta <= neighborDist; ++delta) {
+            if (index >= delta &&
+                line[static_cast<std::size_t>(offset + index - delta)] > current) {
+                return false;
+            }
+            if (index + delta < length &&
+                line[static_cast<std::size_t>(offset + index + delta)] >= current) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static void SearchPeakBoundary(const std::array<uint16_t, kMaxSamples>& line,
+                                   int offset,
+                                   int length,
+                                   int peakIndex,
+                                   Hpp2PeakUnit& unit) {
+        static constexpr uint32_t kBoundarySlopeQ5 = 0x23; // TSACore SearchPeakBoundary for group 0/1.
+        static constexpr int kContributionPermilleFloor = 50;
+        static constexpr uint32_t kAccumSignalFloor = 200;
+
+        int left = peakIndex;
+        if (left != 0) {
+            left = peakIndex - 1;
+            int contributionPermille = 1000;
+            uint32_t accumulated = line[static_cast<std::size_t>(offset + peakIndex)];
+            while (left != 0 && contributionPermille > kContributionPermilleFloor) {
+                const uint32_t prev = line[static_cast<std::size_t>(offset + left - 1)];
+                const uint32_t current = line[static_cast<std::size_t>(offset + left)];
+                if (prev >= ((kBoundarySlopeQ5 * current) >> 5)) {
+                    break;
+                }
+                accumulated += current;
+                accumulated = std::max(accumulated, kAccumSignalFloor);
+                contributionPermille = static_cast<int>((current * 1000u) / accumulated);
+                if (contributionPermille > kContributionPermilleFloor) {
+                    --left;
+                }
+            }
+        }
+
+        int right = peakIndex;
+        if (right < length - 1) {
+            right = peakIndex + 1;
+            int contributionPermille = 1000;
+            uint32_t accumulated = line[static_cast<std::size_t>(offset + peakIndex)];
+            while (right < length - 1 && contributionPermille > kContributionPermilleFloor) {
+                const uint32_t next = line[static_cast<std::size_t>(offset + right + 1)];
+                const uint32_t current = line[static_cast<std::size_t>(offset + right)];
+                if (next >= ((kBoundarySlopeQ5 * current) >> 5)) {
+                    break;
+                }
+                accumulated += current;
+                accumulated = std::max(accumulated, kAccumSignalFloor);
+                contributionPermille = static_cast<int>((current * 1000u) / accumulated);
+                if (contributionPermille > kContributionPermilleFloor) {
+                    ++right;
+                }
+            }
+        }
+
+        unit.leftBoundary = left;
+        unit.rightBoundary = right;
+        unit.width = right - left + 1;
+    }
+
+    static void UpdatePeakPrpt(const std::array<uint16_t, kMaxSamples>& line,
+                               int offset,
+                               int length,
+                               Hpp2PeakUnit& unit) {
+        uint32_t regionSum = 0;
+        uint16_t baselineMin = 0xffff;
+        for (int i = unit.leftBoundary; i <= unit.rightBoundary; ++i) {
+            const uint16_t sample = line[static_cast<std::size_t>(offset + i)];
+            regionSum += sample;
+            baselineMin = std::min(baselineMin, sample);
+        }
+
+        uint32_t threeNeighborSum = 0;
+        const int neighborStart = std::max(0, unit.index - 1);
+        const int neighborEnd = std::min(length - 1, unit.index + 1);
+        for (int i = neighborStart; i <= neighborEnd; ++i) {
+            threeNeighborSum += line[static_cast<std::size_t>(offset + i)];
+        }
+
+        // TSACore UpdatePeakPrpt carries pSignalProfile/pAverageProfile-derived
+        // values into UpdatePeakNoisePrpt.  HPP2 line mode keeps the observable
+        // equivalents here: bounded region sum, 3-neighbor sum, and the local
+        // average-baseline approximation used by the current CMN-subtracted path.
+        const uint16_t peakSample = line[static_cast<std::size_t>(offset + unit.index)];
+        const uint16_t avgBaseline = baselineMin;
+        const uint16_t peakSignal = peakSample > avgBaseline ? static_cast<uint16_t>(peakSample - avgBaseline) : 1;
+        const uint32_t net = regionSum - static_cast<uint32_t>(unit.width) * avgBaseline;
+        unit.signalRegionSum = regionSum;
+        unit.threeNeighborSum = static_cast<int>(std::min<uint32_t>(threeNeighborSum, 0x7fffffffu));
+        unit.avgBaseline = avgBaseline;
+        unit.peakSignal = peakSignal;
+        unit.netSignal = static_cast<uint16_t>(std::min<uint32_t>(net, 0xffffu));
+    }
+
+    static int GetPeakPos(int groupId,
+                          const std::array<uint16_t, kMaxSamples>& line,
+                          int offset,
+                          int length,
+                          const Hpp2PeakUnit& unit) {
+        const int edgeThresholdLast = groupId == 0 ? 5000 : 4500;
+        const int edgeThresholdFirst = groupId == 0 ? 5000 : 3700;
+        // TSACore GetPeakPos (0x6baad7cb) takes the gravity-data path:
+        // GetFictiousEdge(peakGroupId, peakIndex) -> UpdateTX1GravityData or
+        // UpdateTX2GravityData -> Gravity -> coarseIndex * 0x400 + gravityOffset.
+        // This rebuild intentionally keeps the triangle coordinate path because,
+        // in HPP2 line mode, SolveByTriangle produces the same coarse + sub-pitch
+        // position class from peakPos and neighbor samples without materializing
+        // TSACore's transient gravity buffers.
+        return SolveByTriangle(line, offset, length, unit.index, 50, edgeThresholdLast, edgeThresholdFirst);
+    }
+
+    void UpdatePeakNoiseFlags(Hpp2PeakUnit& unit) const {
+        // Not TSACore UpdatePeakNoisePrpt (0x6babddff).  The original computes
+        // GetSignalUnstableLevel(threeNeighborSum, historyAvgSignal,
+        // otherDimHistoryAvgSignal), last-output coordinate distance, and an SS
+        // matrix recheck condition.  Those inputs are cross-frame/HPP3-grid
+        // history artifacts; HPP2 line mode currently only needs the local
+        // width-based noise flags below.
+        unit.noiseProp = 0;
+        if (unit.width < m_peakMinWidth) {
+            unit.noiseProp |= 0x01;
+        }
+        if (unit.width > m_peakMaxWidth) {
+            unit.noiseProp |= 0x02;
+        }
+        const uint32_t baselineAdjustedRegion =
+            unit.signalRegionSum - static_cast<uint32_t>(unit.width) * unit.avgBaseline;
+        if (unit.peakSignal > 1000 && baselineAdjustedRegion > static_cast<uint32_t>(unit.peakSignal) * 3u) {
+            unit.noiseProp |= 0x04;
+        }
+    }
+
+    static void InsertPeakUnit(const Hpp2PeakUnit& unit,
+                               std::array<Hpp2PeakUnit, kMaxPeaksPerDim>& table,
+                               int& count) {
+        int slot = count < kMaxPeaksPerDim ? count : -1;
+        if (slot < 0) {
+            uint16_t weakest = table[0].peakSignal;
+            slot = 0;
+            for (int i = 1; i < kMaxPeaksPerDim; ++i) {
+                if (table[static_cast<std::size_t>(i)].peakSignal < weakest) {
+                    weakest = table[static_cast<std::size_t>(i)].peakSignal;
+                    slot = i;
+                }
+            }
+            if (unit.peakSignal <= weakest) {
+                return;
+            }
+        } else {
+            ++count;
+        }
+        table[static_cast<std::size_t>(slot)] = unit;
+    }
+
+    static void UpdatePeaksAge(std::array<Hpp2PeakUnit, kMaxPeaksPerDim>& table,
+                               int count,
+                               const std::array<Hpp2PeakUnit, kMaxPeaksPerDim>& previousTable,
+                               int previousCount) {
+        // Intentional simplification for HPP2 line mode: inherit only peak age.
+        // TSACore also carries long-scale IIR/average/min/max history fields that
+        // feed HPP3 grid feature smoothing, which is not required on this path.
+        for (int i = 0; i < count; ++i) {
+            auto& unit = table[static_cast<std::size_t>(i)];
+            for (int j = 0; j < previousCount; ++j) {
+                const auto& previous = previousTable[static_cast<std::size_t>(j)];
+                if (!previous.valid) {
+                    continue;
+                }
+                const int delta = unit.index - previous.index;
+                if (delta >= -2 && delta <= 2) {
+                    unit.age = std::min(previous.age + 1, 0xfff5);
+                    break;
+                }
+            }
+        }
+    }
+
+    static const Hpp2PeakUnit* SelectStrongestPeak(const std::array<Hpp2PeakUnit, kMaxPeaksPerDim>& table,
+                                                   int count) {
+        // TSACore compares the strongest slot using pPeakTable[slot+0x3e], a
+        // copied peakSignal field.  Keep peakSignal as the primary ordering key;
+        // netSignal is only a deterministic tie-breaker and exported separately.
+        const Hpp2PeakUnit* strongest = nullptr;
+        for (int i = 0; i < count; ++i) {
+            const auto& unit = table[static_cast<std::size_t>(i)];
+            if (!unit.valid) {
+                continue;
+            }
+            if (strongest == nullptr || unit.peakSignal > strongest->peakSignal ||
+                (unit.peakSignal == strongest->peakSignal && unit.netSignal > strongest->netSignal)) {
+                strongest = &unit;
+            }
+        }
+        return strongest;
+    }
 
     uint16_t RatioToHistory(uint32_t current, int historyIndex) const {
         if (historyIndex < 0 || historyIndex >= kHistorySize) {
@@ -591,19 +873,24 @@ private:
     Peak FindPeak(const std::array<uint16_t, kMaxSamples>& line, int offset, int length) const {
         Peak peak{};
         for (int i = 0; i < length; ++i) {
-            const uint16_t signal = line[static_cast<std::size_t>(offset + i)];
-            if (!peak.valid || signal > peak.signal) {
-                peak.index = i;
-                peak.signal = signal;
+            if (!IsLocalPeak(line, offset, length, i)) {
+                continue;
+            }
+            Hpp2PeakUnit unit{};
+            unit.valid = true;
+            unit.index = i;
+            SearchPeakBoundary(line, offset, length, i, unit);
+            UpdatePeakPrpt(line, offset, length, unit);
+            if (unit.netSignal < m_peakSignalFloor || unit.width < m_peakMinWidth || unit.width > m_peakMaxWidth) {
+                continue;
+            }
+            if (!peak.valid || unit.peakSignal > peak.signal) {
+                peak.index = unit.index;
+                peak.signal = unit.peakSignal;
                 peak.valid = true;
             }
         }
-        peak.valid = peak.valid && peak.signal >= m_peakSignalFloor;
         return peak;
-    }
-
-    static bool IsEdgeIndex(int index, int length) {
-        return index == 0 || index == length - 1;
     }
 
     static uint16_t LimitPressureDelta(uint16_t previous, uint16_t current, uint16_t maxDelta) {
