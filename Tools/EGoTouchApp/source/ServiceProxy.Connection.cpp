@@ -8,7 +8,7 @@ ServiceProxy::ServiceProxy()
     : m_dvrBuffer(std::make_unique<RingBuffer<Dvr::DvrFrameSlot, kDvrCapacity>>()),
       m_dvrDynamicDebugBuffer(std::make_unique<RingBuffer<Dvr::DvrDynamicDebugFrameSlot, kDvrCapacity>>()) {
     // TouchPipeline is self-contained — no processor registration needed.
-    LoadConfig();
+    RefreshConfigSnapshot();
 }
 
 ServiceProxy::~ServiceProxy() {
@@ -44,7 +44,7 @@ bool ServiceProxy::Connect() {
         return false;
     }
 
-    LoadConfig();
+    RefreshConfigSnapshot();
 
     if (!RefreshDynamicDebugSchema()) {
         LOG_WARN("App", __func__, "IPC", "Dynamic debug schema unavailable; UI/export dynamic fields will be empty.");

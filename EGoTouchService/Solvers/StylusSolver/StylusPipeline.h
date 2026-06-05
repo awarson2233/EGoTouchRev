@@ -12,7 +12,9 @@
 #include <array>
 #include <cstdint>
 #include <mutex>
+#include <iosfwd>    // std::ostream 前向声明
 #include <string>
+#include <vector>
 
 namespace Config {
 class ConfigBinder;
@@ -42,6 +44,9 @@ public:
 
     bool Process(HeatmapFrame& frame);
 
+    void registerBindings(Config::ConfigBinder& binder);
+    void applyConfig(const Config::ConfigStore& store);
+
     void SetBtMcuPressure(uint16_t pressure);
     void SetBtMcuPressurePacket(const std::array<uint16_t, 4>& pressure,
                                 const std::array<uint16_t, 4>& rawPressure,
@@ -52,9 +57,6 @@ public:
     int GetPacketSensorRows() const { return kPacketSensorRows; }
     int GetPacketSensorCols() const { return kPacketSensorCols; }
     bool GetEmitPacketWhenInvalid() const { return true; }
-
-    void registerBindings(Config::ConfigBinder& binder);
-    void applyConfig(const Config::ConfigStore& store);
 
     // ── Shared / protocol-agnostic stages ──
     Stylus::StylusFrameParser          m_frameParser;          // shared/

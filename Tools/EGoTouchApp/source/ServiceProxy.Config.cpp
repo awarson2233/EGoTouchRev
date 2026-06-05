@@ -55,7 +55,7 @@ void ServiceProxy::SaveConfig() {
     LOG_INFO("App", __func__, "IPC", "Config patch persisted through service IPC; local INI persistence is disabled.");
 }
 
-void ServiceProxy::LoadConfig() {
+void ServiceProxy::RefreshConfigSnapshot() {
 #if !EGOTOUCH_CONFIG_ENABLED
     return;
 #endif

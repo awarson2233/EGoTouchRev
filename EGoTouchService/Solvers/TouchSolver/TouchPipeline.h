@@ -38,6 +38,7 @@
 #include <string>
 #include <vector>
 #include <array>
+#include <iosfwd>    // std::ostream 前向声明
 
 namespace Config {
 class ConfigBinder;
@@ -62,12 +63,8 @@ public:
     /// Pipeline name for config file section header.
     std::string GetName() const { return "TouchPipeline"; }
 
-    // ========== Config-Binder 集成 ==========
-
-    /// 注册所有可配置键到 ConfigBinder（启动时一次性调用）
+    // ── Configuration interface ──
     void registerBindings(Config::ConfigBinder& binder);
-
-    /// 从 ConfigStore 读取值并更新 Pipeline 成员
     void applyConfig(const Config::ConfigStore& store);
 
     // ── Thread-safe accessors for UI/IPC (guarded by mutex) ──

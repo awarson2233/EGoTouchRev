@@ -94,7 +94,7 @@ public:
 
     // Config sync
     void SaveConfig();
-    void LoadConfig();
+    void RefreshConfigSnapshot();
     const Config::ConfigSchemaSnapshot& GetConfigSchemaSnapshot() const { return m_configSchema; }
     Config::ConfigStore& GetConfigStore() { return m_configStore; }
     std::vector<std::string> GetConfigModuleTags() const;

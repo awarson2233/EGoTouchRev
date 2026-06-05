@@ -1,6 +1,7 @@
 #include "StylusPipeline.h"
 #include "config/ConfigBinder.h"
 #include "config/ConfigStore.h"
+
 #include <algorithm>
 #include <ostream>
 
@@ -113,9 +114,7 @@ void StylusPipeline::applyConfig(const Config::ConfigStore& store) {
     m_hpp2.m_pressureDeltaNormal = static_cast<uint16_t>(store.getOr<int32_t>("stylus.hpp2.pressure_delta_normal", 1024));
     m_hpp2.m_pressureDeltaTight = static_cast<uint16_t>(store.getOr<int32_t>("stylus.hpp2.pressure_delta_tight", 64));
     m_hpp2.m_useTightPressureDelta = store.getOr<bool>("stylus.hpp2.use_tight_pressure_delta", false);
-    if (!hpp2Enabled) {
-        m_hpp2.ResetOnTerminal();
-    }
+    if (!hpp2Enabled) { m_hpp2.ResetOnTerminal(); }
 
     m_frameParser.m_enabled = store.getOr<bool>("stylus.sp.frame_parser_enabled", true);
     m_hpp3.m_featureExtractor.m_enabled = store.getOr<bool>("stylus.sp.peak_detector_enabled", true);
@@ -123,9 +122,7 @@ void StylusPipeline::applyConfig(const Config::ConfigStore& store) {
 
     const bool tiltEnabled = store.getOr<bool>("stylus.sp.tilt_process_enabled", true);
     m_hpp3.m_tiltProcess.m_enabled = tiltEnabled;
-    if (!tiltEnabled) {
-        m_hpp3.m_tiltProcess.Reset();
-    }
+    if (!tiltEnabled) { m_hpp3.m_tiltProcess.Reset(); }
 
     m_hpp3.m_pressureSolver.m_enabled = store.getOr<bool>("stylus.sp.pressure_solver_enabled", true);
 
@@ -135,50 +132,37 @@ void StylusPipeline::applyConfig(const Config::ConfigStore& store) {
     m_hpp3.m_postPressure.m_btFreqShiftDebounceFrames = store.getOr<int32_t>("stylus.sp.bt_freq_shift_debounce_frames", 2);
     m_hpp3.m_postPressure.m_pressureEdgeEnterThreshold = static_cast<uint16_t>(store.getOr<int32_t>("stylus.sp.pressure_edge_enter_threshold", 1500));
     m_hpp3.m_postPressure.m_pressureEdgeExitThreshold = static_cast<uint16_t>(store.getOr<int32_t>("stylus.sp.pressure_edge_exit_threshold", 3000));
-    if (!postPressureEnabled) {
-        m_hpp3.m_postPressure.Reset();
-    }
+    if (!postPressureEnabled) { m_hpp3.m_postPressure.Reset(); }
 
     m_hpp3.m_pressureSolver.m_tipDownPressureThreshold = static_cast<uint16_t>(store.getOr<int32_t>("stylus.sp.tip_down_pressure_threshold", 1));
     m_hpp3.m_pressureSolver.m_btPressSignalSuppressEnterThreshold = static_cast<uint16_t>(store.getOr<int32_t>("stylus.sp.bt_press_signal_suppress_enter_threshold", 2200));
     m_hpp3.m_pressureSolver.m_btPressSignalSuppressExitThreshold = static_cast<uint16_t>(store.getOr<int32_t>("stylus.sp.bt_press_signal_suppress_exit_threshold", 3200));
-
     m_hpp3.m_coordinateSolver.m_signalFloor = static_cast<uint16_t>(store.getOr<int32_t>("stylus.sp.signal_floor", 64));
 
     const bool edgeCoorEnabled = store.getOr<bool>("stylus.sp.edge_coor_enabled", true);
     m_edgeCoorProcess.m_enabled = edgeCoorEnabled;
-    if (!edgeCoorEnabled) {
-        m_edgeCoorProcess.Reset();
-    }
+    if (!edgeCoorEnabled) { m_edgeCoorProcess.Reset(); }
     m_edgeCoorPostProcess.m_enabled = store.getOr<bool>("stylus.sp.edge_coor_post_enabled", true);
 
     const bool noisePostEnabled = store.getOr<bool>("stylus.sp.noise_post_enabled", true);
     m_hpp3.m_noisePostProcess.m_enabled = noisePostEnabled;
     m_hpp3.m_noisePostProcess.m_signalRatioThreshold = static_cast<uint8_t>(store.getOr<int32_t>("stylus.sp.noise_signal_ratio_thold", 5));
     m_hpp3.m_noisePostProcess.m_signalMagnitudeDropRatio = static_cast<uint8_t>(store.getOr<int32_t>("stylus.sp.noise_signal_drop_ratio", 5));
-    if (!noisePostEnabled) {
-        m_hpp3.m_noisePostProcess.Reset();
-    }
+    if (!noisePostEnabled) { m_hpp3.m_noisePostProcess.Reset(); }
 
     const bool linearFilterEnabled = store.getOr<bool>("stylus.sp.linear_filter_enabled", true);
     m_commonPost.m_linearFilterProcess.m_enabled = linearFilterEnabled;
-    if (!linearFilterEnabled) {
-        m_commonPost.m_linearFilterProcess.Reset();
-    }
+    if (!linearFilterEnabled) { m_commonPost.m_linearFilterProcess.Reset(); }
 
     const bool coorReviseEnabled = store.getOr<bool>("stylus.sp.coor_revise_enabled", true);
     m_commonPost.m_coorReviseProcess.m_enabled = coorReviseEnabled;
     m_commonPost.m_coorReviseProcess.m_factorDim1 = store.getOr<int32_t>("stylus.sp.coor_revise_factor_dim1", 5);
     m_commonPost.m_coorReviseProcess.m_factorDim2 = store.getOr<int32_t>("stylus.sp.coor_revise_factor_dim2", 5);
-    if (!coorReviseEnabled) {
-        m_commonPost.m_coorReviseProcess.Reset();
-    }
+    if (!coorReviseEnabled) { m_commonPost.m_coorReviseProcess.Reset(); }
 
     const bool coorSpeedEnabled = store.getOr<bool>("stylus.sp.coor_speed_enabled", true);
     m_commonPost.m_coorSpeedProcess.m_enabled = coorSpeedEnabled;
-    if (!coorSpeedEnabled) {
-        m_commonPost.m_coorSpeedProcess.Reset();
-    }
+    if (!coorSpeedEnabled) { m_commonPost.m_coorSpeedProcess.Reset(); }
 
     const bool iirFilterEnabled = store.getOr<bool>("stylus.sp.iir_filter_enabled", true);
     m_commonPost.m_coorIIRProcess.m_enabled = iirFilterEnabled;
@@ -190,9 +174,7 @@ void StylusPipeline::applyConfig(const Config::ConfigStore& store) {
     m_commonPost.m_coorIIRProcess.m_speedTholdEdge = static_cast<uint8_t>(store.getOr<int32_t>("stylus.sp.iir_speed_thold_edge", 10));
     m_commonPost.m_coorIIRProcess.m_speedMax = store.getOr<int32_t>("stylus.sp.iir_speed_max", 205);
     m_commonPost.m_coorIIRProcess.m_maxCoef = static_cast<uint8_t>(store.getOr<int32_t>("stylus.sp.iir_max_coef", 32));
-    if (!iirFilterEnabled) {
-        m_commonPost.m_coorIIRProcess.Reset();
-    }
+    if (!iirFilterEnabled) { m_commonPost.m_coorIIRProcess.Reset(); }
 
     const bool aftCoorEnabled = store.getOr<bool>("stylus.sp.aft_coor_enabled", true);
     m_commonPost.m_aftCoorProcess.m_enabled = aftCoorEnabled;
@@ -203,9 +185,7 @@ void StylusPipeline::applyConfig(const Config::ConfigStore& store) {
     m_commonPost.m_aftCoorProcess.m_sensorTxCount = store.getOr<int32_t>("stylus.sp.lock_sensor_tx_count", 60);
     m_commonPost.m_aftCoorProcess.m_sensorRxCount = store.getOr<int32_t>("stylus.sp.lock_sensor_rx_count", 40);
     m_commonPost.m_aftCoorProcess.m_bypassLock = store.getOr<bool>("stylus.sp.lock_bypass", false);
-    if (!aftCoorEnabled) {
-        m_commonPost.m_aftCoorProcess.Reset();
-    }
+    if (!aftCoorEnabled) { m_commonPost.m_aftCoorProcess.Reset(); }
 }
 
 bool StylusPipeline::Process(HeatmapFrame& frame) {
