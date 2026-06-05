@@ -8,6 +8,11 @@
 
 namespace Config {
 
+struct ConfigRange {
+    double min = 0.0;
+    double max = 0.0;
+};
+
 using ConfigValue = std::variant<
     bool,
     int32_t,

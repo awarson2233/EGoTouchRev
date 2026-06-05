@@ -1,35 +1,18 @@
 #pragma once
 
 #include "ConfigValue.h"
+#include "SchemaValidator.h"
 #include <cstdint>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 #include <yaml-cpp/yaml.h>
 
 namespace Config {
-
-struct ConfigRange {
-    double min = 0.0;
-    double max = 0.0;
-};
-
-struct ValidationIssue {
-    enum Severity { Error, Warning };
-    Severity severity;
-    std::string path;
-    std::string message;
-};
-
-struct ValidationResult {
-    bool ok() const { return errors.empty(); }
-    std::vector<ValidationIssue> errors;
-    std::vector<ValidationIssue> warnings;
-    void logAll() const;
-};
 
 class ConfigStore {
 public:
@@ -103,6 +86,32 @@ template<typename T>
 void ConfigStore::set(std::string_view path, T value) {
     auto key = resolvePath(path);
     m_entries[key].value = ConfigValue(value);
+}
+
+template<>
+inline ConfigValue ConfigStore::get<ConfigValue>(std::string_view path) const {
+    auto key = resolvePath(path);
+    auto it = m_entries.find(key);
+    if (it == m_entries.end()) {
+        throw std::runtime_error("ConfigStore: key not found: " + std::string(path));
+    }
+    return it->second.value;
+}
+
+template<>
+inline ConfigValue ConfigStore::getOr<ConfigValue>(std::string_view path, ConfigValue fallback) const {
+    auto key = resolvePath(path);
+    auto it = m_entries.find(key);
+    if (it == m_entries.end()) {
+        return fallback;
+    }
+    return it->second.value;
+}
+
+template<>
+inline void ConfigStore::set<ConfigValue>(std::string_view path, ConfigValue value) {
+    auto key = resolvePath(path);
+    m_entries[key].value = std::move(value);
 }
 
 } // namespace Config

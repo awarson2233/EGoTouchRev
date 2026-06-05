@@ -1,0 +1,90 @@
+# EGoTouchRev 出厂默认配置 v2
+# 每个键均有文档注释。用户覆盖请编辑 config/overrides.yaml。
+
+service:
+  mode: full                     # full | touch_only 服务运行模式
+  auto_mode: true                # 自动选择服务模式
+  stylus_vhf_enabled: true       # 是否启用 stylus VHF 输出
+  pen_button_mode: oem_custom    # oem_custom | native_barrel | native_eraser
+  pen_button_route: vhf_only     # vhf_only | win32_only | vhf_and_win32
+
+touch:
+  signal_cond:
+    baseline_bg_alpha_shift: 3        # 0..15 背景基线 alpha 移位
+    baseline_bg_max_step: 512         # 1..2048 背景基线最大步长
+    baseline_no_finger_alpha_shift: 3 # 0..15 无手指基线 alpha 移位
+    baseline_no_finger_max_step: 512  # 1..2048 无手指基线最大步长
+    baseline_recovery_alpha_shift: 2  # 0..15 恢复阶段 alpha 移位
+    baseline_recovery_max_frames: 30  # 1..120 恢复阶段最大帧数
+    baseline_recovery_max_step: 256   # 1..2048 恢复阶段最大步长
+  frame_parser:
+    enabled: true                     # Frame Parser Enabled
+
+stylus:
+  hpp2:
+    enabled: true                              # HPP2 Enabled
+    sensor_tx_count: 60                       # 1..100 HPP2 Sensor TX Count
+    sensor_rx_count: 40                       # 1..100 HPP2 Sensor RX Count
+    cmf_window_radius: 6                      # 0..32 HPP2 CMF Window Radius
+    raw_abnormal_line_sum_threshold: 30000    # 0..2147483647 HPP2 Raw Abnormal Line Sum Threshold
+    raw_abnormal_energy_ratio_threshold: 200  # 0..65535 HPP2 Raw Abnormal Energy Ratio Threshold
+    cmn_abnormal_sum_threshold: 9000          # 0..2147483647 HPP2 CMN Abnormal Sum Threshold
+    cmn_abnormal_min_threshold: 2500          # 0..65535 HPP2 CMN Abnormal Min Threshold
+    charger_noise_clear_floor: 20             # 1..65535 HPP2 Charger Noise Clear Floor
+    charger_noise_ratio_threshold: 299        # 0..65535 HPP2 Charger Noise Ratio Threshold
+    charger_noise_sum_threshold: 400          # 0..2147483647 HPP2 Charger Noise Sum Threshold
+    charger_noise_max_sample_threshold: 200   # 0..65535 HPP2 Charger Noise Max Sample Threshold
+    charger_noise_abnormal_channel_threshold: 2 # 0..255 HPP2 Charger Noise Abnormal Channel Threshold
+    charger_noise_peak_protect_radius: 2      # 0..65535 HPP2 Charger Noise Peak Protect Radius
+    charger_noise_min_raw_sample: 50          # 0..65535 HPP2 Charger Noise Min Raw Sample
+    peak_signal_floor: 250                    # 0..65535 HPP2 Peak Signal Floor
+    peak_search_neighbor_dist: 2              # 1..16 HPP2 Peak Search Neighbor Dist
+    peak_min_width: 2                         # 1..100 HPP2 Peak Min Width
+    peak_max_width: 20                        # 1..100 HPP2 Peak Max Width
+    pressure_edge_enter_threshold: 1500       # 0..65535 HPP2 Pressure Edge Enter Threshold
+    pressure_edge_exit_threshold: 3000        # 0..65535 HPP2 Pressure Edge Exit Threshold
+    pressure_delta_normal: 1024               # 0..65535 HPP2 Pressure Delta Normal
+    pressure_delta_tight: 64                  # 0..65535 HPP2 Pressure Delta Tight
+    use_tight_pressure_delta: false           # HPP2 Use Tight Pressure Delta
+  sp:
+    frame_parser_enabled: true                # Frame Parser Enabled
+    peak_detector_enabled: true               # Peak Detector Enabled
+    coordinate_solver_enabled: true           # Coordinate Solver Enabled
+    tilt_process_enabled: true                # Tilt Process Enabled
+    pressure_solver_enabled: true             # Pressure Solver Enabled
+    post_pressure_enabled: true               # Post Pressure Enabled
+    fake_pressure_decrease_enabled: false     # Fake Pressure Decrease Enabled
+    bt_freq_shift_debounce_frames: 2          # 0..255 BT Freq Shift Debounce Frames
+    pressure_edge_enter_threshold: 1500       # 0..65535 Pressure Edge Enter Threshold
+    pressure_edge_exit_threshold: 3000        # 0..65535 Pressure Edge Exit Threshold
+    tip_down_pressure_threshold: 1            # 0..4095 Tip Down Pressure Threshold
+    bt_press_signal_suppress_enter_threshold: 2200 # 0..65535 BT Press Suppress Enter Threshold
+    bt_press_signal_suppress_exit_threshold: 3200 # 0..65535 BT Press Suppress Exit Threshold
+    signal_floor: 64                          # 0..65535 Signal Floor
+    edge_coor_enabled: true                   # Edge Coor Process Enabled
+    edge_coor_post_enabled: true              # Edge Coor Post Process Enabled
+    noise_post_enabled: true                  # Noise Post Process Enabled
+    noise_signal_ratio_thold: 5               # 1..16 Noise Signal Ratio Threshold
+    noise_signal_drop_ratio: 5                # 1..16 Noise Signal Magnitude Drop Ratio
+    linear_filter_enabled: true               # Linear Filter Enabled
+    coor_revise_enabled: true                 # CoorRevise Enabled
+    coor_revise_factor_dim1: 5                # 0..255 CoorRevise Factor Dim1
+    coor_revise_factor_dim2: 5                # 0..255 CoorRevise Factor Dim2
+    coor_speed_enabled: true                  # Coor Speed Enabled
+    iir_filter_enabled: true                  # IIR Filter Enabled
+    iir_coef_low_in_band: 2                   # 0..255 IIR Coef Low In-Band
+    iir_coef_high_in_band: 16                 # 0..255 IIR Coef High In-Band
+    iir_speed_thold_in_band: 20               # 0..255 IIR Speed Thold In-Band
+    iir_coef_low_edge: 6                      # 0..255 IIR Coef Low Edge
+    iir_coef_high_edge: 18                    # 0..255 IIR Coef High Edge
+    iir_speed_thold_edge: 10                  # 0..255 IIR Speed Thold Edge
+    iir_speed_max: 205                        # 0..1000 IIR Speed Max
+    iir_max_coef: 32                          # 0..255 IIR Max Coef (Denominator)
+    aft_coor_enabled: true                    # AFT Coor Process Enabled
+    lock_flash_in_band_x: 0                   # 0..255 Lock Flash In-Band X
+    lock_flash_in_band_y: 0                   # 0..255 Lock Flash In-Band Y
+    lock_flash_edge_x: 1                      # 0..255 Lock Flash Edge X
+    lock_flash_edge_y: 2                      # 0..255 Lock Flash Edge Y
+    lock_sensor_tx_count: 60                  # 1..200 Lock Sensor TX Count
+    lock_sensor_rx_count: 40                  # 1..200 Lock Sensor RX Count
+    lock_bypass: false                        # Lock Bypass

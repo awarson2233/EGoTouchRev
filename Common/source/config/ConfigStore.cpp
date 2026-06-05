@@ -98,15 +98,6 @@ std::optional<double> numericValue(const ConfigValue& value) {
 
 } // namespace
 
-void ValidationResult::logAll() const {
-    for (const auto& issue : errors) {
-        LOG_ERROR("Config", __func__, "Validate", "{}: {}", issue.path, issue.message);
-    }
-    for (const auto& issue : warnings) {
-        LOG_WARN("Config", __func__, "Validate", "{}: {}", issue.path, issue.message);
-    }
-}
-
 void ConfigStore::loadFromYaml(const std::string& path) {
     m_entries.clear();
     const auto root = YamlParser::load(path);

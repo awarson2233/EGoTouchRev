@@ -139,6 +139,9 @@ add_library(Common STATIC
 target_sources(Common PRIVATE
     "${COMMON_ROOT}/source/config/YamlParser.cpp"
     "${COMMON_ROOT}/source/config/ConfigStore.cpp"
+    "${COMMON_ROOT}/source/config/ConfigBinder.cpp"
+    "${COMMON_ROOT}/source/config/SchemaValidator.cpp"
+    "${COMMON_ROOT}/source/config/ConfigPath.cpp"
 )
 
 target_include_directories(Common PUBLIC
