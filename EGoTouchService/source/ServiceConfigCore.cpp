@@ -1,6 +1,10 @@
 #include "ServiceConfigCore.h"
 
+#include "config/ConfigBinder.h"
+#include "config/ConfigStore.h"
+
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstdlib>
 #include <fstream>
@@ -39,10 +43,71 @@ bool ParseIniKeyValue(std::string_view line, std::string& key, std::string& valu
     return !key.empty();
 }
 
+const std::array<std::pair<ServiceMode, std::string>, 2> kServiceModeConfigNames{{
+    {ServiceMode::Full, "full"},
+    {ServiceMode::TouchOnly, "touch_only"},
+}};
+
+const std::array<std::pair<PenButtonMode, std::string>, 3> kPenButtonModeConfigNames{{
+    {PenButtonMode::OemCustom, "oem_custom"},
+    {PenButtonMode::NativeBarrel, "native_barrel"},
+    {PenButtonMode::NativeEraser, "native_eraser"},
+}};
+
+const std::array<std::pair<PenButtonRoute, std::string>, 3> kPenButtonRouteConfigNames{{
+    {PenButtonRoute::VhfOnly, "vhf_only"},
+    {PenButtonRoute::Win32Only, "win32_only"},
+    {PenButtonRoute::VhfAndWin32, "vhf_and_win32"},
+}};
+
+ServiceMode ParseServiceModeConfig(std::string_view value) {
+    const std::string normalized = ToLowerCopy(TrimCopy(value));
+    return normalized == "touch_only" ? ServiceMode::TouchOnly : ServiceMode::Full;
+}
+
+PenButtonMode ParsePenButtonModeConfig(std::string_view value) {
+    const std::string normalized = ToLowerCopy(TrimCopy(value));
+    if (normalized == "native_barrel") return PenButtonMode::NativeBarrel;
+    if (normalized == "native_eraser") return PenButtonMode::NativeEraser;
+    return PenButtonMode::OemCustom;
+}
+
+PenButtonRoute ParsePenButtonRouteConfig(std::string_view value) {
+    const std::string normalized = ToLowerCopy(TrimCopy(value));
+    if (normalized == "win32_only") return PenButtonRoute::Win32Only;
+    if (normalized == "vhf_and_win32") return PenButtonRoute::VhfAndWin32;
+    return PenButtonRoute::VhfOnly;
+}
+
 } // namespace
 
 const char* ServiceModeToConfig(ServiceMode mode) {
     return mode == ServiceMode::Full ? "full" : "touch_only";
+}
+
+void ServiceConfigState::registerBindings(Config::ConfigBinder& binder) {
+    binder.bindEnum("service.mode", &ServiceConfigState::mode, *this,
+                    ServiceMode::Full, kServiceModeConfigNames,
+                    "Service operating mode (full | touch_only)");
+    binder.bind("service.auto_mode", &ServiceConfigState::autoMode, *this,
+                true, {}, "Auto-select service mode");
+    binder.bind("service.stylus_vhf_enabled", &ServiceConfigState::stylusVhfEnabled, *this,
+                true, {}, "Enable stylus VHF output");
+    binder.bindEnum("service.pen_button_mode", &ServiceConfigState::penButtonMode, *this,
+                    PenButtonMode::OemCustom, kPenButtonModeConfigNames,
+                    "Pen button mode (oem_custom | native_barrel | native_eraser)");
+    binder.bindEnum("service.pen_button_route", &ServiceConfigState::penButtonRoute, *this,
+                    PenButtonRoute::VhfOnly, kPenButtonRouteConfigNames,
+                    "Pen button injection route (vhf_only | win32_only | vhf_and_win32)");
+}
+
+void ServiceConfigState::applyConfig(const Config::ConfigStore& store) {
+    mode = ParseServiceModeConfig(store.getOr<std::string>("service.mode", "full"));
+    autoMode = store.getOr<bool>("service.auto_mode", true);
+    stylusVhfEnabled = store.getOr<bool>("service.stylus_vhf_enabled", true);
+    penButtonMode = ParsePenButtonModeConfig(store.getOr<std::string>("service.pen_button_mode", "oem_custom"));
+    penButtonRoute = ParsePenButtonRouteConfig(store.getOr<std::string>("service.pen_button_route", "vhf_only"));
+    penButtonRouteExplicit = store.has("service.pen_button_route");
 }
 
 ServiceConfigState ParseServiceConfig(const std::string& configPath) {

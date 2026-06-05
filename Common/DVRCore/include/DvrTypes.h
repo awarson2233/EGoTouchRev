@@ -7,6 +7,10 @@
 #include <string>
 #include <vector>
 
+namespace Config {
+class ConfigStore;
+}
+
 namespace Dvr {
 
 struct DynamicDebugField {
@@ -70,12 +74,16 @@ struct RuntimeConfigValue {
     std::string stringValue;
 };
 
+// DVR runtime configuration is persisted as schema/value snapshot sections in DVR2
+// files, not as a live mutable config owner. ConfigStore integration should rebuild
+// a store from this captured schema/value pair when playback/import needs it.
 struct RuntimeConfigSnapshot {
     std::vector<RuntimeConfigField> fields;
     std::vector<RuntimeConfigValue> values;
     uint32_t schemaHash = 0;
 
     bool Empty() const { return fields.empty() || values.empty(); }
+    Config::ConfigStore toConfigStore() const;
 };
 
 } // namespace Dvr

@@ -5,6 +5,11 @@
 #include <cstdint>
 #include <string>
 
+namespace Config {
+class ConfigBinder;
+class ConfigStore;
+}
+
 namespace Service {
 
 /// Service runtime topology selected by [Service].mode.
@@ -20,6 +25,9 @@ struct ServiceConfigState {
     PenButtonMode penButtonMode = PenButtonMode::OemCustom;
     PenButtonRoute penButtonRoute = PenButtonRoute::VhfOnly;
     bool penButtonRouteExplicit = false;
+
+    void registerBindings(Config::ConfigBinder& binder);
+    void applyConfig(const Config::ConfigStore& store);
 };
 
 struct ReloadServiceConfigResult {
