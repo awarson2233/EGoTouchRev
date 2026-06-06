@@ -10,7 +10,9 @@ namespace Host {
 
 class SystemStateMonitor {
 public:
-    // Invoked on the monitor worker thread for each signaled named event.
+    // Invoked on the monitor worker thread for coalesced named-event state changes.
+    // The Win32 manual-reset named events are level notifications, not counters;
+    // repeated SetEvent calls while an event is already signaled may coalesce.
     // Callback exceptions are contained inside the monitor and logged.
     // Callback may call Stop(); Stop() is reentrant-safe for worker-thread calls.
     using EventCallback = std::function<void(const SystemStateEvent&)>;
@@ -38,7 +40,7 @@ public:
 
 private:
     struct Impl;
-    std::unique_ptr<Impl> m_impl;
+    std::shared_ptr<Impl> m_impl;
 };
 
 } // namespace Host

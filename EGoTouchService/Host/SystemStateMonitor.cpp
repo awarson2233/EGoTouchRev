@@ -5,6 +5,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <exception>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -28,6 +29,8 @@ struct SystemStateMonitor::Impl {
     std::mutex lifecycleMu;
     std::condition_variable lifecycleCv;
     bool joining = false;
+    bool selfStopCleanupPending = false;
+    std::thread::id workerThreadId{};
     SystemStateEventType lastDisplayType = SystemStateEventType::Unknown;
     SystemStateEventType lastLidType = SystemStateEventType::Unknown;
     bool shutdownObserved = false;
@@ -117,7 +120,7 @@ SystemStateMonitor::SystemStateMonitor()
     : SystemStateMonitor(kNamedEventNameListHolder.names) {}
 
 SystemStateMonitor::SystemStateMonitor(const wchar_t* const (&eventNames)[kEventCount])
-    : m_impl(std::make_unique<Impl>()) {
+    : m_impl(std::make_shared<Impl>()) {
     m_impl->eventNames = CopyEventNames(eventNames);
 }
 
@@ -212,12 +215,28 @@ bool ShouldPreferTransportRole(SystemStateTransportRole current, SystemStateTran
 }
 
 template <typename ImplT>
-std::size_t CollectSignaledEventBatch(
+void ResetNamedEvent(ImplT& impl, std::size_t index) noexcept {
+    HANDLE eventHandle = impl.events[index];
+    if (eventHandle != nullptr && eventHandle != INVALID_HANDLE_VALUE) {
+        ResetEvent(eventHandle);
+    }
+}
+
+template <typename ImplT>
+std::size_t CollectAndResetSignaledEventBatch(
     ImplT& impl,
     std::size_t firstEventIndex,
     std::array<std::size_t, SystemStateMonitor::kEventCount>& batchIndices) noexcept {
     std::size_t batchCount = 0;
+
+    // These named events are Win32 manual-reset events, so they encode a
+    // coalesced level ("this state needs attention"), not an edge count. Reset
+    // each observed level before callbacks run so a SetEvent issued during a
+    // callback remains signaled for the next drain pass. A SetEvent racing with
+    // this reset while the event is already signaled can still coalesce by API
+    // design; exact per-Set delivery requires an out-of-band counter/queue.
     batchIndices[batchCount++] = firstEventIndex;
+    ResetNamedEvent(impl, firstEventIndex);
 
     for (std::size_t i = 0; i < SystemStateMonitor::kEventCount; ++i) {
         if (i == firstEventIndex) {
@@ -231,23 +250,11 @@ std::size_t CollectSignaledEventBatch(
 
         if (WaitForSingleObject(eventHandle, 0) == WAIT_OBJECT_0) {
             batchIndices[batchCount++] = i;
+            ResetNamedEvent(impl, i);
         }
     }
 
     return batchCount;
-}
-
-template <typename ImplT>
-void ResetSignaledEvents(
-    ImplT& impl,
-    const std::array<std::size_t, SystemStateMonitor::kEventCount>& batchIndices,
-    std::size_t batchCount) noexcept {
-    for (std::size_t i = 0; i < batchCount; ++i) {
-        HANDLE eventHandle = impl.events[batchIndices[i]];
-        if (eventHandle != nullptr && eventHandle != INVALID_HANDLE_VALUE) {
-            ResetEvent(eventHandle);
-        }
-    }
 }
 
 template <typename ImplT>
@@ -286,6 +293,10 @@ void DispatchNormalizedBatch(
         entries[ToIndex(SystemStateEventType::DisplayOff)].present;
 
     for (std::size_t position = 0; position < batchCount; ++position) {
+        if (!impl.running.load(std::memory_order_acquire)) {
+            break;
+        }
+
         const std::size_t eventIndex = batchIndices[position];
         const SystemStateNamedEventSpec* spec = TryGetNamedEventSpec(eventIndex);
         const SystemStateEventType type = spec != nullptr ? spec->type : SystemStateEventType::Unknown;
@@ -390,6 +401,11 @@ void CloseEvents(ImplT& impl) noexcept {
 
 template <typename ImplT>
 void WorkerLoop(ImplT& impl) {
+    {
+        std::lock_guard<std::mutex> lock(impl.lifecycleMu);
+        impl.workerThreadId = std::this_thread::get_id();
+    }
+
     std::array<HANDLE, SystemStateMonitor::kEventCount + 1> wait_handles{};
     wait_handles[0] = impl.stopEvent;
     for (std::size_t i = 0; i < SystemStateMonitor::kEventCount; ++i) {
@@ -412,9 +428,8 @@ void WorkerLoop(ImplT& impl) {
             wait_result < WAIT_OBJECT_0 + 1 + SystemStateMonitor::kEventCount) {
             const std::size_t firstEventIndex = static_cast<std::size_t>(wait_result - WAIT_OBJECT_0 - 1);
             std::array<std::size_t, SystemStateMonitor::kEventCount> batchIndices{};
-            const std::size_t batchCount = CollectSignaledEventBatch(impl, firstEventIndex, batchIndices);
+            const std::size_t batchCount = CollectAndResetSignaledEventBatch(impl, firstEventIndex, batchIndices);
             DispatchNormalizedBatch(impl, batchIndices, batchCount);
-            ResetSignaledEvents(impl, batchIndices, batchCount);
             continue;
         }
 
@@ -424,6 +439,15 @@ void WorkerLoop(ImplT& impl) {
     }
 
     impl.running.store(false, std::memory_order_release);
+
+    std::lock_guard<std::mutex> lock(impl.lifecycleMu);
+    impl.workerThreadId = std::thread::id{};
+    if (impl.selfStopCleanupPending) {
+        CloseEvents(impl);
+        impl.callback = nullptr;
+        impl.selfStopCleanupPending = false;
+        impl.lifecycleCv.notify_all();
+    }
 }
 
 } // namespace
@@ -431,7 +455,9 @@ void WorkerLoop(ImplT& impl) {
 bool SystemStateMonitor::Start(EventCallback callback) {
     Impl& impl = *m_impl;
     std::unique_lock<std::mutex> lifecycleLock(impl.lifecycleMu);
-    impl.lifecycleCv.wait(lifecycleLock, [&impl]() { return !impl.joining; });
+    impl.lifecycleCv.wait(lifecycleLock, [&impl]() {
+        return !impl.joining && !impl.selfStopCleanupPending;
+    });
 
     if (impl.running.load(std::memory_order_acquire)) {
         return false;
@@ -471,8 +497,9 @@ bool SystemStateMonitor::Start(EventCallback callback) {
         return false;
     }
 
-    impl.worker = std::thread([this]() {
-        WorkerLoop(*m_impl);
+    auto workerImpl = m_impl;
+    impl.worker = std::thread([workerImpl]() {
+        WorkerLoop(*workerImpl);
     });
     return true;
 }
@@ -491,14 +518,20 @@ void SystemStateMonitor::Stop() {
     }
 
     if (!impl.worker.joinable()) {
+        if (impl.workerThreadId == std::this_thread::get_id() && impl.selfStopCleanupPending) {
+            return;
+        }
+        impl.lifecycleCv.wait(lifecycleLock, [&impl]() { return !impl.selfStopCleanupPending; });
         CloseEvents(impl);
         impl.callback = nullptr;
         return;
     }
 
     if (impl.worker.get_id() == std::this_thread::get_id()) {
+        impl.selfStopCleanupPending = true;
+        impl.worker.detach();
         LOG_INFO("SystemStateMonitor", __func__, "Monitor",
-                 "Stop() called from callback; stop requested, cleanup deferred.");
+                 "Stop() called from callback; worker detached and cleanup deferred to worker exit.");
         return;
     }
 

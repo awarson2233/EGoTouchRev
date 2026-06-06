@@ -299,5 +299,7 @@ private:
     mutable std::mutex m_lifecycleMu;
     std::condition_variable m_lifecycleCv;
     bool m_stopInProgress = false;
+    bool m_selfStopDetached = false;
+    std::thread::id m_workerThreadId{};
     std::thread m_thread;
 };

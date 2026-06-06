@@ -210,7 +210,9 @@ DeviceRuntime::~DeviceRuntime() { Stop(); }
 
 bool DeviceRuntime::Start() {
   std::unique_lock<std::mutex> lifecycleLock(m_lifecycleMu);
-  m_lifecycleCv.wait(lifecycleLock, [this]() { return !m_stopInProgress; });
+  m_lifecycleCv.wait(lifecycleLock, [this]() {
+    return !m_stopInProgress && !m_selfStopDetached;
+  });
 
   if (m_running.load(std::memory_order_acquire)) {
     return false;
@@ -246,9 +248,14 @@ bool DeviceRuntime::Start() {
 void DeviceRuntime::Stop() {
   {
     std::unique_lock<std::mutex> lifecycleLock(m_lifecycleMu);
+    if (m_selfStopDetached && m_workerThreadId == std::this_thread::get_id()) {
+      return;
+    }
+
     if (m_stopInProgress) {
-      if (m_thread.joinable() &&
-          m_thread.get_id() == std::this_thread::get_id()) {
+      if ((m_thread.joinable() &&
+           m_thread.get_id() == std::this_thread::get_id()) ||
+          m_workerThreadId == std::this_thread::get_id()) {
         return;
       }
       m_lifecycleCv.wait(lifecycleLock,
@@ -259,7 +266,8 @@ void DeviceRuntime::Stop() {
       }
     }
 
-    if (!m_running.load(std::memory_order_acquire) && !m_thread.joinable()) {
+    if (!m_running.load(std::memory_order_acquire) && !m_thread.joinable() &&
+        !m_selfStopDetached) {
       m_stopped.store(true, std::memory_order_release);
       m_stopReason.store(StopReason::Shutdown, std::memory_order_release);
       SetState(workerState::quit);
@@ -277,11 +285,30 @@ void DeviceRuntime::Stop() {
   std::unique_lock<std::mutex> lifecycleLock(m_lifecycleMu);
   if (m_thread.joinable()) {
     if (m_thread.get_id() == std::this_thread::get_id()) {
+      m_selfStopDetached = true;
+      m_thread.detach();
       m_stopInProgress = false;
+      LOG_INFO("Runtime", __func__, "Thread",
+               "Stop() called from worker thread; worker detached and will exit asynchronously.");
       m_lifecycleCv.notify_all();
       return;
     }
+
+    // WorkerMain clears m_workerThreadId under m_lifecycleMu as its final
+    // owner-state access. Do not hold this mutex while joining, or the worker
+    // cannot publish completion and Stop() can deadlock.
+    lifecycleLock.unlock();
     m_thread.join();
+    lifecycleLock.lock();
+  } else if (m_selfStopDetached) {
+    // A detached self-stop worker may set m_running=false before it finishes
+    // lifecycle cleanup. Wait for the final cleanup marker, not just !running,
+    // so Stop()/~DeviceRuntime cannot return while the detached worker can
+    // still access owner fields.
+    m_lifecycleCv.wait(lifecycleLock, [this]() {
+      return !m_selfStopDetached &&
+             m_workerThreadId == std::thread::id{};
+    });
   }
   m_running.store(false, std::memory_order_release);
   SetState(workerState::quit);
@@ -635,6 +662,11 @@ bool DeviceRuntime::DrainCommands() {
 // ----------- Worker 核心循环 -----------
 
 ThreadResult DeviceRuntime::WorkerMain() {
+  {
+    std::lock_guard<std::mutex> lifecycleLock(m_lifecycleMu);
+    m_workerThreadId = std::this_thread::get_id();
+  }
+
   while (true) {
     bool displayOffSuspendDue = false;
     {
@@ -693,9 +725,15 @@ ThreadResult DeviceRuntime::WorkerMain() {
       break;
     case workerState::quit:
       if (OnQuit()) {
-        m_running.store(false); // allow restart via Start()
         LOG_INFO("Runtime", __func__, "quit",
                  "Worker exited, m_running=false.");
+        {
+          std::lock_guard<std::mutex> lifecycleLock(m_lifecycleMu);
+          m_workerThreadId = std::thread::id{};
+          m_selfStopDetached = false;
+          m_running.store(false, std::memory_order_release); // allow restart via Start()
+          m_lifecycleCv.notify_all();
+        }
         return ThreadResult();
       }
       break;
