@@ -1,8 +1,10 @@
 #pragma once
 
 #include "PenButtonConfig.h"
+#include "config/ConfigValue.h"
 
 #include <cstdint>
+#include <optional>
 
 namespace Config {
 class ConfigStore;
@@ -44,7 +46,10 @@ constexpr uint8_t ToServiceConfigFieldBit(ServiceConfigField field) {
 }
 
 const char* ServiceModeToConfig(ServiceMode mode);
+std::optional<PenButtonMode> ParsePenButtonModeValue(const Config::ConfigValue& value);
+std::optional<PenButtonRoute> ParsePenButtonRouteValue(const Config::ConfigValue& value);
 void ApplyConfig(ServiceConfigState& state, const Config::ConfigStore& store);
+void ApplyLegacyServiceModeMigration(Config::ConfigStore& target, const Config::ConfigStore& source);
 ReloadServiceConfigResult DiffServiceConfig(const ServiceConfigState& current,
                                             const ServiceConfigState& reloaded,
                                             bool runtimeAvailable);

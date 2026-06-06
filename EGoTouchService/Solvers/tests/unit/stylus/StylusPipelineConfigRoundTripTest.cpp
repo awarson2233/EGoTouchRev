@@ -59,14 +59,18 @@ void RequireIirEntry(const Config::ConfigSchemaSnapshot& schema,
     RequireInt32Range(*entry, expectedDefault, expectedMin, expectedMax);
 }
 
-void TestStylusIirBindingsExposeCompleteUiSchema() {
+Config::ConfigSchemaSnapshot BuildStylusSchema() {
     Solvers::StylusPipeline pipeline;
     Config::ConfigBinder binder;
     pipeline.registerBindings(binder);
     Config::ConfigStore defaults;
     binder.writeDefaults(defaults);
     binder.apply(defaults);
-    const auto schema = binder.snapshot();
+    return binder.snapshot();
+}
+
+void TestStylusIirBindingsExposeCompleteUiSchema() {
+    const auto schema = BuildStylusSchema();
 
     const auto* enabled = FindSchemaEntry(schema, "stylus.sp.iir_filter_enabled");
     Require(enabled != nullptr, "schema should contain IIR enable entry");
@@ -84,11 +88,25 @@ void TestStylusIirBindingsExposeCompleteUiSchema() {
     RequireIirEntry(schema, "stylus.sp.iir_max_coef", 32, 1.0, 255.0);
 }
 
+void TestHpp2BindingsAreSchemaOnly() {
+    const auto schema = BuildStylusSchema();
+    const auto* enabled = FindSchemaEntry(schema, "stylus.hpp2.enabled");
+    Require(enabled != nullptr, "schema should contain HPP2 compatibility entry");
+    Require(!enabled->boundToRuntime, "HPP2 entry should not be live runtime-bound");
+    Require(enabled->runtimeBinding == Config::ConfigRuntimeBinding::SchemaOnly,
+            "HPP2 entry should be schema-only");
+
+    const auto* peakWidth = FindSchemaEntry(schema, "stylus.hpp2.peak_min_width");
+    Require(peakWidth != nullptr, "schema should contain HPP2 peak width compatibility entry");
+    Require(!peakWidth->boundToRuntime, "HPP2 peak width should not be live runtime-bound");
+}
+
 } // namespace
 
 int main() {
     try {
         TestStylusIirBindingsExposeCompleteUiSchema();
+        TestHpp2BindingsAreSchemaOnly();
         std::cout << "[TEST] Stylus pipeline config schema tests passed.\n";
         return 0;
     } catch (const std::exception& ex) {

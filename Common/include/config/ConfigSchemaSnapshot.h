@@ -21,6 +21,13 @@ enum class ConfigUiType : uint8_t {
     Enum,
 };
 
+enum class ConfigRuntimeBinding : uint8_t {
+    SchemaOnly,
+    LiveSetter,
+    ManualLiveApply,
+    Removed,
+};
+
 // ── 单个配置键的完整元数据 ──
 struct ConfigSchemaEntry {
     std::string yamlPath;
@@ -33,7 +40,8 @@ struct ConfigSchemaEntry {
     std::string description;            // 来自 binder
     std::string moduleTag;              // UI 模块分组 (e.g. "Touch / Signal Conditioning")
     std::vector<std::pair<int, std::string>> enumMapping;  // 枚举映射
-    bool boundToRuntime = false;        // 是否有 live setter (binder 绑定)
+    ConfigRuntimeBinding runtimeBinding = ConfigRuntimeBinding::SchemaOnly;
+    bool boundToRuntime = false;        // 是否有 live setter 或 manual live apply
 };
 
 // ── 全量 schema snapshot ──

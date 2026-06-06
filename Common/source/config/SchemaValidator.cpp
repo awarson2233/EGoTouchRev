@@ -5,9 +5,12 @@
 #include "config/ConfigStore.h"
 #include "config/ConfigValue.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <exception>
 #include <string>
+#include <string_view>
 
 namespace Config {
 namespace {
@@ -26,9 +29,53 @@ double numericValueOrZero(const ConfigValue& value) {
     return 0.0;
 }
 
+std::string normalizePenButtonToken(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    for (char& ch : value) {
+        if (ch == ' ' || ch == '+' || ch == '-') {
+            ch = '_';
+        }
+    }
+    while (value.find("__") != std::string::npos) {
+        value.replace(value.find("__"), 2, "_");
+    }
+    return value;
+}
+
 bool enumContainsValue(const BindingEntry& binding, const std::string& value) {
     for (const auto& [_, name] : binding.enumMapping) {
         if (name == value) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool isLegacyNumericPenEnumPath(std::string_view yamlPath) {
+    return yamlPath == "service.pen_button_mode" || yamlPath == "service.pen_button_route";
+}
+
+bool isValidPenButtonEnumToken(std::string_view yamlPath, const std::string& value) {
+    const auto normalized = normalizePenButtonToken(value);
+    if (yamlPath == "service.pen_button_mode") {
+        return normalized == "oem_custom" ||
+               normalized == "native_barrel" ||
+               normalized == "native_eraser";
+    }
+    if (yamlPath == "service.pen_button_route") {
+        return normalized == "vhf_only" ||
+               normalized == "win32_only" ||
+               normalized == "vhf_and_win32" ||
+               normalized == "vhf_win32";
+    }
+    return false;
+}
+
+bool enumContainsNumericValue(const BindingEntry& binding, int32_t value) {
+    for (const auto& [numeric, _] : binding.enumMapping) {
+        if (numeric == value) {
             return true;
         }
     }
@@ -82,7 +129,15 @@ ValidationResult SchemaValidator::validate(const ConfigStore& store, const Confi
             typeMatches = tryGetValue<std::string>(value).has_value();
         } else if (binding.typeName == "enum") {
             if (auto stringValue = tryGetValue<std::string>(value)) {
-                typeMatches = enumContainsValue(binding, *stringValue);
+                typeMatches = isLegacyNumericPenEnumPath(binding.yamlPath)
+                                  ? isValidPenButtonEnumToken(binding.yamlPath, *stringValue)
+                                  : enumContainsValue(binding, *stringValue);
+            } else if (auto intValue = tryGetValue<int32_t>(value)) {
+                // Numeric enum values are only a legacy compatibility path for pen
+                // button IPC/config values. Other enums (e.g. service.mode) remain
+                // string-only to preserve schema semantics.
+                typeMatches = isLegacyNumericPenEnumPath(binding.yamlPath) &&
+                              enumContainsNumericValue(binding, *intValue);
             }
         } else {
             result.warnings.push_back({

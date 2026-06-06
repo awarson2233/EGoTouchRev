@@ -31,6 +31,7 @@ struct BindingEntry {
     std::string description;
     std::string moduleTag;                // 来自 deriveModuleTag()
     std::vector<std::pair<int, std::string>> enumMapping;  // 枚举值映射
+    ConfigRuntimeBinding runtimeBinding = ConfigRuntimeBinding::SchemaOnly;
 };
 
 class ConfigBinder {
@@ -41,7 +42,8 @@ public:
               T Struct::*member, Struct& instance,
               T defaultValue,
               ConfigRange range = {},
-              std::string_view description = "");
+              std::string_view description = "",
+              ConfigRuntimeBinding runtimeBinding = ConfigRuntimeBinding::LiveSetter);
 
     // ── 枚举绑定 ──
     template<typename Struct, typename Enum>
@@ -49,14 +51,16 @@ public:
                   Enum Struct::*member, Struct& instance,
                   Enum defaultValue,
                   std::span<const std::pair<Enum, std::string>> enumMapping,
-                  std::string_view description = "");
+                  std::string_view description = "",
+                  ConfigRuntimeBinding runtimeBinding = ConfigRuntimeBinding::LiveSetter);
 
     // ── 只读 schema 绑定: 用于 uint8/uint16/uint32 等由 applyConfig() 手动转换的键 ──
     void bindSchema(std::string_view yamlPath,
                     ConfigValue defaultValue,
                     std::string_view typeName,
                     ConfigRange range = {},
-                    std::string_view description = "");
+                    std::string_view description = "",
+                    ConfigRuntimeBinding runtimeBinding = ConfigRuntimeBinding::SchemaOnly);
 
     // ── 从 ConfigStore 读取值并写入所有绑定成员 ──
     void apply(const ConfigStore& store);
@@ -120,7 +124,8 @@ void ConfigBinder::bind(std::string_view yamlPath,
                         T Struct::*member, Struct& instance,
                         T defaultValue,
                         ConfigRange range,
-                        std::string_view description) {
+                        std::string_view description,
+                        ConfigRuntimeBinding runtimeBinding) {
     BindingEntry entry;
     entry.yamlPath = yamlPath;
     entry.description = description;
@@ -129,6 +134,7 @@ void ConfigBinder::bind(std::string_view yamlPath,
     entry.keyId = tryKeyIdForPath(yamlPath);
     entry.displayName = deriveDisplayName(yamlPath);
     entry.moduleTag = deriveModuleTag(yamlPath);
+    entry.runtimeBinding = runtimeBinding;
     if (range.min != 0.0 || range.max != 0.0) {
         entry.range = range;
     }
@@ -151,7 +157,8 @@ void ConfigBinder::bindEnum(std::string_view yamlPath,
                             Enum Struct::*member, Struct& instance,
                             Enum defaultValue,
                             std::span<const std::pair<Enum, std::string>> enumMapping,
-                            std::string_view description) {
+                            std::string_view description,
+                            ConfigRuntimeBinding runtimeBinding) {
     BindingEntry entry;
     entry.yamlPath = yamlPath;
     entry.description = description;
@@ -160,6 +167,7 @@ void ConfigBinder::bindEnum(std::string_view yamlPath,
     entry.keyId = tryKeyIdForPath(yamlPath);
     entry.displayName = deriveDisplayName(yamlPath);
     entry.moduleTag = deriveModuleTag(yamlPath);
+    entry.runtimeBinding = runtimeBinding;
 
     for (const auto& [val, name] : enumMapping) {
         const auto intValue = static_cast<int>(val);

@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <optional>
 #include <string>
 #include <variant>
 
@@ -15,21 +16,22 @@ std::string Normalize(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
         return static_cast<char>(std::tolower(ch));
     });
+    for (char& ch : value) {
+        if (ch == ' ' || ch == '+' || ch == '-') {
+            ch = '_';
+        }
+    }
+    while (value.find("__") != std::string::npos) {
+        value.replace(value.find("__"), 2, "_");
+    }
     return value;
 }
 
 PenButtonMode ParsePenButtonMode(const Config::ConfigStore& store, PenButtonMode fallback) {
     if (store.has("service.pen_button_mode")) {
         const auto value = store.get<Config::ConfigValue>("service.pen_button_mode");
-        if (const auto* text = std::get_if<std::string>(&value)) {
-            const auto normalized = Normalize(*text);
-            if (normalized == "oem_custom") return PenButtonMode::OemCustom;
-            if (normalized == "native_barrel") return PenButtonMode::NativeBarrel;
-            if (normalized == "native_eraser") return PenButtonMode::NativeEraser;
-            return fallback;
-        }
-        if (const auto* numeric = std::get_if<int32_t>(&value)) {
-            return static_cast<PenButtonMode>(std::clamp(*numeric, 0, 2));
+        if (const auto parsed = ParsePenButtonModeValue(value)) {
+            return *parsed;
         }
     }
     return fallback;
@@ -41,16 +43,8 @@ PenButtonRoute ParsePenButtonRoute(const Config::ConfigStore& store,
     if (store.has("service.pen_button_route")) {
         explicitRoute = true;
         const auto value = store.get<Config::ConfigValue>("service.pen_button_route");
-        if (const auto* text = std::get_if<std::string>(&value)) {
-            const auto normalized = Normalize(*text);
-            if (normalized == "vhf_only") return PenButtonRoute::VhfOnly;
-            if (normalized == "win32_only") return PenButtonRoute::Win32Only;
-            if (normalized == "vhf_and_win32") return PenButtonRoute::VhfAndWin32;
-            explicitRoute = false;
-            return fallback;
-        }
-        if (const auto* numeric = std::get_if<int32_t>(&value)) {
-            return static_cast<PenButtonRoute>(std::clamp(*numeric, 0, 2));
+        if (const auto parsed = ParsePenButtonRouteValue(value)) {
+            return *parsed;
         }
         explicitRoute = false;
     }
@@ -61,6 +55,48 @@ PenButtonRoute ParsePenButtonRoute(const Config::ConfigStore& store,
 
 const char* ServiceModeToConfig(ServiceMode mode) {
     return mode == ServiceMode::Full ? "full" : "touch_only";
+}
+
+std::optional<PenButtonMode> ParsePenButtonModeValue(const Config::ConfigValue& value) {
+    if (const auto* text = std::get_if<std::string>(&value)) {
+        const auto normalized = Normalize(*text);
+        if (normalized == "oem_custom") return PenButtonMode::OemCustom;
+        if (normalized == "native_barrel") return PenButtonMode::NativeBarrel;
+        if (normalized == "native_eraser") return PenButtonMode::NativeEraser;
+        return std::nullopt;
+    }
+    if (const auto* numeric = std::get_if<int32_t>(&value)) {
+        if (*numeric >= 0 && *numeric <= 2) {
+            return static_cast<PenButtonMode>(*numeric);
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<PenButtonRoute> ParsePenButtonRouteValue(const Config::ConfigValue& value) {
+    if (const auto* text = std::get_if<std::string>(&value)) {
+        const auto normalized = Normalize(*text);
+        if (normalized == "vhf_only") return PenButtonRoute::VhfOnly;
+        if (normalized == "win32_only") return PenButtonRoute::Win32Only;
+        if (normalized == "vhf_and_win32" || normalized == "vhf_win32") return PenButtonRoute::VhfAndWin32;
+        return std::nullopt;
+    }
+    if (const auto* numeric = std::get_if<int32_t>(&value)) {
+        if (*numeric >= 0 && *numeric <= 2) {
+            return static_cast<PenButtonRoute>(*numeric);
+        }
+    }
+    return std::nullopt;
+}
+
+void ApplyLegacyServiceModeMigration(Config::ConfigStore& target, const Config::ConfigStore& source) {
+    if (source.has("service.mode") || !source.has("service.mode.full")) {
+        return;
+    }
+
+    target.set<std::string>(
+        "service.mode",
+        source.getOr<bool>("service.mode.full", true) ? "full" : "touch_only");
 }
 
 void ApplyConfig(ServiceConfigState& state, const Config::ConfigStore& store) {

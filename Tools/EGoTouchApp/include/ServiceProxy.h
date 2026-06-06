@@ -37,6 +37,14 @@ struct TouchPipelineModuleEnableState {
     bool gestureEnabled = true;
 };
 
+struct ApplyConfigResult {
+    bool liveApplied = false;
+    bool persistAttempted = false;
+    bool persisted = false;
+    bool unpersistedLiveChanges = false;
+    Ipc::IpcStatusCode persistStatus = Ipc::IpcStatusCode::InternalError;
+};
+
 class ServiceProxy {
 public:
     ServiceProxy();
@@ -96,6 +104,8 @@ public:
     // Config sync
     void SaveConfig();
     bool ApplyConfigStoreGlobally();
+    ApplyConfigResult GetLastApplyConfigResult() const;
+    bool HasUnpersistedLiveConfigChanges() const { return m_hasUnpersistedLiveConfigChanges.load(std::memory_order_relaxed); }
     void MarkConfigPathsDirty(const std::vector<std::string>& paths);
     void RefreshConfigSnapshot();
     // Applies ConfigStore edits to the app-local preview pipelines only.
@@ -175,6 +185,11 @@ private:
     Config::ConfigStore m_configStore;
     Config::ConfigStore m_configDefaults;
     std::unordered_set<std::string> m_dirtyConfigPaths;
+    std::atomic<bool> m_lastApplyConfigLiveApplied{false};
+    std::atomic<bool> m_lastApplyConfigPersistAttempted{false};
+    std::atomic<bool> m_lastApplyConfigPersisted{false};
+    std::atomic<bool> m_hasUnpersistedLiveConfigChanges{false};
+    std::atomic<uint8_t> m_lastApplyConfigPersistStatus{static_cast<uint8_t>(Ipc::IpcStatusCode::InternalError)};
 
     // Latest frame snapshot for GUI
     std::mutex m_frameMutex;

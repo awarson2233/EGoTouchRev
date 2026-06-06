@@ -13,7 +13,8 @@ void ConfigBinder::bindSchema(std::string_view yamlPath,
                               ConfigValue defaultValue,
                               std::string_view typeName,
                               ConfigRange range,
-                              std::string_view description) {
+                              std::string_view description,
+                              ConfigRuntimeBinding runtimeBinding) {
     BindingEntry entry;
     entry.yamlPath = yamlPath;
     entry.description = description;
@@ -22,6 +23,7 @@ void ConfigBinder::bindSchema(std::string_view yamlPath,
     entry.keyId = tryKeyIdForPath(yamlPath);
     entry.displayName = deriveDisplayName(yamlPath);
     entry.moduleTag = deriveModuleTag(yamlPath);
+    entry.runtimeBinding = runtimeBinding;
     if (range.min != 0.0 || range.max != 0.0) {
         entry.range = range;
     }
@@ -78,7 +80,9 @@ ConfigSchemaSnapshot ConfigBinder::snapshot() const {
         entry.description = b.description;
         entry.moduleTag = b.moduleTag.empty() ? deriveModuleTag(b.yamlPath) : b.moduleTag;
         entry.enumMapping = b.enumMapping;
-        entry.boundToRuntime = true;
+        entry.runtimeBinding = b.runtimeBinding;
+        entry.boundToRuntime = b.runtimeBinding == ConfigRuntimeBinding::LiveSetter ||
+                               b.runtimeBinding == ConfigRuntimeBinding::ManualLiveApply;
 
         if (b.typeName == "enum") {
             entry.uiType = ConfigUiType::Enum;

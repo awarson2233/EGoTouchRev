@@ -10,6 +10,7 @@
 #include "Ipc/ConfigSync.h"
 #include "SolverBuildConfig.h"
 #include "SolverTypes.h"
+#include "ServiceConfigCore.h"
 
 #include "GuiLogSink.h"
 #include "Logger.h"
@@ -216,16 +217,17 @@ void RegisterServiceConfigBindings(Config::ConfigBinder& binder,
         {PenButtonRoute::VhfAndWin32, "vhf_and_win32"},
     }};
 
+    constexpr auto runtimeBinding = Config::ConfigRuntimeBinding::ManualLiveApply;
     binder.bindEnum("service.mode", &ServiceConfigState::mode, state,
-                    ServiceMode::Full, std::span<const std::pair<ServiceMode, std::string>>(kModeMapping), "Service runtime topology");
+                    ServiceMode::Full, std::span<const std::pair<ServiceMode, std::string>>(kModeMapping), "Service runtime topology", runtimeBinding);
     binder.bind("service.auto_mode", &ServiceConfigState::autoMode, state,
-                true, {}, "Enable automatic runtime start/init");
+                true, {}, "Enable automatic runtime start/init", runtimeBinding);
     binder.bind("service.stylus_vhf_enabled", &ServiceConfigState::stylusVhfEnabled, state,
-                true, {}, "Enable stylus VHF output");
+                true, {}, "Enable stylus VHF output", runtimeBinding);
     binder.bindEnum("service.pen_button_mode", &ServiceConfigState::penButtonMode, state,
-                    PenButtonMode::OemCustom, std::span<const std::pair<PenButtonMode, std::string>>(kPenButtonModeMapping), "Pen button semantic mode");
+                    PenButtonMode::OemCustom, std::span<const std::pair<PenButtonMode, std::string>>(kPenButtonModeMapping), "Pen button semantic mode", runtimeBinding);
     binder.bindEnum("service.pen_button_route", &ServiceConfigState::penButtonRoute, state,
-                    PenButtonRoute::VhfOnly, std::span<const std::pair<PenButtonRoute, std::string>>(kPenButtonRouteMapping), "Pen button injection route");
+                    PenButtonRoute::VhfOnly, std::span<const std::pair<PenButtonRoute, std::string>>(kPenButtonRouteMapping), "Pen button injection route", runtimeBinding);
 }
 
 constexpr uint8_t ToWireServiceMode(ServiceMode mode) {
@@ -390,24 +392,28 @@ void ClampStylusIirCoefficients(Config::ConfigStore& store) {
 bool ConfigValueAllowedBySchema(std::string_view path,
                                 const Config::ConfigValue& value,
                                 const Config::ConfigSchemaSnapshot& schema) {
-    if (path == "service.mode") {
-        const auto str = Config::tryGetValue<std::string>(value);
-        return str.has_value() && (*str == "full" || *str == "touch_only");
-    }
-    if (path == "service.pen_button_mode") {
-        const auto str = Config::tryGetValue<std::string>(value);
-        return str.has_value() && (*str == "oem_custom" || *str == "native_barrel" || *str == "native_eraser");
-    }
-    if (path == "service.pen_button_route") {
-        const auto str = Config::tryGetValue<std::string>(value);
-        return str.has_value() && (*str == "vhf_only" || *str == "win32_only" || *str == "vhf_and_win32");
-    }
-
     const auto it = std::find_if(schema.entries.begin(), schema.entries.end(),
         [path](const Config::ConfigSchemaEntry& entry) { return entry.yamlPath == path; });
     if (it == schema.entries.end()) {
         return false;
     }
+    if (!it->boundToRuntime ||
+        (it->runtimeBinding != Config::ConfigRuntimeBinding::LiveSetter &&
+         it->runtimeBinding != Config::ConfigRuntimeBinding::ManualLiveApply)) {
+        return false;
+    }
+
+    if (path == "service.mode") {
+        const auto str = Config::tryGetValue<std::string>(value);
+        return str.has_value() && (*str == "full" || *str == "touch_only");
+    }
+    if (path == "service.pen_button_mode") {
+        return Service::ParsePenButtonModeValue(value).has_value();
+    }
+    if (path == "service.pen_button_route") {
+        return Service::ParsePenButtonRouteValue(value).has_value();
+    }
+
 
     switch (it->uiType) {
     case Config::ConfigUiType::Bool:
@@ -500,8 +506,10 @@ ServiceHost::~ServiceHost() {
 
 bool ServiceHost::InitializeConfigStores(const std::string& configPath) {
     Config::ConfigBinder binder;
+    ServiceConfigState serviceDefaults;
     Solvers::TouchPipeline touchDefaults;
     Solvers::StylusPipeline stylusDefaults;
+    RegisterServiceConfigBindings(binder, serviceDefaults);
     touchDefaults.registerBindings(binder);
     stylusDefaults.registerBindings(binder);
     Config::registerRuntimeKeyMappings(binder);
@@ -530,6 +538,7 @@ bool ServiceHost::InitializeConfigStores(const std::string& configPath) {
             Config::ConfigStore yamlDefaults;
             yamlDefaults.loadFromYaml(paths->defaultConfig);
             defaults.mergeFrom(yamlDefaults);
+            ApplyLegacyServiceModeMigration(defaults, yamlDefaults);
         } catch (const std::exception& ex) {
             LOG_WARN("Service", __func__, "Config", "Failed to load default config '{}': {}", paths->defaultConfig, ex.what());
         }
@@ -544,6 +553,7 @@ bool ServiceHost::InitializeConfigStores(const std::string& configPath) {
             overrides.loadFromYaml(paths->overrideConfig);
             penButtonRouteExplicit = overrides.has("service.pen_button_route");
             current.mergeFrom(overrides);
+            ApplyLegacyServiceModeMigration(current, overrides);
         } catch (const std::exception& ex) {
             LOG_WARN("Service", __func__, "Config", "Failed to load override config '{}': {}", paths->overrideConfig, ex.what());
         }
@@ -586,11 +596,8 @@ ServiceConfigState ServiceHost::ReadServiceConfigStateFromStore() const {
     const auto& store = m_impl->m_configStore;
 
     ServiceConfigState state{};
-    state.mode = ParseServiceMode(store.getOr<std::string>("service.mode", "full"));
-    state.autoMode = store.getOr<bool>("service.auto_mode", true);
-    state.stylusVhfEnabled = store.getOr<bool>("service.stylus_vhf_enabled", true);
-    state.penButtonMode = ParsePenButtonMode(store.getOr<std::string>("service.pen_button_mode", "oem_custom"));
-    state.penButtonRoute = ParsePenButtonRoute(store.getOr<std::string>("service.pen_button_route", "vhf_only"));
+    state.penButtonRouteExplicit = m_impl->m_penButtonRouteExplicit;
+    ApplyConfig(state, store);
     state.penButtonRouteExplicit = m_impl->m_penButtonRouteExplicit;
     return state;
 }
@@ -668,11 +675,18 @@ bool ServiceHost::PersistServicePolicyConfig() {
 
 ReloadServiceConfigResult ServiceHost::HandleReloadServiceConfig(
     const ServiceConfigState& reloadedConfig) {
-    ReloadServiceConfigResult result{};
-
     const bool modeChanged = (m_configState.mode != reloadedConfig.mode);
     const bool autoModeChanged = (m_configState.autoMode != reloadedConfig.autoMode);
     const bool stylusVhfChanged = (m_configState.stylusVhfEnabled != reloadedConfig.stylusVhfEnabled);
+    const bool penButtonModeChanged = (m_configState.penButtonMode != reloadedConfig.penButtonMode);
+    const bool penButtonRouteChanged =
+        (m_configState.penButtonRoute != reloadedConfig.penButtonRoute) ||
+        (m_configState.penButtonRouteExplicit != reloadedConfig.penButtonRouteExplicit);
+    const bool policyChanged =
+        autoModeChanged || stylusVhfChanged ||
+        penButtonModeChanged || penButtonRouteChanged;
+
+    ReloadServiceConfigResult result = DiffServiceConfig(m_configState, reloadedConfig, m_deviceRuntime && policyChanged);
 
     if (modeChanged) {
         result.changedFields |= ToServiceConfigFieldBit(ServiceConfigField::Mode);
@@ -698,11 +712,6 @@ ReloadServiceConfigResult ServiceHost::HandleReloadServiceConfig(
                  reloadedConfig.stylusVhfEnabled ? 1 : 0);
     }
 
-    const bool penButtonModeChanged = (m_configState.penButtonMode != reloadedConfig.penButtonMode);
-    const bool penButtonRouteChanged =
-        (m_configState.penButtonRoute != reloadedConfig.penButtonRoute) ||
-        (m_configState.penButtonRouteExplicit != reloadedConfig.penButtonRouteExplicit);
-
     if (penButtonModeChanged) {
         result.changedFields |= ToServiceConfigFieldBit(ServiceConfigField::PenButtonMode);
         LOG_INFO("Service", __func__, "IPC",
@@ -717,9 +726,6 @@ ReloadServiceConfigResult ServiceHost::HandleReloadServiceConfig(
                  static_cast<int>(reloadedConfig.penButtonRoute));
     }
 
-    const bool policyChanged =
-        autoModeChanged || stylusVhfChanged ||
-        penButtonModeChanged || penButtonRouteChanged;
     if (m_deviceRuntime && policyChanged) {
         m_deviceRuntime->ApplyServicePolicy(
             reloadedConfig.autoMode, reloadedConfig.stylusVhfEnabled,
@@ -1483,11 +1489,9 @@ void ServiceHost::HandleIpcApplyConfigTlvChunk(const Ipc::IpcRequest& req, Ipc::
             return;
         }
 
-        desired.mode = ParseServiceMode(candidate.getOr<std::string>("service.mode", "full"));
-        desired.autoMode = candidate.getOr<bool>("service.auto_mode", true);
-        desired.stylusVhfEnabled = candidate.getOr<bool>("service.stylus_vhf_enabled", true);
-        desired.penButtonMode = ParsePenButtonMode(candidate.getOr<std::string>("service.pen_button_mode", "oem_custom"));
-        desired.penButtonRoute = ParsePenButtonRoute(candidate.getOr<std::string>("service.pen_button_route", "vhf_only"));
+        desired = m_configState;
+        desired.penButtonRouteExplicit = m_impl->m_penButtonRouteExplicit;
+        ApplyConfig(desired, candidate);
         desired.penButtonRouteExplicit = m_impl->m_penButtonRouteExplicit || penButtonRouteTouched;
         m_impl->m_configStore = std::move(candidate);
         m_impl->m_penButtonRouteExplicit = desired.penButtonRouteExplicit;

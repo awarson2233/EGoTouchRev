@@ -8,6 +8,15 @@
 #include <vector>
 
 namespace App {
+namespace {
+
+bool IsLiveEditableEntry(const Config::ConfigSchemaEntry& entry) {
+    return entry.boundToRuntime &&
+           (entry.runtimeBinding == Config::ConfigRuntimeBinding::LiveSetter ||
+            entry.runtimeBinding == Config::ConfigRuntimeBinding::ManualLiveApply);
+}
+
+} // namespace
 
 void ConfigUIRenderer::RenderConfigStore(
     const Config::ConfigSchemaSnapshot& schema,
@@ -35,6 +44,10 @@ void ConfigUIRenderer::RenderConfigStore(
 
         const std::string label = entry.displayName + "##" + entry.yamlPath;
         const bool hasRange = entry.range.has_value();
+        const bool liveEditable = IsLiveEditableEntry(entry);
+        if (!liveEditable) {
+            ImGui::BeginDisabled();
+        }
 
         switch (entry.uiType) {
             case Config::ConfigUiType::Bool: {
@@ -107,6 +120,10 @@ void ConfigUIRenderer::RenderConfigStore(
                 }
                 break;
             }
+        }
+
+        if (!liveEditable) {
+            ImGui::EndDisabled();
         }
 
         if (ImGui::IsItemHovered() && !entry.description.empty()) {
