@@ -6,6 +6,7 @@
 namespace Ipc {
 
 constexpr uint16_t kIpcProtocolVersion = 2;
+constexpr uint16_t kIpcResponseDataBytes = 4096;
 
 constexpr const wchar_t* kPipeName = L"\\\\.\\pipe\\EGoTouchControl";
 // IPC-related global events
@@ -243,7 +244,15 @@ struct DebugFieldSchemaWire {
     char dvrAnchor[32]{};
 };
 
+constexpr uint16_t kDebugSnapshotLegacyHeaderSize = sizeof(uint16_t) * 4;
+constexpr uint32_t kDebugSnapshotMetadataMagic = 0x44534D54u; // 'DSMT'
+constexpr uint16_t kDebugSnapshotMetadataVersion = 1;
+constexpr uint16_t kDebugSnapshotMetadataWireSize = 24;
+constexpr uint32_t kDebugSnapshotHasFrameTimestamp = 1u << 0;
+
 struct DebugSnapshotHeader {
+    // Legacy 8-byte header. Values must immediately follow this header for
+    // compatibility with existing GetDebugSnapshot clients.
     // Must be identical to DebugSchemaResponseHeader::schemaVersion for the same descriptor set.
     uint16_t schemaVersion = 0;
     uint16_t fieldCount = 0;
@@ -257,6 +266,18 @@ struct DebugSnapshotValueWire {
     uint8_t  flags = 0; // bit0: value valid
     uint32_t _reserved0 = 0;
     uint64_t rawValue = 0;
+};
+
+constexpr uint16_t kDebugSnapshotMaxValues = static_cast<uint16_t>(
+    (kIpcResponseDataBytes - kDebugSnapshotLegacyHeaderSize) / sizeof(DebugSnapshotValueWire));
+
+struct DebugSnapshotMetadataWire {
+    uint32_t magic = kDebugSnapshotMetadataMagic;
+    uint16_t wireSize = kDebugSnapshotMetadataWireSize;
+    uint16_t version = kDebugSnapshotMetadataVersion;
+    uint32_t frameIdentityFlags = 0;
+    uint32_t _reserved0 = 0;
+    uint64_t frameTimestamp = 0;
 };
 
 // Legacy response wire for ReloadConfig. Keep the 3-byte layout for transition compatibility.
@@ -295,7 +316,7 @@ struct IpcResponse {
     IpcStatusCode status = IpcStatusCode::InternalError;
     bool     success = false;
     uint16_t dataLen = 0;
-    uint8_t  data[4096]{};
+    uint8_t  data[kIpcResponseDataBytes]{};
 };
 
 inline void MarkSuccess(IpcResponse& resp) noexcept {
@@ -313,6 +334,12 @@ static_assert(sizeof(IpcRequest) == 260,
     "IpcRequest size changed");
 static_assert(sizeof(IpcResponse) == 4100,
     "IpcResponse size changed");
+static_assert(sizeof(DebugSnapshotHeader) == kDebugSnapshotLegacyHeaderSize,
+    "DebugSnapshotHeader must remain the legacy 8-byte wire header");
+static_assert(sizeof(DebugSnapshotMetadataWire) == kDebugSnapshotMetadataWireSize,
+    "DebugSnapshotMetadataWire size changed");
+static_assert(kDebugSnapshotMaxValues == 255,
+    "DebugSnapshot value capacity changed");
 static_assert(sizeof(ConfigTlvChunkRequestWire) <= 256,
     "Config TLV chunk must fit in IpcRequest::param");
 

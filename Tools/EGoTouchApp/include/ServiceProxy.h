@@ -159,6 +159,9 @@ public:
 private:
     DvrDynamicDebugSchema CaptureDynamicDebugSchema() const;
     DvrDynamicDebugFrame CaptureDynamicDebugFrame() const;
+    Dvr::DvrDynamicDebugFrameSlot CaptureDynamicDebugFrameSlot(uint64_t dvrSeq) const;
+    bool RefreshDynamicDebugSnapshot(uint64_t* outFrameTimestamp = nullptr);
+    void ClearDynamicDebugState();
     DvrRuntimeConfigSnapshot CaptureRuntimeConfigSnapshot() const;
     void InitConfigSchema();
 
@@ -193,6 +196,7 @@ private:
 
     // DVR ring buffer (POD slots — zero heap allocation per frame)
     std::unique_ptr<RingBuffer<Dvr::DvrFrameSlot, kDvrCapacity>> m_dvrBuffer;
+    std::unique_ptr<RingBuffer<Dvr::DvrDynamicDebugFrameSlot, kDvrCapacity>> m_dvrDynamicDebugBuffer;
     std::atomic<uint64_t> m_dvrSeqCounter{0};
     std::atomic<bool> m_dvrExporting{false};
     std::thread m_dvrThread;
@@ -229,6 +233,7 @@ private:
     std::atomic<uint16_t> m_dynamicSchemaVersion{0};
     std::atomic<uint32_t> m_dynamicSchemaHash{0};
     DvrDynamicDebugSchema m_lastDvrDynamicSchema;
+    std::chrono::steady_clock::time_point m_nextDynamicDebugSchemaRetry{};
 
     bool RefreshDynamicDebugSchema();
 
