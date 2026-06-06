@@ -1694,9 +1694,9 @@ void ServiceHost::HandleIpcGetDebugSnapshot(Ipc::IpcResponse& resp) {
         penStats = m_impl->m_penPressureReader->GetPressureStats();
     }
 
-    const uint16_t maxByPayload = static_cast<uint16_t>(
-        (sizeof(resp.data) - sizeof(Ipc::DebugSnapshotHeader)) / sizeof(Ipc::DebugSnapshotValueWire));
-    const uint16_t take = std::min<uint16_t>(static_cast<uint16_t>(m_impl->m_debugSchema.size()), maxByPayload);
+    const uint16_t take = static_cast<uint16_t>(std::min<size_t>(
+        m_impl->m_debugSchema.size(),
+        Ipc::kDebugSnapshotMaxValues));
 
     Ipc::DebugSnapshotHeader hdr{};
     hdr.schemaVersion = m_impl->m_debugSchemaVersion;
@@ -1726,6 +1726,14 @@ void ServiceHost::HandleIpcGetDebugSnapshot(Ipc::IpcResponse& resp) {
         v.rawValue = raw;
         std::memcpy(resp.data + cursor, &v, sizeof(v));
         cursor += sizeof(v);
+    }
+
+    if (hasFrame && cursor + sizeof(Ipc::DebugSnapshotMetadataWire) <= sizeof(resp.data)) {
+        Ipc::DebugSnapshotMetadataWire meta{};
+        meta.frameIdentityFlags = Ipc::kDebugSnapshotHasFrameTimestamp;
+        meta.frameTimestamp = frame.timestamp;
+        std::memcpy(resp.data + cursor, &meta, sizeof(meta));
+        cursor += sizeof(meta);
     }
 
     resp.dataLen = static_cast<uint16_t>(cursor);

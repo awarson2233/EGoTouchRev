@@ -57,13 +57,17 @@ void ServiceProxy::PollLoop() {
     auto lastFpsTick = std::chrono::steady_clock::now();
     auto lastLogPoll = std::chrono::steady_clock::now();
     auto lastPenPoll = std::chrono::steady_clock::now();
+    auto lastDynamicDebugPoll = std::chrono::steady_clock::now() - std::chrono::milliseconds(250);
+    uint64_t latestDvrSeq = 0;
+    uint64_t latestDvrTimestamp = 0;
     HANDLE frameEvent = m_frameReader.FrameReadyEvent();
     HANDLE stopEvent = m_pollStopEvent;
     while (m_polling.load()) {
         auto now = std::chrono::steady_clock::now();
         auto nextLogDue = lastLogPoll + std::chrono::milliseconds(1000);
         auto nextPenDue = lastPenPoll + std::chrono::milliseconds(500);
-        auto nextDue = (nextLogDue < nextPenDue) ? nextLogDue : nextPenDue;
+        auto nextDynamicDebugDue = lastDynamicDebugPoll + std::chrono::milliseconds(250);
+        auto nextDue = std::min(nextLogDue, std::min(nextPenDue, nextDynamicDebugDue));
         DWORD timeoutMs = 1000;
         if (nextDue <= now) {
             timeoutMs = 0;
@@ -127,6 +131,8 @@ void ServiceProxy::PollLoop() {
                     slot.CopyFrom(m_latestFrame);
                     slot.dvrSeq = m_dvrSeqCounter.fetch_add(1, std::memory_order_relaxed) + 1;
                     m_dvrBuffer->PushOverwriting(slot);
+                    latestDvrSeq = slot.dvrSeq;
+                    latestDvrTimestamp = slot.timestamp;
                 }
             }
             if (wt == WaitType::Log) {
@@ -157,6 +163,22 @@ void ServiceProxy::PollLoop() {
 
             lastFpsTick = now;
         }
+        // Dynamic debug snapshot polling (~every 250ms). This keeps UI values fresh
+        // without binding the shared-memory frame hot path to synchronous pipe IPC.
+        auto dynamicDebugElapsed = std::chrono::duration_cast<
+            std::chrono::milliseconds>(now - lastDynamicDebugPoll);
+        if (dynamicDebugElapsed.count() >= 250 && m_client.IsConnected()) {
+            uint64_t snapshotTimestamp = 0;
+            if (RefreshDynamicDebugSnapshot(&snapshotTimestamp) &&
+                snapshotTimestamp != 0 &&
+                latestDvrSeq != 0 &&
+                snapshotTimestamp == latestDvrTimestamp &&
+                m_dvrDynamicDebugBuffer) {
+                m_dvrDynamicDebugBuffer->PushOverwriting(CaptureDynamicDebugFrameSlot(latestDvrSeq));
+            }
+            lastDynamicDebugPoll = now;
+        }
+
         // Service log polling (~every 1s)
         auto logElapsed = std::chrono::duration_cast<
             std::chrono::milliseconds>(now - lastLogPoll);

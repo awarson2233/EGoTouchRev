@@ -9,6 +9,7 @@
 #include <iomanip>
 #include <sstream>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 namespace App {
@@ -38,6 +39,32 @@ std::filesystem::path MakeDvrExportRoot() {
 
 std::string MakeDvrDatasetName() {
     return "dvr" + MakeDatasetTimestampString();
+}
+
+Dvr::DvrDynamicDebugFrameSlot MakeInvalidDynamicDebugFrameSlot(
+    uint64_t dvrSeq,
+    const DvrDynamicDebugSchema& schema) {
+    Dvr::DvrDynamicDebugFrameSlot slot{};
+    slot.dvrSeq = dvrSeq;
+    const size_t sampleCount = std::min(schema.fields.size(), static_cast<size_t>(Dvr::kMaxDynamicDebugSamples));
+    slot.sampleCount = static_cast<uint16_t>(sampleCount);
+    for (size_t i = 0; i < sampleCount; ++i) {
+        slot.samples[i].fieldId = schema.fields[i].fieldId;
+        slot.samples[i].valueType = static_cast<uint8_t>(schema.fields[i].valueType);
+        slot.samples[i].valid = 0;
+        slot.samples[i].rawValue = 0;
+    }
+    return slot;
+}
+
+bool DynamicDebugFrameSlotMatchesSchema(const Dvr::DvrDynamicDebugFrameSlot& slot,
+                                        const DvrDynamicDebugSchema& schema) {
+    if (slot.sampleCount != schema.fields.size()) return false;
+    for (size_t i = 0; i < schema.fields.size(); ++i) {
+        if (slot.samples[i].fieldId != schema.fields[i].fieldId) return false;
+        if (static_cast<Ipc::DebugValueType>(slot.samples[i].valueType) != schema.fields[i].valueType) return false;
+    }
+    return true;
 }
 
 } // namespace
@@ -161,10 +188,41 @@ void ServiceProxy::TriggerDvrBinaryExport() {
             preTriggerFrames.erase(preTriggerFrames.begin(), preTriggerFrames.begin() + static_cast<long long>(dropCount));
         }
 
-        const fs::path replayBinPath = dir / (datasetName + ".dvrbin");
+        std::vector<Dvr::DvrDynamicDebugFrameSlot> dynamicFramesForExport;
         const auto dynamicSchema = GetCurrentDvrDynamicDebugSchema();
+        bool canExportDynamicFrames = m_dvrDynamicDebugBuffer &&
+            !dynamicSchema.Empty() &&
+            dynamicSchema.fields.size() <= static_cast<size_t>(Dvr::kMaxDynamicDebugSamples);
+        if (canExportDynamicFrames) {
+            const auto dynamicSnapshot = m_dvrDynamicDebugBuffer->GetSnapshot();
+            std::unordered_map<uint64_t, const Dvr::DvrDynamicDebugFrameSlot*> dynamicBySeq;
+            dynamicBySeq.reserve(dynamicSnapshot.size());
+            for (const auto& frame : dynamicSnapshot) {
+                dynamicBySeq[frame.dvrSeq] = &frame;
+            }
+
+            dynamicFramesForExport.reserve(preTriggerFrames.size());
+            for (const auto& frame : preTriggerFrames) {
+                auto it = dynamicBySeq.find(frame.dvrSeq);
+                if (it == dynamicBySeq.end()) {
+                    dynamicFramesForExport.push_back(MakeInvalidDynamicDebugFrameSlot(frame.dvrSeq, dynamicSchema));
+                    continue;
+                }
+                if (!DynamicDebugFrameSlotMatchesSchema(*it->second, dynamicSchema)) {
+                    dynamicFramesForExport.clear();
+                    canExportDynamicFrames = false;
+                    break;
+                }
+                dynamicFramesForExport.push_back(*it->second);
+            }
+        }
+        const auto* dynamicFrames = (canExportDynamicFrames && dynamicFramesForExport.size() == preTriggerFrames.size())
+            ? &dynamicFramesForExport
+            : nullptr;
+
+        const fs::path replayBinPath = dir / (datasetName + ".dvrbin");
         const auto runtimeConfig = CaptureRuntimeConfigSnapshot();
-        if (!WriteDvrBinaryFile(replayBinPath, preTriggerFrames, &dynamicSchema, nullptr, &runtimeConfig, nullptr)) {
+        if (!WriteDvrBinaryFile(replayBinPath, preTriggerFrames, &dynamicSchema, dynamicFrames, &runtimeConfig, nullptr)) {
             LOG_ERROR("App", "TriggerDvrBinaryExport", "IPC", "Failed to write DVR2 dataset: {}", replayBinPath.string());
             m_dvrExporting.store(false);
             return;
