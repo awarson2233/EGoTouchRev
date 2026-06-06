@@ -1,6 +1,7 @@
 #include "StylusSolver/StylusPipeline.h"
 #include "config/ConfigBinder.h"
 #include "config/ConfigSchemaSnapshot.h"
+#include "config/ConfigStore.h"
 #include "config/ConfigValue.h"
 
 #include <cstdint>
@@ -62,6 +63,9 @@ void TestStylusIirBindingsExposeCompleteUiSchema() {
     Solvers::StylusPipeline pipeline;
     Config::ConfigBinder binder;
     pipeline.registerBindings(binder);
+    Config::ConfigStore defaults;
+    binder.writeDefaults(defaults);
+    binder.apply(defaults);
     const auto schema = binder.snapshot();
 
     const auto* enabled = FindSchemaEntry(schema, "stylus.sp.iir_filter_enabled");
