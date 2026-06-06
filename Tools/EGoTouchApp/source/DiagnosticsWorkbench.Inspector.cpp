@@ -559,7 +559,8 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
             ImGui::TextWrapped("Edit stylus pipeline parameters by module. Apply Global sends the ConfigStore to the Service, live-applies the Service pipeline, and persists YAML overrides.");
 #endif
             const auto& schema = m_proxy->GetConfigSchemaSnapshot();
-            const auto modules = CollectModuleTagsWithPrefix(schema, "Stylus /");
+            auto modules = CollectModuleTagsWithPrefix(schema, "Stylus /");
+            modules.erase(std::remove(modules.begin(), modules.end(), std::string{"Stylus / HPP2"}), modules.end());
             if (modules.empty()) {
                 ImGui::TextDisabled("No ConfigStore/ConfigBinder stylus parameters are registered.");
             } else if (ImGui::BeginTabBar("StylusConfigTabs")) {
