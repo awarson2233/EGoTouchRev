@@ -243,10 +243,10 @@ void DiagnosticsWorkbench::DrawTouchPipelineConfigPanel() {
     }
 
 #if !EGOTOUCH_CONFIG_ENABLED
-    ImGui::TextColored(WarnColor(), "Runtime config is disabled in this build (EGOTOUCH_CONFIG_ENABLED=0).");
-    ImGui::TextWrapped("Touch pipeline parameters are not editable here, and this panel cannot live-apply changes to the Service-side pipeline.");
-    return;
-#else
+    ImGui::TextColored(WarnColor(), "Runtime config apply is disabled in this build (EGOTOUCH_CONFIG_ENABLED=0).");
+    ImGui::TextWrapped("Touch pipeline parameters remain editable in the app-local ConfigStore, but Apply is disabled and changes do not affect the Service-side live pipeline.");
+#endif
+
     const auto& schema = m_proxy->GetConfigSchemaSnapshot();
     const auto modules = CollectModuleTagsWithPrefix(schema, "Touch /");
     if (modules.empty()) {
@@ -295,15 +295,22 @@ void DiagnosticsWorkbench::DrawTouchPipelineConfigPanel() {
             ImGui::EndDisabled();
         }
 
+#if !EGOTOUCH_CONFIG_ENABLED
+        ImGui::BeginDisabled();
+        ImGui::Button("Apply App-local Preview");
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        ImGui::TextDisabled("Apply disabled; Service pipeline is not changed.");
+#else
         if (ImGui::Button("Apply App-local Preview")) {
             m_proxy->ApplyConfigStoreToLocalRuntime();
         }
         ImGui::SameLine();
         ImGui::TextDisabled("Service pipeline is not changed.");
+#endif
 
         ImGui::EndTable();
     }
-#endif
 }
 
 void DiagnosticsWorkbench::DrawTouchPacketDetails() {
@@ -527,10 +534,11 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
 
         if (ImGui::BeginTabItem("Config")) {
 #if !EGOTOUCH_CONFIG_ENABLED
-            ImGui::TextColored(WarnColor(), "Runtime config is disabled in this build (EGOTOUCH_CONFIG_ENABLED=0).");
-            ImGui::TextWrapped("Stylus pipeline parameters are not editable here, and this tab cannot live-apply changes to the Service-side pipeline.");
+            ImGui::TextColored(WarnColor(), "Runtime config apply is disabled in this build (EGOTOUCH_CONFIG_ENABLED=0).");
+            ImGui::TextWrapped("Stylus pipeline parameters remain editable in the app-local ConfigStore, but Apply is disabled and changes do not affect the Service-side live pipeline.");
 #else
             ImGui::TextWrapped("Edit stylus pipeline parameters by module. Apply updates only the app-local preview pipeline; it does not live-apply the Service-side pipeline.");
+#endif
             const auto& schema = m_proxy->GetConfigSchemaSnapshot();
             const auto modules = CollectModuleTagsWithPrefix(schema, "Stylus /");
             if (modules.empty()) {
@@ -539,11 +547,19 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
                 for (const auto& module : modules) {
                     if (ImGui::BeginTabItem(ModuleDisplayName(module))) {
                         ConfigUIRenderer::RenderConfigStoreByModule(schema, m_proxy->GetConfigStore(), module);
+#if !EGOTOUCH_CONFIG_ENABLED
+                        ImGui::BeginDisabled();
+                        ImGui::Button("Apply App-local Preview");
+                        ImGui::EndDisabled();
+                        ImGui::SameLine();
+                        ImGui::TextDisabled("Apply disabled; Service pipeline is not changed.");
+#else
                         if (ImGui::Button("Apply App-local Preview")) {
                             m_proxy->ApplyConfigStoreToLocalRuntime();
                         }
                         ImGui::SameLine();
                         ImGui::TextDisabled("Service pipeline is not changed.");
+#endif
                         ImGui::EndTabItem();
                     }
                 }
