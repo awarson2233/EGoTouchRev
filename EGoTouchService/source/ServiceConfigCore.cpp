@@ -1,9 +1,86 @@
 #include "ServiceConfigCore.h"
 
+#include "config/ConfigStore.h"
+
+#include <algorithm>
+#include <cctype>
+#include <string>
+#include <variant>
+
 namespace Service {
+
+namespace {
+
+std::string Normalize(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return value;
+}
+
+PenButtonMode ParsePenButtonMode(const Config::ConfigStore& store, PenButtonMode fallback) {
+    if (store.has("service.pen_button_mode")) {
+        const auto value = store.get<Config::ConfigValue>("service.pen_button_mode");
+        if (const auto* text = std::get_if<std::string>(&value)) {
+            const auto normalized = Normalize(*text);
+            if (normalized == "oem_custom") return PenButtonMode::OemCustom;
+            if (normalized == "native_barrel") return PenButtonMode::NativeBarrel;
+            if (normalized == "native_eraser") return PenButtonMode::NativeEraser;
+            return fallback;
+        }
+        if (const auto* numeric = std::get_if<int32_t>(&value)) {
+            return static_cast<PenButtonMode>(std::clamp(*numeric, 0, 2));
+        }
+    }
+    return fallback;
+}
+
+PenButtonRoute ParsePenButtonRoute(const Config::ConfigStore& store,
+                                   PenButtonRoute fallback,
+                                   bool& explicitRoute) {
+    if (store.has("service.pen_button_route")) {
+        explicitRoute = true;
+        const auto value = store.get<Config::ConfigValue>("service.pen_button_route");
+        if (const auto* text = std::get_if<std::string>(&value)) {
+            const auto normalized = Normalize(*text);
+            if (normalized == "vhf_only") return PenButtonRoute::VhfOnly;
+            if (normalized == "win32_only") return PenButtonRoute::Win32Only;
+            if (normalized == "vhf_and_win32") return PenButtonRoute::VhfAndWin32;
+            explicitRoute = false;
+            return fallback;
+        }
+        if (const auto* numeric = std::get_if<int32_t>(&value)) {
+            return static_cast<PenButtonRoute>(std::clamp(*numeric, 0, 2));
+        }
+        explicitRoute = false;
+    }
+    return fallback;
+}
+
+} // namespace
 
 const char* ServiceModeToConfig(ServiceMode mode) {
     return mode == ServiceMode::Full ? "full" : "touch_only";
+}
+
+void ApplyConfig(ServiceConfigState& state, const Config::ConfigStore& store) {
+    if (store.has("service.mode")) {
+        const auto mode = Normalize(store.getOr<std::string>("service.mode", ServiceModeToConfig(state.mode)));
+        if (mode == "full") {
+            state.mode = ServiceMode::Full;
+        } else if (mode == "touch_only") {
+            state.mode = ServiceMode::TouchOnly;
+        }
+    } else if (store.has("service.mode.full")) {
+        state.mode = store.getOr<bool>("service.mode.full", state.mode == ServiceMode::Full)
+            ? ServiceMode::Full
+            : ServiceMode::TouchOnly;
+    }
+
+    state.autoMode = store.getOr<bool>("service.auto_mode", state.autoMode);
+    state.stylusVhfEnabled = store.getOr<bool>("service.stylus_vhf_enabled", state.stylusVhfEnabled);
+    state.penButtonMode = ParsePenButtonMode(store, state.penButtonMode);
+    state.penButtonRoute = ParsePenButtonRoute(store, state.penButtonRoute, state.penButtonRouteExplicit);
 }
 
 ReloadServiceConfigResult DiffServiceConfig(const ServiceConfigState& current,

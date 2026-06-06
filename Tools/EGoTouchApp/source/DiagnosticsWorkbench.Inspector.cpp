@@ -242,11 +242,6 @@ void DiagnosticsWorkbench::DrawTouchPipelineConfigPanel() {
         return;
     }
 
-#if !EGOTOUCH_CONFIG_ENABLED
-    ImGui::TextColored(WarnColor(), "Runtime config apply is disabled in this build (EGOTOUCH_CONFIG_ENABLED=0).");
-    ImGui::TextWrapped("Touch pipeline parameters remain editable in the app-local ConfigStore, but Apply is disabled and changes do not affect the Service-side live pipeline.");
-#endif
-
     const auto& schema = m_proxy->GetConfigSchemaSnapshot();
     const auto modules = CollectModuleTagsWithPrefix(schema, "Touch /");
     if (modules.empty()) {
@@ -295,19 +290,11 @@ void DiagnosticsWorkbench::DrawTouchPipelineConfigPanel() {
             ImGui::EndDisabled();
         }
 
-#if !EGOTOUCH_CONFIG_ENABLED
-        ImGui::BeginDisabled();
-        ImGui::Button("Apply App-local Preview");
-        ImGui::EndDisabled();
-        ImGui::SameLine();
-        ImGui::TextDisabled("Apply disabled; Service pipeline is not changed.");
-#else
         if (ImGui::Button("Apply App-local Preview")) {
             m_proxy->ApplyConfigStoreToLocalRuntime();
         }
         ImGui::SameLine();
         ImGui::TextDisabled("Service pipeline is not changed.");
-#endif
 
         ImGui::EndTable();
     }
@@ -407,6 +394,10 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
         ImGui::BeginDisabled();
     }
 
+    const char* modeItems[] = {"OEM Custom", "Native Barrel", "Native Eraser"};
+    const char* routeItems[] = {"VHF Only", "Win32 Only", "VHF + Win32"};
+
+#ifdef _DEBUG
     // Global VHF Output Switch
     ImGui::TextUnformatted("Windows INK Output (VHF)");
     bool vhfStylus = m_proxy->IsSrvStylusVhfEnabled();
@@ -418,17 +409,31 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
     ImGui::TextUnformatted("Pen Button Injection");
     {
         int curMode = static_cast<int>(m_proxy->GetPenButtonMode());
-        const char* modeItems[] = {"OEM Custom", "Native Barrel", "Native Eraser"};
         if (ImGui::Combo("Button Mode", &curMode, modeItems, IM_ARRAYSIZE(modeItems))) {
             m_proxy->SetPenButtonMode(static_cast<PenButtonMode>(curMode));
         }
 
         int curRoute = static_cast<int>(m_proxy->GetPenButtonRoute());
-        const char* routeItems[] = {"VHF Only", "Win32 Only", "VHF + Win32"};
         if (ImGui::Combo("Injection Route", &curRoute, routeItems, IM_ARRAYSIZE(routeItems))) {
             m_proxy->SetPenButtonRoute(static_cast<PenButtonRoute>(curRoute));
         }
     }
+#else
+    ImGui::TextUnformatted("Windows INK Output (VHF)");
+    ImGui::TextWrapped("Release uses startup YAML only; edit config/default.yaml or config/overrides.yaml and restart Service.");
+    ImGui::TextDisabled("Stylus Native Output: %s", m_proxy->IsSrvStylusVhfEnabled() ? "Enabled" : "Disabled");
+
+    ImGui::Separator();
+    ImGui::TextUnformatted("Pen Button Injection");
+    {
+        const int curMode = static_cast<int>(m_proxy->GetPenButtonMode());
+        const int curRoute = static_cast<int>(m_proxy->GetPenButtonRoute());
+        const char* modeText = (curMode >= 0 && curMode < IM_ARRAYSIZE(modeItems)) ? modeItems[curMode] : "Unknown";
+        const char* routeText = (curRoute >= 0 && curRoute < IM_ARRAYSIZE(routeItems)) ? routeItems[curRoute] : "Unknown";
+        ImGui::TextDisabled("Button Mode: %s", modeText);
+        ImGui::TextDisabled("Injection Route: %s", routeText);
+    }
+#endif
     ImGui::Separator();
 
     if (ImGui::BeginTabBar("StylusSubTabs")) {
@@ -533,12 +538,7 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
         }
 
         if (ImGui::BeginTabItem("Config")) {
-#if !EGOTOUCH_CONFIG_ENABLED
-            ImGui::TextColored(WarnColor(), "Runtime config apply is disabled in this build (EGOTOUCH_CONFIG_ENABLED=0).");
-            ImGui::TextWrapped("Stylus pipeline parameters remain editable in the app-local ConfigStore, but Apply is disabled and changes do not affect the Service-side live pipeline.");
-#else
             ImGui::TextWrapped("Edit stylus pipeline parameters by module. Apply updates only the app-local preview pipeline; it does not live-apply the Service-side pipeline.");
-#endif
             const auto& schema = m_proxy->GetConfigSchemaSnapshot();
             const auto modules = CollectModuleTagsWithPrefix(schema, "Stylus /");
             if (modules.empty()) {
@@ -547,19 +547,11 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
                 for (const auto& module : modules) {
                     if (ImGui::BeginTabItem(ModuleDisplayName(module))) {
                         ConfigUIRenderer::RenderConfigStoreByModule(schema, m_proxy->GetConfigStore(), module);
-#if !EGOTOUCH_CONFIG_ENABLED
-                        ImGui::BeginDisabled();
-                        ImGui::Button("Apply App-local Preview");
-                        ImGui::EndDisabled();
-                        ImGui::SameLine();
-                        ImGui::TextDisabled("Apply disabled; Service pipeline is not changed.");
-#else
                         if (ImGui::Button("Apply App-local Preview")) {
                             m_proxy->ApplyConfigStoreToLocalRuntime();
                         }
                         ImGui::SameLine();
                         ImGui::TextDisabled("Service pipeline is not changed.");
-#endif
                         ImGui::EndTabItem();
                     }
                 }
@@ -705,9 +697,14 @@ void DiagnosticsWorkbench::DrawBtMcuPanel() {
     ImGui::Text("Pressure Range Mode");
     int pressureMode = ps.pressureMode == 0 ? 0 : 1;
     const char* pressureModes[] = {"4096 raw12", "16382 raw14 / 4"};
+#ifdef _DEBUG
     if (ImGui::Combo("##PenPressureMode", &pressureMode, pressureModes, 2) && m_proxy) {
         m_proxy->SetPenPressureMode(static_cast<uint8_t>(pressureMode));
     }
+#else
+    ImGui::TextDisabled("%s", pressureModes[pressureMode]);
+    ImGui::TextWrapped("Release builds do not live-mutate Service pen pressure mode.");
+#endif
 
     ImGui::Separator();
     ImGui::Text("Live Pressure Data");

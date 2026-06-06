@@ -23,6 +23,10 @@
 #include "vhf/VhfReporter.h"
 #include "StylusSolver/StylusPipeline.h"
 
+namespace Config {
+class ConfigStore;
+}
+
 // --------------- 基础类型 ---------------
 
 enum class result { error, timeout };
@@ -170,6 +174,7 @@ public:
                             PenButtonMode penButtonMode = PenButtonMode::OemCustom,
                             PenButtonRoute penButtonRoute = PenButtonRoute::VhfOnly,
                             bool penButtonRouteExplicit = false);
+    void ApplyConfigStore(const Config::ConfigStore& store);
 
     void SetPenButtonMode(PenButtonMode m) { m_penButtonMode.store(m, std::memory_order_release); }
     PenButtonMode GetPenButtonMode() const { return m_penButtonMode.load(std::memory_order_acquire); }

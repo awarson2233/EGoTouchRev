@@ -4,6 +4,10 @@
 
 #include <cstdint>
 
+namespace Config {
+class ConfigStore;
+}
+
 namespace Service {
 
 /// Service runtime topology selected by [Service].mode.
@@ -40,6 +44,7 @@ constexpr uint8_t ToServiceConfigFieldBit(ServiceConfigField field) {
 }
 
 const char* ServiceModeToConfig(ServiceMode mode);
+void ApplyConfig(ServiceConfigState& state, const Config::ConfigStore& store);
 ReloadServiceConfigResult DiffServiceConfig(const ServiceConfigState& current,
                                             const ServiceConfigState& reloaded,
                                             bool runtimeAvailable);

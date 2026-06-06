@@ -1,6 +1,7 @@
 #include "runtime/DeviceRuntime.h"
 #include "Logger.h"
 #include "SolverTypes.h"
+#include "config/ConfigStore.h"
 
 
 #include <chrono>
@@ -264,6 +265,16 @@ void DeviceRuntime::ApplyServicePolicy(bool autoMode, bool stylusVhfEnabled,
       "Applied: autoMode={} stylusVhfEnabled={} penBtnMode={} penBtnRoute={} penBtnRouteExplicit={}",
       autoMode, stylusVhfEnabled, static_cast<int>(penButtonMode),
       static_cast<int>(penButtonRoute), penButtonRouteExplicit);
+}
+
+void DeviceRuntime::ApplyConfigStore(const Config::ConfigStore& store) {
+  std::lock_guard<std::mutex> lk(m_pipelineMu);
+  m_touchPipeline.applyConfig(store);
+  m_stylusPipeline.applyConfig(store);
+  m_vhfReporter.SetStylusPacketSensorRows(m_stylusPipeline.GetPacketSensorRows());
+  m_vhfReporter.SetStylusPacketSensorCols(m_stylusPipeline.GetPacketSensorCols());
+  m_vhfReporter.SetStylusPacketEmitWhenInvalid(m_stylusPipeline.GetEmitPacketWhenInvalid());
+  LOG_INFO("Runtime", __func__, "Config", "Applied startup config to touch/stylus pipelines.");
 }
 
 bool DeviceRuntime::IsShutdownRequested() const {

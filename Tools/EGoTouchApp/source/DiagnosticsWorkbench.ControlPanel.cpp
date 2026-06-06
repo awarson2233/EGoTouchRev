@@ -159,6 +159,7 @@ void DiagnosticsWorkbench::DrawControlPanel() {
     ImGui::TextUnformatted("System Events");
     DrawSystemEventsPanel();
 
+#ifdef _DEBUG
     if (!allowLiveControl) ImGui::BeginDisabled();
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
     if (ImGui::Button("Save Global Parameters")) {
@@ -217,6 +218,18 @@ void DiagnosticsWorkbench::DrawControlPanel() {
         }
         if (!allowLiveControl) ImGui::EndDisabled();
     }
+#else
+    ImGui::Separator();
+    ImGui::TextUnformatted("Global Config");
+    ImGui::TextWrapped("Release builds use startup YAML only. Edit config/default.yaml or config/overrides.yaml and restart EGoTouchService; live save/global mutation is not supported.");
+    if (m_proxy) {
+        const char* activeModeText = m_proxy->IsSrvActiveModeFull() ? "Full" : "Touch-Only";
+        const char* desiredModeText = m_proxy->IsSrvModeFull() ? "Full" : "Touch-Only";
+        ImGui::TextDisabled("Mode: desired=%s active=%s", desiredModeText, activeModeText);
+        ImGui::TextDisabled("Auto-Mode: %s", m_proxy->IsSrvAutoMode() ? "Enabled" : "Disabled");
+        ImGui::TextDisabled("VHF: %s", m_proxy->IsVhfEnabled() ? "Enabled" : "Disabled");
+    }
+#endif
 
 
     ImGui::Checkbox("Auto-refresh Heatmap", &m_autoRefresh);

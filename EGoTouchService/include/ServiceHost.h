@@ -67,6 +67,7 @@ private:
                                    bool& valid);
     void BuildDebugSchema();
 
+    bool LoadStartupConfig(const std::string& configPath);
     void ApplyServiceConfigToRuntime(const ServiceConfigState& config);
     ReloadServiceConfigResult HandleReloadServiceConfig(const ServiceConfigState& reloadedConfig);
     bool StartRuntimeAndPipeline(const std::string& configPath);

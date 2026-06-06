@@ -14,6 +14,8 @@
 #include "GuiLogSink.h"
 #include "Logger.h"
 #include "Ipc/IpcProtocol.h"
+#include "config/ConfigPath.h"
+#include "config/ConfigStore.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -24,8 +26,10 @@
 #include <array>
 #include <cstring>
 #include <cwchar>
+#include <exception>
 #include <cwctype>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -250,6 +254,40 @@ ServiceHost::~ServiceHost() {
 }
 
 // ── 模式解析 ──────────────────────────────────────────
+bool ServiceHost::LoadStartupConfig(const std::string& configPath) {
+    std::optional<std::string> overridePath;
+    if (!configPath.empty()) {
+        overridePath = configPath;
+    }
+    const auto paths = Config::resolve(overridePath);
+    if (!paths.has_value()) {
+        LOG_ERROR("Service", __func__, "Config", "Startup config was not found; service startup aborted.");
+        return false;
+    }
+
+    try {
+        Config::ConfigStore store;
+        store.loadFromYaml(paths->defaultConfig);
+        if (paths->overrideExists) {
+            Config::ConfigStore overrides;
+            overrides.loadFromYaml(paths->overrideConfig);
+            store.mergeFrom(overrides);
+        }
+
+        ApplyConfig(m_configState, store);
+        if (m_deviceRuntime) {
+            m_deviceRuntime->ApplyConfigStore(store);
+        }
+
+        LOG_INFO("Service", __func__, "Config", "Loaded startup config: default='{}' overrides='{}' overrideExists={}",
+                 paths->defaultConfig, paths->overrideConfig, paths->overrideExists);
+        return true;
+    } catch (const std::exception& ex) {
+        LOG_ERROR("Service", __func__, "Config", "Failed to load startup config: {}", ex.what());
+        return false;
+    }
+}
+
 void ServiceHost::ApplyServiceConfigToRuntime(const ServiceConfigState& config) {
     if (!m_deviceRuntime) return;
 
@@ -332,6 +370,14 @@ ReloadServiceConfigResult ServiceHost::HandleReloadServiceConfig(
 bool ServiceHost::StartRuntimeAndPipeline(const std::string& configPath) {
     m_deviceRuntime = std::make_unique<DeviceRuntime>(
         kDevicePathMaster, kDevicePathSlave, kDevicePathInterrupt);
+    if (!LoadStartupConfig(configPath)) {
+        m_deviceRuntime.reset();
+        return false;
+    }
+
+    m_runtimeMode = m_configState.mode;
+    LOG_INFO("Service", __func__, "Boot", "Service mode: {}, AutoMode: {}",
+             ServiceModeToConfig(m_configState.mode), m_configState.autoMode);
     ApplyServiceConfigToRuntime(m_configState);
     BuildDebugSchema();
 
@@ -439,10 +485,6 @@ void ServiceHost::StartPenSubsystem() {
 
 bool ServiceHost::Start() {
     const std::string configPath = GetConfigPath();
-    (void)configPath;
-    m_runtimeMode = m_configState.mode;
-    LOG_INFO("Service", __func__, "Boot", "Service mode: {}, AutoMode: {}",
-             ServiceModeToConfig(m_configState.mode), m_configState.autoMode);
 
     if (!StartRuntimeAndPipeline(configPath)) {
         return false;
@@ -893,6 +935,12 @@ void ServiceHost::HandleIpcGetConfigSnapshot(Ipc::IpcResponse& resp) {
 }
 
 void ServiceHost::HandleIpcApplyConfigPatch(const Ipc::IpcRequest& req, Ipc::IpcResponse& resp) {
+#ifndef _DEBUG
+    (void)req;
+    Ipc::MarkFailure(resp, Ipc::IpcStatusCode::UnsupportedCommand);
+    LOG_WARN("Service", __func__, "IPC", "Release builds read YAML only at startup; live config mutation is not supported.");
+    return;
+#else
     if (!m_deviceRuntime) {
         Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidState);
         return;
@@ -942,9 +990,15 @@ void ServiceHost::HandleIpcApplyConfigPatch(const Ipc::IpcRequest& req, Ipc::Ipc
     std::memcpy(resp.data, &result, sizeof(result));
     resp.dataLen = static_cast<uint16_t>(sizeof(result));
     Ipc::MarkSuccess(resp);
+#endif
 }
 
 void ServiceHost::HandleIpcPersistConfig(Ipc::IpcResponse& resp) {
+#ifndef _DEBUG
+    Ipc::MarkFailure(resp, Ipc::IpcStatusCode::UnsupportedCommand);
+    LOG_WARN("Service", __func__, "IPC", "Release builds read YAML only at startup; PersistConfig is not supported.");
+    return;
+#else
     if (!m_deviceRuntime) {
         Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidState);
         return;
@@ -956,9 +1010,15 @@ void ServiceHost::HandleIpcPersistConfig(Ipc::IpcResponse& resp) {
     resp.dataLen = static_cast<uint16_t>(sizeof(result));
     Ipc::MarkSuccess(resp);
     LOG_INFO("Service", __func__, "IPC", "PersistConfig accepted; legacy INI persistence is disabled.");
+#endif
 }
 
 void ServiceHost::HandleIpcReloadConfig(Ipc::IpcResponse& resp) {
+#ifndef _DEBUG
+    Ipc::MarkFailure(resp, Ipc::IpcStatusCode::UnsupportedCommand);
+    LOG_WARN("Service", __func__, "IPC", "Release builds read YAML only at startup; ReloadConfig is not supported.");
+    return;
+#else
     if (!m_deviceRuntime) {
         Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidState);
         return;
@@ -973,6 +1033,7 @@ void ServiceHost::HandleIpcReloadConfig(Ipc::IpcResponse& resp) {
     resp.dataLen = static_cast<uint16_t>(sizeof(summary));
     Ipc::MarkSuccess(resp);
     LOG_INFO("Service", __func__, "IPC", "ReloadConfig accepted; legacy INI reload is disabled.");
+#endif
 }
 
 void ServiceHost::HandleIpcSaveConfig(Ipc::IpcResponse& resp) {

@@ -95,7 +95,7 @@ endif()
 # --- SIMD options ---
 # This project targets a specific platform; enable NEON by default.
 option(HIMAX_ENABLE_NEON "Enable ARM NEON intrinsics when available" ON)
-option(EGOTOUCH_ENABLE_RUNTIME_CONFIG "Enable runtime config schema/I/O in the production Solvers target" OFF)
+option(EGOTOUCH_ENABLE_RUNTIME_CONFIG "Enable config schema/I/O and startup YAML apply in Solvers/Service/App" ON)
 
 # --- Common Library ---
 # Use the source directory as the root for subprojects/resources so paths
@@ -313,6 +313,17 @@ if(MSVC)
     target_link_options(EGoTouchApp PRIVATE "/MANIFESTUAC:level='requireAdministrator'")
 endif()
 
+function(ego_copy_config_to_output target)
+    add_custom_command(TARGET ${target} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/config"
+            "$<TARGET_FILE_DIR:${target}>/config"
+        COMMENT "Copy config/default.yaml and optional overrides.yaml for ${target}"
+    )
+endfunction()
+
+ego_copy_config_to_output(EGoTouchApp)
+
 # --- EGoTouchService (Production Service Shell) ---
 set(SERVICE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/EGoTouchService")
 
@@ -337,6 +348,7 @@ target_compile_definitions(EGoTouchService PRIVATE
     EGOTOUCH_CONFIG_ENABLED=${EGO_SOLVERS_RUNTIME_CONFIG_ENABLED}
 )
 target_link_libraries(EGoTouchService PRIVATE EGoTouchServiceCore DVRCore IPCCore Device Host Common advapi32 setupapi hid)
+ego_copy_config_to_output(EGoTouchService)
 
 # EGoTouchService uses wmain (console subsystem) for service/console dual mode
 if(MSVC)
