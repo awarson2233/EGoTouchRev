@@ -85,6 +85,10 @@ void ServiceProxy::InitConfigSchema() {
 
 void ServiceProxy::ApplyConfigStoreToLocalRuntime() {
 #if !EGOTOUCH_CONFIG_ENABLED
+    static std::atomic_bool loggedNoOp{false};
+    if (!loggedNoOp.exchange(true, std::memory_order_relaxed)) {
+        LOG_WARN("App", __func__, "Config", "Runtime config is disabled; app-local preview apply is a no-op and does not affect the Service-side live pipeline.");
+    }
     return;
 #endif
 

@@ -95,6 +95,8 @@ public:
     // Config sync
     void SaveConfig();
     void RefreshConfigSnapshot();
+    // Applies ConfigStore edits to the app-local preview pipelines only.
+    // Does not live-apply Service-side pipelines; no-op when runtime config is disabled.
     void ApplyConfigStoreToLocalRuntime();
     const Config::ConfigSchemaSnapshot& GetConfigSchemaSnapshot() const { return m_configSchema; }
     Config::ConfigStore& GetConfigStore() { return m_configStore; }
