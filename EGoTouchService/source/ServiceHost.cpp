@@ -1174,7 +1174,6 @@ void ServiceHost::HandleIpcPersistConfig(Ipc::IpcResponse& resp) {
         return;
     }
 
-#ifdef _DEBUG
     if (!PersistServicePolicyConfig()) {
         Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InternalError);
         return;
