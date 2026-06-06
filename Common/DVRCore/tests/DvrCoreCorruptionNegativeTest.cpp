@@ -2,6 +2,7 @@
 
 #include <cstring>
 #include <iostream>
+#include <vector>
 
 namespace {
 
@@ -41,6 +42,43 @@ size_t SectionEntryOffset(const std::vector<uint8_t>& bytes, Dvr::Format::Dvr2Se
 
 Dvr::Format::Dvr2SectionEntry SectionEntry(const std::vector<uint8_t>& bytes, Dvr::Format::Dvr2SectionType sectionType) {
     return ReadPod<Dvr::Format::Dvr2SectionEntry>(bytes, SectionEntryOffset(bytes, sectionType));
+}
+
+std::vector<Dvr::Format::Dvr2FieldDef> ReadFrameFields(const std::vector<uint8_t>& bytes,
+                                                       const Dvr::Format::Dvr2SectionEntry& schemaSection,
+                                                       Dvr::Format::Dvr2FrameSchemaHeader& schemaHeader) {
+    schemaHeader = ReadPod<Dvr::Format::Dvr2FrameSchemaHeader>(bytes, static_cast<size_t>(schemaSection.offset));
+    std::vector<Dvr::Format::Dvr2FieldDef> fields(schemaHeader.fieldCount);
+    const size_t fieldsOffset = static_cast<size_t>(schemaSection.offset) + sizeof(Dvr::Format::Dvr2FrameSchemaHeader);
+    for (uint32_t i = 0; i < schemaHeader.fieldCount; ++i) {
+        fields[i] = ReadPod<Dvr::Format::Dvr2FieldDef>(bytes, fieldsOffset + static_cast<size_t>(i) * sizeof(Dvr::Format::Dvr2FieldDef));
+    }
+    return fields;
+}
+
+Dvr::Format::Dvr2FieldDef& RequireField(std::vector<Dvr::Format::Dvr2FieldDef>& fields, const char* path) {
+    for (auto& field : fields) {
+        if (std::strncmp(field.path, path, sizeof(field.path)) == 0) return field;
+    }
+    DvrCoreTest::Require(false, "test field not found in schema");
+    return fields.front();
+}
+
+void WriteFrameFieldsAndHashes(std::vector<uint8_t>& bytes,
+                               const Dvr::Format::Dvr2SectionEntry& schemaSection,
+                               Dvr::Format::Dvr2FrameSchemaHeader schemaHeader,
+                               const std::vector<Dvr::Format::Dvr2FieldDef>& fields) {
+    schemaHeader.schemaHash = Dvr::Format::ComputeFieldSchemaHash(fields);
+    WritePod(bytes, static_cast<size_t>(schemaSection.offset), schemaHeader);
+    const size_t fieldsOffset = static_cast<size_t>(schemaSection.offset) + sizeof(Dvr::Format::Dvr2FrameSchemaHeader);
+    for (uint32_t i = 0; i < schemaHeader.fieldCount; ++i) {
+        WritePod(bytes, fieldsOffset + static_cast<size_t>(i) * sizeof(Dvr::Format::Dvr2FieldDef), fields[i]);
+    }
+
+    const auto metaSection = SectionEntry(bytes, Dvr::Format::Dvr2SectionType::Meta);
+    auto meta = ReadPod<Dvr::Format::Dvr2MetaSection>(bytes, static_cast<size_t>(metaSection.offset));
+    meta.frameSchemaHash = schemaHeader.schemaHash;
+    WritePod(bytes, static_cast<size_t>(metaSection.offset), meta);
 }
 
 void CorruptAndExpectFailure(const char* name, bool withRuntimeConfig, void (*mutate)(std::vector<uint8_t>&)) {
@@ -101,6 +139,33 @@ void TestIndexOutsideFramesFails() {
     });
 }
 
+void TestContiguousFieldBoundsFails() {
+    CorruptAndExpectFailure("contiguous_bounds", false, [](std::vector<uint8_t>& bytes) {
+        const auto schemaSection = SectionEntry(bytes, Dvr::Format::Dvr2SectionType::FrameSchema);
+        Dvr::Format::Dvr2FrameSchemaHeader schemaHeader{};
+        auto fields = ReadFrameFields(bytes, schemaSection, schemaHeader);
+        auto& field = RequireField(fields, "heatmapMatrix");
+        field.offset = schemaHeader.frameRecordSize - static_cast<uint32_t>(field.elementSize);
+        field.elementCount = 1;
+        field.stride = field.elementSize;
+        WriteFrameFieldsAndHashes(bytes, schemaSection, schemaHeader, fields);
+    });
+}
+
+void TestRawDataBoundsFails() {
+    CorruptAndExpectFailure("raw_data_bounds", false, [](std::vector<uint8_t>& bytes) {
+        const auto schemaSection = SectionEntry(bytes, Dvr::Format::Dvr2SectionType::FrameSchema);
+        Dvr::Format::Dvr2FrameSchemaHeader schemaHeader{};
+        auto fields = ReadFrameFields(bytes, schemaSection, schemaHeader);
+        auto& field = RequireField(fields, "rawData");
+        field.offset = schemaHeader.frameRecordSize - 2;
+        field.size = 4;
+        field.elementCount = 1;
+        field.stride = field.elementSize;
+        WriteFrameFieldsAndHashes(bytes, schemaSection, schemaHeader, fields);
+    });
+}
+
 void TestRuntimeConfigHashMismatchFails() {
     CorruptAndExpectFailure("runtime_hash", true, [](std::vector<uint8_t>& bytes) {
         const auto valuesSection = SectionEntry(bytes, Dvr::Format::Dvr2SectionType::RuntimeConfigValues);
@@ -130,6 +195,8 @@ int main() {
         TestUnsupportedSectionVersionFails();
         TestFrameSchemaHashMismatchFails();
         TestIndexOutsideFramesFails();
+        TestContiguousFieldBoundsFails();
+        TestRawDataBoundsFails();
         TestRuntimeConfigHashMismatchFails();
         TestRuntimeConfigValueTypeMismatchFails();
         std::cout << "[TEST] DVRCore corruption negative tests passed.\n";

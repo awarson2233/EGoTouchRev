@@ -177,6 +177,25 @@ uint64_t FieldExtent(const Dvr2FieldDef& field) {
     return static_cast<uint64_t>(field.offset) + (elementCount - 1) * stride + elementSize;
 }
 
+bool RangeWithinRecord(uint32_t offset, size_t length, size_t recordSize) noexcept {
+    return offset <= recordSize && length <= recordSize - offset;
+}
+
+bool ValidateContiguousFieldBounds(const Dvr2FieldDef& field,
+                                   size_t recordSize,
+                                   size_t length,
+                                   std::string_view path,
+                                   std::string* outError) {
+    if (!RangeWithinRecord(field.offset, length, recordSize)) {
+        if (outError) {
+            *outError = "DVR2 frame schema contiguous field exceeds record bounds: ";
+            outError->append(path);
+        }
+        return false;
+    }
+    return true;
+}
+
 const Dvr2FieldDef* RequireField(const std::vector<Dvr2FieldDef>& fields,
                                  std::string_view path,
                                  std::string* outError) {
@@ -251,6 +270,7 @@ bool CopyContiguousField(const std::vector<uint8_t>& record,
         }
         return false;
     }
+    if (!ValidateContiguousFieldBounds(*field, record.size(), expectedSize, path, outError)) return false;
     std::memcpy(dst, record.data() + field->offset, expectedSize);
     return true;
 }
@@ -329,6 +349,7 @@ bool TryCopyContiguousField(const std::vector<uint8_t>& record,
         }
         return false;
     }
+    if (!ValidateContiguousFieldBounds(*field, record.size(), expectedSize, path, outError)) return false;
     std::memcpy(dst, record.data() + field->offset, expectedSize);
     if (outPresent) *outPresent = true;
     return true;
@@ -457,11 +478,11 @@ void SynthesizeRawGridFromLegacyFields(const std::vector<uint8_t>& record,
 
     if (const auto* rawLenField = DvrFmt::FindField(fields, "rawDataLength")) {
         const auto* rawField = DvrFmt::FindField(fields, "rawData");
-        if (rawField && rawLenField->offset + sizeof(uint16_t) <= record.size()) {
+        if (rawField && RangeWithinRecord(rawLenField->offset, sizeof(uint16_t), record.size())) {
             uint16_t rawLen = 0;
             std::memcpy(&rawLen, record.data() + rawLenField->offset, sizeof(rawLen));
             const size_t len = std::min<size_t>({rawLen, Frame::kTotalFrameSize, rawField->size});
-            if (rawField->offset + len <= record.size() && len >= static_cast<size_t>(Frame::kTotalFrameSize)) {
+            if (RangeWithinRecord(rawField->offset, len, record.size()) && len >= static_cast<size_t>(Frame::kTotalFrameSize)) {
                 const size_t slaveOffset = rawField->offset + len - static_cast<size_t>(Frame::kSlaveFrameSize);
                 const uint8_t* payload = record.data() + slaveOffset + Solvers::Stylus::Hpp3::kSlaveHeaderBytes;
                 grid = Solvers::Stylus::Hpp3::ExtractGridFromSlavePayloadBytes(payload, static_cast<size_t>(Solvers::Stylus::Hpp3::kBlockWords * 2 * sizeof(uint16_t)));
@@ -697,6 +718,7 @@ bool PopulateHeatmapFrameFromRecordBytes(const std::vector<uint8_t>& record,
         return false;
     }
     const size_t rawLen = std::min<size_t>({u16, Frame::kTotalFrameSize, rawField->size});
+    if (!ValidateContiguousFieldBounds(*rawField, record.size(), rawLen, "rawData", outError)) return false;
     SynthesizeRawGridFromLegacyFields(record, fields, dst);
 #if EGOTOUCH_DIAG
     dst.rawData.assign(record.data() + rawField->offset, record.data() + rawField->offset + rawLen);

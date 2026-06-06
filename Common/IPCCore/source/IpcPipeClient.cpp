@@ -1,6 +1,9 @@
 #include "Ipc/IpcPipeClient.h"
 #include "Logger.h"
+
+#include <algorithm>
 #include <cstring>
+#include <cwchar>
 
 namespace Ipc {
 
@@ -47,19 +50,37 @@ IpcResponse IpcPipeClient::Send(const IpcRequest& req) {
     std::lock_guard<std::mutex> lock(m_pipeMutex);
     if (m_pipe == INVALID_HANDLE_VALUE) return resp;
 
-    DWORD bytesWritten = 0;
-    if (!WriteFile(m_pipe, &req, sizeof(req), &bytesWritten, nullptr)) {
-        LOG_ERROR("IPC", __func__, "IPC", "WriteFile failed: {}",  GetLastError());
+    auto closePipe = [&]() noexcept {
         CloseHandle(m_pipe);
         m_pipe = INVALID_HANDLE_VALUE;
+    };
+
+    if (req.paramLen > sizeof(req.param)) {
+        LOG_ERROR("IPC", __func__, "IPC", "Refusing oversized IPC request paramLen={}", req.paramLen);
+        MarkFailure(resp, IpcStatusCode::InvalidRequest);
+        closePipe();
+        return resp;
+    }
+
+    DWORD bytesWritten = 0;
+    if (!WriteFile(m_pipe, &req, sizeof(req), &bytesWritten, nullptr) || bytesWritten != sizeof(req)) {
+        LOG_ERROR("IPC", __func__, "IPC", "WriteFile failed or wrote a partial request: error={} bytesWritten={}",  GetLastError(), bytesWritten);
+        closePipe();
         return resp;
     }
 
     DWORD bytesRead = 0;
-    if (!ReadFile(m_pipe, &resp, sizeof(resp), &bytesRead, nullptr)) {
-        LOG_ERROR("IPC", __func__, "IPC", "ReadFile failed: {}",  GetLastError());
-        CloseHandle(m_pipe);
-        m_pipe = INVALID_HANDLE_VALUE;
+    if (!ReadFile(m_pipe, &resp, sizeof(resp), &bytesRead, nullptr) || bytesRead != sizeof(resp)) {
+        LOG_ERROR("IPC", __func__, "IPC", "ReadFile failed or read a partial response: error={} bytesRead={}",  GetLastError(), bytesRead);
+        closePipe();
+        resp = {};
+        return resp;
+    }
+    if (resp.dataLen > sizeof(resp.data)) {
+        LOG_ERROR("IPC", __func__, "IPC", "Received oversized IPC response dataLen={}", resp.dataLen);
+        closePipe();
+        resp = {};
+        MarkFailure(resp, IpcStatusCode::InvalidRequest);
         return resp;
     }
     return resp;
@@ -72,9 +93,15 @@ IpcResponse IpcPipeClient::Ping() {
 
 IpcResponse IpcPipeClient::EnterDebugMode(const wchar_t* shmName) {
     IpcRequest req{}; req.command = IpcCommand::EnterDebugMode;
-    const size_t nameBytes = (wcslen(shmName) + 1) * sizeof(wchar_t);
-    req.paramLen = static_cast<uint16_t>(std::min(nameBytes, sizeof(req.param)));
-    std::memcpy(req.param, shmName, req.paramLen);
+    const size_t capacityChars = sizeof(req.param) / sizeof(wchar_t);
+    const size_t sourceChars = shmName ? std::wcslen(shmName) : 0;
+    const size_t copyChars = std::min(sourceChars, capacityChars - 1);
+    auto* dst = reinterpret_cast<wchar_t*>(req.param);
+    if (copyChars != 0) {
+        std::memcpy(dst, shmName, copyChars * sizeof(wchar_t));
+    }
+    dst[copyChars] = L'\0';
+    req.paramLen = static_cast<uint16_t>((copyChars + 1) * sizeof(wchar_t));
     return Send(req);
 }
 

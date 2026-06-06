@@ -123,6 +123,12 @@ bool IsCommandAllowed(IpcCommand command, const ClientSecurityContext& context) 
     return IsKnownCommand(command) && context.elevatedAdmin;
 }
 
+bool WriteFullResponse(HANDLE pipe, const IpcResponse& resp) noexcept {
+    DWORD bytesWritten = 0;
+    const BOOL ok = WriteFile(pipe, &resp, sizeof(resp), &bytesWritten, nullptr);
+    return ok && bytesWritten == sizeof(resp);
+}
+
 } // namespace
 
 void IpcPipeServer::SetCommandHandler(CommandHandler handler) {
@@ -202,21 +208,25 @@ void IpcPipeServer::ServerLoop() {
             BOOL ok = ReadFile(pipe, &req, sizeof(req),
                                &bytesRead, nullptr);
             m_state.store(ServerState::Idle, std::memory_order_release);
-            if (!ok || bytesRead < sizeof(IpcCommand)) break;
+            if (!ok || bytesRead != sizeof(IpcRequest)) break;
 
             m_state.store(ServerState::Handling, std::memory_order_release);
             IpcResponse resp{};
             if (!clientValidated) {
                 if (!ValidateClient(pipe, client)) {
                     MarkFailure(resp, IpcStatusCode::PermissionDenied);
-                    DWORD bytesWritten = 0;
-                    WriteFile(pipe, &resp, sizeof(resp),
-                              &bytesWritten, nullptr);
+                    WriteFullResponse(pipe, resp);
                     LOG_WARN("IPC", __func__, "IPC", "Rejected non-elevated or non-admin pipe client.");
                     m_state.store(ServerState::Idle, std::memory_order_release);
                     break;
                 }
                 clientValidated = true;
+            }
+            if (req.paramLen > sizeof(req.param)) {
+                MarkFailure(resp, IpcStatusCode::InvalidRequest);
+                m_state.store(ServerState::Idle, std::memory_order_release);
+                if (!WriteFullResponse(pipe, resp)) break;
+                continue;
             }
 
             if (!IsKnownCommand(req.command)) {
@@ -229,10 +239,14 @@ void IpcPipeServer::ServerLoop() {
                 MarkFailure(resp, IpcStatusCode::InvalidState);
             }
 
+            if (resp.dataLen > sizeof(resp.data)) {
+                LOG_WARN("IPC", __func__, "IPC", "Handler returned oversized IPC response dataLen={}", resp.dataLen);
+                resp = {};
+                MarkFailure(resp, IpcStatusCode::InternalError);
+            }
+
             m_state.store(ServerState::Idle, std::memory_order_release);
-            DWORD bytesWritten = 0;
-            WriteFile(pipe, &resp, sizeof(resp),
-                      &bytesWritten, nullptr);
+            if (!WriteFullResponse(pipe, resp)) break;
         }
 
         m_state.store(ServerState::Idle, std::memory_order_release);
