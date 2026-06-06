@@ -74,8 +74,22 @@ void StylusPipeline::registerBindings(Config::ConfigBinder& binder) {
                 m_commonPost.m_coorSpeedProcess, true, {}, "Coordinate speed process enable");
     binder.bind("stylus.sp.iir_filter_enabled", &Stylus::CoorIIRProcess::m_enabled,
                 m_commonPost.m_coorIIRProcess, true, {}, "IIR coordinate filter enable");
+    binder.bind("stylus.sp.iir_coef_low_in_band", &Stylus::CoorIIRProcess::m_coefLowInBand,
+                m_commonPost.m_coorIIRProcess, static_cast<int32_t>(2), ConfigRange{0.0, 255.0}, "IIR low coefficient in-band");
+    binder.bind("stylus.sp.iir_coef_high_in_band", &Stylus::CoorIIRProcess::m_coefHighInBand,
+                m_commonPost.m_coorIIRProcess, static_cast<int32_t>(16), ConfigRange{0.0, 255.0}, "IIR high coefficient in-band");
+    binder.bind("stylus.sp.iir_speed_thold_in_band", &Stylus::CoorIIRProcess::m_speedTholdInBand,
+                m_commonPost.m_coorIIRProcess, static_cast<int32_t>(20), ConfigRange{0.0, 255.0}, "IIR speed threshold in-band");
+    binder.bind("stylus.sp.iir_coef_low_edge", &Stylus::CoorIIRProcess::m_coefLowEdge,
+                m_commonPost.m_coorIIRProcess, static_cast<int32_t>(6), ConfigRange{0.0, 255.0}, "IIR low coefficient at edge/writing");
+    binder.bind("stylus.sp.iir_coef_high_edge", &Stylus::CoorIIRProcess::m_coefHighEdge,
+                m_commonPost.m_coorIIRProcess, static_cast<int32_t>(18), ConfigRange{0.0, 255.0}, "IIR high coefficient at edge/writing");
+    binder.bind("stylus.sp.iir_speed_thold_edge", &Stylus::CoorIIRProcess::m_speedTholdEdge,
+                m_commonPost.m_coorIIRProcess, static_cast<int32_t>(10), ConfigRange{0.0, 255.0}, "IIR speed threshold at edge/writing");
     binder.bind("stylus.sp.iir_speed_max", &Stylus::CoorIIRProcess::m_speedMax,
                 m_commonPost.m_coorIIRProcess, static_cast<int32_t>(205), ConfigRange{0.0, 1000.0}, "IIR speed max");
+    binder.bind("stylus.sp.iir_max_coef", &Stylus::CoorIIRProcess::m_maxCoef,
+                m_commonPost.m_coorIIRProcess, static_cast<int32_t>(32), ConfigRange{1.0, 255.0}, "IIR max coefficient denominator");
 
     // ── AFT Coor ──
     binder.bind("stylus.sp.aft_coor_enabled", &Stylus::AftCoorProcess::m_enabled,
@@ -166,14 +180,14 @@ void StylusPipeline::applyConfig(const Config::ConfigStore& store) {
 
     const bool iirFilterEnabled = store.getOr<bool>("stylus.sp.iir_filter_enabled", true);
     m_commonPost.m_coorIIRProcess.m_enabled = iirFilterEnabled;
-    m_commonPost.m_coorIIRProcess.m_coefLowInBand = static_cast<uint8_t>(store.getOr<int32_t>("stylus.sp.iir_coef_low_in_band", 2));
-    m_commonPost.m_coorIIRProcess.m_coefHighInBand = static_cast<uint8_t>(store.getOr<int32_t>("stylus.sp.iir_coef_high_in_band", 16));
-    m_commonPost.m_coorIIRProcess.m_speedTholdInBand = static_cast<uint8_t>(store.getOr<int32_t>("stylus.sp.iir_speed_thold_in_band", 20));
-    m_commonPost.m_coorIIRProcess.m_coefLowEdge = static_cast<uint8_t>(store.getOr<int32_t>("stylus.sp.iir_coef_low_edge", 6));
-    m_commonPost.m_coorIIRProcess.m_coefHighEdge = static_cast<uint8_t>(store.getOr<int32_t>("stylus.sp.iir_coef_high_edge", 18));
-    m_commonPost.m_coorIIRProcess.m_speedTholdEdge = static_cast<uint8_t>(store.getOr<int32_t>("stylus.sp.iir_speed_thold_edge", 10));
+    m_commonPost.m_coorIIRProcess.m_coefLowInBand = store.getOr<int32_t>("stylus.sp.iir_coef_low_in_band", 2);
+    m_commonPost.m_coorIIRProcess.m_coefHighInBand = store.getOr<int32_t>("stylus.sp.iir_coef_high_in_band", 16);
+    m_commonPost.m_coorIIRProcess.m_speedTholdInBand = store.getOr<int32_t>("stylus.sp.iir_speed_thold_in_band", 20);
+    m_commonPost.m_coorIIRProcess.m_coefLowEdge = store.getOr<int32_t>("stylus.sp.iir_coef_low_edge", 6);
+    m_commonPost.m_coorIIRProcess.m_coefHighEdge = store.getOr<int32_t>("stylus.sp.iir_coef_high_edge", 18);
+    m_commonPost.m_coorIIRProcess.m_speedTholdEdge = store.getOr<int32_t>("stylus.sp.iir_speed_thold_edge", 10);
     m_commonPost.m_coorIIRProcess.m_speedMax = store.getOr<int32_t>("stylus.sp.iir_speed_max", 205);
-    m_commonPost.m_coorIIRProcess.m_maxCoef = static_cast<uint8_t>(store.getOr<int32_t>("stylus.sp.iir_max_coef", 32));
+    m_commonPost.m_coorIIRProcess.m_maxCoef = store.getOr<int32_t>("stylus.sp.iir_max_coef", 32);
     if (!iirFilterEnabled) { m_commonPost.m_coorIIRProcess.Reset(); }
 
     const bool aftCoorEnabled = store.getOr<bool>("stylus.sp.aft_coor_enabled", true);

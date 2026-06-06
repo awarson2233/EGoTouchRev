@@ -91,6 +91,9 @@ ego_add_solvers_unit(SolversUnit_TouchCloseSplit touch
 ego_add_solvers_unit(SolversUnit_StylusHpp2Pipeline stylus
     unit/stylus/StylusHpp2PipelineTest.cpp
 )
+ego_add_solvers_config_unit(SolversUnit_StylusPipelineConfigRoundTrip stylus
+    unit/stylus/StylusPipelineConfigRoundTripTest.cpp
+)
 
 # RawdataBenchmark disabled: uses deleted LoadConfig/SaveConfig + old INI config
 # ego_add_solvers_perf(SolversPerf_RawdataBenchmark
