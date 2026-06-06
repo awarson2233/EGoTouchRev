@@ -9,6 +9,27 @@
 
 namespace Config {
 
+void ConfigBinder::bindSchema(std::string_view yamlPath,
+                              ConfigValue defaultValue,
+                              std::string_view typeName,
+                              ConfigRange range,
+                              std::string_view description) {
+    BindingEntry entry;
+    entry.yamlPath = yamlPath;
+    entry.description = description;
+    entry.defaultValue = std::move(defaultValue);
+    entry.typeName = typeName;
+    entry.keyId = tryKeyIdForPath(yamlPath);
+    entry.displayName = deriveDisplayName(yamlPath);
+    entry.moduleTag = deriveModuleTag(yamlPath);
+    if (range.min != 0.0 || range.max != 0.0) {
+        entry.range = range;
+    }
+    entry.setter = [](const ConfigValue&) {};
+    entry.getter = [value = entry.defaultValue]() -> ConfigValue { return value; };
+    m_bindings.push_back(std::move(entry));
+}
+
 void ConfigBinder::apply(const ConfigStore& store) {
     for (auto& binding : m_bindings) {
         // 从 ConfigStore 读取值，如果键不存在则使用默认值

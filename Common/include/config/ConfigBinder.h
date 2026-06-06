@@ -51,6 +51,13 @@ public:
                   std::span<const std::pair<Enum, std::string>> enumMapping,
                   std::string_view description = "");
 
+    // ── 只读 schema 绑定: 用于 uint8/uint16/uint32 等由 applyConfig() 手动转换的键 ──
+    void bindSchema(std::string_view yamlPath,
+                    ConfigValue defaultValue,
+                    std::string_view typeName,
+                    ConfigRange range = {},
+                    std::string_view description = "");
+
     // ── 从 ConfigStore 读取值并写入所有绑定成员 ──
     void apply(const ConfigStore& store);
 

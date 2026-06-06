@@ -8,15 +8,17 @@
 
 namespace Himax::Pen {
 
-inline uint16_t ScalePenPressure(uint16_t raw, PenPressureRangeMode mode) noexcept {
-    if (mode == PenPressureRangeMode::Raw14Bit16382) {
-        return static_cast<uint16_t>(raw / 4u);
-    }
-    return raw;
-}
-
 inline uint16_t PenPressureMax(PenPressureRangeMode) noexcept {
     return 4095;
+}
+
+inline uint16_t ScalePenPressure(uint16_t raw, PenPressureRangeMode mode) noexcept {
+    uint16_t scaled = raw;
+    if (mode == PenPressureRangeMode::Raw14Bit16382) {
+        scaled = static_cast<uint16_t>(raw / 4u);
+    }
+    const uint16_t maxPressure = PenPressureMax(mode);
+    return scaled > maxPressure ? maxPressure : scaled;
 }
 
 inline std::optional<PenPressureStats> TryParsePenPressurePacket(

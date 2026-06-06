@@ -20,12 +20,28 @@ void StylusPipeline::registerBindings(Config::ConfigBinder& binder) {
     binder.bind("stylus.hpp2.cmf_window_radius", &Stylus::Hpp2::Pipeline::m_cmfWindowRadius, m_hpp2,
                 static_cast<int32_t>(6), ConfigRange{0.0, 32.0}, "HPP2 CMF window radius");
     // uint16/uint32 thresholds — applied via applyConfig() with static_cast
+    binder.bindSchema("stylus.hpp2.raw_abnormal_line_sum_threshold", Config::ConfigValue(static_cast<int32_t>(30000)), "int", ConfigRange{0.0, 2147483647.0}, "HPP2 raw abnormal line sum threshold");
+    binder.bindSchema("stylus.hpp2.raw_abnormal_energy_ratio_threshold", Config::ConfigValue(static_cast<int32_t>(200)), "int", ConfigRange{0.0, 65535.0}, "HPP2 raw abnormal energy ratio threshold");
+    binder.bindSchema("stylus.hpp2.cmn_abnormal_sum_threshold", Config::ConfigValue(static_cast<int32_t>(9000)), "int", ConfigRange{0.0, 2147483647.0}, "HPP2 CMN abnormal sum threshold");
+    binder.bindSchema("stylus.hpp2.cmn_abnormal_min_threshold", Config::ConfigValue(static_cast<int32_t>(2500)), "int", ConfigRange{0.0, 65535.0}, "HPP2 CMN abnormal min threshold");
+    binder.bindSchema("stylus.hpp2.charger_noise_clear_floor", Config::ConfigValue(static_cast<int32_t>(20)), "int", ConfigRange{1.0, 65535.0}, "HPP2 charger noise clear floor");
+    binder.bindSchema("stylus.hpp2.charger_noise_ratio_threshold", Config::ConfigValue(static_cast<int32_t>(299)), "int", ConfigRange{0.0, 65535.0}, "HPP2 charger noise ratio threshold");
+    binder.bindSchema("stylus.hpp2.charger_noise_sum_threshold", Config::ConfigValue(static_cast<int32_t>(400)), "int", ConfigRange{0.0, 2147483647.0}, "HPP2 charger noise sum threshold");
+    binder.bindSchema("stylus.hpp2.charger_noise_max_sample_threshold", Config::ConfigValue(static_cast<int32_t>(200)), "int", ConfigRange{0.0, 65535.0}, "HPP2 charger noise max sample threshold");
+    binder.bindSchema("stylus.hpp2.charger_noise_abnormal_channel_threshold", Config::ConfigValue(static_cast<int32_t>(2)), "int", ConfigRange{0.0, 255.0}, "HPP2 charger noise abnormal channel threshold");
+    binder.bindSchema("stylus.hpp2.charger_noise_peak_protect_radius", Config::ConfigValue(static_cast<int32_t>(2)), "int", ConfigRange{0.0, 65535.0}, "HPP2 charger noise peak protect radius");
+    binder.bindSchema("stylus.hpp2.charger_noise_min_raw_sample", Config::ConfigValue(static_cast<int32_t>(50)), "int", ConfigRange{0.0, 65535.0}, "HPP2 charger noise min raw sample");
+    binder.bindSchema("stylus.hpp2.peak_signal_floor", Config::ConfigValue(static_cast<int32_t>(250)), "int", ConfigRange{0.0, 65535.0}, "HPP2 peak signal floor");
     binder.bind("stylus.hpp2.peak_search_neighbor_dist", &Stylus::Hpp2::Pipeline::m_peakSearchNeighborDist, m_hpp2,
                 static_cast<int32_t>(2), ConfigRange{1.0, 16.0}, "HPP2 peak search neighbor distance");
     binder.bind("stylus.hpp2.peak_min_width", &Stylus::Hpp2::Pipeline::m_peakMinWidth, m_hpp2,
                 static_cast<int32_t>(2), ConfigRange{1.0, 100.0}, "HPP2 peak min width");
     binder.bind("stylus.hpp2.peak_max_width", &Stylus::Hpp2::Pipeline::m_peakMaxWidth, m_hpp2,
                 static_cast<int32_t>(20), ConfigRange{1.0, 100.0}, "HPP2 peak max width");
+    binder.bindSchema("stylus.hpp2.pressure_edge_enter_threshold", Config::ConfigValue(static_cast<int32_t>(1500)), "int", ConfigRange{0.0, 65535.0}, "HPP2 pressure edge enter threshold");
+    binder.bindSchema("stylus.hpp2.pressure_edge_exit_threshold", Config::ConfigValue(static_cast<int32_t>(3000)), "int", ConfigRange{0.0, 65535.0}, "HPP2 pressure edge exit threshold");
+    binder.bindSchema("stylus.hpp2.pressure_delta_normal", Config::ConfigValue(static_cast<int32_t>(1024)), "int", ConfigRange{0.0, 65535.0}, "HPP2 pressure delta normal");
+    binder.bindSchema("stylus.hpp2.pressure_delta_tight", Config::ConfigValue(static_cast<int32_t>(64)), "int", ConfigRange{0.0, 65535.0}, "HPP2 pressure delta tight");
     binder.bind("stylus.hpp2.use_tight_pressure_delta", &Stylus::Hpp2::Pipeline::m_useTightPressureDelta, m_hpp2,
                 false, {}, "HPP2 use tight pressure delta");
 
@@ -50,6 +66,12 @@ void StylusPipeline::registerBindings(Config::ConfigBinder& binder) {
                 m_hpp3.m_postPressure, false, {}, "HPP3 fake pressure decrease enable");
     binder.bind("stylus.sp.bt_freq_shift_debounce_frames", &Stylus::Hpp3::Hpp3PostPressureProcess::m_btFreqShiftDebounceFrames,
                 m_hpp3.m_postPressure, static_cast<int32_t>(2), ConfigRange{0.0, 255.0}, "BT frequency shift debounce frames");
+    binder.bindSchema("stylus.sp.pressure_edge_enter_threshold", Config::ConfigValue(static_cast<int32_t>(1500)), "int", ConfigRange{0.0, 65535.0}, "HPP3 pressure edge enter threshold");
+    binder.bindSchema("stylus.sp.pressure_edge_exit_threshold", Config::ConfigValue(static_cast<int32_t>(3000)), "int", ConfigRange{0.0, 65535.0}, "HPP3 pressure edge exit threshold");
+    binder.bindSchema("stylus.sp.tip_down_pressure_threshold", Config::ConfigValue(static_cast<int32_t>(1)), "int", ConfigRange{0.0, 4095.0}, "HPP3 tip-down pressure threshold");
+    binder.bindSchema("stylus.sp.bt_press_signal_suppress_enter_threshold", Config::ConfigValue(static_cast<int32_t>(2200)), "int", ConfigRange{0.0, 65535.0}, "HPP3 BT pressure signal suppress enter threshold");
+    binder.bindSchema("stylus.sp.bt_press_signal_suppress_exit_threshold", Config::ConfigValue(static_cast<int32_t>(3200)), "int", ConfigRange{0.0, 65535.0}, "HPP3 BT pressure signal suppress exit threshold");
+    binder.bindSchema("stylus.sp.signal_floor", Config::ConfigValue(static_cast<int32_t>(64)), "int", ConfigRange{0.0, 65535.0}, "HPP3 coordinate signal floor");
 
     // ── Coordinate ──
     binder.bind("stylus.sp.edge_coor_enabled", &Stylus::EdgeCoorProcess::m_enabled, m_edgeCoorProcess,
@@ -60,6 +82,8 @@ void StylusPipeline::registerBindings(Config::ConfigBinder& binder) {
     // ── Noise Post ──
     binder.bind("stylus.sp.noise_post_enabled", &Stylus::Hpp3::Hpp3NoisePostProcess::m_enabled,
                 m_hpp3.m_noisePostProcess, true, {}, "HPP3 noise post process enable");
+    binder.bindSchema("stylus.sp.noise_signal_ratio_thold", Config::ConfigValue(static_cast<int32_t>(5)), "int", ConfigRange{1.0, 16.0}, "HPP3 noise signal ratio threshold");
+    binder.bindSchema("stylus.sp.noise_signal_drop_ratio", Config::ConfigValue(static_cast<int32_t>(5)), "int", ConfigRange{1.0, 16.0}, "HPP3 noise signal drop ratio");
 
     // ── Common Post ──
     binder.bind("stylus.sp.linear_filter_enabled", &Stylus::LinearFilterProcess::m_enabled,
@@ -74,12 +98,23 @@ void StylusPipeline::registerBindings(Config::ConfigBinder& binder) {
                 m_commonPost.m_coorSpeedProcess, true, {}, "Coordinate speed process enable");
     binder.bind("stylus.sp.iir_filter_enabled", &Stylus::CoorIIRProcess::m_enabled,
                 m_commonPost.m_coorIIRProcess, true, {}, "IIR coordinate filter enable");
+    binder.bindSchema("stylus.sp.iir_coef_low_in_band", Config::ConfigValue(static_cast<int32_t>(2)), "int", ConfigRange{0.0, 255.0}, "IIR low coefficient in band");
+    binder.bindSchema("stylus.sp.iir_coef_high_in_band", Config::ConfigValue(static_cast<int32_t>(16)), "int", ConfigRange{0.0, 255.0}, "IIR high coefficient in band");
+    binder.bindSchema("stylus.sp.iir_speed_thold_in_band", Config::ConfigValue(static_cast<int32_t>(20)), "int", ConfigRange{0.0, 255.0}, "IIR speed threshold in band");
+    binder.bindSchema("stylus.sp.iir_coef_low_edge", Config::ConfigValue(static_cast<int32_t>(6)), "int", ConfigRange{0.0, 255.0}, "IIR low coefficient at edge");
+    binder.bindSchema("stylus.sp.iir_coef_high_edge", Config::ConfigValue(static_cast<int32_t>(18)), "int", ConfigRange{0.0, 255.0}, "IIR high coefficient at edge");
+    binder.bindSchema("stylus.sp.iir_speed_thold_edge", Config::ConfigValue(static_cast<int32_t>(10)), "int", ConfigRange{0.0, 255.0}, "IIR speed threshold at edge");
     binder.bind("stylus.sp.iir_speed_max", &Stylus::CoorIIRProcess::m_speedMax,
                 m_commonPost.m_coorIIRProcess, static_cast<int32_t>(205), ConfigRange{0.0, 1000.0}, "IIR speed max");
+    binder.bindSchema("stylus.sp.iir_max_coef", Config::ConfigValue(static_cast<int32_t>(32)), "int", ConfigRange{1.0, 255.0}, "IIR maximum coefficient denominator");
 
     // ── AFT Coor ──
     binder.bind("stylus.sp.aft_coor_enabled", &Stylus::AftCoorProcess::m_enabled,
                 m_commonPost.m_aftCoorProcess, true, {}, "AFT coordinate process enable");
+    binder.bindSchema("stylus.sp.lock_flash_in_band_x", Config::ConfigValue(static_cast<int32_t>(0)), "int", ConfigRange{0.0, 255.0}, "AFT lock flash in-band X");
+    binder.bindSchema("stylus.sp.lock_flash_in_band_y", Config::ConfigValue(static_cast<int32_t>(0)), "int", ConfigRange{0.0, 255.0}, "AFT lock flash in-band Y");
+    binder.bindSchema("stylus.sp.lock_flash_edge_x", Config::ConfigValue(static_cast<int32_t>(1)), "int", ConfigRange{0.0, 255.0}, "AFT lock flash edge X");
+    binder.bindSchema("stylus.sp.lock_flash_edge_y", Config::ConfigValue(static_cast<int32_t>(2)), "int", ConfigRange{0.0, 255.0}, "AFT lock flash edge Y");
     binder.bind("stylus.sp.lock_sensor_tx_count", &Stylus::AftCoorProcess::m_sensorTxCount,
                 m_commonPost.m_aftCoorProcess, static_cast<int32_t>(60), ConfigRange{1.0, 200.0}, "AFT lock sensor TX count");
     binder.bind("stylus.sp.lock_sensor_rx_count", &Stylus::AftCoorProcess::m_sensorRxCount,

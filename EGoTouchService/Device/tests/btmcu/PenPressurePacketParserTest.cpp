@@ -43,8 +43,10 @@ void TestRaw12BitPacketParses() {
     Require(parsed->rawPress[1] == 0x1234, "p1 should parse little-endian");
     Require(parsed->rawPress[2] == 0x0FFF, "p2 should parse little-endian");
     Require(parsed->rawPress[3] == 0x4000, "p3 should parse little-endian");
-    Require(parsed->press[0] == parsed->rawPress[0], "12-bit p0 should be unscaled");
-    Require(parsed->press[1] == parsed->rawPress[1], "12-bit p1 should be unscaled");
+    Require(parsed->press[0] == parsed->rawPress[0], "12-bit p0 should be unscaled below max");
+    Require(parsed->press[1] == parsed->pressureMax, "12-bit p1 above max should be clamped");
+    Require(parsed->press[2] <= parsed->pressureMax && parsed->press[3] <= parsed->pressureMax,
+            "all 12-bit scaled pressure values should be clamped to pressureMax");
     Require(parsed->pressureMax == 4095, "pressure max should remain 4095");
 }
 
@@ -80,8 +82,8 @@ void TestRaw14BitPacketScales() {
             "14-bit p1 should be divided by 4");
     Require(parsed->rawPress[2] == 0x3FFC && parsed->press[2] == 0x0FFF,
             "14-bit p2 should be divided by 4");
-    Require(parsed->rawPress[3] == 0x4000 && parsed->press[3] == 0x1000,
-            "14-bit p3 should be divided by 4");
+    Require(parsed->rawPress[3] == 0x4000 && parsed->press[3] == parsed->pressureMax,
+            "14-bit p3 should be divided by 4 and clamped to pressureMax");
     Require(parsed->pressureMode == Himax::Pen::PenPressureRangeMode::Raw14Bit16382,
             "pressure mode should be copied");
 }
@@ -100,7 +102,12 @@ void TestRaw14BitEdgeScalingUsesIntegerDivision() {
     Require(parsed->press[0] == 0, "raw 0 should scale to 0");
     Require(parsed->press[1] == 0, "raw 3 should truncate to 0 when divided by 4");
     Require(parsed->press[2] == 0x0FFF, "raw 0x3FFC should scale to 4095");
-    Require(parsed->press[3] == 0x3FFF, "raw 0xFFFF should scale by integer division without overflow");
+    Require(parsed->rawPress[3] == 0xFFFF, "raw pressure should preserve original 0xFFFF value");
+    Require(parsed->press[3] == parsed->pressureMax, "raw 0xFFFF should scale and clamp to pressureMax");
+    for (int k = 0; k < 4; ++k) {
+        Require(parsed->press[k] <= parsed->pressureMax,
+                "all 14-bit scaled pressure values should be clamped to pressureMax");
+    }
 }
 
 } // namespace

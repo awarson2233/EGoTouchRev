@@ -18,6 +18,11 @@
 #include "btmcu/PenUsbTypes.h"
 #include "win32/SyntheticPenButtonInjector.h"
 
+namespace Config {
+class ConfigStore;
+struct ValidationResult;
+}
+
 #include "himax/HimaxChip.h"
 #include "TouchSolver/TouchPipeline.h"
 #include "vhf/VhfReporter.h"
@@ -170,6 +175,8 @@ public:
                             PenButtonMode penButtonMode = PenButtonMode::OemCustom,
                             PenButtonRoute penButtonRoute = PenButtonRoute::VhfOnly,
                             bool penButtonRouteExplicit = false);
+    Config::ValidationResult ValidateConfigStore(const Config::ConfigStore& store) const;
+    void ApplyConfigStore(const Config::ConfigStore& store);
 
     void SetPenButtonMode(PenButtonMode m) { m_penButtonMode.store(m, std::memory_order_release); }
     PenButtonMode GetPenButtonMode() const { return m_penButtonMode.load(std::memory_order_acquire); }

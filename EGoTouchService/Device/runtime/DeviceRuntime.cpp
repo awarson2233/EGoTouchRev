@@ -1,6 +1,9 @@
 #include "runtime/DeviceRuntime.h"
 #include "Logger.h"
 #include "SolverTypes.h"
+#include "config/ConfigBinder.h"
+#include "config/ConfigStore.h"
+#include "config/SchemaValidator.h"
 
 
 #include <chrono>
@@ -264,6 +267,26 @@ void DeviceRuntime::ApplyServicePolicy(bool autoMode, bool stylusVhfEnabled,
       "Applied: autoMode={} stylusVhfEnabled={} penBtnMode={} penBtnRoute={} penBtnRouteExplicit={}",
       autoMode, stylusVhfEnabled, static_cast<int>(penButtonMode),
       static_cast<int>(penButtonRoute), penButtonRouteExplicit);
+}
+
+Config::ValidationResult DeviceRuntime::ValidateConfigStore(
+    const Config::ConfigStore &store) const {
+  std::lock_guard<std::mutex> lk(m_pipelineMu);
+
+  // Build schema from fresh pipeline instances so validation remains read-only
+  // and cannot accidentally strip setters from the runtime apply path.
+  Solvers::TouchPipeline touchPipeline;
+  Solvers::StylusPipeline stylusPipeline;
+  Config::ConfigBinder binder;
+  touchPipeline.registerBindings(binder);
+  stylusPipeline.registerBindings(binder);
+  return Config::SchemaValidator::validate(store, binder);
+}
+
+void DeviceRuntime::ApplyConfigStore(const Config::ConfigStore &store) {
+  std::lock_guard<std::mutex> lk(m_pipelineMu);
+  m_touchPipeline.applyConfig(store);
+  m_stylusPipeline.applyConfig(store);
 }
 
 bool DeviceRuntime::IsShutdownRequested() const {
