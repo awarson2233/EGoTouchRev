@@ -73,6 +73,7 @@ private:
     void ReadLatestBtSample(Asa::BtInputSnapshot& out) const;
 
     StylusPenSession m_penSession{};
+    StylusRuntime::Protocol m_lastActiveProtocol = StylusRuntime::Protocol::None;
     bool m_lastFrameWasTerminal = false;
 
     // NOTE: In the current architecture, all callers are serialized by

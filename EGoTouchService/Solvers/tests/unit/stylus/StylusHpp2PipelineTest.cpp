@@ -1,5 +1,6 @@
 #include "StylusSolver/StylusPipeline.h"
 
+#include <array>
 #include <cstdint>
 #include <iostream>
 #include <stdexcept>
@@ -44,7 +45,7 @@ Solvers::StylusPenSession MakePenSession(uint8_t stylusId,
     session.connected = connected;
     session.hasStylusId = connected;
     session.stylusId = connected ? stylusId : 0;
-    session.protocolHint = connected ? protocolHint : Solvers::StylusProtocolHint::Auto;
+    session.protocolHint = protocolHint;
     session.revision = revision;
     return session;
 }
@@ -162,6 +163,37 @@ void TestForcedHpp2WithoutLineDataTerminals() {
     Require(!frame.stylus.output.valid, "missing forced HPP2 line data should not emit output");
 }
 
+void TestHpp2HintDoesNotOverrideRawEvidence() {
+    Solvers::StylusPipeline pipeline;
+    pipeline.ApplyPenSession(MakePenSession(1, Solvers::StylusProtocolHint::Hpp2, 1));
+
+    std::array<uint8_t, 4> shortRaw{};
+    HeatmapFrame frame = MakeHpp2Frame(12, 7, 2600, 2400, 512, 0u, 0u);
+    frame.rawPtr = shortRaw.data();
+    frame.rawLen = shortRaw.size();
+    pipeline.Process(frame);
+
+    Require(frame.stylus.runtime.activeProtocol == Solvers::StylusRuntime::Protocol::Hpp3,
+            "HPP2 hint must not override concrete raw HPP3 evidence");
+    Require(frame.stylus.runtime.Active().flow.terminal,
+            "short raw HPP3 evidence should terminal as HPP3 parse failure");
+    Require(!frame.stylus.output.valid, "raw evidence path should not emit HPP2 fallback output");
+}
+
+void TestHpp3HintDoesNotRunAfterHpp2Fallback() {
+    Solvers::StylusPipeline pipeline;
+    pipeline.ApplyPenSession(MakePenSession(1, Solvers::StylusProtocolHint::Hpp3, 1));
+
+    HeatmapFrame frame = MakeHpp2Frame(12, 7, 2600, 2400, 512, 0u, 0x1u);
+    pipeline.Process(frame);
+
+    Require(frame.stylus.runtime.activeProtocol == Solvers::StylusRuntime::Protocol::Hpp2,
+            "HPP3 hint must respect parser HPP2 fallback evidence");
+    Require(!frame.stylus.runtime.Active().flow.terminal,
+            "HPP2 fallback under HPP3 hint should run HPP2 pipeline");
+    Require(frame.stylus.output.valid, "HPP2 fallback under HPP3 hint should emit valid HPP2 output");
+}
+
 void TestSameProtocolPenSwitchResetsState() {
     Solvers::StylusPipeline pipeline;
     pipeline.ApplyPenSession(MakePenSession(1, Solvers::StylusProtocolHint::Hpp2, 1));
@@ -194,9 +226,68 @@ void TestDisconnectedPenSessionTerminals() {
 
     HeatmapFrame disconnected = MakeHpp2Frame(12, 7, 2600, 2400, 512, 0u, 0u);
     pipeline.Process(disconnected);
+    Require(disconnected.stylus.runtime.activeProtocol == Solvers::StylusRuntime::Protocol::Hpp2,
+            "disconnected pen session should retain the previous HPP2 terminal protocol");
     Require(disconnected.stylus.runtime.Active().flow.terminal,
             "disconnected pen session should terminal current frame");
     Require(!disconnected.stylus.output.valid, "disconnected pen session should not emit output");
+}
+
+void TestInitialDisconnectedAutoSessionStaysProtocolNeutral() {
+    Solvers::StylusPipeline pipeline;
+    pipeline.ApplyPenSession(MakePenSession(0, Solvers::StylusProtocolHint::Auto, 1, false));
+
+    HeatmapFrame disconnected = MakeHpp2Frame(12, 7, 2600, 2400, 512, 0u, 0u);
+    pipeline.Process(disconnected);
+
+    Require(disconnected.stylus.runtime.activeProtocol == Solvers::StylusRuntime::Protocol::None,
+            "initial disconnected Auto session should remain protocol-neutral");
+    Require(disconnected.stylus.runtime.activeProtocol != Solvers::StylusRuntime::Protocol::Hpp3,
+            "initial disconnected Auto session must not default to HPP3");
+    Require(disconnected.stylus.runtime.Active().flow.terminal,
+            "initial disconnected Auto session should terminal current frame");
+    Require(!disconnected.stylus.output.valid,
+            "initial disconnected Auto session should not emit output");
+}
+
+void TestFreshAutoSessionDoesNotInheritPreviousTerminalProtocol() {
+    Solvers::StylusPipeline pipeline;
+    pipeline.ApplyPenSession(MakePenSession(1, Solvers::StylusProtocolHint::Hpp2, 1));
+
+    HeatmapFrame valid = MakeHpp2Frame(12, 7, 2600, 2400, 512, 0u, 0u);
+    pipeline.Process(valid);
+    Require(valid.stylus.runtime.activeProtocol == Solvers::StylusRuntime::Protocol::Hpp2,
+            "first session should establish HPP2 as last active protocol");
+    Require(valid.stylus.output.valid, "first session should process valid HPP2 data");
+
+    pipeline.ApplyPenSession(MakePenSession(4, Solvers::StylusProtocolHint::Auto, 2, true));
+    pipeline.ApplyPenSession(MakePenSession(0, Solvers::StylusProtocolHint::Auto, 2, false));
+
+    HeatmapFrame disconnected = MakeHpp2Frame(12, 7, 2600, 2400, 512, 0u, 0u);
+    pipeline.Process(disconnected);
+    Require(disconnected.stylus.runtime.activeProtocol == Solvers::StylusRuntime::Protocol::None,
+            "fresh Auto session disconnected before parser evidence should stay protocol-neutral");
+    Require(disconnected.stylus.runtime.activeProtocol != Solvers::StylusRuntime::Protocol::Hpp2,
+            "fresh Auto terminal must not inherit the previous session HPP2 protocol");
+    Require(disconnected.stylus.runtime.Active().flow.terminal,
+            "fresh Auto disconnected session should terminal current frame");
+    Require(!disconnected.stylus.output.valid,
+            "fresh Auto disconnected session should not emit output");
+}
+
+void TestInitialDisconnectedHpp2HintSelectsHpp2Terminal() {
+    Solvers::StylusPipeline pipeline;
+    pipeline.ApplyPenSession(MakePenSession(0, Solvers::StylusProtocolHint::Hpp2, 1, false));
+
+    HeatmapFrame disconnected = MakeHpp2Frame(12, 7, 2600, 2400, 512, 0u, 0u);
+    pipeline.Process(disconnected);
+
+    Require(disconnected.stylus.runtime.activeProtocol == Solvers::StylusRuntime::Protocol::Hpp2,
+            "initial disconnected HPP2 hint should select HPP2 terminal protocol");
+    Require(disconnected.stylus.runtime.Active().flow.terminal,
+            "initial disconnected HPP2 hint should terminal current frame");
+    Require(!disconnected.stylus.output.valid,
+            "initial disconnected HPP2 hint should not emit output");
 }
 
 } // namespace
@@ -210,8 +301,13 @@ int main() {
         TestHpp2ButtonReleaseCounterDecrements();
         TestForcedHpp2IgnoresAuxFlags();
         TestForcedHpp2WithoutLineDataTerminals();
+        TestHpp2HintDoesNotOverrideRawEvidence();
+        TestHpp3HintDoesNotRunAfterHpp2Fallback();
         TestSameProtocolPenSwitchResetsState();
         TestDisconnectedPenSessionTerminals();
+        TestInitialDisconnectedAutoSessionStaysProtocolNeutral();
+        TestFreshAutoSessionDoesNotInheritPreviousTerminalProtocol();
+        TestInitialDisconnectedHpp2HintSelectsHpp2Terminal();
     } catch (const std::exception& ex) {
         std::cerr << "[FAIL] StylusHpp2PipelineTest: " << ex.what() << "\n";
         return 1;

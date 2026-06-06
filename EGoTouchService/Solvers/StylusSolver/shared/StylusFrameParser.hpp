@@ -18,8 +18,17 @@ public:
         static_cast<std::size_t>(Hpp3::kSlaveHeaderBytes) + kSlaveWordCount * sizeof(uint16_t);
     static constexpr std::size_t kMinimumSlaveSignalBytes = kSlaveWordOffset + 4;
 
+    enum class Hpp2InputPolicy : uint8_t {
+        RequireAuxFlag,
+        AllowWithoutAuxFlag,
+    };
+
     bool m_enabled = true;
     bool m_enableSlaveChecksum = false;
+
+    static inline bool IsHpp2AuxStatusFlags(uint32_t auxStatusFlags) {
+        return (auxStatusFlags & 0x1u) != 0 && (auxStatusFlags & 0x2u) == 0;
+    }
 
     inline bool Process(HeatmapFrame& frame) const {
         auto& stylus = frame.stylus;
@@ -49,7 +58,8 @@ public:
             if (TryProcessFromSlaveSuffix(frame, priorInput)) {
                 return true;
             }
-            // Final fallback: pre-populated HPP2 line-mode input
+            // Final fallback: pre-populated HPP2 line-mode input.
+            // Only use it after all HPP3 raw/slave evidence paths are absent.
             return ProcessWithHpp2Fallback(frame, priorInput);
         }
 
@@ -58,8 +68,7 @@ public:
             if (TryProcessFromSlaveSuffix(frame, priorInput)) {
                 return true;
             }
-            // Final fallback: pre-populated HPP2 line-mode input
-            return ProcessWithHpp2Fallback(frame, priorInput);
+            return TerminalParseFailure(frame, Asa::FrameClass::ShortFrame);
         }
 
         const std::size_t slaveOffset = frame.rawLen - available;
@@ -159,44 +168,33 @@ public:
             return true;
         }
 
-        if (TryProcessFromHpp2Input(frame, priorInput, false)) {
+        if (TryProcessFromHpp2Input(frame, priorInput, Hpp2InputPolicy::AllowWithoutAuxFlag)) {
             return true;
         }
 
-        flow.terminal = true;
-        flow.frameClass = Asa::FrameClass::NoSignal;
-        parse.valid = false;
-        parse.slaveValid = false;
-        parse.checksumOk = false;
-        parse.hasCurrentStylusSignal = false;
-        return true;
+        return TerminalParseFailure(frame, Asa::FrameClass::NoSignal);
     }
 
     // When no raw pointer, no slave suffix, and no grid data is available,
     // fall back to a pre-populated HPP2 line-mode input as a last resort.
     inline bool ProcessWithHpp2Fallback(HeatmapFrame& frame, const StylusInputSnapshot& priorInput) const {
         // All real-data paths have been exhausted above; HPP2 input is the final fallback.
-        if (TryProcessFromHpp2Input(frame, priorInput, true)) {
+        if (TryProcessFromHpp2Input(frame, priorInput, Hpp2InputPolicy::RequireAuxFlag)) {
             return true;
         }
 
-        auto& runtime = frame.stylus.runtime.Active();
-        auto& flow = runtime.flow;
-        auto& parse = runtime.parse;
-        flow.terminal = true;
-        parse.valid = false;
-        parse.slaveValid = false;
-        parse.checksumOk = false;
-        return true;
+        return TerminalParseFailure(frame, Asa::FrameClass::NoSignal);
     }
 
 private:
     static inline bool TryProcessFromHpp2Input(HeatmapFrame& frame,
                                                const StylusInputSnapshot& priorInput,
-                                               bool requireHpp2Flag) {
-        const bool isHpp2 = (priorInput.auxStatusFlags & 0x1u) != 0 &&
-                            (priorInput.auxStatusFlags & 0x2u) == 0;
-        if ((requireHpp2Flag && !isHpp2) || !priorInput.hpp2LineValid) {
+                                               Hpp2InputPolicy policy) {
+        if (!priorInput.hpp2LineValid) {
+            return false;
+        }
+        if (policy == Hpp2InputPolicy::RequireAuxFlag &&
+            !IsHpp2AuxStatusFlags(priorInput.auxStatusFlags)) {
             return false;
         }
 
@@ -219,6 +217,19 @@ private:
         parse.hasCurrentStylusSignal = true;
         flow.terminal = false;
         flow.frameClass = Asa::FrameClass::Valid;
+        return true;
+    }
+
+    static inline bool TerminalParseFailure(HeatmapFrame& frame, Asa::FrameClass frameClass) {
+        auto& runtime = frame.stylus.runtime.Active();
+        auto& flow = runtime.flow;
+        auto& parse = runtime.parse;
+        flow.terminal = true;
+        flow.frameClass = frameClass;
+        parse.valid = false;
+        parse.slaveValid = false;
+        parse.checksumOk = false;
+        parse.hasCurrentStylusSignal = false;
         return true;
     }
 

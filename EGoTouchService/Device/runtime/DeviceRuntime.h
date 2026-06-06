@@ -107,7 +107,6 @@ struct RuntimePenState {
     bool hasStylusId = false;
     uint8_t stylusId = 0;
 
-    bool hasProtocolHint = false;
     Solvers::StylusProtocolHint protocolHint = Solvers::StylusProtocolHint::Auto;
     uint32_t penRevision = 0;
 

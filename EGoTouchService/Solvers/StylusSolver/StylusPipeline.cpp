@@ -35,48 +35,53 @@ bool StylusPipeline::Process(HeatmapFrame& frame) {
     frame.stylus.ResetPerFrameState();
     ReadLatestBtSample(frame.stylus.input.btSample);
 
+    const auto selectTerminalProtocol = [&]() {
+        if (m_lastActiveProtocol == StylusRuntime::Protocol::Hpp2) {
+            frame.stylus.runtime.SelectHpp2().flow.terminal = true;
+        } else if (m_lastActiveProtocol == StylusRuntime::Protocol::Hpp3) {
+            frame.stylus.runtime.SelectHpp3().flow.terminal = true;
+        } else if (m_penSession.protocolHint == StylusProtocolHint::Hpp2) {
+            frame.stylus.runtime.SelectHpp2().flow.terminal = true;
+        } else if (m_penSession.protocolHint == StylusProtocolHint::Hpp3) {
+            frame.stylus.runtime.SelectHpp3().flow.terminal = true;
+        } else {
+            // Protocol-neutral terminal: keep activeProtocol as None so a fresh
+            // disconnected session does not get misclassified as HPP3. Mark both
+            // runtimes terminal because Active() maps None to HPP3 for legacy reads.
+            frame.stylus.runtime.hpp2.flow.terminal = true;
+            frame.stylus.runtime.hpp3.flow.terminal = true;
+        }
+    };
+
     if (m_penSession.hasConnectionState && !m_penSession.connected) {
-        frame.stylus.runtime.SelectHpp3().flow.terminal = true;
+        selectTerminalProtocol();
         FinalizeTerminalFrame(frame);
         return true;
     }
 
-    const auto runHpp2 = [&]() -> bool {
-        m_frameParser.ProcessHpp2Line(frame);
-        if (frame.stylus.runtime.Active().flow.terminal) {
-            return false;
-        }
-        return m_hpp2.Process(frame);
-    };
+    const bool hasHpp3Evidence = frame.rawPtr != nullptr || frame.slaveSuffixValid;
+    const StylusInputSnapshot inputBeforeParse = frame.stylus.input;
+    m_frameParser.Process(frame);
 
-    const auto runHpp3 = [&]() -> bool {
-        m_frameParser.Process(frame);
-        if (frame.stylus.runtime.Active().flow.terminal) {
-            return false;
-        }
-        return m_hpp3.Process(frame);
-    };
+    const bool parsedTerminal = frame.stylus.runtime.Active().flow.terminal;
+    const bool parsedHpp2 = frame.stylus.runtime.activeProtocol == StylusRuntime::Protocol::Hpp2;
+
+    if (parsedTerminal && !hasHpp3Evidence &&
+        m_penSession.protocolHint == StylusProtocolHint::Hpp2 && !parsedHpp2) {
+        frame.stylus.input = inputBeforeParse;
+        m_frameParser.ProcessHpp2Line(frame);
+    }
+
+    if (frame.stylus.runtime.Active().flow.terminal) {
+        FinalizeTerminalFrame(frame);
+        return true;
+    }
 
     bool completed = false;
-    switch (m_penSession.protocolHint) {
-    case StylusProtocolHint::Hpp2:
-        completed = runHpp2();
-        break;
-    case StylusProtocolHint::Hpp3:
-        completed = runHpp3();
-        break;
-    case StylusProtocolHint::Auto:
-    default:
-        m_frameParser.Process(frame);
-        if (frame.stylus.runtime.Active().flow.terminal) {
-            FinalizeTerminalFrame(frame);
-            return true;
-        }
-
-        const uint32_t auxStatusFlags = frame.stylus.input.auxStatusFlags;
-        const bool isHpp2 = (auxStatusFlags & 0x1u) != 0 && (auxStatusFlags & 0x2u) == 0;
-        completed = isHpp2 ? m_hpp2.Process(frame) : m_hpp3.Process(frame);
-        break;
+    if (frame.stylus.runtime.activeProtocol == StylusRuntime::Protocol::Hpp2) {
+        completed = m_hpp2.Process(frame);
+    } else if (frame.stylus.runtime.activeProtocol == StylusRuntime::Protocol::Hpp3) {
+        completed = m_hpp3.Process(frame);
     }
 
     if (!completed) {
@@ -92,6 +97,9 @@ bool StylusPipeline::Process(HeatmapFrame& frame) {
     m_commonPost.Process(frame);
     m_edgeCoorProcess.CaptureFinal(frame.stylus.runtime.Active());
     m_commit.Commit(frame);
+    if (frame.stylus.runtime.activeProtocol != StylusRuntime::Protocol::None) {
+        m_lastActiveProtocol = frame.stylus.runtime.activeProtocol;
+    }
     return true;
 }
 
@@ -111,6 +119,15 @@ void StylusPipeline::ApplyPenSession(const StylusPenSession& session) {
 
     ResetStatefulStages();
     ClearBtSample();
+    if (m_penSession.connected) {
+        if (m_penSession.protocolHint == StylusProtocolHint::Hpp2) {
+            m_lastActiveProtocol = StylusRuntime::Protocol::Hpp2;
+        } else if (m_penSession.protocolHint == StylusProtocolHint::Hpp3) {
+            m_lastActiveProtocol = StylusRuntime::Protocol::Hpp3;
+        } else {
+            m_lastActiveProtocol = StylusRuntime::Protocol::None;
+        }
+    }
     m_lastFrameWasTerminal = true;
 }
 
@@ -128,6 +145,9 @@ void StylusPipeline::ClearBtSample() {
 }
 
 void StylusPipeline::FinalizeTerminalFrame(HeatmapFrame& frame) {
+    if (frame.stylus.runtime.activeProtocol != StylusRuntime::Protocol::None) {
+        m_lastActiveProtocol = frame.stylus.runtime.activeProtocol;
+    }
     if (!m_lastFrameWasTerminal) {
         ResetStatefulStages();
     }
