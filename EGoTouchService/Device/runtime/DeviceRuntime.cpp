@@ -495,6 +495,11 @@ RuntimeSnapshot DeviceRuntime::GetSnapshot() const {
   return s;
 }
 
+RuntimePenState DeviceRuntime::GetPenStateSnapshot() const {
+  std::lock_guard<std::mutex> lk(m_penStateMu);
+  return m_penState;
+}
+
 std::vector<HistoryEntry> DeviceRuntime::GetHistory(std::size_t n) const {
   std::lock_guard<std::mutex> lk(m_mu);
   if (n >= m_history.size())

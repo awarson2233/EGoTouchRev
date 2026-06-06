@@ -56,6 +56,7 @@ bool IsKnownCommand(IpcCommand command) noexcept {
     case IpcCommand::PersistConfig:
     case IpcCommand::GetLogs:
     case IpcCommand::GetPenBridgeStatus:
+    case IpcCommand::GetPenIdentityStatus:
     case IpcCommand::GetDebugSchema:
     case IpcCommand::GetDebugSnapshot:
     case IpcCommand::SetPenPressureMode:

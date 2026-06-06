@@ -3,6 +3,7 @@
 #include "DvrTypes.h"
 #include "SolverTypes.h"
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace App {
@@ -18,6 +19,16 @@ struct PenBridgeStatus {
     uint16_t rawPress[4]  = {0,0,0,0};
     uint8_t  pressureMode = 1;
     uint16_t pressureMax  = 4095;
+};
+
+struct PenIdentityStatus {
+    bool connected = false;
+    bool hasStylusId = false;
+    uint8_t stylusId = 0;
+    bool hasPenModuleModelId = false;
+    uint32_t penModuleModelId = 0;
+    bool hasHardwareVersion = false;
+    std::string hardwareVersion;
 };
 
 enum class FrameSourceMode {

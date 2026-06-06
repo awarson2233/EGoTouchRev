@@ -531,6 +531,37 @@ Offset  Size  Field         Type      说明
 
 ---
 
+#### GetPenIdentityStatus (0x41)
+
+查询当前手写笔身份状态。该命令不改变 `GetPenBridgeStatus` 的 24 bytes 固定布局。
+
+| 方向 | 字段 | 值 |
+|------|------|-----|
+| Req | command | `0x41` |
+| Req | paramLen | `0` |
+| Res | success | `true` |
+| Res | data | `PenIdentityStatusWire` |
+| Res | dataLen | `140` |
+| Res | status (失败) | `InvalidState` (DeviceRuntime 未就绪) |
+
+**PenIdentityStatusWire** 布局 (140 bytes):
+
+```
+Offset  Size  Field                   Type       说明
+------  ----  -----                   ----       ----
+0       2     wireVersion             uint16_t   IPC 协议版本
+2       1     flags                   uint8_t    bit0=stylusId 有效, bit1=modelId 有效, bit2=hardwareVersion 有效, bit3=connected
+3       1     stylusId                uint8_t    PenTypeInfo payload[0]
+4       4     penModuleModelId        uint32_t   PenModule 小端 modelId
+8       2     hardwareVersionUtf8Len  uint16_t   UTF-8 字节长度, 不含 NUL
+10      2     _reserved0              uint16_t   保留
+12      128   hardwareVersionUtf8     char[128]  UTF-8 validated 字符串缓冲, 额外 NUL 仅供 C string 便利
+```
+
+字符串约束：`hardwareVersionUtf8Len` 是字节数，不是字符数；服务端按 UTF-8 边界截断，不会截断到多字节字符中间。
+
+---
+
 #### SetPenPressureMode (0x3F)
 
 设置笔压力读取范围模式。

@@ -146,22 +146,30 @@ void TestCommandPacketBuilders() {
             "payload command should preserve header and append payload bytes");
 }
 
-void TestAsciiPayloadFormatting() {
+void TestUtf8PayloadDecoding() {
     const std::array<uint8_t, 8> version{'H', 'W', '1', '.', '2', 0x00, 'X', 'Y'};
-    Require(Himax::Pen::FormatPenUsbAsciiPayload(version) == "HW1.2",
-            "ASCII payload should stop at the first NUL byte");
+    Require(Himax::Pen::DecodePenUsbUtf8Payload(version) == "HW1.2",
+            "UTF-8 payload should stop at the first NUL byte");
+
+    const std::array<uint8_t, 7> utf8{'H', 'W', '-', 0xE7, 0xAC, 0x94, 0x00};
+    Require(Himax::Pen::DecodePenUsbUtf8Payload(utf8) == std::string("HW-\xE7\xAC\x94", 6),
+            "UTF-8 payload should preserve multibyte characters");
 
     const std::array<uint8_t, 6> mixed{'A', 0x01, 'B', 0x7F, 'C', 0x00};
-    Require(Himax::Pen::FormatPenUsbAsciiPayload(mixed) == "ABC",
-            "ASCII payload should keep only printable characters");
+    Require(Himax::Pen::DecodePenUsbUtf8Payload(mixed).empty(),
+            "payload with control characters should be rejected");
 
     const std::array<uint8_t, 4> binary{0x01, 0x02, 0x1F, 0x00};
-    Require(Himax::Pen::FormatPenUsbAsciiPayload(binary) == "01 02 1F",
-            "binary payload should fall back to uppercase hex bytes");
+    Require(Himax::Pen::DecodePenUsbUtf8Payload(binary).empty(),
+            "binary payload should not be exposed as a version string");
+
+    const std::array<uint8_t, 3> invalid{0xE7, 0xAC, 0x00};
+    Require(Himax::Pen::DecodePenUsbUtf8Payload(invalid).empty(),
+            "truncated UTF-8 payload should be rejected");
 
     const std::array<uint8_t, 3> empty{0x00, 'H', 'W'};
-    Require(Himax::Pen::FormatPenUsbAsciiPayload(empty).empty(),
-            "payload starting with NUL should format as an empty string");
+    Require(Himax::Pen::DecodePenUsbUtf8Payload(empty).empty(),
+            "payload starting with NUL should decode as an empty string");
 }
 
 void TestType3Encoding() {
@@ -217,7 +225,7 @@ int main() {
         TestInvalidFactoryEventFramesAreRejected();
         TestFactoryAckTable();
         TestCommandPacketBuilders();
-        TestAsciiPayloadFormatting();
+        TestUtf8PayloadDecoding();
         TestType3Encoding();
         TestFactoryInitParamsPacket();
         std::cout << "[TEST] Device Pen USB protocol packet tests passed.\n";

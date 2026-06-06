@@ -45,6 +45,7 @@ enum class IpcCommand : uint8_t {
     GetDebugSnapshot = 62,
     SetPenPressureMode = 63,  // param[0]: 0=4096 raw12, 1=16382 raw14 divided by 4
     SetMasterParserOnly = 64,  // param[0]: 0=normal, 1=service-side master parser only
+    GetPenIdentityStatus = 65, // App queries current stylus identity + UTF-8 HW version
 };
 
 enum class IpcStatusCode : uint8_t {
@@ -250,6 +251,21 @@ struct ReloadConfigSummaryWire {
     uint8_t changedFields = 0;
     uint8_t appliedFields = 0;
     uint8_t restartRequiredFields = 0;
+};
+
+constexpr uint8_t kPenIdentityHasStylusId = 1u << 0;
+constexpr uint8_t kPenIdentityHasPenModuleModelId = 1u << 1;
+constexpr uint8_t kPenIdentityHasHardwareVersion = 1u << 2;
+constexpr uint8_t kPenIdentityConnected = 1u << 3;
+
+struct PenIdentityStatusWire {
+    uint16_t wireVersion = kIpcProtocolVersion;
+    uint8_t flags = 0;
+    uint8_t stylusId = 0;
+    uint32_t penModuleModelId = 0;
+    uint16_t hardwareVersionUtf8Len = 0;
+    uint16_t _reserved0 = 0;
+    char hardwareVersionUtf8[128]{};
 };
 
 struct IpcRequest {

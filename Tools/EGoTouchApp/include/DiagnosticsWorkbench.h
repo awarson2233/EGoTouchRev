@@ -40,7 +40,6 @@ private:
     void DrawTouchPacketDetails();
     void DrawTouchContactSummaryTable();
     void DrawStylusPanel();
-    void DrawDynamicDebugPanel();
     void DrawMasterSuffixTable();
     void DrawSlaveSuffixTable();
 

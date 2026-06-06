@@ -1,7 +1,5 @@
 #include "ServiceProxyInternal.h"
-#include <algorithm>
 #include <cstring>
-#include <unordered_map>
 
 namespace App {
 
@@ -129,70 +127,5 @@ DvrDynamicDebugFrame ServiceProxy::CaptureDynamicDebugFrame() const {
     return frame;
 }
 
-Dvr::DvrDynamicDebugFrameSlot ServiceProxy::CaptureDvrDynamicDebugFrameSlot(uint64_t dvrSeq) const {
-    std::lock_guard<std::mutex> lk(m_dynamicDebugMutex);
-    Dvr::DvrDynamicDebugFrameSlot frame{};
-    frame.dvrSeq = dvrSeq;
-    frame.sampleCount = static_cast<uint16_t>(std::min<size_t>(m_dynamicDebugFields.size(), Dvr::kMaxDynamicDebugSamples));
-    for (uint16_t i = 0; i < frame.sampleCount; ++i) {
-        const auto& field = m_dynamicDebugFields[i];
-        auto& sample = frame.samples[i];
-        sample.fieldId = field.fieldId;
-        sample.valueType = static_cast<uint8_t>(field.valueType);
-        auto it = m_dynamicDebugValues.find(field.fieldId);
-        if (it != m_dynamicDebugValues.end()) {
-            sample.valueType = static_cast<uint8_t>(it->second.valueType);
-            sample.valid = it->second.valid ? 1 : 0;
-            sample.rawValue = it->second.rawValue;
-        }
-    }
-    return frame;
-}
-
-bool ServiceProxy::PollDynamicDebugSnapshot() {
-    if (!m_client.IsConnected()) return false;
-
-    Ipc::IpcRequest req{};
-    req.command = Ipc::IpcCommand::GetDebugSnapshot;
-    const auto resp = m_client.Send(req);
-    if (!resp.success || resp.dataLen < sizeof(Ipc::DebugSnapshotHeader)) {
-        return false;
-    }
-
-    Ipc::DebugSnapshotHeader hdr{};
-    std::memcpy(&hdr, resp.data, sizeof(hdr));
-    if (hdr.recordSize != sizeof(Ipc::DebugSnapshotValueWire)) {
-        return false;
-    }
-
-    if (m_dynamicSchemaVersion.load() != hdr.schemaVersion) {
-        if (!RefreshDynamicDebugSchema()) {
-            return false;
-        }
-    }
-
-    std::unordered_map<uint16_t, DynamicDebugValue> values;
-    size_t cursor = sizeof(Ipc::DebugSnapshotHeader);
-    for (uint16_t i = 0; i < hdr.fieldCount; ++i) {
-        if (cursor + sizeof(Ipc::DebugSnapshotValueWire) > resp.dataLen) {
-            break;
-        }
-        Ipc::DebugSnapshotValueWire v{};
-        std::memcpy(&v, resp.data + cursor, sizeof(v));
-        cursor += sizeof(v);
-
-        DynamicDebugValue dv;
-        dv.valueType = static_cast<Ipc::DebugValueType>(v.valueType);
-        dv.valid = (v.flags & 0x1) != 0;
-        dv.rawValue = v.rawValue;
-        values[v.fieldId] = dv;
-    }
-
-    {
-        std::lock_guard<std::mutex> lk(m_dynamicDebugMutex);
-        m_dynamicDebugValues = std::move(values);
-    }
-    return true;
-}
 
 } // namespace App

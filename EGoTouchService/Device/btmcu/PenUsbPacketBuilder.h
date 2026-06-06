@@ -48,7 +48,55 @@ inline std::size_t EncodePenUsbType3Token(std::string_view token,
     return 2;
 }
 
-inline std::string FormatPenUsbAsciiPayload(std::span<const uint8_t> payload) {
+inline bool IsAllowedPenUsbUtf8Scalar(uint32_t scalar) noexcept {
+    if (scalar == 0x09u) return true; // tab is harmless in logs/UI.
+    if (scalar < 0x20u || (scalar >= 0x7Fu && scalar <= 0x9Fu)) return false;
+    if (scalar >= 0xD800u && scalar <= 0xDFFFu) return false;
+    return scalar <= 0x10FFFFu;
+}
+
+inline bool IsValidPenUsbUtf8Payload(std::span<const uint8_t> payload) noexcept {
+    std::size_t i = 0;
+    while (i < payload.size()) {
+        const uint8_t lead = payload[i];
+        uint32_t scalar = 0;
+        std::size_t width = 0;
+        if ((lead & 0x80u) == 0) {
+            scalar = lead;
+            width = 1;
+        } else if (lead >= 0xC2u && lead <= 0xDFu) {
+            scalar = lead & 0x1Fu;
+            width = 2;
+        } else if (lead >= 0xE0u && lead <= 0xEFu) {
+            scalar = lead & 0x0Fu;
+            width = 3;
+        } else if (lead >= 0xF0u && lead <= 0xF4u) {
+            scalar = lead & 0x07u;
+            width = 4;
+        } else {
+            return false;
+        }
+
+        if (i + width > payload.size()) return false;
+        for (std::size_t j = 1; j < width; ++j) {
+            const uint8_t cont = payload[i + j];
+            if ((cont & 0xC0u) != 0x80u) return false;
+            scalar = (scalar << 6) | (cont & 0x3Fu);
+        }
+
+        if ((width == 3 && lead == 0xE0u && payload[i + 1] < 0xA0u) ||
+            (width == 3 && lead == 0xEDu && payload[i + 1] >= 0xA0u) ||
+            (width == 4 && lead == 0xF0u && payload[i + 1] < 0x90u) ||
+            (width == 4 && lead == 0xF4u && payload[i + 1] >= 0x90u)) {
+            return false;
+        }
+        if (!IsAllowedPenUsbUtf8Scalar(scalar)) return false;
+        i += width;
+    }
+    return true;
+}
+
+inline std::string DecodePenUsbUtf8Payload(std::span<const uint8_t> payload) {
     std::size_t end = 0;
     while (end < payload.size() && payload[end] != 0x00) {
         ++end;
@@ -57,32 +105,15 @@ inline std::string FormatPenUsbAsciiPayload(std::span<const uint8_t> payload) {
         return {};
     }
 
-    std::string text;
-    text.reserve(end);
-    for (std::size_t i = 0; i < end; ++i) {
-        const uint8_t ch = payload[i];
-        if (ch >= 0x20 && ch <= 0x7E) {
-            text.push_back(static_cast<char>(ch));
-        }
+    const auto bytes = payload.subspan(0, end);
+    if (!IsValidPenUsbUtf8Payload(bytes)) {
+        return {};
     }
-    if (!text.empty()) {
-        return text;
-    }
+    return std::string(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+}
 
-    constexpr char kHex[] = "0123456789ABCDEF";
-    constexpr std::size_t kMaxHexBytes = 16;
-    const std::size_t hexBytes = end < kMaxHexBytes ? end : kMaxHexBytes;
-    std::string hex;
-    hex.reserve(hexBytes * 3);
-    for (std::size_t i = 0; i < hexBytes; ++i) {
-        if (!hex.empty()) {
-            hex.push_back(' ');
-        }
-        const uint8_t value = payload[i];
-        hex.push_back(kHex[(value >> 4) & 0x0F]);
-        hex.push_back(kHex[value & 0x0F]);
-    }
-    return hex;
+inline std::string FormatPenUsbAsciiPayload(std::span<const uint8_t> payload) {
+    return DecodePenUsbUtf8Payload(payload);
 }
 
 inline std::vector<uint8_t> BuildPenUsbCommand(PenUsbCommandId commandId) {

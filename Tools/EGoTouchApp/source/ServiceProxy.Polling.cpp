@@ -3,6 +3,7 @@
 #include "FrameLayout.h"
 #include <algorithm>
 #include <chrono>
+#include <cstring>
 #include <sstream>
 #include <string>
 #include <windows.h>
@@ -126,9 +127,6 @@ void ServiceProxy::PollLoop() {
                     slot.CopyFrom(m_latestFrame);
                     slot.dvrSeq = m_dvrSeqCounter.fetch_add(1, std::memory_order_relaxed) + 1;
                     m_dvrBuffer->PushOverwriting(slot);
-                    if (m_dvrDynamicDebugBuffer) {
-                        m_dvrDynamicDebugBuffer->PushOverwriting(CaptureDvrDynamicDebugFrameSlot(slot.dvrSeq));
-                    }
                 }
             }
             if (wt == WaitType::Log) {
@@ -159,14 +157,6 @@ void ServiceProxy::PollLoop() {
 
             lastFpsTick = now;
         }
-        // Dynamic debug snapshot polling (best effort, ~200ms)
-        static auto lastDebugPoll = std::chrono::steady_clock::now();
-        auto dbgElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastDebugPoll);
-        if (dbgElapsed.count() >= 200 && m_client.IsConnected()) {
-            PollDynamicDebugSnapshot();
-            lastDebugPoll = now;
-        }
-
         // Service log polling (~every 1s)
         auto logElapsed = std::chrono::duration_cast<
             std::chrono::milliseconds>(now - lastLogPoll);
@@ -221,6 +211,34 @@ void ServiceProxy::PollLoop() {
                 }
                 std::lock_guard<std::mutex> lk(m_penMutex);
                 m_penStatus = s;
+            }
+
+            Ipc::IpcRequest identityReq{};
+            identityReq.command = Ipc::IpcCommand::GetPenIdentityStatus;
+            auto identityResp = m_client.Send(identityReq);
+            if (identityResp.success && identityResp.dataLen >= sizeof(Ipc::PenIdentityStatusWire)) {
+                Ipc::PenIdentityStatusWire wire{};
+                std::memcpy(&wire, identityResp.data, sizeof(wire));
+                if (wire.wireVersion == Ipc::kIpcProtocolVersion) {
+                    PenIdentityStatus identity{};
+                    identity.connected = (wire.flags & Ipc::kPenIdentityConnected) != 0;
+                    identity.hasStylusId = (wire.flags & Ipc::kPenIdentityHasStylusId) != 0;
+                    identity.stylusId = wire.stylusId;
+                    identity.hasPenModuleModelId = (wire.flags & Ipc::kPenIdentityHasPenModuleModelId) != 0;
+                    identity.penModuleModelId = wire.penModuleModelId;
+                    identity.hasHardwareVersion = (wire.flags & Ipc::kPenIdentityHasHardwareVersion) != 0;
+                    const auto textLen = std::min<std::size_t>(
+                        wire.hardwareVersionUtf8Len, sizeof(wire.hardwareVersionUtf8));
+                    if (identity.hasHardwareVersion && textLen > 0) {
+                        identity.hardwareVersion.assign(wire.hardwareVersionUtf8,
+                                                        wire.hardwareVersionUtf8 + textLen);
+                    } else {
+                        identity.hasHardwareVersion = false;
+                    }
+
+                    std::lock_guard<std::mutex> lk(m_penMutex);
+                    m_penIdentityStatus = std::move(identity);
+                }
             }
             lastPenPoll = now;
         }

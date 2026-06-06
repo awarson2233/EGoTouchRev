@@ -101,6 +101,9 @@ struct IpcResponse {
 | `GetPenBridgeStatus` | 60 | 查询 PenBridge 状态 |
 | `GetDebugSchema` | 61 | 获取动态调试字段 schema |
 | `GetDebugSnapshot` | 62 | 获取动态调试字段值 |
+| `SetPenPressureMode` | 63 | 设置笔压力读取范围 |
+| `SetMasterParserOnly` | 64 | 调试用，仅运行 Master Parser |
+| `GetPenIdentityStatus` | 65 | 查询当前手写笔 ID / modelId / UTF-8 hardwareVersion |
 
 ---
 
@@ -157,15 +160,29 @@ struct IpcResponse {
 
 ### 6.3 `GetPenBridgeStatus`
 
-返回固定 13 字节：
+返回固定 24 字节：
 
 - `evtRunning`
 - `pressRunning`
 - `reportType`
 - `freq1/freq2`
 - `press0..press3`（little-endian `uint16_t`）
+- `pressureMode`
+- `pressureMax`
+- `rawPress0..rawPress3`（little-endian `uint16_t`）
 
-### 6.4 `GetDebugSchema` / `GetDebugSnapshot`
+### 6.4 `GetPenIdentityStatus`
+
+返回固定 140 字节 `PenIdentityStatusWire`：
+
+- `wireVersion`
+- `flags`：bit0=`stylusId` 有效，bit1=`penModuleModelId` 有效，bit2=`hardwareVersionUtf8` 有效，bit3=`connected`
+- `stylusId`：`PenTypeInfo payload[0]`
+- `penModuleModelId`：`PenModule` 小端 modelId
+- `hardwareVersionUtf8Len`：UTF-8 字节长度，不含 NUL
+- `hardwareVersionUtf8[128]`：UTF-8 validated 字符串，服务端按字符边界安全截断
+
+### 6.5 `GetDebugSchema` / `GetDebugSnapshot`
 
 - `GetDebugSchema`：返回 schema header + records
 - `GetDebugSnapshot`：返回 snapshot header + values

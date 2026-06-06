@@ -15,7 +15,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
-#include <cstring>
 #include <iomanip>
 #include <sstream>
 #include <string>
@@ -559,42 +558,6 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
             }
             ImGui::EndTabItem();
         }
-
-        if (ImGui::BeginTabItem("Advanced Debug")) {
-            ImGui::TextColored(ImVec4(0.9f,0.9f,0.5f,1.f), "Linear Filter Internals");
-            ImGui::Text("State=%u  lfState=%u  cos=%d  straightCount=%d  drag=%d",
-                static_cast<unsigned int>(diag.linearFilterState),
-                static_cast<unsigned int>(diag.lfStateMachine),
-                diag.lfCos1000,
-                diag.lfStraightBufCount,
-                diag.lfDragApplied);
-            ImGui::Text("Line fit: valid=%s  slope=%.4f  intercept=%.4f",
-                diag.lfLineFitValid ? "yes" : "no",
-                diag.lfLineFitSlopeA,
-                diag.lfLineFitInterceptB);
-
-            ImGui::Separator();
-            ImGui::TextColored(ImVec4(1.0f,0.5f,0.3f,1.f), "Pressure Internals");
-            ImGui::Text("BT raw=%u  preIIR=%u  polySegment=%u  freqDebounceLeft=%u",
-                diag.btRawPressure,
-                diag.preIirPressure,
-                static_cast<unsigned int>(diag.polySegment),
-                static_cast<unsigned int>(diag.btFreqShiftDebounceFramesLeft));
-
-            ImGui::Separator();
-            ImGui::TextColored(ImVec4(0.5f,0.9f,1.0f,1.f), "Legacy / Derived Flags");
-            ImGui::Text("lifecycle=%u  wasInking=%s  exitSmoothed=%s  cmf=%s  sigSuppress=%s  vhfPenState=0x%02X",
-                static_cast<unsigned int>(diag.penLifecycle),
-                diag.wasInking ? "yes" : "no",
-                diag.exitSmoothed ? "yes" : "no",
-                diag.cmfEnabled ? "yes" : "no",
-                diag.sigSuppressActive ? "yes" : "no",
-                static_cast<unsigned int>(diag.vhfPenState));
-
-            ImGui::Separator();
-            DrawDynamicDebugPanel();
-            ImGui::EndTabItem();
-        }
         ImGui::EndTabBar();
     }
 
@@ -603,70 +566,6 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
     if (masterParserOnly) ImGui::EndDisabled();
 }
 
-void DiagnosticsWorkbench::DrawDynamicDebugPanel() {
-    if (!m_proxy) {
-        ImGui::TextUnformatted("ServiceProxy unavailable.");
-        return;
-    }
-
-    const auto defs = m_proxy->GetDynamicDebugFields();
-    ImGui::Text("Schema Version: %u", static_cast<unsigned int>(m_proxy->GetDynamicDebugSchemaVersion()));
-    ImGui::SameLine();
-    ImGui::Text("Schema Hash: %u", static_cast<unsigned int>(m_proxy->GetDynamicDebugSchemaHash()));
-
-    if (defs.empty()) {
-        ImGui::TextDisabled("No dynamic debug fields from service.");
-        return;
-    }
-
-    std::vector<const DynamicDebugField*> ordered;
-    ordered.reserve(defs.size());
-    for (const auto& d : defs) ordered.push_back(&d);
-    std::stable_sort(ordered.begin(), ordered.end(), [](const DynamicDebugField* a, const DynamicDebugField* b) {
-        if (a->uiGroup != b->uiGroup) return a->uiGroup < b->uiGroup;
-        if (a->uiOrder != b->uiOrder) return a->uiOrder < b->uiOrder;
-        return a->fieldId < b->fieldId;
-    });
-
-    std::string currentGroup;
-    for (const auto* def : ordered) {
-        if (def->uiGroup != currentGroup) {
-            if (!currentGroup.empty()) ImGui::Separator();
-            currentGroup = def->uiGroup;
-            ImGui::TextColored(ImVec4(0.5f, 0.9f, 1.0f, 1.0f), "%s", currentGroup.empty() ? "Ungrouped" : currentGroup.c_str());
-        }
-
-        DynamicDebugValue v;
-        const bool has = m_proxy->GetDynamicDebugValue(def->fieldId, v);
-        if (!has || !v.valid) {
-            ImGui::Text("%s: N/A", def->displayName.empty() ? def->key.c_str() : def->displayName.c_str());
-            continue;
-        }
-
-        const char* label = def->displayName.empty() ? def->key.c_str() : def->displayName.c_str();
-        switch (v.valueType) {
-        case Ipc::DebugValueType::UInt32:
-            ImGui::Text("%s: %u %s", label, static_cast<unsigned int>(v.rawValue & 0xFFFFFFFFu), def->unit.c_str());
-            break;
-        case Ipc::DebugValueType::Int32:
-            ImGui::Text("%s: %d %s", label, static_cast<int32_t>(v.rawValue & 0xFFFFFFFFu), def->unit.c_str());
-            break;
-        case Ipc::DebugValueType::Float32: {
-            uint32_t bits = static_cast<uint32_t>(v.rawValue & 0xFFFFFFFFu);
-            float fv = 0.0f;
-            std::memcpy(&fv, &bits, sizeof(fv));
-            ImGui::Text("%s: %.4f %s", label, fv, def->unit.c_str());
-            break;
-        }
-        case Ipc::DebugValueType::Bool:
-            ImGui::Text("%s: %s", label, (v.rawValue & 0x1ull) ? "true" : "false");
-            break;
-        default:
-            ImGui::Text("%s: <unknown>", label);
-            break;
-        }
-    }
-}
 
 // ── BT MCU Panel (PenBridge Status — via IPC) ──
 void DiagnosticsWorkbench::DrawBtMcuPanel() {
@@ -678,6 +577,7 @@ void DiagnosticsWorkbench::DrawBtMcuPanel() {
 
     // ── Status + Pressure (via IPC GetPenBridgeStatus) ──
     auto ps = m_proxy ? m_proxy->GetPenBridgeStatus() : App::PenBridgeStatus{};
+    auto pen = m_proxy ? m_proxy->GetPenIdentityStatus() : App::PenIdentityStatus{};
 
     ImGui::Text("EventBridge (col00):");
     ImGui::SameLine();
@@ -692,6 +592,32 @@ void DiagnosticsWorkbench::DrawBtMcuPanel() {
         ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "RUNNING");
     else
         ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "STOPPED");
+
+    ImGui::Separator();
+    ImGui::Text("Current Pen Identity");
+    ImGui::Text("Pen Connection:");
+    ImGui::SameLine();
+    if (pen.connected)
+        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "CONNECTED");
+    else
+        ImGui::TextDisabled("DISCONNECTED / UNKNOWN");
+
+    if (pen.hasStylusId)
+        ImGui::Text("Current Stylus ID: %u (0x%02X)", pen.stylusId, pen.stylusId);
+    else
+        ImGui::TextDisabled("Current Stylus ID: Unknown");
+
+    if (pen.hasPenModuleModelId)
+        ImGui::Text("Pen Module Model ID: 0x%06X", pen.penModuleModelId);
+    else
+        ImGui::TextDisabled("Pen Module Model ID: Unknown");
+
+    ImGui::TextUnformatted("Hardware Version:");
+    ImGui::SameLine();
+    if (pen.hasHardwareVersion && !pen.hardwareVersion.empty())
+        ImGui::TextUnformatted(pen.hardwareVersion.c_str());
+    else
+        ImGui::TextDisabled("Unknown");
 
     ImGui::Separator();
     ImGui::Text("Pressure Range Mode");

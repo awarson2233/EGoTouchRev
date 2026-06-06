@@ -89,6 +89,7 @@ private:
     void HandleIpcSaveConfig(Ipc::IpcResponse& resp);
     void HandleIpcGetLogs(Ipc::IpcResponse& resp);
     void HandleIpcGetPenBridgeStatus(Ipc::IpcResponse& resp);
+    void HandleIpcGetPenIdentityStatus(Ipc::IpcResponse& resp);
     void HandleIpcGetDebugSchema(const Ipc::IpcRequest& req, Ipc::IpcResponse& resp);
     void HandleIpcGetDebugSnapshot(Ipc::IpcResponse& resp);
 

@@ -136,6 +136,10 @@ public:
         std::lock_guard<std::mutex> lk(m_penMutex);
         return m_penStatus;
     }
+    PenIdentityStatus GetPenIdentityStatus() const {
+        std::lock_guard<std::mutex> lk(m_penMutex);
+        return m_penIdentityStatus;
+    }
 
     // Local performance stats
     int  GetAcquisitionFps() const { return m_fps.load(); }
@@ -152,7 +156,6 @@ public:
 private:
     DvrDynamicDebugSchema CaptureDynamicDebugSchema() const;
     DvrDynamicDebugFrame CaptureDynamicDebugFrame() const;
-    Dvr::DvrDynamicDebugFrameSlot CaptureDvrDynamicDebugFrameSlot(uint64_t dvrSeq) const;
     DvrRuntimeConfigSnapshot CaptureRuntimeConfigSnapshot() const;
     void InitConfigSchema();
 
@@ -186,7 +189,6 @@ private:
 
     // DVR ring buffer (POD slots — zero heap allocation per frame)
     std::unique_ptr<RingBuffer<Dvr::DvrFrameSlot, kDvrCapacity>> m_dvrBuffer;
-    std::unique_ptr<RingBuffer<Dvr::DvrDynamicDebugFrameSlot, kDvrCapacity>> m_dvrDynamicDebugBuffer;
     std::atomic<uint64_t> m_dvrSeqCounter{0};
     std::atomic<bool> m_dvrExporting{false};
     std::thread m_dvrThread;
@@ -214,6 +216,7 @@ private:
     // PenBridge status (polled alongside logs)
     mutable std::mutex m_penMutex;
     PenBridgeStatus m_penStatus;
+    PenIdentityStatus m_penIdentityStatus;
 
     // Dynamic debug schema/value cache
     mutable std::mutex m_dynamicDebugMutex;
@@ -224,7 +227,6 @@ private:
     DvrDynamicDebugSchema m_lastDvrDynamicSchema;
 
     bool RefreshDynamicDebugSchema();
-    bool PollDynamicDebugSnapshot();
 
     // FPS measurement
     std::atomic<int> m_fps{0};

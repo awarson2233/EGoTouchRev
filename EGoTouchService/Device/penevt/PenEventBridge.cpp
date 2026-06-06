@@ -304,12 +304,18 @@ void PenEventBridge::OnPacketReceived(const std::vector<uint8_t>& packet) {
                 break;
             }
             case PenUsbEventCode::PenHardwareVersion: {
-                auto hardwareVersion = FormatPenUsbAsciiPayload(parsed->payload);
+                auto hardwareVersion = DecodePenUsbUtf8Payload(parsed->payload);
                 ev.semantic.hasHardwareVersion = !hardwareVersion.empty();
                 ev.semantic.hardwareVersion = std::move(hardwareVersion);
-                LOG_INFO("PenEvent", __func__, "MCU",
-                         "PenHardwareVersion: version=\"{}\" payloadLen={}",
-                         ev.semantic.hardwareVersion, parsed->payload.size());
+                if (ev.semantic.hasHardwareVersion) {
+                    LOG_INFO("PenEvent", __func__, "MCU",
+                             "PenHardwareVersion: version=\"{}\" payloadLen={}",
+                             ev.semantic.hardwareVersion, parsed->payload.size());
+                } else {
+                    LOG_WARN("PenEvent", __func__, "MCU",
+                             "PenHardwareVersion ignored: empty or invalid UTF-8 payloadLen={}",
+                             parsed->payload.size());
+                }
                 break;
             }
             case PenUsbEventCode::PenConnStatus:

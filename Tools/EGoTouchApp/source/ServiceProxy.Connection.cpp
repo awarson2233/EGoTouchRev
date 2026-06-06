@@ -5,8 +5,7 @@
 namespace App {
 
 ServiceProxy::ServiceProxy()
-    : m_dvrBuffer(std::make_unique<RingBuffer<Dvr::DvrFrameSlot, kDvrCapacity>>()),
-      m_dvrDynamicDebugBuffer(std::make_unique<RingBuffer<Dvr::DvrDynamicDebugFrameSlot, kDvrCapacity>>()) {
+    : m_dvrBuffer(std::make_unique<RingBuffer<Dvr::DvrFrameSlot, kDvrCapacity>>()) {
     // TouchPipeline is self-contained — no processor registration needed.
     InitConfigSchema();
     RefreshConfigSnapshot();
@@ -96,6 +95,11 @@ void ServiceProxy::DisconnectLocked() {
         m_client.Disconnect();
     }
     m_frameReader.Close();
+    {
+        std::lock_guard<std::mutex> lk(m_penMutex);
+        m_penStatus = PenBridgeStatus{};
+        m_penIdentityStatus = PenIdentityStatus{};
+    }
     m_fps.store(0);
     m_slaveFps.store(0);
 }

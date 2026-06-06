@@ -171,6 +171,32 @@ constexpr uint8_t ToWireServiceMode(ServiceMode mode) {
     return static_cast<uint8_t>(Ipc::ServiceModeWire::Full);
 }
 
+std::size_t Utf8TruncatedLength(std::string_view text, std::size_t capacity) noexcept {
+    std::size_t i = 0;
+    std::size_t lastGood = 0;
+    while (i < text.size() && i < capacity) {
+        const auto ch = static_cast<uint8_t>(text[i]);
+        std::size_t width = 1;
+        if ((ch & 0x80u) == 0) {
+            width = 1;
+        } else if ((ch & 0xE0u) == 0xC0u) {
+            width = 2;
+        } else if ((ch & 0xF0u) == 0xE0u) {
+            width = 3;
+        } else if ((ch & 0xF8u) == 0xF0u) {
+            width = 4;
+        } else {
+            break;
+        }
+        if (i + width > text.size() || i + width > capacity) {
+            break;
+        }
+        i += width;
+        lastGood = i;
+    }
+    return lastGood;
+}
+
 bool TryParseWireServiceMode(uint8_t wireValue, ServiceMode& out) {
     switch (static_cast<Ipc::ServiceModeWire>(wireValue)) {
     case Ipc::ServiceModeWire::Full:
@@ -1086,6 +1112,40 @@ void ServiceHost::HandleIpcGetPenBridgeStatus(Ipc::IpcResponse& resp) {
     Ipc::MarkSuccess(resp);
 }
 
+void ServiceHost::HandleIpcGetPenIdentityStatus(Ipc::IpcResponse& resp) {
+    if (!m_deviceRuntime) {
+        Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidState);
+        return;
+    }
+
+    const auto state = m_deviceRuntime->GetPenStateSnapshot();
+    Ipc::PenIdentityStatusWire wire{};
+    if (state.hasConnection && state.connected) {
+        wire.flags |= Ipc::kPenIdentityConnected;
+    }
+    if (state.hasStylusId) {
+        wire.flags |= Ipc::kPenIdentityHasStylusId;
+        wire.stylusId = state.stylusId;
+    }
+    if (state.hasPenModuleModelId) {
+        wire.flags |= Ipc::kPenIdentityHasPenModuleModelId;
+        wire.penModuleModelId = state.penModuleModelId;
+    }
+    if (state.hasHardwareVersion && !state.hardwareVersion.empty()) {
+        constexpr std::size_t kMaxTextBytes = sizeof(wire.hardwareVersionUtf8) - 1;
+        const std::size_t textLen = Utf8TruncatedLength(state.hardwareVersion, kMaxTextBytes);
+        if (textLen > 0) {
+            wire.flags |= Ipc::kPenIdentityHasHardwareVersion;
+            wire.hardwareVersionUtf8Len = static_cast<uint16_t>(textLen);
+            std::memcpy(wire.hardwareVersionUtf8, state.hardwareVersion.data(), textLen);
+        }
+    }
+
+    std::memcpy(resp.data, &wire, sizeof(wire));
+    resp.dataLen = static_cast<uint16_t>(sizeof(wire));
+    Ipc::MarkSuccess(resp);
+}
+
 void ServiceHost::HandleIpcGetDebugSchema(const Ipc::IpcRequest& req, Ipc::IpcResponse& resp) {
     Ipc::DebugSchemaRequest reqSchema{};
     if (req.paramLen >= sizeof(Ipc::DebugSchemaRequest)) {
@@ -1293,6 +1353,10 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(const Ipc::IpcRequest& req) {
 
     case Ipc::IpcCommand::GetPenBridgeStatus:
         HandleIpcGetPenBridgeStatus(resp);
+        break;
+
+    case Ipc::IpcCommand::GetPenIdentityStatus:
+        HandleIpcGetPenIdentityStatus(resp);
         break;
 
     case Ipc::IpcCommand::SetMasterParserOnly:

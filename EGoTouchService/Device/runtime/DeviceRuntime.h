@@ -211,6 +211,7 @@ public:
                            const char* reason = "");
 
     RuntimeSnapshot GetSnapshot() const;
+    RuntimePenState GetPenStateSnapshot() const;
     std::vector<HistoryEntry> GetHistory(std::size_t n = 200) const;
     void ClearHistory();
 

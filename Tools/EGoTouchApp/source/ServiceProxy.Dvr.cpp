@@ -3,7 +3,6 @@
 #include "DvrCsvExport.h"
 #include "Logger.h"
 
-#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -134,11 +133,6 @@ void ServiceProxy::TriggerDvrBinaryExport() {
             m_dvrExporting.store(false);
             return;
         }
-        std::vector<Dvr::DvrDynamicDebugFrameSlot> dynamicFrameSlots;
-        if (m_dvrDynamicDebugBuffer) {
-            dynamicFrameSlots = m_dvrDynamicDebugBuffer->GetSnapshot();
-        }
-
         namespace fs = std::filesystem;
         const fs::path dir = MakeDvrExportRoot();
         const std::string datasetName = MakeDvrDatasetName();
@@ -167,32 +161,10 @@ void ServiceProxy::TriggerDvrBinaryExport() {
             preTriggerFrames.erase(preTriggerFrames.begin(), preTriggerFrames.begin() + static_cast<long long>(dropCount));
         }
 
-        std::vector<Dvr::DvrDynamicDebugFrameSlot> preTriggerDynamicFrames;
-        const std::vector<Dvr::DvrDynamicDebugFrameSlot>* dynamicFramesForExport = nullptr;
-        if (!dynamicFrameSlots.empty()) {
-            bool allDynamicFramesMatched = true;
-            preTriggerDynamicFrames.reserve(preTriggerFrames.size());
-            for (const auto& frame : preTriggerFrames) {
-                const auto match = std::find_if(dynamicFrameSlots.begin(), dynamicFrameSlots.end(), [seq = frame.dvrSeq](const auto& dynamicFrame) {
-                    return dynamicFrame.dvrSeq == seq;
-                });
-                if (match == dynamicFrameSlots.end()) {
-                    allDynamicFramesMatched = false;
-                    break;
-                }
-                preTriggerDynamicFrames.push_back(*match);
-            }
-            if (allDynamicFramesMatched) {
-                dynamicFramesForExport = &preTriggerDynamicFrames;
-            } else {
-                LOG_WARN("App", "TriggerDvrBinaryExport", "IPC", "Dynamic debug frames did not cover all exported DVR frames; exporting static frame schema only.");
-            }
-        }
-
         const fs::path replayBinPath = dir / (datasetName + ".dvrbin");
         const auto dynamicSchema = GetCurrentDvrDynamicDebugSchema();
         const auto runtimeConfig = CaptureRuntimeConfigSnapshot();
-        if (!WriteDvrBinaryFile(replayBinPath, preTriggerFrames, &dynamicSchema, dynamicFramesForExport, &runtimeConfig, nullptr)) {
+        if (!WriteDvrBinaryFile(replayBinPath, preTriggerFrames, &dynamicSchema, nullptr, &runtimeConfig, nullptr)) {
             LOG_ERROR("App", "TriggerDvrBinaryExport", "IPC", "Failed to write DVR2 dataset: {}", replayBinPath.string());
             m_dvrExporting.store(false);
             return;

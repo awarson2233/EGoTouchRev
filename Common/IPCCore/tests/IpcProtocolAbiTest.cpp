@@ -40,6 +40,7 @@ int main() {
     Require(U(IpcCommand::PersistConfig) == 44, "PersistConfig command value remains stable");
     Require(U(IpcCommand::GetDebugSchema) == 61, "GetDebugSchema command value remains stable");
     Require(U(IpcCommand::SetMasterParserOnly) == 64, "SetMasterParserOnly command value remains stable");
+    Require(U(IpcCommand::GetPenIdentityStatus) == 65, "GetPenIdentityStatus command value remains stable");
 
     Require(U(IpcStatusCode::Ok) == 0, "Ok status value remains stable");
     Require(U(IpcStatusCode::UnsupportedCommand) == 1, "UnsupportedCommand status value remains stable");
@@ -73,6 +74,16 @@ int main() {
     Require(patch.wireVersion == kIpcProtocolVersion, "ApplyConfigPatchRequestWire version defaults to protocol version");
     Require(patch.fieldMask == 0, "ApplyConfigPatchRequestWire field mask defaults empty");
     Require(patch.desiredMode == U(ServiceModeWire::Full), "ApplyConfigPatchRequestWire desired mode defaults to Full");
+
+    PenIdentityStatusWire penIdentity{};
+    Require(sizeof(PenIdentityStatusWire) == 140, "PenIdentityStatusWire layout remains fixed");
+    Require(penIdentity.wireVersion == kIpcProtocolVersion, "PenIdentityStatusWire version defaults to protocol version");
+    Require(penIdentity.flags == 0, "PenIdentityStatusWire flags default empty");
+    Require(penIdentity.stylusId == 0, "PenIdentityStatusWire stylus id defaults zero");
+    Require(penIdentity.penModuleModelId == 0, "PenIdentityStatusWire model id defaults zero");
+    Require(penIdentity.hardwareVersionUtf8Len == 0, "PenIdentityStatusWire UTF-8 length defaults zero");
+    Require(sizeof(penIdentity.hardwareVersionUtf8) == 128, "PenIdentityStatusWire UTF-8 buffer capacity remains 128 bytes");
+    Require(penIdentity.hardwareVersionUtf8[0] == '\0', "PenIdentityStatusWire UTF-8 buffer is zero-initialized");
 
     DebugFieldSchemaWire schema{};
     Require(schema.fieldId == 0, "DebugFieldSchemaWire field id is zero-initialized");

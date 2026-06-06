@@ -10,25 +10,6 @@ namespace Solvers {
 void StylusPipeline::registerBindings(Config::ConfigBinder& binder) {
     using Config::ConfigRange;
 
-    // ── HPP2 ──
-    binder.bind("stylus.hpp2.enabled", &Stylus::Hpp2::Pipeline::m_enabled, m_hpp2,
-                true, {}, "HPP2 pipeline enable");
-    binder.bind("stylus.hpp2.sensor_tx_count", &Stylus::Hpp2::Pipeline::m_sensorTxCount, m_hpp2,
-                static_cast<int32_t>(60), ConfigRange{1.0, 100.0}, "HPP2 sensor TX count");
-    binder.bind("stylus.hpp2.sensor_rx_count", &Stylus::Hpp2::Pipeline::m_sensorRxCount, m_hpp2,
-                static_cast<int32_t>(40), ConfigRange{1.0, 100.0}, "HPP2 sensor RX count");
-    binder.bind("stylus.hpp2.cmf_window_radius", &Stylus::Hpp2::Pipeline::m_cmfWindowRadius, m_hpp2,
-                static_cast<int32_t>(6), ConfigRange{0.0, 32.0}, "HPP2 CMF window radius");
-    // uint16/uint32 thresholds — applied via applyConfig() with static_cast
-    binder.bind("stylus.hpp2.peak_search_neighbor_dist", &Stylus::Hpp2::Pipeline::m_peakSearchNeighborDist, m_hpp2,
-                static_cast<int32_t>(2), ConfigRange{1.0, 16.0}, "HPP2 peak search neighbor distance");
-    binder.bind("stylus.hpp2.peak_min_width", &Stylus::Hpp2::Pipeline::m_peakMinWidth, m_hpp2,
-                static_cast<int32_t>(2), ConfigRange{1.0, 100.0}, "HPP2 peak min width");
-    binder.bind("stylus.hpp2.peak_max_width", &Stylus::Hpp2::Pipeline::m_peakMaxWidth, m_hpp2,
-                static_cast<int32_t>(20), ConfigRange{1.0, 100.0}, "HPP2 peak max width");
-    binder.bind("stylus.hpp2.use_tight_pressure_delta", &Stylus::Hpp2::Pipeline::m_useTightPressureDelta, m_hpp2,
-                false, {}, "HPP2 use tight pressure delta");
-
     // ── Frame Parser ──
     binder.bind("stylus.sp.frame_parser_enabled", &Stylus::StylusFrameParser::m_enabled, m_frameParser,
                 true, {}, "Frame parser enable");
@@ -89,33 +70,6 @@ void StylusPipeline::registerBindings(Config::ConfigBinder& binder) {
 }
 
 void StylusPipeline::applyConfig(const Config::ConfigStore& store) {
-    const bool hpp2Enabled = store.getOr<bool>("stylus.hpp2.enabled", true);
-    m_hpp2.m_enabled = hpp2Enabled;
-    m_hpp2.m_sensorTxCount = store.getOr<int32_t>("stylus.hpp2.sensor_tx_count", 60);
-    m_hpp2.m_sensorRxCount = store.getOr<int32_t>("stylus.hpp2.sensor_rx_count", 40);
-    m_hpp2.m_cmfWindowRadius = store.getOr<int32_t>("stylus.hpp2.cmf_window_radius", 6);
-    m_hpp2.m_rawAbnormalLineSumThreshold = static_cast<uint32_t>(store.getOr<int32_t>("stylus.hpp2.raw_abnormal_line_sum_threshold", 30000));
-    m_hpp2.m_rawAbnormalEnergyRatioThreshold = static_cast<uint16_t>(store.getOr<int32_t>("stylus.hpp2.raw_abnormal_energy_ratio_threshold", 200));
-    m_hpp2.m_cmnAbnormalSumThreshold = static_cast<uint32_t>(store.getOr<int32_t>("stylus.hpp2.cmn_abnormal_sum_threshold", 9000));
-    m_hpp2.m_cmnAbnormalMinThreshold = static_cast<uint16_t>(store.getOr<int32_t>("stylus.hpp2.cmn_abnormal_min_threshold", 2500));
-    m_hpp2.m_chargerNoiseClearFloor = static_cast<uint16_t>(store.getOr<int32_t>("stylus.hpp2.charger_noise_clear_floor", 20));
-    m_hpp2.m_chargerNoiseRatioThreshold = static_cast<uint16_t>(store.getOr<int32_t>("stylus.hpp2.charger_noise_ratio_threshold", 299));
-    m_hpp2.m_chargerNoiseSumThreshold = static_cast<uint32_t>(store.getOr<int32_t>("stylus.hpp2.charger_noise_sum_threshold", 400));
-    m_hpp2.m_chargerNoiseMaxSampleThreshold = static_cast<uint16_t>(store.getOr<int32_t>("stylus.hpp2.charger_noise_max_sample_threshold", 200));
-    m_hpp2.m_chargerNoiseAbnormalChannelThreshold = static_cast<uint8_t>(store.getOr<int32_t>("stylus.hpp2.charger_noise_abnormal_channel_threshold", 2));
-    m_hpp2.m_chargerNoisePeakProtectRadius = static_cast<uint16_t>(store.getOr<int32_t>("stylus.hpp2.charger_noise_peak_protect_radius", 2));
-    m_hpp2.m_chargerNoiseMinRawSample = static_cast<uint16_t>(store.getOr<int32_t>("stylus.hpp2.charger_noise_min_raw_sample", 50));
-    m_hpp2.m_peakSignalFloor = static_cast<uint16_t>(store.getOr<int32_t>("stylus.hpp2.peak_signal_floor", 250));
-    m_hpp2.m_peakSearchNeighborDist = store.getOr<int32_t>("stylus.hpp2.peak_search_neighbor_dist", 2);
-    m_hpp2.m_peakMinWidth = store.getOr<int32_t>("stylus.hpp2.peak_min_width", 2);
-    m_hpp2.m_peakMaxWidth = store.getOr<int32_t>("stylus.hpp2.peak_max_width", 20);
-    m_hpp2.m_pressureEdgeEnterThreshold = static_cast<uint16_t>(store.getOr<int32_t>("stylus.hpp2.pressure_edge_enter_threshold", 1500));
-    m_hpp2.m_pressureEdgeExitThreshold = static_cast<uint16_t>(store.getOr<int32_t>("stylus.hpp2.pressure_edge_exit_threshold", 3000));
-    m_hpp2.m_pressureDeltaNormal = static_cast<uint16_t>(store.getOr<int32_t>("stylus.hpp2.pressure_delta_normal", 1024));
-    m_hpp2.m_pressureDeltaTight = static_cast<uint16_t>(store.getOr<int32_t>("stylus.hpp2.pressure_delta_tight", 64));
-    m_hpp2.m_useTightPressureDelta = store.getOr<bool>("stylus.hpp2.use_tight_pressure_delta", false);
-    if (!hpp2Enabled) { m_hpp2.ResetOnTerminal(); }
-
     m_frameParser.m_enabled = store.getOr<bool>("stylus.sp.frame_parser_enabled", true);
     m_hpp3.m_featureExtractor.m_enabled = store.getOr<bool>("stylus.sp.peak_detector_enabled", true);
     m_hpp3.m_coordinateSolver.m_enabled = store.getOr<bool>("stylus.sp.coordinate_solver_enabled", true);

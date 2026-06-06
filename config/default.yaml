@@ -21,31 +21,6 @@ touch:
     enabled: true                     # Frame Parser Enabled
 
 stylus:
-  hpp2:
-    enabled: true                              # HPP2 Enabled
-    sensor_tx_count: 60                       # 1..100 HPP2 Sensor TX Count
-    sensor_rx_count: 40                       # 1..100 HPP2 Sensor RX Count
-    cmf_window_radius: 6                      # 0..32 HPP2 CMF Window Radius
-    raw_abnormal_line_sum_threshold: 30000    # 0..2147483647 HPP2 Raw Abnormal Line Sum Threshold
-    raw_abnormal_energy_ratio_threshold: 200  # 0..65535 HPP2 Raw Abnormal Energy Ratio Threshold
-    cmn_abnormal_sum_threshold: 9000          # 0..2147483647 HPP2 CMN Abnormal Sum Threshold
-    cmn_abnormal_min_threshold: 2500          # 0..65535 HPP2 CMN Abnormal Min Threshold
-    charger_noise_clear_floor: 20             # 1..65535 HPP2 Charger Noise Clear Floor
-    charger_noise_ratio_threshold: 299        # 0..65535 HPP2 Charger Noise Ratio Threshold
-    charger_noise_sum_threshold: 400          # 0..2147483647 HPP2 Charger Noise Sum Threshold
-    charger_noise_max_sample_threshold: 200   # 0..65535 HPP2 Charger Noise Max Sample Threshold
-    charger_noise_abnormal_channel_threshold: 2 # 0..255 HPP2 Charger Noise Abnormal Channel Threshold
-    charger_noise_peak_protect_radius: 2      # 0..65535 HPP2 Charger Noise Peak Protect Radius
-    charger_noise_min_raw_sample: 50          # 0..65535 HPP2 Charger Noise Min Raw Sample
-    peak_signal_floor: 250                    # 0..65535 HPP2 Peak Signal Floor
-    peak_search_neighbor_dist: 2              # 1..16 HPP2 Peak Search Neighbor Dist
-    peak_min_width: 2                         # 1..100 HPP2 Peak Min Width
-    peak_max_width: 20                        # 1..100 HPP2 Peak Max Width
-    pressure_edge_enter_threshold: 1500       # 0..65535 HPP2 Pressure Edge Enter Threshold
-    pressure_edge_exit_threshold: 3000        # 0..65535 HPP2 Pressure Edge Exit Threshold
-    pressure_delta_normal: 1024               # 0..65535 HPP2 Pressure Delta Normal
-    pressure_delta_tight: 64                  # 0..65535 HPP2 Pressure Delta Tight
-    use_tight_pressure_delta: false           # HPP2 Use Tight Pressure Delta
   sp:
     frame_parser_enabled: true                # Frame Parser Enabled
     peak_detector_enabled: true               # Peak Detector Enabled

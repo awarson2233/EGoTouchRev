@@ -1,4 +1,5 @@
 #include "StylusSolver/StylusPipeline.h"
+#include "config/ConfigStore.h"
 
 #include <array>
 #include <cstdint>
@@ -107,6 +108,25 @@ void TestHpp2NoPeakRejects() {
     pipeline.Process(frame);
 
     Require(frame.stylus.runtime.Active().flow.terminal, "sub-floor peak signal should reject the frame");
+}
+
+void TestHpp2ConfigStoreOverridesAreIgnored() {
+    Solvers::StylusPipeline pipeline;
+    Config::ConfigStore store;
+    store.set("stylus.hpp2.enabled", false);
+    store.set("stylus.hpp2.sensor_tx_count", 1);
+    store.set("stylus.hpp2.sensor_rx_count", 1);
+    store.set("stylus.hpp2.peak_signal_floor", 6000);
+    store.set("stylus.hpp2.raw_abnormal_line_sum_threshold", 1);
+    store.set("stylus.hpp2.use_tight_pressure_delta", true);
+    pipeline.applyConfig(store);
+
+    HeatmapFrame frame = MakeHpp2Frame(12, 7, 2600, 2400, 512);
+    pipeline.Process(frame);
+
+    Require(!frame.stylus.runtime.Active().flow.terminal, "HPP2 config store overrides should not disable or reject the frame");
+    Require(frame.stylus.output.valid, "HPP2 config store overrides should not affect default output validity");
+    Require(frame.stylus.output.pressure == 512, "HPP2 config store overrides should not affect default pressure publishing");
 }
 
 void TestHpp2ButtonReleaseCounterDecrements() {
@@ -298,6 +318,7 @@ int main() {
         TestHpp2EdgePressureGuardSuppressesPressure();
         TestHpp2AbnormalRawRejects();
         TestHpp2NoPeakRejects();
+        TestHpp2ConfigStoreOverridesAreIgnored();
         TestHpp2ButtonReleaseCounterDecrements();
         TestForcedHpp2IgnoresAuxFlags();
         TestForcedHpp2WithoutLineDataTerminals();
