@@ -65,6 +65,17 @@ constexpr int GetFactoryBtMcuAckCode(uint8_t eventCode) noexcept {
 enum class PenUsbEventCode : uint8_t {
     PenModule = 0x00,               // PenService PenModule / ModelId 上报
     PenHardwareVersion = 0x02,      // PenService 硬件版本 ASCII 上报
+    UsbdSwVersion = 0x03,
+    BatteryStatus = 0x08,
+    ChargingStatus = 0x09,
+    DevConnect = 0x10,
+    DevPairStatus = 0x12,
+    PenDockStatus = 0x21,
+    PenUpdateStatus = 0x23,
+    PenKeyFuncGet = 0x27,
+    Unknown28 = 0x28,               // 抓包出现；原厂可见 switch 未定位，不自动 ACK
+    PenBatteryAfterConn = 0x2C,
+    PenPairDetectAck = 0x2E,
     PenCurrentFunc = 0x2F,
     PenUnknown6F = 0x6F,            // 未确认事件，不自动 ACK
     PenAcStatus = 0x70,
@@ -128,6 +139,78 @@ constexpr const char* ToString(PenCurrentMode mode) noexcept {
     case PenCurrentMode::Eraser: return "eraser";
     default: return "unknown";
     }
+}
+
+constexpr PenUsbEventCode PenUsbEventCodeFromRaw(uint8_t code) noexcept {
+    switch (code) {
+    case 0x00: return PenUsbEventCode::PenModule;
+    case 0x02: return PenUsbEventCode::PenHardwareVersion;
+    case 0x03: return PenUsbEventCode::UsbdSwVersion;
+    case 0x08: return PenUsbEventCode::BatteryStatus;
+    case 0x09: return PenUsbEventCode::ChargingStatus;
+    case 0x10: return PenUsbEventCode::DevConnect;
+    case 0x12: return PenUsbEventCode::DevPairStatus;
+    case 0x21: return PenUsbEventCode::PenDockStatus;
+    case 0x23: return PenUsbEventCode::PenUpdateStatus;
+    case 0x27: return PenUsbEventCode::PenKeyFuncGet;
+    case 0x28: return PenUsbEventCode::Unknown28;
+    case 0x2C: return PenUsbEventCode::PenBatteryAfterConn;
+    case 0x2E: return PenUsbEventCode::PenPairDetectAck;
+    case 0x2F: return PenUsbEventCode::PenCurrentFunc;
+    case 0x6F: return PenUsbEventCode::PenUnknown6F;
+    case 0x70: return PenUsbEventCode::PenAcStatus;
+    case 0x71: return PenUsbEventCode::PenConnStatus;
+    case 0x72: return PenUsbEventCode::PenCurStatus;
+    case 0x73: return PenUsbEventCode::PenTypeInfo;
+    case 0x74: return PenUsbEventCode::PenRotateAngle;
+    case 0x75: return PenUsbEventCode::PenTouchMode;
+    case 0x76: return PenUsbEventCode::PenGlobalPreventMode;
+    case 0x77: return PenUsbEventCode::PenScreenStatus;
+    case 0x78: return PenUsbEventCode::PenHolster;
+    case 0x79: return PenUsbEventCode::PenFreqJump;
+    case 0x7B: return PenUsbEventCode::PenRepParam;
+    case 0x7C: return PenUsbEventCode::PenGlobalAnnotation;
+    case 0x7F: return PenUsbEventCode::EraserToggle;
+    default: return PenUsbEventCode::Unknown;
+    }
+}
+
+constexpr const char* ToString(PenUsbEventCode code) noexcept {
+    switch (code) {
+    case PenUsbEventCode::PenModule: return "PEN_MODULE";
+    case PenUsbEventCode::PenHardwareVersion: return "PEN_HARDWARE_VERSION";
+    case PenUsbEventCode::UsbdSwVersion: return "USBD_SW_VERSION";
+    case PenUsbEventCode::BatteryStatus: return "BATTERY_STATUS";
+    case PenUsbEventCode::ChargingStatus: return "CHARGING_STATUS";
+    case PenUsbEventCode::DevConnect: return "DEV_CONNECT";
+    case PenUsbEventCode::DevPairStatus: return "DEV_PAIR_STATUS";
+    case PenUsbEventCode::PenDockStatus: return "PEN_DOCK_STATUS";
+    case PenUsbEventCode::PenUpdateStatus: return "PEN_UPDATE_STATUS";
+    case PenUsbEventCode::PenKeyFuncGet: return "PEN_KEY_FUNC_GET";
+    case PenUsbEventCode::Unknown28: return "UNKNOWN_0x28";
+    case PenUsbEventCode::PenBatteryAfterConn: return "PEN_BATTERY_AFTER_CONN";
+    case PenUsbEventCode::PenPairDetectAck: return "PEN_PAIR_DETECT_ACK";
+    case PenUsbEventCode::PenCurrentFunc: return "PEN_CURRENT_FUNC";
+    case PenUsbEventCode::PenUnknown6F: return "UNKNOWN_0x6F";
+    case PenUsbEventCode::PenAcStatus: return "PEN_AC_STATUS";
+    case PenUsbEventCode::PenConnStatus: return "PEN_CONN_STATUS";
+    case PenUsbEventCode::PenCurStatus: return "PEN_CUR_STATUS";
+    case PenUsbEventCode::PenTypeInfo: return "PEN_TYPE_INFO";
+    case PenUsbEventCode::PenRotateAngle: return "PEN_ROATE_ANGLE";
+    case PenUsbEventCode::PenTouchMode: return "PEN_TOUCH_MODE";
+    case PenUsbEventCode::PenGlobalPreventMode: return "PEN_GLOBAL_PREVENT_MODE";
+    case PenUsbEventCode::PenScreenStatus: return "PEN_SCREEN_STATUS";
+    case PenUsbEventCode::PenHolster: return "PEN_HOLSTER";
+    case PenUsbEventCode::PenFreqJump: return "PEN_FREQ_JUMP";
+    case PenUsbEventCode::PenRepParam: return "PEN_REP_PARAM";
+    case PenUsbEventCode::PenGlobalAnnotation: return "PEN_GLOBAL_ANNOTATION";
+    case PenUsbEventCode::EraserToggle: return "ERASER_TOGGLE";
+    default: return "UNKNOWN_EVENT";
+    }
+}
+
+constexpr const char* PenUsbEventNameFromRaw(uint8_t code) noexcept {
+    return ToString(PenUsbEventCodeFromRaw(code));
 }
 
 constexpr bool FactoryStatusFlagsAffected(PenUsbEventCode code) noexcept {

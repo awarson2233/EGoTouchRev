@@ -149,10 +149,12 @@ bool PenEventBridge::SendRawPacket(const std::vector<uint8_t>& pkt) {
     return true;
 }
 
-void PenEventBridge::SendAck(uint8_t ackCode) {
+void PenEventBridge::SendAck(uint8_t eventCode, uint8_t ackCode) {
     const auto pkt = BuildPenUsbEventAck(ackCode);
     if (SendRawPacket(pkt)) {
-        LOG_INFO("PenEvent", __func__, "MCU", "ACK sent: 0x{:02X}", ackCode);
+        LOG_INFO("PenEvent", __func__, "MCU",
+                 "ACK sent: event={}(0x{:02X}) ack=0x{:02X}",
+                 PenUsbEventNameFromRaw(eventCode), eventCode, ackCode);
     }
 }
 
@@ -255,13 +257,15 @@ void PenEventBridge::OnPacketReceived(const std::vector<uint8_t>& packet) {
     }
 
     const uint8_t eventCode = parsed->eventCode;
+    const uint8_t payload0 = parsed->payload.empty() ? 0 : parsed->payload[0];
     LOG_INFO("PenEvent", __func__, "MCU",
-             "RX packet: size={}B eventCode=0x{:02X} payloadLen={}",
-             packet.size(), eventCode, parsed->payload.size());
+             "RX event: event={}(0x{:02X}) size={}B payloadLen={} payload0=0x{:02X}",
+             PenUsbEventNameFromRaw(eventCode), eventCode, packet.size(),
+             parsed->payload.size(), payload0);
 
     int ackCode = GetAckCode(eventCode);
     if (ackCode >= 0) {
-        SendAck(static_cast<uint8_t>(ackCode));
+        SendAck(eventCode, static_cast<uint8_t>(ackCode));
     }
 
     AdvanceSessionFromEvent(eventCode);

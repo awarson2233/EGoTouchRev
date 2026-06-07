@@ -106,7 +106,35 @@ void TestFactoryAckTable() {
     Require(GetFactoryBtMcuAckCode(0x7C) == 0x0C, "0x7C should ACK 0x0C");
     Require(GetFactoryBtMcuAckCode(0x7F) == 0x09, "0x7F should ACK 9");
     Require(GetFactoryBtMcuAckCode(0x00) == -1, "PenModule 0x00 should not be ACKed without factory evidence");
+    Require(GetFactoryBtMcuAckCode(0x28) == -1, "Open event 0x28 should not be ACKed without factory evidence");
     Require(GetFactoryBtMcuAckCode(0x6F) == -1, "0x6F should not be ACKed without factory evidence");
+}
+
+void TestEventCodeNames() {
+    using Himax::Pen::PenUsbEventCode;
+    using Himax::Pen::PenUsbEventCodeFromRaw;
+    using Himax::Pen::PenUsbEventNameFromRaw;
+    using Himax::Pen::ToString;
+
+    Require(PenUsbEventCodeFromRaw(0x71) == PenUsbEventCode::PenConnStatus,
+            "0x71 should map to PenConnStatus");
+    Require(PenUsbEventCodeFromRaw(0x7B) == PenUsbEventCode::PenRepParam,
+            "0x7B should map to PenRepParam");
+    Require(PenUsbEventCodeFromRaw(0x28) == PenUsbEventCode::Unknown28,
+            "0x28 should keep the documented open-event identity");
+    Require(PenUsbEventCodeFromRaw(0x55) == PenUsbEventCode::Unknown,
+            "unknown event code should map to Unknown");
+
+    Require(std::string(ToString(PenUsbEventCode::PenConnStatus)) == "PEN_CONN_STATUS",
+            "0x71 should format as PEN_CONN_STATUS");
+    Require(std::string(ToString(PenUsbEventCode::PenRepParam)) == "PEN_REP_PARAM",
+            "0x7B should format as PEN_REP_PARAM");
+    Require(std::string(ToString(PenUsbEventCode::PenRotateAngle)) == "PEN_ROATE_ANGLE",
+            "0x74 should preserve the protocol document spelling");
+    Require(std::string(PenUsbEventNameFromRaw(0x28)) == "UNKNOWN_0x28",
+            "0x28 should format as a named open event, not a raw-only code");
+    Require(std::string(PenUsbEventNameFromRaw(0x55)) == "UNKNOWN_EVENT",
+            "unknown event code should format as UNKNOWN_EVENT");
 }
 
 void TestCommandPacketBuilders() {
@@ -224,6 +252,7 @@ int main() {
         TestHardwareVersionEventFrameParses();
         TestInvalidFactoryEventFramesAreRejected();
         TestFactoryAckTable();
+        TestEventCodeNames();
         TestCommandPacketBuilders();
         TestUtf8PayloadDecoding();
         TestType3Encoding();

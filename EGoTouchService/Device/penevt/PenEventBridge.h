@@ -51,7 +51,7 @@ private:
     static int GetAckCode(uint8_t eventCode);
 
     bool SendRawPacket(const std::vector<uint8_t>& pkt);
-    void SendAck(uint8_t ackCode);
+    void SendAck(uint8_t eventCode, uint8_t ackCode);
     void ExecuteInitAction(PenUsbInitAction action);
     void AdvanceSessionFromEvent(uint8_t eventCode);
 

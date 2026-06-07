@@ -59,27 +59,7 @@ PenButtonRoutePlan ResolvePenButtonRoute(PenButtonMode mode,
 }
 
 const char *FactoryStatusEventName(Himax::Pen::PenUsbEventCode code) noexcept {
-  using EC = Himax::Pen::PenUsbEventCode;
-  switch (code) {
-  case EC::PenAcStatus:
-    return "PenAcStatus";
-  case EC::PenConnStatus:
-    return "PenConnStatus";
-  case EC::PenCurStatus:
-    return "PenCurStatus";
-  case EC::PenTypeInfo:
-    return "PenTypeInfo";
-  case EC::PenRotateAngle:
-    return "PenRotateAngle";
-  case EC::PenTouchMode:
-    return "PenTouchMode";
-  case EC::PenGlobalPreventMode:
-    return "PenGlobalPreventMode";
-  case EC::PenHolster:
-    return "PenHolster";
-  default:
-    return "Unknown";
-  }
+  return Himax::Pen::ToString(code);
 }
 
 Solvers::StylusProtocolHint ResolveProtocolHintFromStylusId(uint8_t stylusId) noexcept {
@@ -1207,8 +1187,8 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
   }
 
   default:
-    LOG_INFO("Runtime", __func__, "MCU", "MCU event 0x{:02X} received.",
-             static_cast<uint8_t>(ev.code));
+    LOG_INFO("Runtime", __func__, "MCU", "MCU event {}(0x{:02X}) received.",
+             Himax::Pen::ToString(ev.code), static_cast<uint8_t>(ev.code));
     break;
   }
 }
