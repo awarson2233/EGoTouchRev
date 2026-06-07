@@ -21,6 +21,20 @@
 - [ ] P1-7 App `ConfigDraft` 完整拆分 snapshot cache、editable draft、dirty baseline、apply/persist state
 - [ ] P2 legacy fixed ABI cleanup：删除 Service/Common 旧 `ConfigSnapshotWire` / `ApplyConfigPatchRequestWire` 主路径；保留本地离线 fallback
 
+## 后续执行 Gate
+
+> 每个 impl agent 返回后必须由 review agent 审查；未通过则回同一 impl/fix agent 修正。review 通过时只输出文档摘要，文档由主 agent 更新。
+
+| Gate | 状态 | 任务内容 | 修改范围 | 预期行为 | 验收方式 | 并行规则 |
+|------|------|----------|----------|----------|----------|----------|
+| Step 1 P1-6 final review/fix | [~] 进行中 | 冻结并验收 `ApplyConfigPatchV3` / `PersistConfigV3` wire/result；完成 restart-required staged + persist 语义 | IPC wire/client/server, `ConfigRuntime`, `ServiceHost`, `ServiceProxy`, ABI/runtime/App tests | semantic reject 返回 result wire `Rejected`; malformed request 才 IPC failure; `VersionMismatch` refresh/retry; restart-required 不 live apply; persist policy skip/count | `git diff --check`; `cmake --preset arm64-Debug`; build 或相关 target build; `ctest --preset arm64-Debug --output-on-failure` | 串行；不允许多 impl 并行 |
+| Step 2 P1-7 ConfigDraft | [ ] 待开始 | 拆分 Service catalog cache、snapshot cache、editable draft、dirty baseline、apply/persist state | App `ServiceProxy`, `ConfigUIRenderer`, inspector, App tests | refresh 不覆盖 dirty draft; apply/persist 状态可表达 rejected、unpersisted、restart-required、VersionMismatch rebase | App draft tests + full ctest | 串行；不可与 App legacy cleanup 并行 |
+| Step 3 P2 Common/Service legacy IPC cleanup | [ ] 待开始 | 删除/隔离 Service/Common legacy fixed ABI 主路径 | Common IPC, ServiceHost, IPC ABI tests | connected config IPC 只保留 v3 catalog/snapshot/patch/persist；旧 command tombstone 或 unsupported | `git grep` legacy symbols; build; ctest | 可与 Step 4 并行，独立 worktree |
+| Step 4 P2 App connected legacy cleanup + offline fallback | [ ] 待开始 | 清理 App connected legacy merge/apply/helper；保留离线 binder/YAML fallback | App `ServiceProxy`, inspector, App fallback tests | connected 只走 v3；offline fallback 仍可初始化 schema/store；v3 fetch failure 不伪装成 legacy snapshot | App connected/offline tests + full ctest | 可与 Step 3 并行；不可与 Step 2 并行 |
+| Step 5 build macro cleanup | [ ] 待开始 | 清理 `EGOTOUCH_CONFIG_ENABLED` / `EGOTOUCH_ENABLE_RUNTIME_CONFIG` 双路径 | CMake/presets, SolverBuildConfig, guarded Service/App/Solver code | runtime config 成为唯一主路径；disabled runtime UI/branches 移除或降为兼容 shim | grep macros; arm64-Debug/Release/amd64-Debug configure/build gates | 默认串行 |
+| Step 6 packaging/e2e verification | [ ] 待开始 | 验证 build output config、startup、connected edit/apply/persist、restart persistence | 优先只读；必要时补 e2e tests/scripts | `config/default.yaml` 随 exe；overrides 仅保存差异且可重启保持 | ctest; preset builds; config copy/install check; persist/restart evidence | 可并行只读验证 |
+| Step 7 final docs/API sync | [ ] 待开始 | 同步实施文档、任务清单、IPC/API 文档 | docs only | 文档与代码、grep、测试证据一致；legacy 主路径描述删除或标历史 | docs diff-check; task checklist audit | 仅主 agent 写 docs |
+
 ---
 
 ## Phase 0: 依赖 + 基础组件
