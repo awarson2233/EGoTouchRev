@@ -185,10 +185,25 @@ constexpr uint16_t ConfigV3PageCapacityBytes() noexcept {
     return static_cast<uint16_t>(kIpcResponseDataBytes - sizeof(ConfigV3PageResponseHeaderWire));
 }
 
-constexpr bool IsValidConfigV3PageResponse(const ConfigV3PageResponseHeaderWire& header) noexcept {
-    return header.headerBytes == sizeof(ConfigV3PageResponseHeaderWire) &&
+constexpr bool IsKnownConfigV3PayloadKind(uint8_t payloadKind) noexcept {
+    return payloadKind == static_cast<uint8_t>(ConfigV3PayloadKind::Catalog) ||
+           payloadKind == static_cast<uint8_t>(ConfigV3PayloadKind::Snapshot);
+}
+
+constexpr bool IsValidConfigV3PageResponse(const ConfigV3PageResponseHeaderWire& header, uint32_t dataLen) noexcept {
+    return header.wireVersion == kIpcProtocolVersion &&
+           IsKnownConfigV3PayloadKind(header.payloadKind) &&
+           header.flags == 0 &&
+           header.headerBytes == sizeof(ConfigV3PageResponseHeaderWire) &&
            header.headerBytes < kIpcResponseDataBytes &&
-           header.pageBytes <= ConfigV3PageCapacityBytes();
+           header.pageBytes <= ConfigV3PageCapacityBytes() &&
+           header.offset <= header.totalBytes &&
+           header.pageBytes <= header.totalBytes - header.offset &&
+           dataLen == static_cast<uint32_t>(header.headerBytes) + header.pageBytes;
+}
+
+constexpr bool IsValidConfigV3PageResponse(const ConfigV3PageResponseHeaderWire& header) noexcept {
+    return IsValidConfigV3PageResponse(header, static_cast<uint32_t>(header.headerBytes) + header.pageBytes);
 }
 
 enum class DebugValueType : uint8_t {

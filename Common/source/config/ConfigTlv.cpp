@@ -346,6 +346,8 @@ namespace {
 constexpr uint32_t kConfigV3CatalogMagic = 0x33435643u; // 'CVC3'
 constexpr uint32_t kConfigV3SnapshotMagic = 0x33535643u; // 'CVS3'
 constexpr uint16_t kConfigV3Version = 1;
+constexpr size_t kConfigV3MinCatalogEntrySize = sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint8_t) + sizeof(uint8_t);
+constexpr size_t kConfigV3MinSnapshotEntrySize = sizeof(uint16_t) + sizeof(uint8_t) + sizeof(uint16_t);
 
 void appendUint32Le(std::vector<uint8_t>& out, uint32_t value) {
     appendUint16Le(out, static_cast<uint16_t>(value & 0xFFFFu));
@@ -472,6 +474,37 @@ uint32_t readHeaderStrict(const uint8_t* data, size_t size, size_t& offset, uint
     if (version != kConfigV3Version) throw std::runtime_error("Config v3 unsupported version");
     return count;
 }
+
+void rejectEntryCountIfImpossible(uint32_t count, size_t remainingBytes, size_t minEntryBytes) {
+    if (minEntryBytes == 0 || count > remainingBytes / minEntryBytes) {
+        throw std::runtime_error("Config v3 entry count exceeds payload size");
+    }
+}
+
+bool isKnownUiType(uint8_t uiType) {
+    switch (static_cast<ConfigUiType>(uiType)) {
+    case ConfigUiType::Bool:
+    case ConfigUiType::Int32:
+    case ConfigUiType::Float:
+    case ConfigUiType::String:
+    case ConfigUiType::Enum:
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool isKnownRuntimeBinding(uint8_t binding) {
+    switch (static_cast<ConfigRuntimeBinding>(binding)) {
+    case ConfigRuntimeBinding::SchemaOnly:
+    case ConfigRuntimeBinding::LiveSetter:
+    case ConfigRuntimeBinding::ManualLiveApply:
+    case ConfigRuntimeBinding::Removed:
+        return true;
+    default:
+        return false;
+    }
+}
 } // namespace
 
 std::vector<uint8_t> serializeConfigV3Catalog(const ConfigV3CatalogPayload& payload) {
@@ -495,6 +528,9 @@ std::vector<uint8_t> serializeConfigV3Catalog(const ConfigV3CatalogPayload& payl
         appendString(out, e.displayName);
         appendString(out, e.description);
         appendString(out, e.moduleTag);
+        if (e.enumMapping.size() > std::numeric_limits<uint16_t>::max()) {
+            throw std::length_error("Config v3 enum mapping is too large");
+        }
         appendUint16Le(out, static_cast<uint16_t>(e.enumMapping.size()));
         for (const auto& [value, name] : e.enumMapping) {
             appendUint32Le(out, static_cast<uint32_t>(value));
@@ -510,6 +546,7 @@ ConfigV3CatalogPayload deserializeConfigV3Catalog(const uint8_t* data, size_t si
     size_t offset = 0;
     ConfigV3CatalogPayload payload{};
     uint32_t count = readHeaderStrict(data, size, offset, kConfigV3CatalogMagic, payload.schemaVersion, payload.snapshotVersion);
+    rejectEntryCountIfImpossible(count, size - offset, kConfigV3MinCatalogEntrySize);
     payload.entries.reserve(count);
     for (uint32_t i = 0; i < count; ++i) {
         ConfigDescriptor e;
@@ -517,6 +554,7 @@ ConfigV3CatalogPayload deserializeConfigV3Catalog(const uint8_t* data, size_t si
         uint16_t key = 0;
         uint8_t uiType = 0;
         if (!readUint16Le(data, size, offset, key) || !readUint8(data, size, offset, uiType)) throw std::runtime_error("Config v3 truncated catalog entry");
+        if (!isKnownUiType(uiType)) throw std::runtime_error("Config v3 invalid ui type");
         e.keyId = static_cast<ConfigKeyId>(key);
         e.uiType = static_cast<ConfigUiType>(uiType);
         e.defaultValue = readValueStrict(data, size, offset);
@@ -541,6 +579,7 @@ ConfigV3CatalogPayload deserializeConfigV3Catalog(const uint8_t* data, size_t si
         uint8_t binding = 0;
         uint8_t bound = 0;
         if (!readUint8(data, size, offset, binding) || !readUint8(data, size, offset, bound)) throw std::runtime_error("Config v3 truncated binding");
+        if (!isKnownRuntimeBinding(binding)) throw std::runtime_error("Config v3 invalid runtime binding");
         if (bound > 1) throw std::runtime_error("Config v3 invalid bound flag");
         e.runtimeBinding = static_cast<ConfigRuntimeBinding>(binding);
         e.boundToRuntime = bound != 0;
@@ -566,6 +605,7 @@ ConfigV3SnapshotPayload deserializeConfigV3Snapshot(const uint8_t* data, size_t 
     size_t offset = 0;
     ConfigV3SnapshotPayload payload{};
     uint32_t count = readHeaderStrict(data, size, offset, kConfigV3SnapshotMagic, payload.schemaVersion, payload.snapshotVersion);
+    rejectEntryCountIfImpossible(count, size - offset, kConfigV3MinSnapshotEntrySize);
     payload.entries.reserve(count);
     for (uint32_t i = 0; i < count; ++i) {
         uint16_t key = 0;

@@ -95,8 +95,32 @@ int main() {
     Require(pageHeader.headerBytes == sizeof(ConfigV3PageResponseHeaderWire), "ConfigV3PageResponseHeaderWire headerBytes defaults to header size");
     Require(ConfigV3PageCapacityBytes() == kIpcResponseDataBytes - sizeof(ConfigV3PageResponseHeaderWire), "Config v3 page capacity matches response data tail");
     Require(IsValidConfigV3PageResponse(pageHeader), "Config v3 default page header is valid");
+    Require(IsValidConfigV3PageResponse(pageHeader, sizeof(ConfigV3PageResponseHeaderWire)), "Config v3 explicit data length is valid");
     pageHeader.pageBytes = ConfigV3PageCapacityBytes() + 1;
     Require(!IsValidConfigV3PageResponse(pageHeader), "Config v3 page header rejects oversized page");
+
+    pageHeader = ConfigV3PageResponseHeaderWire{};
+    pageHeader.wireVersion = kIpcProtocolVersion + 1;
+    Require(!IsValidConfigV3PageResponse(pageHeader), "Config v3 page header rejects invalid version");
+    pageHeader = ConfigV3PageResponseHeaderWire{};
+    pageHeader.payloadKind = 0xFFu;
+    Require(!IsValidConfigV3PageResponse(pageHeader), "Config v3 page header rejects invalid kind");
+    pageHeader = ConfigV3PageResponseHeaderWire{};
+    pageHeader.flags = 0x01u;
+    Require(!IsValidConfigV3PageResponse(pageHeader), "Config v3 page header rejects unknown flags");
+    pageHeader = ConfigV3PageResponseHeaderWire{};
+    pageHeader.offset = 1;
+    pageHeader.totalBytes = 0;
+    Require(!IsValidConfigV3PageResponse(pageHeader), "Config v3 page header rejects offset beyond total");
+    pageHeader = ConfigV3PageResponseHeaderWire{};
+    pageHeader.offset = 4;
+    pageHeader.totalBytes = 5;
+    pageHeader.pageBytes = 2;
+    Require(!IsValidConfigV3PageResponse(pageHeader), "Config v3 page header rejects page beyond total");
+    pageHeader = ConfigV3PageResponseHeaderWire{};
+    pageHeader.pageBytes = 4;
+    pageHeader.totalBytes = 4;
+    Require(!IsValidConfigV3PageResponse(pageHeader, sizeof(ConfigV3PageResponseHeaderWire) + 3), "Config v3 page header rejects mismatched data length");
 
     PenIdentityStatusWire penIdentity{};
     Require(sizeof(PenIdentityStatusWire) == 140, "PenIdentityStatusWire layout remains fixed");
