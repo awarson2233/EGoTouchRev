@@ -50,7 +50,7 @@ int main() {
     const auto catalog = Config::deserializeConfigV3Catalog(catalogBlob.bytes.data(), catalogBlob.bytes.size());
     assert(catalog.schemaVersion == catalogBlob.schemaVersion);
     assert(CatalogHasPath(catalog, "service.mode"));
-    assert(CatalogHasPath(catalog, "touch.signal_cond.baseline_enabled"));
+    assert(CatalogHasPath(catalog, "touch.signal_cond.baseline_no_finger_max_step"));
     assert(CatalogHasPath(catalog, "stylus.sp.iir_max_coef"));
 
     const auto snapshotBlob = runtime.BuildSnapshotV3Blob();
