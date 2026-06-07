@@ -147,6 +147,7 @@ target_sources(Common PRIVATE
     "${COMMON_ROOT}/source/config/ConfigPath.cpp"
     "${COMMON_ROOT}/source/config/ConfigTlv.cpp"
     "${COMMON_ROOT}/source/config/ConfigKeyMap.cpp"
+    "${COMMON_ROOT}/source/config/ConfigCatalog.cpp"
 )
 
 target_include_directories(Common PUBLIC
@@ -401,6 +402,7 @@ if (EGO_BUILD_TESTS)
     ego_add_common_test(CommonPenButtonConfigTest Common/tests/PenButtonConfigTest.cpp)
     ego_add_common_test(CommonHeaderCompileTest Common/tests/HeaderCompileTest.cpp)
     target_include_directories(CommonHeaderCompileTest PRIVATE "${IPC_ROOT}/include")
+    ego_add_common_test(CommonConfigCatalogTest Common/tests/ConfigCatalogTest.cpp)
 
     add_executable(HostSystemStateMonitorTest
         EGoTouchService/Host/tests/SystemStateMonitorNamedEventTest.cpp

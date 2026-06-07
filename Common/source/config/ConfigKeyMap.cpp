@@ -1,6 +1,7 @@
 #include "config/ConfigKeyMap.h"
 
 #include "config/ConfigBinder.h"
+#include "config/ConfigCatalog.h"
 #include "config/ConfigStore.h"
 
 #include <algorithm>
@@ -99,22 +100,6 @@ void ensureStaticMapsInitialized()
     (void)initialized;
 }
 
-bool startsWith(std::string_view value, std::string_view prefix)
-{
-    return value.size() >= prefix.size() && value.substr(0, prefix.size()) == prefix;
-}
-
-uint16_t nextAvailableId(uint16_t startInclusive, uint16_t endExclusive)
-{
-    auto& idToPath = mutableKeyIdToPath();
-    for (uint16_t raw = startInclusive; raw < endExclusive; ++raw) {
-        if (!idToPath.contains(static_cast<ConfigKeyId>(raw))) {
-            return raw;
-        }
-    }
-    return endExclusive;
-}
-
 } // namespace
 
 const std::unordered_map<ConfigKeyId, std::string>& keyIdToPath()
@@ -149,40 +134,10 @@ void registerRuntimeKeyMappings(const ConfigBinder& binder)
 {
     ensureStaticMapsInitialized();
 
-    std::vector<std::string> missingTouchPaths;
-    std::vector<std::string> missingStylusPaths;
-    const auto snapshot = binder.snapshot();
-    for (const auto& entry : snapshot.entries) {
-        if (tryKeyIdForPath(entry.yamlPath).has_value()) {
-            continue;
-        }
-        if (startsWith(entry.yamlPath, "touch.")) {
-            missingTouchPaths.push_back(entry.yamlPath);
-        } else if (startsWith(entry.yamlPath, "stylus.")) {
-            missingStylusPaths.push_back(entry.yamlPath);
-        }
-    }
-
-    std::ranges::sort(missingTouchPaths);
-    std::ranges::sort(missingStylusPaths);
-
-    uint16_t nextTouch = nextAvailableId(0x0100, 0x0200);
-    for (const auto& path : missingTouchPaths) {
-        if (nextTouch >= 0x0200) {
-            break;
-        }
-        registerKeyMapping(static_cast<ConfigKeyId>(nextTouch++), path);
-        nextTouch = nextAvailableId(nextTouch, 0x0200);
-    }
-
-    uint16_t nextStylus = nextAvailableId(0x0200, static_cast<uint16_t>(ConfigKeyId::MaxKeyId));
-    for (const auto& path : missingStylusPaths) {
-        if (nextStylus >= static_cast<uint16_t>(ConfigKeyId::MaxKeyId)) {
-            break;
-        }
-        registerKeyMapping(static_cast<ConfigKeyId>(nextStylus++), path);
-        nextStylus = nextAvailableId(nextStylus, static_cast<uint16_t>(ConfigKeyId::MaxKeyId));
-    }
+    // Compatibility entry point only: keyId is now a fixed IPC contract and must
+    // not be allocated from runtime paths. Binding snapshots/catalogs surface
+    // unknown paths as ConfigKeyId::MaxKeyId for validation or logging.
+    (void)binder;
 }
 
 std::optional<std::string_view> tryPathForKeyId(ConfigKeyId id)
@@ -207,45 +162,18 @@ std::optional<ConfigKeyId> tryKeyIdForPath(std::string_view yamlPath)
 
 ConfigSchemaSnapshot BuildMergedSchema(const ConfigStore& defaults, const ConfigBinder& binder)
 {
-    ConfigSchemaSnapshot result;
-    std::unordered_map<std::string, size_t> indexByPath;
-
-    const auto paths = defaults.allPaths();
-    result.entries.reserve(paths.size());
-    indexByPath.reserve(paths.size());
-
-    for (const auto& path : paths) {
-        ConfigSchemaEntry entry;
-        entry.yamlPath = path;
-        entry.keyId = tryKeyIdForPath(path).value_or(ConfigKeyId::MaxKeyId);
-        entry.defaultValue = defaults.get<ConfigValue>(path);
-        entry.currentValue = entry.defaultValue;
-        entry.uiType = deriveUiType(entry.defaultValue);
-        entry.displayName = deriveDisplayName(path);
-        entry.moduleTag = deriveModuleTag(path);
-        entry.boundToRuntime = false;
-
-        indexByPath.emplace(entry.yamlPath, result.entries.size());
-        result.entries.push_back(std::move(entry));
+    auto result = BuildSchemaSnapshot(BuildConfigCatalog(defaults, binder));
+    const auto binderSnapshot = binder.snapshot();
+    std::unordered_map<std::string, ConfigValue> currentByPath;
+    currentByPath.reserve(binderSnapshot.entries.size());
+    for (const auto& entry : binderSnapshot.entries) {
+        currentByPath.emplace(entry.yamlPath, entry.currentValue);
     }
-
-    auto binderSnapshot = binder.snapshot();
-    for (auto& entry : binderSnapshot.entries) {
-        if (const auto it = indexByPath.find(entry.yamlPath); it != indexByPath.end()) {
-            result.entries[it->second] = std::move(entry);
-        } else {
-            indexByPath.emplace(entry.yamlPath, result.entries.size());
-            result.entries.push_back(std::move(entry));
+    for (auto& entry : result.entries) {
+        if (const auto it = currentByPath.find(entry.yamlPath); it != currentByPath.end()) {
+            entry.currentValue = it->second;
         }
     }
-
-    std::ranges::sort(result.entries, [](const ConfigSchemaEntry& lhs, const ConfigSchemaEntry& rhs) {
-        if (lhs.keyId != rhs.keyId) {
-            return static_cast<uint16_t>(lhs.keyId) < static_cast<uint16_t>(rhs.keyId);
-        }
-        return lhs.yamlPath < rhs.yamlPath;
-    });
-
     return result;
 }
 

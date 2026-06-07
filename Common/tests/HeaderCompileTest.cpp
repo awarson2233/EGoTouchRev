@@ -1,4 +1,8 @@
 #include "ConfigSync.h"
+#include "config/ConfigCatalog.h"
+#include "config/ConfigKeyId.h"
+#include "config/ConfigKeyMap.h"
+#include "config/ConfigSchemaSnapshot.h"
 #include "FrameLayout.h"
 #include "GuiLogSink.h"
 #include "IpcPipeClient.h"
@@ -9,6 +13,7 @@
 #include "PenButtonConfig.h"
 #include "SharedFrameBuffer.h"
 
+#include <cstdint>
 #include <iostream>
 #include <stdexcept>
 #include <type_traits>
@@ -26,6 +31,9 @@ void TestCommonHeadersExposeExpectedTypes() {
     Require(Common::GuiLogSink::kMaxLines == 2000, "GuiLogSink.h should expose kMaxLines");
     Require(ToString(PenButtonMode::OemCustom) != nullptr, "PenButtonConfig.h should expose ToString(PenButtonMode)");
     Require(Common::Logger::Get() == nullptr, "Logger.h should expose Logger::Get without requiring initialization");
+    static_assert(std::is_class_v<Config::ConfigCatalog>);
+    static_assert(std::is_class_v<Config::ConfigCatalogBuilder>);
+    Require(static_cast<uint16_t>(Config::ConfigKeyId::MaxKeyId) == 0x0300, "ConfigKeyId.h should expose MaxKeyId");
 }
 
 void TestIpcCompatibilityHeadersCompile() {
