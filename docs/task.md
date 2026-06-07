@@ -143,9 +143,9 @@
 
 ### 3.3 App 侧适配
 - [x] 3.3.1 `ServiceProxy` connected mode 优先通过 `GetConfigCatalogV3` / `GetConfigSnapshotV3` 获取 Service catalog/snapshot
-- [ ] 3.3.2 新增 `ConfigDraft`，拆分 Service snapshot cache、用户 draft、dirty baseline version
-- [ ] 3.3.3 删除 connected mode 对 legacy `GetConfigSnapshot=42` 的 fallback
-- [ ] 3.3.4 保留本地 binder/YAML fallback 作为 Service 不可用/离线场景，不作为 legacy 删除目标
+- [~] 3.3.2 新增 `ConfigDraft`，拆分 Service snapshot cache、用户 draft、dirty baseline version（当前仅完成轻量 v3 baseline version 记录）
+- [x] 3.3.3 删除 connected mode 对 legacy `GetConfigSnapshot=42` 的 fallback
+- [x] 3.3.4 保留本地 binder/YAML fallback 作为 Service 不可用/离线场景，不作为 legacy 删除目标
 - [ ] 3.3.5 `ServiceProxy::SaveConfig()` / Apply 流程升级为 v3 Patch + v3 Persist result
 - [ ] 3.3.6 删除 `MergeServiceProxyConfigSections()` 旧实现（如仍存在）
 - [ ] 3.3.7 集成测试: App ↔ Service v3 IPC round-trip
@@ -177,7 +177,7 @@
 
 ## 进度总览
 
-> 下表是 2026-06-05 早期任务拆分的历史统计，不再作为当前 Config v3 权威进度。当前状态：P0 地基与 P1-1 `GetConfigCatalogV3` / `GetConfigSnapshotV3` 已完成；下一步是 P1-2 App Draft、legacy fixed ABI fallback 删除、Catalog 策略字段、`IConfigTarget`、default.yaml generator/check。详见 [config_v3_full_upgrade_plan.md](artifacts/config_v3_full_upgrade_plan.md)。
+> 下表是 2026-06-05 早期任务拆分的历史统计，不再作为当前 Config v3 权威进度。当前状态：P0 地基、P1-1 `GetConfigCatalogV3` / `GetConfigSnapshotV3`、P1-2 connected mode legacy snapshot fallback 删除已完成；下一步是 Catalog 策略字段、`IConfigTarget`、v3 Patch/Persist、default.yaml generator/check。详见 [config_v3_full_upgrade_plan.md](artifacts/config_v3_full_upgrade_plan.md)。
 
 | Phase | 任务数 | 已完成 | 状态 |
 |-------|--------|--------|------|
@@ -196,4 +196,4 @@
 
 ---
 
-> 最后更新: 2026-06-07 (同步 P1-1 v3 Catalog/Snapshot IPC 已完成；legacy fixed ABI fallback 后续删除，本地 fallback 保留为离线/Service 不可用路径)
+> 最后更新: 2026-06-07 (同步 P1-2 connected mode legacy snapshot fallback 已删除；Service/Common legacy fixed ABI cleanup 后续处理，本地 fallback 保留为离线/Service 不可用路径)

@@ -237,7 +237,7 @@ ConfigCatalog
     → App Draft
 ```
 
-当前 connected App 已优先通过 v3 IPC 获取 Service catalog/snapshot；旧 `GetConfigSnapshot` fixed ABI fallback 后续删除，本地 fallback 保留为 Service 不可用/离线路径。
+当前 connected App 已优先通过 v3 IPC 获取 Service catalog/snapshot；App connected mode 已删除旧 `GetConfigSnapshot` fixed ABI fallback，本地 fallback 保留为 Service 不可用/离线路径。Service/Common 侧 legacy fixed ABI 定义和 handler 仍保留，等待 v3 Patch/Persist 完整化后清理。
 
 ---
 
@@ -362,7 +362,7 @@ device:               # 硬件配置
 | 类别 | 命令示例 | 说明 |
 |------|---------|------|
 | **生命周期** | `StartRuntime`, `StopRuntime` | 控制 DeviceRuntime |
-| **配置管理** | `GetConfigCatalogV3`, `GetConfigSnapshotV3`, `ApplyConfigTlvChunk`, legacy `GetConfigSnapshot` | Service-owned 配置；legacy fixed ABI fallback 后续删除 |
+| **配置管理** | `GetConfigCatalogV3`, `GetConfigSnapshotV3`, `ApplyConfigTlvChunk`, legacy `GetConfigSnapshot` | Service-owned 配置；App connected mode 不再 fallback legacy snapshot，Service/Common legacy ABI 后续清理 |
 | **VHF 控制** | `SetVhfEnabled`, `SetVhfTranspose` | VHF 输出开关 |
 | **调试** | `EnterDebugMode`, `ExitDebugMode` | 开启/关闭 Debug 帧推送 |
 | **笔状态** | `GetPenBridgeStatus`, `GetPenIdentityStatus` | 查询笔压感/身份 |
