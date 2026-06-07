@@ -38,6 +38,8 @@ enum class IpcCommand : uint8_t {
     ApplyConfigPatch  = 43,
     PersistConfig     = 44,
     ApplyConfigTlvChunk = 45,
+    GetConfigCatalogV3 = 46,
+    GetConfigSnapshotV3 = 47,
     // Logs
     GetLogs        = 50,  // App requests recent log lines from Service
     // PenBridge (BT MCU)
@@ -149,6 +151,45 @@ struct ConfigTlvChunkRequestWire {
     uint8_t _reserved0 = 0;
     uint8_t bytes[kConfigTlvChunkPayloadBytes]{};
 };
+
+enum class ConfigV3PayloadKind : uint8_t {
+    Catalog = 1,
+    Snapshot = 2,
+};
+
+struct ConfigV3PageRequestWire {
+    uint16_t wireVersion = kIpcProtocolVersion;
+    uint8_t payloadKind = static_cast<uint8_t>(ConfigV3PayloadKind::Catalog);
+    uint8_t flags = 0;
+    uint32_t schemaVersion = 0;
+    uint32_t snapshotVersion = 0;
+    uint32_t offset = 0;
+    uint32_t maxBytes = 0;
+    uint32_t reserved = 0;
+};
+
+struct ConfigV3PageResponseHeaderWire {
+    uint16_t wireVersion = kIpcProtocolVersion;
+    uint8_t payloadKind = static_cast<uint8_t>(ConfigV3PayloadKind::Catalog);
+    uint8_t flags = 0;
+    uint16_t headerBytes = sizeof(ConfigV3PageResponseHeaderWire);
+    uint16_t pageBytes = 0;
+    uint32_t totalBytes = 0;
+    uint32_t schemaVersion = 0;
+    uint32_t snapshotVersion = 0;
+    uint32_t offset = 0;
+    uint32_t checksum = 0;
+};
+
+constexpr uint16_t ConfigV3PageCapacityBytes() noexcept {
+    return static_cast<uint16_t>(kIpcResponseDataBytes - sizeof(ConfigV3PageResponseHeaderWire));
+}
+
+constexpr bool IsValidConfigV3PageResponse(const ConfigV3PageResponseHeaderWire& header) noexcept {
+    return header.headerBytes == sizeof(ConfigV3PageResponseHeaderWire) &&
+           header.headerBytes < kIpcResponseDataBytes &&
+           header.pageBytes <= ConfigV3PageCapacityBytes();
+}
 
 enum class DebugValueType : uint8_t {
     UInt32 = 0,
@@ -342,5 +383,11 @@ static_assert(kDebugSnapshotMaxValues == 255,
     "DebugSnapshot value capacity changed");
 static_assert(sizeof(ConfigTlvChunkRequestWire) <= 256,
     "Config TLV chunk must fit in IpcRequest::param");
+static_assert(sizeof(ConfigV3PageRequestWire) <= 256,
+    "Config v3 page request must fit in IpcRequest::param");
+static_assert(sizeof(ConfigV3PageResponseHeaderWire) < kIpcResponseDataBytes,
+    "Config v3 response header must leave room for page bytes");
+static_assert(ConfigV3PageCapacityBytes() == kIpcResponseDataBytes - sizeof(ConfigV3PageResponseHeaderWire),
+    "Config v3 page capacity calculation changed");
 
 } // namespace Ipc

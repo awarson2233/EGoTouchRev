@@ -39,6 +39,8 @@ int main() {
     Require(U(IpcCommand::ApplyConfigPatch) == 43, "ApplyConfigPatch command value remains stable");
     Require(U(IpcCommand::PersistConfig) == 44, "PersistConfig command value remains stable");
     Require(U(IpcCommand::ApplyConfigTlvChunk) == 45, "ApplyConfigTlvChunk command value remains stable");
+    Require(U(IpcCommand::GetConfigCatalogV3) == 46, "GetConfigCatalogV3 command value is assigned");
+    Require(U(IpcCommand::GetConfigSnapshotV3) == 47, "GetConfigSnapshotV3 command value is assigned");
     Require(U(IpcCommand::GetDebugSchema) == 61, "GetDebugSchema command value remains stable");
     Require(U(IpcCommand::SetMasterParserOnly) == 64, "SetMasterParserOnly command value remains stable");
     Require(U(IpcCommand::GetPenIdentityStatus) == 65, "GetPenIdentityStatus command value remains stable");
@@ -81,6 +83,20 @@ int main() {
     Require(sizeof(chunk.bytes) == 244, "ConfigTlvChunkRequestWire payload buffer remains 244 bytes");
     Require(chunk.wireVersion == kIpcProtocolVersion, "ConfigTlvChunkRequestWire version defaults to protocol version");
     Require(kConfigTlvChunkPayloadBytes == 244, "Config TLV chunk payload size remains stable");
+
+    ConfigV3PageRequestWire pageRequest{};
+    Require(sizeof(ConfigV3PageRequestWire) <= 256, "ConfigV3PageRequestWire fits in request param");
+    Require(pageRequest.wireVersion == kIpcProtocolVersion, "ConfigV3PageRequestWire version defaults to protocol version");
+    Require(pageRequest.payloadKind == U(ConfigV3PayloadKind::Catalog), "ConfigV3PageRequestWire payload kind defaults to Catalog");
+    Require(pageRequest.flags == 0 && pageRequest.offset == 0 && pageRequest.maxBytes == 0, "ConfigV3PageRequestWire fields default to zero");
+
+    ConfigV3PageResponseHeaderWire pageHeader{};
+    Require(sizeof(ConfigV3PageResponseHeaderWire) == 28, "ConfigV3PageResponseHeaderWire layout remains fixed");
+    Require(pageHeader.headerBytes == sizeof(ConfigV3PageResponseHeaderWire), "ConfigV3PageResponseHeaderWire headerBytes defaults to header size");
+    Require(ConfigV3PageCapacityBytes() == kIpcResponseDataBytes - sizeof(ConfigV3PageResponseHeaderWire), "Config v3 page capacity matches response data tail");
+    Require(IsValidConfigV3PageResponse(pageHeader), "Config v3 default page header is valid");
+    pageHeader.pageBytes = ConfigV3PageCapacityBytes() + 1;
+    Require(!IsValidConfigV3PageResponse(pageHeader), "Config v3 page header rejects oversized page");
 
     PenIdentityStatusWire penIdentity{};
     Require(sizeof(PenIdentityStatusWire) == 140, "PenIdentityStatusWire layout remains fixed");

@@ -1,8 +1,11 @@
 #include "config/ConfigTlv.h"
 
+#include "config/ConfigCatalog.h"
 #include "config/ConfigKeyMap.h"
 #include "Logger.h"
 
+#include <algorithm>
+#include <cstring>
 #include <limits>
 #include <set>
 #include <utility>
@@ -337,6 +340,240 @@ ConfigMutationResultTlv deserializeMutationResult(const uint8_t* data, size_t si
     }
 
     return result;
+}
+
+namespace {
+constexpr uint32_t kConfigV3CatalogMagic = 0x33435643u; // 'CVC3'
+constexpr uint32_t kConfigV3SnapshotMagic = 0x33535643u; // 'CVS3'
+constexpr uint16_t kConfigV3Version = 1;
+
+void appendUint32Le(std::vector<uint8_t>& out, uint32_t value) {
+    appendUint16Le(out, static_cast<uint16_t>(value & 0xFFFFu));
+    appendUint16Le(out, static_cast<uint16_t>((value >> 16) & 0xFFFFu));
+}
+
+bool readUint32Le(const uint8_t* data, size_t size, size_t& offset, uint32_t& value) {
+    uint16_t lo = 0;
+    uint16_t hi = 0;
+    if (!readUint16Le(data, size, offset, lo) || !readUint16Le(data, size, offset, hi)) {
+        return false;
+    }
+    value = static_cast<uint32_t>(lo) | (static_cast<uint32_t>(hi) << 16);
+    return true;
+}
+
+void appendString(std::vector<uint8_t>& out, const std::string& value) {
+    if (value.size() > std::numeric_limits<uint16_t>::max()) {
+        throw std::length_error("Config v3 string is too large");
+    }
+    appendUint16Le(out, static_cast<uint16_t>(value.size()));
+    appendBytes(out, value.data(), value.size());
+}
+
+std::string readStringStrict(const uint8_t* data, size_t size, size_t& offset) {
+    uint16_t len = 0;
+    if (!readUint16Le(data, size, offset, len) || offset > size || size - offset < len) {
+        throw std::runtime_error("Config v3 truncated string");
+    }
+    std::string value(reinterpret_cast<const char*>(data + offset), len);
+    offset += len;
+    return value;
+}
+
+void appendValue(std::vector<uint8_t>& out, const ConfigValue& value) {
+    if (std::holds_alternative<bool>(value)) {
+        appendUint8(out, static_cast<uint8_t>(ConfigValueType::Bool));
+        appendUint8(out, std::get<bool>(value) ? 1 : 0);
+    } else if (std::holds_alternative<int32_t>(value)) {
+        appendUint8(out, static_cast<uint8_t>(ConfigValueType::Int32));
+        appendUint32Le(out, static_cast<uint32_t>(std::get<int32_t>(value)));
+    } else if (std::holds_alternative<float>(value)) {
+        appendUint8(out, static_cast<uint8_t>(ConfigValueType::Float));
+        uint32_t bits = 0;
+        static_assert(sizeof(bits) == sizeof(float));
+        std::memcpy(&bits, &std::get<float>(value), sizeof(bits));
+        appendUint32Le(out, bits);
+    } else {
+        appendUint8(out, static_cast<uint8_t>(ConfigValueType::String));
+        appendString(out, std::get<std::string>(value));
+    }
+}
+
+void appendFloat64Le(std::vector<uint8_t>& out, double value) {
+    uint64_t bits = 0;
+    static_assert(sizeof(bits) == sizeof(double));
+    std::memcpy(&bits, &value, sizeof(bits));
+    appendUint32Le(out, static_cast<uint32_t>(bits & 0xFFFFFFFFu));
+    appendUint32Le(out, static_cast<uint32_t>((bits >> 32) & 0xFFFFFFFFu));
+}
+
+bool readFloat64Le(const uint8_t* data, size_t size, size_t& offset, double& value) {
+    uint32_t lo = 0;
+    uint32_t hi = 0;
+    if (!readUint32Le(data, size, offset, lo) || !readUint32Le(data, size, offset, hi)) {
+        return false;
+    }
+    uint64_t bits = static_cast<uint64_t>(lo) | (static_cast<uint64_t>(hi) << 32);
+    std::memcpy(&value, &bits, sizeof(value));
+    return true;
+}
+
+ConfigValue readValueStrict(const uint8_t* data, size_t size, size_t& offset) {
+    uint8_t rawType = 0;
+    if (!readUint8(data, size, offset, rawType)) {
+        throw std::runtime_error("Config v3 truncated value type");
+    }
+    switch (static_cast<ConfigValueType>(rawType)) {
+    case ConfigValueType::Bool: {
+        uint8_t v = 0;
+        if (!readUint8(data, size, offset, v) || v > 1) throw std::runtime_error("Config v3 invalid bool");
+        return v != 0;
+    }
+    case ConfigValueType::Int32: {
+        uint32_t v = 0;
+        if (!readUint32Le(data, size, offset, v)) throw std::runtime_error("Config v3 truncated int32");
+        return static_cast<int32_t>(v);
+    }
+    case ConfigValueType::Float: {
+        uint32_t bits = 0;
+        float v = 0.0f;
+        if (!readUint32Le(data, size, offset, bits)) throw std::runtime_error("Config v3 truncated float");
+        std::memcpy(&v, &bits, sizeof(v));
+        return v;
+    }
+    case ConfigValueType::String:
+        return readStringStrict(data, size, offset);
+    case ConfigValueType::Null:
+        return std::string{};
+    default:
+        throw std::runtime_error("Config v3 unsupported value type");
+    }
+}
+
+void appendHeader(std::vector<uint8_t>& out, uint32_t magic, uint16_t version, uint32_t schemaVersion, uint32_t snapshotVersion, size_t count) {
+    if (count > std::numeric_limits<uint32_t>::max()) throw std::length_error("too many Config v3 entries");
+    appendUint32Le(out, magic);
+    appendUint16Le(out, version);
+    appendUint32Le(out, schemaVersion);
+    appendUint32Le(out, snapshotVersion);
+    appendUint32Le(out, static_cast<uint32_t>(count));
+}
+
+uint32_t readHeaderStrict(const uint8_t* data, size_t size, size_t& offset, uint32_t expectedMagic, uint32_t& schemaVersion, uint32_t& snapshotVersion) {
+    uint32_t magic = 0;
+    uint16_t version = 0;
+    uint32_t count = 0;
+    if (data == nullptr || !readUint32Le(data, size, offset, magic) || !readUint16Le(data, size, offset, version) ||
+        !readUint32Le(data, size, offset, schemaVersion) || !readUint32Le(data, size, offset, snapshotVersion) ||
+        !readUint32Le(data, size, offset, count)) {
+        throw std::runtime_error("Config v3 truncated header");
+    }
+    if (magic != expectedMagic) throw std::runtime_error("Config v3 invalid magic");
+    if (version != kConfigV3Version) throw std::runtime_error("Config v3 unsupported version");
+    return count;
+}
+} // namespace
+
+std::vector<uint8_t> serializeConfigV3Catalog(const ConfigV3CatalogPayload& payload) {
+    std::vector<ConfigDescriptor> entries = payload.entries;
+    std::stable_sort(entries.begin(), entries.end(), [](const auto& a, const auto& b) {
+        if (a.keyId != b.keyId) return static_cast<uint16_t>(a.keyId) < static_cast<uint16_t>(b.keyId);
+        return a.path < b.path;
+    });
+    std::vector<uint8_t> out;
+    appendHeader(out, kConfigV3CatalogMagic, payload.version, payload.schemaVersion, payload.snapshotVersion, entries.size());
+    for (const auto& e : entries) {
+        appendString(out, e.path);
+        appendUint16Le(out, static_cast<uint16_t>(e.keyId));
+        appendUint8(out, static_cast<uint8_t>(e.uiType));
+        appendValue(out, e.defaultValue);
+        appendUint8(out, e.range.has_value() ? 1 : 0);
+        if (e.range) {
+            appendFloat64Le(out, e.range->min);
+            appendFloat64Le(out, e.range->max);
+        }
+        appendString(out, e.displayName);
+        appendString(out, e.description);
+        appendString(out, e.moduleTag);
+        appendUint16Le(out, static_cast<uint16_t>(e.enumMapping.size()));
+        for (const auto& [value, name] : e.enumMapping) {
+            appendUint32Le(out, static_cast<uint32_t>(value));
+            appendString(out, name);
+        }
+        appendUint8(out, static_cast<uint8_t>(e.runtimeBinding));
+        appendUint8(out, e.boundToRuntime ? 1 : 0);
+    }
+    return out;
+}
+
+ConfigV3CatalogPayload deserializeConfigV3Catalog(const uint8_t* data, size_t size) {
+    size_t offset = 0;
+    ConfigV3CatalogPayload payload{};
+    uint32_t count = readHeaderStrict(data, size, offset, kConfigV3CatalogMagic, payload.schemaVersion, payload.snapshotVersion);
+    payload.entries.reserve(count);
+    for (uint32_t i = 0; i < count; ++i) {
+        ConfigDescriptor e;
+        e.path = readStringStrict(data, size, offset);
+        uint16_t key = 0;
+        uint8_t uiType = 0;
+        if (!readUint16Le(data, size, offset, key) || !readUint8(data, size, offset, uiType)) throw std::runtime_error("Config v3 truncated catalog entry");
+        e.keyId = static_cast<ConfigKeyId>(key);
+        e.uiType = static_cast<ConfigUiType>(uiType);
+        e.defaultValue = readValueStrict(data, size, offset);
+        uint8_t hasRange = 0;
+        if (!readUint8(data, size, offset, hasRange)) throw std::runtime_error("Config v3 truncated range flag");
+        if (hasRange > 1) throw std::runtime_error("Config v3 invalid range flag");
+        if (hasRange) {
+            ConfigRange range{};
+            if (!readFloat64Le(data, size, offset, range.min) || !readFloat64Le(data, size, offset, range.max)) throw std::runtime_error("Config v3 truncated range");
+            e.range = range;
+        }
+        e.displayName = readStringStrict(data, size, offset);
+        e.description = readStringStrict(data, size, offset);
+        e.moduleTag = readStringStrict(data, size, offset);
+        uint16_t enumCount = 0;
+        if (!readUint16Le(data, size, offset, enumCount)) throw std::runtime_error("Config v3 truncated enum count");
+        for (uint16_t j = 0; j < enumCount; ++j) {
+            uint32_t v = 0;
+            if (!readUint32Le(data, size, offset, v)) throw std::runtime_error("Config v3 truncated enum value");
+            e.enumMapping.emplace_back(static_cast<int>(v), readStringStrict(data, size, offset));
+        }
+        uint8_t binding = 0;
+        uint8_t bound = 0;
+        if (!readUint8(data, size, offset, binding) || !readUint8(data, size, offset, bound)) throw std::runtime_error("Config v3 truncated binding");
+        if (bound > 1) throw std::runtime_error("Config v3 invalid bound flag");
+        e.runtimeBinding = static_cast<ConfigRuntimeBinding>(binding);
+        e.boundToRuntime = bound != 0;
+        payload.entries.push_back(std::move(e));
+    }
+    if (offset != size) throw std::runtime_error("Config v3 trailing bytes");
+    return payload;
+}
+
+std::vector<uint8_t> serializeConfigV3Snapshot(const ConfigV3SnapshotPayload& payload) {
+    auto entries = payload.entries;
+    std::stable_sort(entries.begin(), entries.end(), [](const auto& a, const auto& b) { return static_cast<uint16_t>(a.keyId) < static_cast<uint16_t>(b.keyId); });
+    std::vector<uint8_t> out;
+    appendHeader(out, kConfigV3SnapshotMagic, payload.version, payload.schemaVersion, payload.snapshotVersion, entries.size());
+    for (const auto& e : entries) {
+        appendUint16Le(out, static_cast<uint16_t>(e.keyId));
+        appendValue(out, e.value);
+    }
+    return out;
+}
+
+ConfigV3SnapshotPayload deserializeConfigV3Snapshot(const uint8_t* data, size_t size) {
+    size_t offset = 0;
+    ConfigV3SnapshotPayload payload{};
+    uint32_t count = readHeaderStrict(data, size, offset, kConfigV3SnapshotMagic, payload.schemaVersion, payload.snapshotVersion);
+    payload.entries.reserve(count);
+    for (uint32_t i = 0; i < count; ++i) {
+        uint16_t key = 0;
+        if (!readUint16Le(data, size, offset, key)) throw std::runtime_error("Config v3 truncated snapshot entry");
+        payload.entries.push_back(ConfigV3SnapshotEntry{static_cast<ConfigKeyId>(key), readValueStrict(data, size, offset)});
+    }
+    if (offset != size) throw std::runtime_error("Config v3 trailing bytes");
+    return payload;
 }
 
 } // namespace Config

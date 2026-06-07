@@ -1,12 +1,15 @@
 #pragma once
 
+#include "ConfigCatalog.h"
 #include "ConfigKeyId.h"
 #include "ConfigValue.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <stdexcept>
+#include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace Config {
@@ -99,5 +102,29 @@ std::vector<uint8_t> serializeMutationResult(const ConfigMutationResultTlv& resu
 
 // 从原始字节反序列化
 ConfigMutationResultTlv deserializeMutationResult(const uint8_t* data, size_t size);
+
+struct ConfigV3CatalogPayload {
+    uint16_t version = 1;
+    uint32_t schemaVersion = 0;
+    uint32_t snapshotVersion = 0;
+    std::vector<ConfigDescriptor> entries;
+};
+
+struct ConfigV3SnapshotEntry {
+    ConfigKeyId keyId = ConfigKeyId::MaxKeyId;
+    ConfigValue value = std::string{};
+};
+
+struct ConfigV3SnapshotPayload {
+    uint16_t version = 1;
+    uint32_t schemaVersion = 0;
+    uint32_t snapshotVersion = 0;
+    std::vector<ConfigV3SnapshotEntry> entries;
+};
+
+std::vector<uint8_t> serializeConfigV3Catalog(const ConfigV3CatalogPayload& payload);
+ConfigV3CatalogPayload deserializeConfigV3Catalog(const uint8_t* data, size_t size);
+std::vector<uint8_t> serializeConfigV3Snapshot(const ConfigV3SnapshotPayload& payload);
+ConfigV3SnapshotPayload deserializeConfigV3Snapshot(const uint8_t* data, size_t size);
 
 } // namespace Config
