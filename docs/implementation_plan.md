@@ -2,6 +2,8 @@
 
 > 日期: 2026-06-05 | 策略: 完全重构, 不兼容旧格式 | 原则: 配置文件是唯一权威数据源
 
+> 当前实现进度: 截至 2026-06-07，P1-3 Catalog 策略字段和 P1-4 `IConfigTarget` registry 已合入。当前架构仍是 v3 过渡态：Catalog/Snapshot v3 IPC 已落地，ConfigRuntime 已通过 target validate/rollback/action plan 管理 live patch；`default.yaml` generator、完整 v3 Patch/Persist result、App `ConfigDraft`、legacy fixed ABI cleanup 仍待完成。
+
 ---
 
 ## 一、目标架构
@@ -61,6 +63,8 @@ graph TB
         PARSER["YamlParser::load()"]
         VALIDATOR["SchemaValidator<br/>类型/范围/必填校验"]
         STORE["ConfigStore<br/>path → value 存储"]
+        CATALOG["ConfigCatalog<br/>keyId/type/default/range/policy"]
+        RUNTIME["ConfigRuntime<br/>target validate + action plan"]
         BINDER["ConfigBinder<br/>YAML path → C++ member 绑定"]
         ACCESSOR["ConfigAccessor<br/>成员直接访问 (热路径)"]
         SAVE["saveOverrides()<br/>仅写变更键"]
@@ -68,7 +72,9 @@ graph TB
         YAML --> PARSER
         PARSER --> VALIDATOR
         VALIDATOR --> STORE
-        STORE --> BINDER
+        STORE --> CATALOG
+        CATALOG --> RUNTIME
+        RUNTIME --> BINDER
         BINDER --> ACCESSOR
         STORE --> SAVE
     end
@@ -77,14 +83,19 @@ graph TB
         TOUCH["TouchPipeline<br/>registerBindings() + applyConfig()"]
         STYLUS["StylusPipeline<br/>registerBindings() + applyConfig()"]
         SVC["ServiceConfig"]
+        TARGETS["IConfigTarget<br/>ServicePolicyTarget / PipelineConfigTarget"]
         DVR["DVR Runtime"]
     end
 
     UI --> IPC
-    IPC --> STORE
+    IPC --> RUNTIME
     BINDER --> TOUCH
     BINDER --> STYLUS
     BINDER --> SVC
+    RUNTIME --> TARGETS
+    TARGETS --> TOUCH
+    TARGETS --> STYLUS
+    TARGETS --> SVC
     BINDER --> DVR
 ```
 
@@ -96,7 +107,8 @@ sequenceDiagram
     participant PARSER as YamlParser
     participant VAL as SchemaValidator
     participant STORE as ConfigStore
-    participant BINDER as ConfigBinder
+    participant RUNTIME as ConfigRuntime
+    participant TARGET as IConfigTarget
     participant MOD as Pipeline/Service
 
     Note over YAML,MOD: 启动阶段
@@ -105,15 +117,15 @@ sequenceDiagram
     YAML->>PARSER: 加载 overrides.yaml (可选)
     PARSER->>STORE: 合并为统一配置树
 
-    MOD->>BINDER: registerBindings(binder)
-    Note over BINDER: 每个键一行<br/>binder.bind("path", &member, default, range, desc)
+    MOD->>RUNTIME: register target / bindings
+    Note over RUNTIME: Catalog 描述 keyId/type/range/applyTiming/persistPolicy
 
     STORE->>VAL: validate(schema)
     Note over VAL: 类型检查 / 范围校验 / 缺键报告
     VAL-->>STORE: ValidationResult
 
-    STORE->>BINDER: apply(bindings)
-    BINDER->>MOD: 写入成员字段
+    STORE->>TARGET: apply startup config
+    TARGET->>MOD: 写入成员字段
 
     Note over YAML,MOD: 运行时阶段
 
@@ -121,10 +133,13 @@ sequenceDiagram
 
     Note over YAML,MOD: 配置修改 (App 通过 IPC)
 
-    APP->>STORE: ApplyConfigPatch(TLV)
-    STORE->>BINDER: 重新 apply(bindings)
-    BINDER->>MOD: 更新成员字段
-    STORE->>YAML: saveOverrides()
+    APP->>RUNTIME: ApplyConfigPatch(TLV)
+    RUNTIME->>TARGET: validate(candidate, changeSet)
+    TARGET-->>RUNTIME: ValidationResult
+    RUNTIME->>RUNTIME: commit store after all targets pass
+    RUNTIME-->>TARGET: action plan
+    TARGET->>MOD: 更新成员字段 (mutex 外执行外部 apply)
+    RUNTIME->>YAML: saveOverrides()
 ```
 
 ### 1.6 热路径读取模型
@@ -334,6 +349,71 @@ ConfigPaths resolve(std::optional<std::string> cliOverride = {});
 
 } // namespace Config
 ```
+
+### 2.6 ConfigCatalog 策略字段 — v3 契约元数据
+
+当前 v3 catalog 已携带策略字段，并通过 catalog payload version 2 传输；snapshot payload 仍保持 version 1。
+
+```cpp
+enum class ConfigScope : uint8_t {
+    ServicePolicy,
+    TouchPipeline,
+    StylusPipeline,
+    DeviceRuntime,
+    Debug,
+};
+
+enum class ConfigApplyTiming : uint8_t {
+    LiveImmediate,
+    FrameBoundary,
+    RestartRequired,
+    StartupOnly,
+    ReadOnly,
+};
+
+enum class ConfigPersistPolicy : uint8_t {
+    Persistable,
+    RuntimeOnly,
+    GeneratedDefault,
+    Deprecated,
+};
+```
+
+当前已落地行为:
+
+- `ConfigSchemaEntry` / `ConfigDescriptor` / `BindingEntry` round-trip 这些字段。
+- `GetConfigCatalogV3` 输出 catalog v2，App 解析后按 `applyTiming` 过滤不可 live patch 的键。
+- `service.mode` 标记为 `RestartRequired`，不会被 App 当作 live immediate patch 发送。
+
+仍待完成:
+
+- `RestartRequired` 的 staged patch + persist + restart 生效语义。
+- `GeneratedDefault` / `Persistable` 在 v3 Persist 与 generator 中的最终消费。
+
+### 2.7 IConfigTarget — 事务化 validate/apply 边界
+
+当前 `ConfigRuntime` 已支持 target registry。TLV live patch 的关键路径:
+
+```text
+parse TLV -> schema/type/range validation -> candidate ConfigStore
+-> ConfigChangeSet -> all targets validate
+-> commit store only after all targets pass
+-> produce apply action plan
+-> ServiceHost executes external DeviceRuntime/Pipeline apply outside ConfigRuntime mutex
+```
+
+已落地 target:
+
+| Target | Scope | 当前职责 |
+|--------|-------|----------|
+| `ServicePolicyTarget` | `service.*` | 生成 service policy action plan; 保持 restart-required 不走 live immediate |
+| `PipelineConfigTarget` | `touch.*`, `stylus.*` | 校验 pipeline live patch; `StylusIirCoefficientsWithinMax` 已迁入 target validate; 生成 pipeline apply action |
+
+设计约束:
+
+- target validate 失败不得 commit `ConfigStore`。
+- target 不应在 `ConfigRuntime` mutex 内执行阻塞 I/O 或回调 runtime。
+- 外部设备/pipeline apply 必须通过 action plan 在 mutex 外执行。
 
 ---
 
@@ -552,6 +632,20 @@ EGoTouchRev-2.0.0/
 ---
 
 ## 六、实施计划
+
+### 当前 v3 主线进度 (2026-06-07)
+
+| 阶段 | 状态 | 当前结果 |
+|------|------|----------|
+| P0 Catalog/KeyId/TLV/Runtime/App schema 地基 | 已完成 | 静态 keyId、structured TLV parse、`ConfigRuntime` facade、App schema/keyId 收敛 |
+| P1-1 Service-driven Catalog/Snapshot IPC | 已完成 | `GetConfigCatalogV3` / `GetConfigSnapshotV3` 分页 IPC 落地 |
+| P1-2 App connected legacy snapshot fallback 删除 | 已完成 | connected mode 不再 fallback 到 legacy `GetConfigSnapshot=42`; 本地 fallback 仅用于 Service 不可用/离线 |
+| P1-3 Catalog strategy fields | 已完成 | `ConfigScope` / `ConfigApplyTiming` / `ConfigPersistPolicy` 已进入 catalog v2 round-trip; App live patch 过滤不可 live apply 键 |
+| P1-4 `IConfigTarget` registry | 已完成 | `ConfigRuntime` 通过 target validate 后 commit，失败 rollback; `ServicePolicyTarget` / `PipelineConfigTarget` 默认注册; apply action 在 mutex 外执行 |
+| P1-5 Catalog-to-`default.yaml` generator/check | 待完成 | 生成 YAML 与仓库 `config/default.yaml` 语义等价，并接入 CI/CMake 校验 |
+| P1-6 v3 Patch/Persist result | 待完成 | 替换过渡 `ApplyConfigTlvChunk` / legacy persist 语义，支持 per-key result 与 restart-required staged flow |
+| P1-7 App `ConfigDraft` | 待完成 | 拆分 Service snapshot cache、用户 draft、dirty baseline、apply/persist state |
+| P2 legacy fixed ABI cleanup | 待完成 | 删除 Service/Common 旧 fixed ABI 主路径；本地离线 fallback 保留 |
 
 ### Phase 0: 依赖 + 基础组件 (1-2 天)
 

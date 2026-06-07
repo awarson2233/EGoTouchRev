@@ -1,11 +1,25 @@
 # Config 重构任务清单
 
-> 基于: [implementation_plan.md](implementation_plan.md) | 当前权威进度见: [config_v3_full_upgrade_plan.md](artifacts/config_v3_full_upgrade_plan.md)  
+> 基于: [implementation_plan.md](implementation_plan.md) | 当前权威进度见: [config_v3_full_upgrade_plan.md](artifacts/config_v3_full_upgrade_plan.md)
 > 原则: 分阶段迁移到 Config v3；最终删除 legacy fixed ABI fallback，本地 fallback 保留为 Service 不可用/离线场景
 
 状态: `[ ]` 待开始 `[~]` 进行中 `[x]` 已完成 `[-]` 已取消
 
-> 进度说明：本文档是早期 YAML/ConfigStore/Binder/TLV 迁移任务清单，保留历史拆分。P0 与 P1-1 的最新状态以 [config_v3_full_upgrade_plan.md](artifacts/config_v3_full_upgrade_plan.md) 为准。
+> 进度说明：本文档是早期 YAML/ConfigStore/Binder/TLV 迁移任务清单，保留历史拆分。当前 v3 主线进度见下方“Config v3 当前主线”。
+
+---
+
+## Config v3 当前主线
+
+- [x] P0 Catalog/KeyId/TLV/Runtime/App schema 地基
+- [x] P1-1 Service-driven `GetConfigCatalogV3` / `GetConfigSnapshotV3` 分页 IPC
+- [x] P1-2 App connected mode 删除 legacy `GetConfigSnapshot=42` fallback；本地 binder/YAML fallback 仅保留为 Service 不可用/离线路径
+- [x] P1-3 Catalog strategy fields：`ConfigScope` / `ConfigApplyTiming` / `ConfigPersistPolicy` 进入 schema、descriptor、binding 与 v3 catalog payload；catalog wire version 升为 2，snapshot 保持 version 1；App/UI live patch 过滤 `ReadOnly` / `StartupOnly` / `RestartRequired`
+- [x] P1-4 `IConfigTarget` / target registry：`ConfigRuntime` 通过 target validate 后 commit，失败不落库；默认注册 `ServicePolicyTarget` / `PipelineConfigTarget`；ServiceHost 按 apply action plan 在 runtime mutex 外执行 pipeline apply；IIR 关系校验迁入 pipeline target
+- [ ] P1-5 Catalog-to-`default.yaml` generator/check；消除 Catalog/default.yaml 漂移
+- [ ] P1-6 v3 Patch/Persist result 完整化；实现 restart-required staged/persist/restart 语义
+- [ ] P1-7 App `ConfigDraft` 完整拆分 snapshot cache、editable draft、dirty baseline、apply/persist state
+- [ ] P2 legacy fixed ABI cleanup：删除 Service/Common 旧 `ConfigSnapshotWire` / `ApplyConfigPatchRequestWire` 主路径；保留本地离线 fallback
 
 ---
 
@@ -130,23 +144,25 @@
 - [x] 3.1.3 `ConfigMutationResultTlv` struct
 - [x] 3.1.4 keyId ↔ YAML path 双向映射 (ConfigKeyMap)
 - [x] 3.1.5 TLV 序列化/反序列化函数
-- [ ] 3.1.6 单元测试: TLV round-trip / 未知 keyId 跳过 / 版本不匹配检测
+- [x] 3.1.6 单元测试: TLV round-trip / 未知 keyId / duplicate / trailing bytes / 版本不匹配检测
+- [x] 3.1.7 v3 Catalog 策略字段: `scope` / `applyTiming` / `persistPolicy` round-trip; catalog payload version 2, snapshot payload version 1
 
 ### 3.2 Service 侧 IPC Handler
 - [x] 3.2.1 `HandleIpcGetConfigCatalogV3` — ConfigRuntime catalog blob → paged IPC response
 - [x] 3.2.2 `HandleIpcGetConfigSnapshotV3` — ConfigRuntime snapshot blob → paged IPC response
-- [~] 3.2.3 `HandleIpcApplyConfigPatch` — 当前由 `ApplyConfigTlvChunk` 承担过渡 live patch；后续升级为 v3 patch/result
+- [~] 3.2.3 `HandleIpcApplyConfigPatch` — 当前由 `ApplyConfigTlvChunk` 承担过渡 live patch；已接入 target validate/rollback/action plan，后续升级为 v3 patch/result
 - [ ] 3.2.4 `HandleIpcPersistConfigV3` — 按 Catalog `persistPolicy` 保存 overrides
 - [ ] 3.2.5 `HandleIpcReloadConfig` — 重新加载 YAML → apply bindings → 返回 v3 snapshot
 - [ ] 3.2.6 删除旧的 `ConfigSnapshotWire` / `ApplyConfigPatchRequestWire` 固定布局 struct（依赖 App connected mode 全面切 v3）
 - [ ] 3.2.7 删除旧的 IPC handler 中对应的旧格式序列化代码（只删除 legacy fixed ABI fallback；不删除本地离线 fallback）
+- [x] 3.2.8 `IConfigTarget` registry — `ServicePolicyTarget` / `PipelineConfigTarget` 默认注册；target validate 失败不 commit；pipeline apply 在 ConfigRuntime mutex 外执行
 
 ### 3.3 App 侧适配
 - [x] 3.3.1 `ServiceProxy` connected mode 优先通过 `GetConfigCatalogV3` / `GetConfigSnapshotV3` 获取 Service catalog/snapshot
 - [~] 3.3.2 新增 `ConfigDraft`，拆分 Service snapshot cache、用户 draft、dirty baseline version（当前仅完成轻量 v3 baseline version 记录）
 - [x] 3.3.3 删除 connected mode 对 legacy `GetConfigSnapshot=42` 的 fallback
 - [x] 3.3.4 保留本地 binder/YAML fallback 作为 Service 不可用/离线场景，不作为 legacy 删除目标
-- [ ] 3.3.5 `ServiceProxy::SaveConfig()` / Apply 流程升级为 v3 Patch + v3 Persist result
+- [~] 3.3.5 `ServiceProxy::SaveConfig()` / Apply 流程升级为 v3 Patch + v3 Persist result（当前 live apply 仍走 `ApplyConfigTlvChunk`，并按 catalog `applyTiming` 过滤不可 live patch 键）
 - [ ] 3.3.6 删除 `MergeServiceProxyConfigSections()` 旧实现（如仍存在）
 - [ ] 3.3.7 集成测试: App ↔ Service v3 IPC round-trip
 
@@ -177,7 +193,7 @@
 
 ## 进度总览
 
-> 下表是 2026-06-05 早期任务拆分的历史统计，不再作为当前 Config v3 权威进度。当前状态：P0 地基、P1-1 `GetConfigCatalogV3` / `GetConfigSnapshotV3`、P1-2 connected mode legacy snapshot fallback 删除已完成；下一步是 Catalog 策略字段、`IConfigTarget`、v3 Patch/Persist、default.yaml generator/check。详见 [config_v3_full_upgrade_plan.md](artifacts/config_v3_full_upgrade_plan.md)。
+> 下表是 2026-06-05 早期任务拆分的历史统计，不再作为当前 Config v3 权威进度。当前状态：P0、P1-1、P1-2、P1-3 Catalog 策略字段、P1-4 `IConfigTarget` registry 已完成；下一步是 default.yaml generator/check、v3 Patch/Persist result、完整 `ConfigDraft`、legacy fixed ABI cleanup。详见本文档顶部“Config v3 当前主线”。
 
 | Phase | 任务数 | 已完成 | 状态 |
 |-------|--------|--------|------|
@@ -196,4 +212,4 @@
 
 ---
 
-> 最后更新: 2026-06-07 (同步 P1-2 connected mode legacy snapshot fallback 已删除；Service/Common legacy fixed ABI cleanup 后续处理，本地 fallback 保留为离线/Service 不可用路径)
+> 最后更新: 2026-06-07 (同步 P1-3 Catalog 策略字段与 P1-4 `IConfigTarget` registry 已合入；Service/Common legacy fixed ABI cleanup 后续处理，本地 fallback 保留为离线/Service 不可用路径)
