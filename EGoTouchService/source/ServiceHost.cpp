@@ -1441,11 +1441,18 @@ void ServiceHost::HandleIpcApplyConfigTlvChunk(const Ipc::IpcRequest& req, Ipc::
         m_impl->m_pendingConfigTlvReceived = 0;
     }
 
-    const auto patch = Config::deserializePatch(payload.data(), payload.size());
-    if (patch.entries.empty()) {
-        Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidRequest);
+    const auto parseResult = Config::deserializePatchDetailed(payload.data(), payload.size());
+    if (!parseResult.ok()) {
+        const auto status = parseResult.status == Config::ConfigTlvParseStatus::InvalidArgument
+            ? Ipc::IpcStatusCode::InternalError
+            : Ipc::IpcStatusCode::InvalidRequest;
+        LOG_WARN("Service", __func__, "Config", "Rejected config TLV patch: status={} offset={} entryIndex={} keyId=0x{:04X} valueType=0x{:02X}",
+                 Config::toString(parseResult.status), parseResult.issue.offset, parseResult.issue.entryIndex,
+                 parseResult.issue.rawKeyId, parseResult.issue.rawValueType);
+        Ipc::MarkFailure(resp, status);
         return;
     }
+    const auto& patch = parseResult.patch;
 
     size_t changedCount = 0;
     bool penButtonRouteTouched = false;

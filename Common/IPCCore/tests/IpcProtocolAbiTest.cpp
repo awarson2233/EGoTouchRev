@@ -78,6 +78,7 @@ int main() {
 
     ConfigTlvChunkRequestWire chunk{};
     Require(sizeof(ConfigTlvChunkRequestWire) <= 256, "ConfigTlvChunkRequestWire fits in request param");
+    Require(sizeof(chunk.bytes) == 244, "ConfigTlvChunkRequestWire payload buffer remains 244 bytes");
     Require(chunk.wireVersion == kIpcProtocolVersion, "ConfigTlvChunkRequestWire version defaults to protocol version");
     Require(kConfigTlvChunkPayloadBytes == 244, "Config TLV chunk payload size remains stable");
 

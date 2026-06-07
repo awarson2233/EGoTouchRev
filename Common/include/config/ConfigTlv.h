@@ -39,6 +39,40 @@ struct ConfigPatchTlv {
     std::vector<ConfigTlvEntry> entries;  // 仅变更的键
 };
 
+enum class ConfigTlvParseStatus : uint8_t {
+    Ok = 0,
+    EmptyPatch = 1,
+    UnsupportedVersion = 2,
+    TruncatedHeader = 3,
+    TruncatedEntry = 4,
+    UnknownKeyId = 5,
+    UnknownValueType = 6,
+    DuplicateKey = 7,
+    TrailingBytes = 8,
+    InvalidArgument = 9,
+};
+
+struct ConfigTlvParseIssue {
+    ConfigTlvParseStatus status = ConfigTlvParseStatus::Ok;
+    size_t offset = 0;
+    uint16_t entryIndex = 0;
+    uint16_t rawKeyId = 0;
+    uint8_t rawValueType = 0;
+};
+
+struct ConfigTlvParseResult {
+    ConfigTlvParseStatus status = ConfigTlvParseStatus::Ok;
+    ConfigPatchTlv patch;
+    ConfigTlvParseIssue issue;
+
+    [[nodiscard]] bool ok() const noexcept { return status == ConfigTlvParseStatus::Ok; }
+};
+
+const char* toString(ConfigTlvParseStatus status) noexcept;
+
+ConfigTlvParseResult tryDeserializePatch(const uint8_t* data, size_t size);
+ConfigTlvParseResult deserializePatchDetailed(const uint8_t* data, size_t size);
+
 // ── Mutation Result ──
 struct ConfigMutationResultTlv {
     uint16_t changedCount = 0;

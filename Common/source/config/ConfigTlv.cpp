@@ -2,8 +2,8 @@
 
 #include "Logger.h"
 
-#include <cstring>
 #include <limits>
+#include <set>
 #include <utility>
 
 namespace Config {
@@ -22,9 +22,8 @@ void appendBytes(std::vector<uint8_t>& out, const void* data, size_t size)
 
 void appendUint16Le(std::vector<uint8_t>& out, uint16_t value)
 {
-    uint8_t bytes[sizeof(uint16_t)]{};
-    std::memcpy(bytes, &value, sizeof(value));
-    appendBytes(out, bytes, sizeof(bytes));
+    out.push_back(static_cast<uint8_t>(value & 0x00FFu));
+    out.push_back(static_cast<uint8_t>((value >> 8) & 0x00FFu));
 }
 
 void appendUint8(std::vector<uint8_t>& out, uint8_t value)
@@ -38,7 +37,8 @@ bool readUint16Le(const uint8_t* data, size_t size, size_t& offset, uint16_t& va
         return false;
     }
 
-    std::memcpy(&value, data + offset, sizeof(value));
+    value = static_cast<uint16_t>(data[offset]) |
+            static_cast<uint16_t>(static_cast<uint16_t>(data[offset + 1]) << 8);
     offset += sizeof(uint16_t);
     return true;
 }
@@ -73,19 +73,10 @@ bool isKnownValueType(ConfigValueType valueType)
     }
 }
 
-void logUnknownKeyId(ConfigKeyId keyId)
+void logParseIssue(const char* method, const ConfigTlvParseIssue& issue)
 {
-    LOG_WARN("Config", "ConfigTlv", "Deserialize", "unknown keyId: 0x{:04X}", static_cast<uint16_t>(keyId));
-}
-
-void logMalformed(const char* method, const char* reason)
-{
-    LOG_WARN("Config", method, "Deserialize", "malformed TLV payload: {}", reason);
-}
-
-void logVersionMismatch(const char* method, uint16_t version)
-{
-    LOG_WARN("Config", method, "Deserialize", "unsupported TLV version: {}", version);
+    LOG_WARN("Config", method, "Deserialize", "Config TLV parse failed: status={} offset={} entryIndex={} keyId=0x{:04X} valueType=0x{:02X}",
+             toString(issue.status), issue.offset, issue.entryIndex, issue.rawKeyId, issue.rawValueType);
 }
 
 std::vector<uint8_t> serializeEntries(uint16_t version, const std::vector<ConfigTlvEntry>& entries)
@@ -114,11 +105,12 @@ std::vector<uint8_t> serializeEntries(uint16_t version, const std::vector<Config
 }
 
 template <typename T>
-T deserializeEntries(const uint8_t* data, size_t size, const char* method)
+T deserializeEntriesLegacy(const uint8_t* data, size_t size, const char* method)
 {
     T result{};
     if (data == nullptr || size < kSnapshotHeaderSize) {
-        logMalformed(method, "missing snapshot/patch header");
+        ConfigTlvParseIssue issue{ConfigTlvParseStatus::TruncatedHeader, 0, 0, 0, 0};
+        logParseIssue(method, issue);
         return result;
     }
 
@@ -126,12 +118,14 @@ T deserializeEntries(const uint8_t* data, size_t size, const char* method)
     uint16_t version = 0;
     uint16_t entryCount = 0;
     if (!readUint16Le(data, size, offset, version) || !readUint16Le(data, size, offset, entryCount)) {
-        logMalformed(method, "truncated snapshot/patch header");
+        ConfigTlvParseIssue issue{ConfigTlvParseStatus::TruncatedHeader, offset, 0, 0, 0};
+        logParseIssue(method, issue);
         return T{};
     }
 
     if (version != kCurrentVersion) {
-        logVersionMismatch(method, version);
+        ConfigTlvParseIssue issue{ConfigTlvParseStatus::UnsupportedVersion, 0, 0, version, 0};
+        logParseIssue(method, issue);
         return T{};
     }
 
@@ -145,19 +139,18 @@ T deserializeEntries(const uint8_t* data, size_t size, const char* method)
         if (!readUint16Le(data, size, offset, rawKeyId) ||
             !readUint8(data, size, offset, rawValueType) ||
             !readUint16Le(data, size, offset, valueLen)) {
-            logMalformed(method, "truncated entry header");
+            ConfigTlvParseIssue issue{ConfigTlvParseStatus::TruncatedEntry, offset, i, rawKeyId, rawValueType};
+            logParseIssue(method, issue);
             return T{};
         }
 
         if (offset > size || size - offset < valueLen) {
-            logMalformed(method, "truncated entry payload");
+            ConfigTlvParseIssue issue{ConfigTlvParseStatus::TruncatedEntry, offset, i, rawKeyId, rawValueType};
+            logParseIssue(method, issue);
             return T{};
         }
 
-        std::string valuePayload(valueLen, '\0');
-        if (valueLen > 0) {
-            std::memcpy(valuePayload.data(), data + offset, valueLen);
-        }
+        std::string valuePayload(reinterpret_cast<const char*>(data + offset), valueLen);
         offset += valueLen;
 
         ConfigTlvEntry entry{
@@ -167,7 +160,7 @@ T deserializeEntries(const uint8_t* data, size_t size, const char* method)
         };
 
         if (!isKnownKeyId(entry.keyId)) {
-            logUnknownKeyId(entry.keyId);
+            LOG_WARN("Config", method, "Deserialize", "unknown keyId: 0x{:04X}", rawKeyId);
         }
         if (!isKnownValueType(entry.valueType)) {
             LOG_WARN("Config", method, "Deserialize", "unknown valueType: 0x{:02X}", rawValueType);
@@ -183,7 +176,33 @@ T deserializeEntries(const uint8_t* data, size_t size, const char* method)
     return result;
 }
 
+ConfigTlvParseResult fail(ConfigTlvParseStatus status, size_t offset, uint16_t entryIndex = 0,
+                          uint16_t rawKeyId = 0, uint8_t rawValueType = 0)
+{
+    ConfigTlvParseResult result{};
+    result.status = status;
+    result.issue = ConfigTlvParseIssue{status, offset, entryIndex, rawKeyId, rawValueType};
+    return result;
+}
+
 } // namespace
+
+const char* toString(ConfigTlvParseStatus status) noexcept
+{
+    switch (status) {
+    case ConfigTlvParseStatus::Ok: return "Ok";
+    case ConfigTlvParseStatus::EmptyPatch: return "EmptyPatch";
+    case ConfigTlvParseStatus::UnsupportedVersion: return "UnsupportedVersion";
+    case ConfigTlvParseStatus::TruncatedHeader: return "TruncatedHeader";
+    case ConfigTlvParseStatus::TruncatedEntry: return "TruncatedEntry";
+    case ConfigTlvParseStatus::UnknownKeyId: return "UnknownKeyId";
+    case ConfigTlvParseStatus::UnknownValueType: return "UnknownValueType";
+    case ConfigTlvParseStatus::DuplicateKey: return "DuplicateKey";
+    case ConfigTlvParseStatus::TrailingBytes: return "TrailingBytes";
+    case ConfigTlvParseStatus::InvalidArgument: return "InvalidArgument";
+    }
+    return "Unknown";
+}
 
 std::vector<uint8_t> serializeSnapshot(const ConfigSnapshotTlv& snapshot)
 {
@@ -192,7 +211,7 @@ std::vector<uint8_t> serializeSnapshot(const ConfigSnapshotTlv& snapshot)
 
 ConfigSnapshotTlv deserializeSnapshot(const uint8_t* data, size_t size)
 {
-    return deserializeEntries<ConfigSnapshotTlv>(data, size, "deserializeSnapshot");
+    return deserializeEntriesLegacy<ConfigSnapshotTlv>(data, size, "deserializeSnapshot");
 }
 
 std::vector<uint8_t> serializePatch(const ConfigPatchTlv& patch)
@@ -200,9 +219,82 @@ std::vector<uint8_t> serializePatch(const ConfigPatchTlv& patch)
     return serializeEntries(patch.version, patch.entries);
 }
 
+ConfigTlvParseResult tryDeserializePatch(const uint8_t* data, size_t size)
+{
+    if (data == nullptr || size < kSnapshotHeaderSize) {
+        return fail(data == nullptr ? ConfigTlvParseStatus::InvalidArgument : ConfigTlvParseStatus::TruncatedHeader, 0);
+    }
+
+    size_t offset = 0;
+    uint16_t version = 0;
+    uint16_t entryCount = 0;
+    if (!readUint16Le(data, size, offset, version) || !readUint16Le(data, size, offset, entryCount)) {
+        return fail(ConfigTlvParseStatus::TruncatedHeader, offset);
+    }
+
+    if (version != kCurrentVersion) {
+        return fail(ConfigTlvParseStatus::UnsupportedVersion, 0, 0, version, 0);
+    }
+    if (entryCount == 0) {
+        return fail(ConfigTlvParseStatus::EmptyPatch, offset);
+    }
+
+    ConfigTlvParseResult result{};
+    result.patch.version = version;
+    result.patch.entries.reserve(entryCount);
+    std::set<uint16_t> seenKeys;
+
+    for (uint16_t i = 0; i < entryCount; ++i) {
+        uint16_t rawKeyId = 0;
+        uint8_t rawValueType = 0;
+        uint16_t valueLen = 0;
+        if (!readUint16Le(data, size, offset, rawKeyId) ||
+            !readUint8(data, size, offset, rawValueType) ||
+            !readUint16Le(data, size, offset, valueLen)) {
+            return fail(ConfigTlvParseStatus::TruncatedEntry, offset, i, rawKeyId, rawValueType);
+        }
+        if (!isKnownKeyId(static_cast<ConfigKeyId>(rawKeyId))) {
+            return fail(ConfigTlvParseStatus::UnknownKeyId, offset, i, rawKeyId, rawValueType);
+        }
+        if (!isKnownValueType(static_cast<ConfigValueType>(rawValueType))) {
+            return fail(ConfigTlvParseStatus::UnknownValueType, offset, i, rawKeyId, rawValueType);
+        }
+        if (!seenKeys.insert(rawKeyId).second) {
+            return fail(ConfigTlvParseStatus::DuplicateKey, offset, i, rawKeyId, rawValueType);
+        }
+        if (offset > size || size - offset < valueLen) {
+            return fail(ConfigTlvParseStatus::TruncatedEntry, offset, i, rawKeyId, rawValueType);
+        }
+
+        result.patch.entries.push_back(ConfigTlvEntry{
+            .keyId = static_cast<ConfigKeyId>(rawKeyId),
+            .valueType = static_cast<ConfigValueType>(rawValueType),
+            .stringValue = std::string(reinterpret_cast<const char*>(data + offset), valueLen),
+        });
+        offset += valueLen;
+    }
+
+    if (offset != size) {
+        return fail(ConfigTlvParseStatus::TrailingBytes, offset);
+    }
+
+    result.status = ConfigTlvParseStatus::Ok;
+    result.issue = ConfigTlvParseIssue{};
+    return result;
+}
+
+ConfigTlvParseResult deserializePatchDetailed(const uint8_t* data, size_t size)
+{
+    const auto result = tryDeserializePatch(data, size);
+    if (!result.ok()) {
+        logParseIssue("deserializePatchDetailed", result.issue);
+    }
+    return result;
+}
+
 ConfigPatchTlv deserializePatch(const uint8_t* data, size_t size)
 {
-    return deserializeEntries<ConfigPatchTlv>(data, size, "deserializePatch");
+    return deserializeEntriesLegacy<ConfigPatchTlv>(data, size, "deserializePatch");
 }
 
 std::vector<uint8_t> serializeMutationResult(const ConfigMutationResultTlv& result)
@@ -219,7 +311,8 @@ ConfigMutationResultTlv deserializeMutationResult(const uint8_t* data, size_t si
 {
     ConfigMutationResultTlv result{};
     if (data == nullptr || size < kMutationResultSize) {
-        logMalformed("deserializeMutationResult", "missing mutation result payload");
+        ConfigTlvParseIssue issue{ConfigTlvParseStatus::TruncatedHeader, 0, 0, 0, 0};
+        logParseIssue("deserializeMutationResult", issue);
         return result;
     }
 
@@ -228,7 +321,8 @@ ConfigMutationResultTlv deserializeMutationResult(const uint8_t* data, size_t si
     if (!readUint16Le(data, size, offset, result.changedCount) ||
         !readUint16Le(data, size, offset, result.appliedCount) ||
         !readUint8(data, size, offset, restartRequired)) {
-        logMalformed("deserializeMutationResult", "truncated mutation result payload");
+        ConfigTlvParseIssue issue{ConfigTlvParseStatus::TruncatedEntry, offset, 0, 0, 0};
+        logParseIssue("deserializeMutationResult", issue);
         return ConfigMutationResultTlv{};
     }
 

@@ -438,7 +438,7 @@ bool ServiceProxy::ApplyConfigStoreGlobally() {
         applyResp = m_client.ApplyConfigTlvChunk(chunk);
         if (!applyResp.success) {
             setApplyStatus(ApplyConfigStatus::LiveApplyFailed);
-            LOG_WARN("App", __func__, "IPC", "ApplyConfigTlvChunk failed with status={} offset={}", static_cast<unsigned int>(applyResp.status), offset);
+            LOG_WARN("App", __func__, "IPC", "ApplyConfigTlvChunk failed with status={} offset={}; dirty paths retained for retry", static_cast<unsigned int>(applyResp.status), offset);
             return false;
         }
         offset += take;
