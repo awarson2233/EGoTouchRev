@@ -230,7 +230,7 @@ bool BuildConfigV3PageResponse(Ipc::IpcCommand command,
                                const Ipc::IpcRequest& req,
                                const ConfigRuntime::ConfigV3Blob& blob,
                                Ipc::IpcResponse& resp) {
-    if (req.paramLen < sizeof(Ipc::ConfigV3PageRequestWire)) {
+    if (req.paramLen != sizeof(Ipc::ConfigV3PageRequestWire)) {
         Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidRequest);
         return false;
     }
