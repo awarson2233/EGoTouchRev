@@ -15,8 +15,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
-#include <iomanip>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -335,8 +333,9 @@ void DiagnosticsWorkbench::DrawTouchPipelineConfigPanel() {
             ImGui::BeginDisabled();
         }
         std::vector<std::string> changedPaths;
-        ConfigUIRenderer::RenderConfigStoreByModule(schema, m_proxy->GetConfigStore(), activeModule, &changedPaths);
-        m_proxy->MarkConfigPathsDirty(changedPaths);
+        Config::ConfigStore& draftView = m_proxy->GetMutableConfigDraftStoreForUi();
+        ConfigUIRenderer::RenderConfigStoreByModule(schema, draftView, activeModule, &changedPaths);
+        m_proxy->CommitConfigDraftEdits(changedPaths);
         if (masterParserOnly) {
             ImGui::EndDisabled();
         }
@@ -618,8 +617,9 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
                 for (const auto& module : modules) {
                     if (ImGui::BeginTabItem(ModuleDisplayName(module))) {
                         std::vector<std::string> changedPaths;
-                        ConfigUIRenderer::RenderConfigStoreByModule(schema, m_proxy->GetConfigStore(), module, &changedPaths);
-                        m_proxy->MarkConfigPathsDirty(changedPaths);
+                        Config::ConfigStore& draftView = m_proxy->GetMutableConfigDraftStoreForUi();
+                        ConfigUIRenderer::RenderConfigStoreByModule(schema, draftView, module, &changedPaths);
+                        m_proxy->CommitConfigDraftEdits(changedPaths);
 #if !EGOTOUCH_CONFIG_ENABLED
                         ImGui::BeginDisabled();
                         ImGui::Button("Apply Global");

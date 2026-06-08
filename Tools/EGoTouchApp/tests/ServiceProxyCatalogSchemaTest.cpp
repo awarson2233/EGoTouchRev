@@ -133,6 +133,20 @@ void ApplyCatalog(App::ServiceProxy& proxy) {
             "v3 catalog payload should apply");
 }
 
+void ApplyCatalogWithPathPersistPolicy(App::ServiceProxy& proxy,
+                                       std::string_view path,
+                                       Config::ConfigPersistPolicy persistPolicy) {
+    auto payload = BuildCatalogPayload();
+    const auto it = std::ranges::find_if(payload.entries, [path](const Config::ConfigDescriptor& entry) {
+        return entry.path == path;
+    });
+    Require(it != payload.entries.end(), "catalog path should exist for persist policy override");
+    it->persistPolicy = persistPolicy;
+    const auto catalogBytes = Config::serializeConfigV3Catalog(payload);
+    Require(proxy.ApplyConfigV3CatalogBytesForTest(catalogBytes.data(), catalogBytes.size()),
+            "v3 catalog payload with persist policy override should apply");
+}
+
 Ipc::IpcResponse MakeApplyConfigPatchV3Response(Ipc::ConfigV3MutationStatus status,
                                                 uint16_t changedCount,
                                                 uint16_t appliedCount,
@@ -174,6 +188,12 @@ Ipc::IpcResponse MakePersistConfigV3Response(uint16_t persistedCount, uint16_t s
     return response;
 }
 
+Ipc::IpcResponse MakePersistConfigV3FailureResponse() {
+    Ipc::IpcResponse response{};
+    Ipc::MarkFailure(response, Ipc::IpcStatusCode::InternalError);
+    return response;
+}
+
 void ApplySnapshotWithBaseline(App::ServiceProxy& proxy, uint32_t schemaVersion, uint32_t snapshotVersion) {
     Config::ConfigV3SnapshotPayload snapshot{};
     snapshot.schemaVersion = schemaVersion;
@@ -184,12 +204,12 @@ void ApplySnapshotWithBaseline(App::ServiceProxy& proxy, uint32_t schemaVersion,
     Require(proxy.ApplyConfigV3SnapshotBytesForTest(bytes.data(), bytes.size()), "v3 snapshot baseline should apply");
 }
 
-std::vector<uint8_t> MakeSnapshotBytes(uint32_t schemaVersion, uint32_t snapshotVersion) {
+std::vector<uint8_t> MakeSnapshotBytes(uint32_t schemaVersion, uint32_t snapshotVersion, bool autoMode = true) {
     Config::ConfigV3SnapshotPayload snapshot{};
     snapshot.schemaVersion = schemaVersion;
     snapshot.snapshotVersion = snapshotVersion;
     snapshot.entries.push_back({Config::ConfigKeyId::SvcMode, std::string("full")});
-    snapshot.entries.push_back({Config::ConfigKeyId::SvcAutoMode, true});
+    snapshot.entries.push_back({Config::ConfigKeyId::SvcAutoMode, autoMode});
     return Config::serializeConfigV3Snapshot(snapshot);
 }
 
@@ -201,7 +221,7 @@ void TestV3CatalogPayloadAppliesSchemaAndDefaults() {
     RequireMappedRestartEntry(schema, "service.mode");
     RequireLiveMappedEntry(schema, "touch.signal_cond.baseline_no_finger_max_step");
     RequireLiveMappedEntry(schema, "stylus.sp.bt_freq_shift_debounce_frames");
-    Require(proxy.GetConfigStore().has("service.mode"), "local fallback store should remain populated");
+    Require(proxy.GetConfigDraftStore().has("service.mode"), "local fallback draft should remain populated");
     const auto versions = proxy.GetConfigV3BaselineVersionsForTest();
     Require(versions.catalogSchemaVersion == 10, "v3 catalog schemaVersion should be recorded");
     Require(versions.catalogSnapshotVersion == 20, "v3 catalog snapshotVersion should be recorded");
@@ -211,8 +231,7 @@ void TestConnectedApplyUsesConfigPatchV3() {
     App::ServiceProxy proxy;
     ApplyCatalog(proxy);
     ApplySnapshotWithBaseline(proxy, 10, 31);
-    proxy.GetConfigStore().set<Config::ConfigValue>("service.auto_mode", false);
-    proxy.MarkConfigPathsDirty({"service.auto_mode"});
+    proxy.SetConfigDraftValue("service.auto_mode", false);
     proxy.SetConfigV3IpcTestResponses(
         true,
         MakeApplyConfigPatchV3Response(Ipc::ConfigV3MutationStatus::Ok, 1, 1, 0),
@@ -234,14 +253,98 @@ void TestConnectedApplyUsesConfigPatchV3() {
     Require(result.liveApplied, "live v3 apply should set liveApplied");
     Require(!result.restartRequired, "live v3 apply should not require restart");
     Require(result.persistAttempted && result.persisted, "live v3 apply should persist through v3");
+    const auto state = proxy.GetConfigDraftPathState("service.auto_mode");
+    Require(!state.dirty, "persisted live apply should clear dirty state");
+    Require(state.applyState == App::ConfigDraftApplyState::LiveApplied, "persisted live apply should retain live-applied key state");
+    Require(state.persistState == App::ConfigDraftPersistState::Persisted, "persisted live apply should mark key persisted");
+}
+
+void TestConnectedApplyOkPersistFailKeepsDirty() {
+    App::ServiceProxy proxy;
+    ApplyCatalog(proxy);
+    ApplySnapshotWithBaseline(proxy, 10, 33);
+    proxy.SetConfigDraftValue("service.auto_mode", false);
+    proxy.SetConfigV3IpcTestResponses(
+        true,
+        MakeApplyConfigPatchV3Response(Ipc::ConfigV3MutationStatus::Ok, 1, 1, 0),
+        MakePersistConfigV3FailureResponse());
+
+    Require(proxy.ApplyConfigStoreGlobally(), "apply should still succeed when persist fails after live apply");
+    Require(proxy.GetConfigV3ApplyRequestCountForTest() == 1, "persist-fail path should send one apply");
+    Require(proxy.GetConfigV3PersistRequestCountForTest() == 1, "persist-fail path should attempt persist");
+    const auto result = proxy.GetLastApplyConfigResult();
+    Require(result.status == App::ApplyConfigStatus::LiveApplied, "apply ok/persist fail should still report live applied");
+    Require(result.liveApplied, "apply ok/persist fail should report liveApplied");
+    Require(result.persistAttempted && !result.persisted, "persist failure should be visible");
+    Require(result.unpersistedLiveChanges, "persist failure should leave unpersisted live changes");
+    const auto state = proxy.GetConfigDraftPathState("service.auto_mode");
+    Require(state.dirty, "apply ok/persist fail should keep dirty key");
+    Require(state.applyState == App::ConfigDraftApplyState::LiveApplied, "apply ok/persist fail should keep live-applied key state");
+    Require(state.persistState == App::ConfigDraftPersistState::Unpersisted, "apply ok/persist fail should mark key unpersisted");
+}
+
+void TestAppliedUnpersistedSameValueCommitStillRetriesPersist() {
+    App::ServiceProxy proxy;
+    ApplyCatalog(proxy);
+    ApplySnapshotWithBaseline(proxy, 10, 42);
+    proxy.SetConfigDraftValue("service.auto_mode", false);
+    proxy.SetConfigV3IpcTestResponses(
+        true,
+        MakeApplyConfigPatchV3Response(Ipc::ConfigV3MutationStatus::Ok, 1, 1, 0),
+        MakePersistConfigV3FailureResponse());
+
+    Require(proxy.ApplyConfigStoreGlobally(), "initial live apply should succeed even when persist fails");
+    Require(proxy.GetConfigV3ApplyRequestCountForTest() == 1, "initial live apply should send one patch");
+    Require(proxy.GetConfigV3PersistRequestCountForTest() == 1, "initial live apply should attempt persist");
+    auto state = proxy.GetConfigDraftPathState("service.auto_mode");
+    Require(state.dirty, "persist failure should leave applied key dirty");
+    Require(state.applyState == App::ConfigDraftApplyState::LiveApplied,
+            "persist failure should preserve live-applied state");
+    Require(state.persistState == App::ConfigDraftPersistState::Unpersisted,
+            "persist failure should mark key unpersisted");
+
+    const auto appliedSnapshotBytes = MakeSnapshotBytes(10, 43, false);
+    Require(proxy.ApplyConfigV3SnapshotBytesForTest(appliedSnapshotBytes.data(), appliedSnapshotBytes.size()),
+            "snapshot refresh should record the applied value");
+    proxy.SetConfigDraftValue("service.auto_mode", false);
+    state = proxy.GetConfigDraftPathState("service.auto_mode");
+    Require(state.dirty, "same-value recommit should keep applied key dirty for persist retry");
+    Require(state.applyState == App::ConfigDraftApplyState::LiveApplied,
+            "same-value recommit should preserve live-applied state");
+    Require(state.persistState == App::ConfigDraftPersistState::Unpersisted,
+            "same-value recommit should preserve unpersisted state");
+
+    proxy.SetConfigV3IpcTestResponses(
+        true,
+        std::vector<Ipc::IpcResponse>{},
+        MakePersistConfigV3Response(1, 0));
+
+    Require(proxy.ApplyConfigStoreGlobally(), "same-value persist retry should succeed without a second patch apply");
+    Require(proxy.GetConfigV3ApplyRequestCountForTest() == 0,
+            "same-value persist retry should not send another patch apply");
+    Require(proxy.GetConfigV3PersistRequestCountForTest() == 1,
+            "same-value persist retry should still send PersistConfigV3");
+    const auto result = proxy.GetLastApplyConfigResult();
+    Require(result.status == App::ApplyConfigStatus::LiveApplied,
+            "same-value persist retry should retain live-applied outcome");
+    Require(result.liveApplied, "same-value persist retry should preserve liveApplied status");
+    Require(result.persistAttempted && result.persisted,
+            "same-value persist retry should report successful persist");
+    Require(!result.unpersistedLiveChanges,
+            "same-value persist retry success should clear unpersisted live change flag");
+    state = proxy.GetConfigDraftPathState("service.auto_mode");
+    Require(!state.dirty, "same-value persist retry success should clear dirty state");
+    Require(state.applyState == App::ConfigDraftApplyState::LiveApplied,
+            "same-value persist retry success should retain live-applied key state");
+    Require(state.persistState == App::ConfigDraftPersistState::Persisted,
+            "same-value persist retry success should mark key persisted");
 }
 
 void TestConnectedRestartRequiredApplyUsesConfigPatchV3() {
     App::ServiceProxy proxy;
     ApplyCatalog(proxy);
     ApplySnapshotWithBaseline(proxy, 10, 32);
-    proxy.GetConfigStore().set<Config::ConfigValue>("service.mode", std::string("touch_only"));
-    proxy.MarkConfigPathsDirty({"service.mode"});
+    proxy.SetConfigDraftValue("service.mode", std::string("touch_only"));
     proxy.SetConfigV3IpcTestResponses(
         true,
         MakeApplyConfigPatchV3Response(Ipc::ConfigV3MutationStatus::Ok, 1, 0, 1),
@@ -258,14 +361,19 @@ void TestConnectedRestartRequiredApplyUsesConfigPatchV3() {
     Require(!result.liveApplied, "restart-required-only patch should not report liveApplied");
     Require(result.restartRequired, "restart-required v3 apply should set restartRequired");
     Require(result.persistAttempted && result.persisted, "restart-required v3 apply should persist staged value");
+    const auto state = proxy.GetConfigDraftPathState("service.mode");
+    Require(!state.dirty, "persisted restart-required key should clear dirty state");
+    Require(state.applyState == App::ConfigDraftApplyState::StagedRestartRequired,
+            "restart-required key should be staged, not live-applied");
+    Require(state.persistState == App::ConfigDraftPersistState::Persisted,
+            "restart-required key should be marked persisted after persist success");
 }
 
 void TestConnectedRejectedApplyResultIsPropagated() {
     App::ServiceProxy proxy;
     ApplyCatalog(proxy);
     ApplySnapshotWithBaseline(proxy, 10, 34);
-    proxy.GetConfigStore().set<Config::ConfigValue>("service.auto_mode", false);
-    proxy.MarkConfigPathsDirty({"service.auto_mode"});
+    proxy.SetConfigDraftValue("service.auto_mode", false);
     proxy.SetConfigV3IpcTestResponses(
         true,
         MakeApplyConfigPatchV3Response(
@@ -283,14 +391,18 @@ void TestConnectedRejectedApplyResultIsPropagated() {
     const auto result = proxy.GetLastApplyConfigResult();
     Require(result.status == App::ApplyConfigStatus::LiveApplyFailed, "rejected v3 result should map to LiveApplyFailed");
     Require(!result.liveApplied && !result.restartRequired, "rejected v3 result should not report applied state");
+    const auto state = proxy.GetConfigDraftPathState("service.auto_mode");
+    Require(state.dirty, "rejected key should remain dirty");
+    Require(state.applyState == App::ConfigDraftApplyState::Failed, "rejected key should keep failed state");
+    Require(state.failedKeyId == Config::ConfigKeyId::SvcAutoMode, "rejected key state should identify failed key");
+    Require(!state.errorMessage.empty(), "rejected key should keep an error message");
 }
 
 void TestVersionMismatchRetryRejectsInvalidWireVersion() {
     App::ServiceProxy proxy;
     ApplyCatalog(proxy);
     ApplySnapshotWithBaseline(proxy, 10, 35);
-    proxy.GetConfigStore().set<Config::ConfigValue>("service.auto_mode", false);
-    proxy.MarkConfigPathsDirty({"service.auto_mode"});
+    proxy.SetConfigDraftValue("service.auto_mode", false);
     proxy.SetConfigV3IpcTestResponses(
         true,
         std::vector<Ipc::IpcResponse>{
@@ -309,12 +421,125 @@ void TestVersionMismatchRetryRejectsInvalidWireVersion() {
     Require(result.status == App::ApplyConfigStatus::LiveApplyFailed, "invalid retry wireVersion should map to LiveApplyFailed");
 }
 
+void TestVersionMismatchRebaseUsesRefreshedBaseline() {
+    App::ServiceProxy proxy;
+    ApplyCatalog(proxy);
+    ApplySnapshotWithBaseline(proxy, 10, 37);
+    proxy.SetConfigDraftValue("service.auto_mode", false);
+    proxy.SetConfigV3IpcTestResponses(
+        true,
+        std::vector<Ipc::IpcResponse>{
+            MakeApplyConfigPatchV3Response(Ipc::ConfigV3MutationStatus::VersionMismatch, 0, 0, 0),
+            MakeApplyConfigPatchV3Response(Ipc::ConfigV3MutationStatus::Ok, 1, 1, 0),
+        },
+        MakePersistConfigV3Response(1, 0),
+        MakeSnapshotBytes(10, 38));
+
+    Require(proxy.ApplyConfigStoreGlobally(), "version mismatch should refresh snapshot and retry dirty draft");
+    Require(proxy.GetConfigV3ApplyRequestCountForTest() == 2, "version mismatch should send retry patch");
+    Require(proxy.GetConfigV3PersistRequestCountForTest() == 1, "successful retry should persist");
+    const auto versions = proxy.GetConfigV3BaselineVersionsForTest();
+    Require(versions.snapshotVersion == 38, "retry should use refreshed snapshot baseline");
+    const auto request = proxy.GetLastConfigV3ApplyRequestForTest();
+    Require(request.baseSchemaVersion == 10, "retry request should use refreshed schema baseline");
+    Require(request.baseSnapshotVersion == 38, "retry request should use refreshed snapshot baseline");
+    const auto patch = Config::deserializePatch(request.bytes, request.payloadBytes);
+    Require(patch.entries.size() == 1, "rebased retry patch should contain current dirty draft entry");
+    Require(patch.entries.front().keyId == Config::ConfigKeyId::SvcAutoMode,
+            "rebased retry patch should target service.auto_mode");
+    Require(patch.entries.front().stringValue == "false",
+            "rebased retry patch should keep current dirty draft value");
+    Require(!proxy.GetConfigDraftPathState("service.auto_mode").dirty,
+            "successful retry persist should clear dirty state");
+}
+
+void TestVersionMismatchRebaseToPersistOnlyRetriesPersist() {
+    App::ServiceProxy proxy;
+    ApplyCatalog(proxy);
+    ApplySnapshotWithBaseline(proxy, 10, 39);
+    proxy.SetConfigDraftValue("service.auto_mode", false);
+    proxy.SetConfigV3IpcTestResponses(
+        true,
+        std::vector<Ipc::IpcResponse>{
+            MakeApplyConfigPatchV3Response(Ipc::ConfigV3MutationStatus::Ok, 1, 1, 0),
+        },
+        MakePersistConfigV3FailureResponse());
+
+    Require(proxy.ApplyConfigStoreGlobally(), "initial live apply should succeed even when persist fails");
+    Require(proxy.GetConfigV3ApplyRequestCountForTest() == 1, "initial live apply should send one patch");
+    Require(proxy.GetConfigV3PersistRequestCountForTest() == 1, "initial live apply should attempt persist");
+    auto state = proxy.GetConfigDraftPathState("service.auto_mode");
+    Require(state.dirty, "persist failure should leave applied key dirty");
+    Require(state.applyState == App::ConfigDraftApplyState::LiveApplied,
+            "persist failure should preserve live-applied state");
+    Require(state.persistState == App::ConfigDraftPersistState::Unpersisted,
+            "persist failure should mark key unpersisted");
+
+    proxy.SetConfigV3IpcTestResponses(
+        true,
+        std::vector<Ipc::IpcResponse>{
+            MakeApplyConfigPatchV3Response(Ipc::ConfigV3MutationStatus::VersionMismatch, 0, 0, 0),
+        },
+        MakePersistConfigV3Response(1, 0),
+        MakeSnapshotBytes(10, 40, false));
+
+    Require(proxy.ApplyConfigStoreGlobally(), "persist-only rebase should persist without treating old VersionMismatch as rejection");
+    Require(proxy.GetConfigV3ApplyRequestCountForTest() == 1,
+            "persist-only rebase should not send a second patch apply after snapshot refresh");
+    Require(proxy.GetConfigV3PersistRequestCountForTest() == 1,
+            "persist-only rebase should still send PersistConfigV3");
+    const auto result = proxy.GetLastApplyConfigResult();
+    Require(result.status == App::ApplyConfigStatus::LiveApplied,
+            "persist-only retry should retain live-applied outcome");
+    Require(result.liveApplied, "persist-only retry should preserve liveApplied status");
+    Require(result.persistAttempted && result.persisted,
+            "persist-only retry should report successful persist");
+    Require(!result.unpersistedLiveChanges,
+            "persist-only retry success should clear unpersisted live change flag");
+    state = proxy.GetConfigDraftPathState("service.auto_mode");
+    Require(!state.dirty, "persist-only retry success should clear dirty state");
+    Require(state.applyState == App::ConfigDraftApplyState::LiveApplied,
+            "persist-only retry success should retain live-applied key state");
+    Require(state.persistState == App::ConfigDraftPersistState::Persisted,
+            "persist-only retry success should mark key persisted");
+}
+
+void TestNonUserOverridePersistPolicyRemainsUnpersisted() {
+    App::ServiceProxy proxy;
+    ApplyCatalogWithPathPersistPolicy(proxy, "service.auto_mode", Config::ConfigPersistPolicy::RuntimeOnly);
+    ApplySnapshotWithBaseline(proxy, 10, 41);
+    proxy.SetConfigDraftValue("service.auto_mode", false);
+    proxy.SetConfigV3IpcTestResponses(
+        true,
+        MakeApplyConfigPatchV3Response(Ipc::ConfigV3MutationStatus::Ok, 1, 1, 0),
+        MakePersistConfigV3Response(0, 1));
+
+    Require(proxy.ApplyConfigStoreGlobally(), "runtime-only live apply should succeed");
+    Require(proxy.GetConfigV3ApplyRequestCountForTest() == 1, "runtime-only live apply should send one patch");
+    Require(proxy.GetConfigV3PersistRequestCountForTest() == 1, "runtime-only live apply should still attempt global persist");
+    const auto result = proxy.GetLastApplyConfigResult();
+    Require(result.status == App::ApplyConfigStatus::LiveApplied,
+            "runtime-only live apply should report live applied");
+    Require(result.persistAttempted && !result.persisted,
+            "runtime-only path should not make the global result look fully persisted");
+    Require(result.unpersistedLiveChanges,
+            "runtime-only path should keep unpersisted live change flag set");
+    const auto state = proxy.GetConfigDraftPathState("service.auto_mode");
+    Require(state.dirty, "runtime-only path should remain dirty after persist success response");
+    Require(state.applyState == App::ConfigDraftApplyState::LiveApplied,
+            "runtime-only path should still be live applied");
+    Require(state.persistState == App::ConfigDraftPersistState::Unpersisted,
+            "runtime-only path should not be marked persisted");
+    Require(state.persistStatus == Ipc::IpcStatusCode::Ok,
+            "runtime-only skipped persist should retain the successful PersistConfigV3 IPC status");
+}
+
 void TestLocalFallbackInitializesSchemaAndDefaultStore() {
     App::ServiceProxy proxy;
     Require(!proxy.GetConfigSchemaSnapshot().entries.empty(), "local fallback schema should initialize without Service connection");
-    Require(proxy.GetConfigStore().has("service.mode"), "local fallback default store should contain service.mode");
-    Require(proxy.GetConfigStore().has("touch.signal_cond.baseline_no_finger_max_step"),
-            "local fallback default store should contain touch catalog key");
+    Require(proxy.GetConfigDraftStore().has("service.mode"), "local fallback default draft should contain service.mode");
+    Require(proxy.GetConfigDraftStore().has("touch.signal_cond.baseline_no_finger_max_step"),
+            "local fallback default draft should contain touch catalog key");
     const auto versions = proxy.GetConfigV3BaselineVersionsForTest();
     Require(versions.catalogSchemaVersion == 0, "local fallback should not claim a v3 catalog baseline");
     Require(versions.snapshotVersion == 0, "local fallback should not claim a v3 snapshot baseline");
@@ -333,11 +558,11 @@ void TestV3SnapshotPayloadWritesConfigStore() {
     const auto bytes = Config::serializeConfigV3Snapshot(snapshot);
 
     Require(proxy.ApplyConfigV3SnapshotBytesForTest(bytes.data(), bytes.size()), "v3 snapshot payload should apply");
-    Require(proxy.GetConfigStore().getOr<std::string>("service.mode", "") == "touch_only",
+    Require(proxy.GetConfigDraftStore().getOr<std::string>("service.mode", "") == "touch_only",
             "v3 snapshot should write numeric enum as string value to ConfigStore");
-    Require(proxy.GetConfigStore().getOr<std::string>("service.pen_button_route", "") == "win32_only",
+    Require(proxy.GetConfigDraftStore().getOr<std::string>("service.pen_button_route", "") == "win32_only",
             "v3 snapshot should write string enum value to ConfigStore");
-    Require(proxy.GetConfigStore().getOr<bool>("service.auto_mode", true) == false,
+    Require(proxy.GetConfigDraftStore().getOr<bool>("service.auto_mode", true) == false,
             "v3 snapshot should write bool value to ConfigStore");
     const auto versions = proxy.GetConfigV3BaselineVersionsForTest();
     Require(versions.snapshotSchemaVersion == 10, "v3 snapshot schemaVersion should be recorded");
@@ -347,8 +572,7 @@ void TestV3SnapshotPayloadWritesConfigStore() {
 void TestV3SnapshotPreservesDirtyPath() {
     App::ServiceProxy proxy;
     ApplyCatalog(proxy);
-    proxy.GetConfigStore().set<Config::ConfigValue>("service.mode", std::string("full"));
-    proxy.MarkConfigPathsDirty({"service.mode"});
+    proxy.SetConfigDraftValue("service.mode", std::string("full"));
 
     Config::ConfigV3SnapshotPayload snapshot{};
     snapshot.schemaVersion = 10;
@@ -357,14 +581,20 @@ void TestV3SnapshotPreservesDirtyPath() {
     const auto bytes = Config::serializeConfigV3Snapshot(snapshot);
 
     Require(proxy.ApplyConfigV3SnapshotBytesForTest(bytes.data(), bytes.size()), "dirty v3 snapshot should still succeed");
-    Require(proxy.GetConfigStore().getOr<std::string>("service.mode", "") == "full",
+    Require(proxy.GetConfigDraftStore().getOr<std::string>("service.mode", "") == "full",
             "v3 snapshot should not overwrite dirty path");
+    Require(proxy.GetServiceConfigSnapshotStoreForTest().getOr<std::string>("service.mode", "") == "touch_only",
+            "v3 snapshot should still update service snapshot cache for dirty path");
+    Require(proxy.IsSrvModeFull(), "draft desired mode should remain dirty full value");
+    Require(!proxy.IsSrvActiveModeFull(), "active mode mirror should come from service snapshot, not dirty draft");
+    const auto state = proxy.GetConfigDraftPathState("service.mode");
+    Require(state.dirty, "dirty draft should remain dirty after snapshot refresh");
+    Require(state.hasServiceSnapshot, "dirty draft state should record service snapshot availability");
 }
 
 void TestV3SnapshotSkipsUnknownKeyId() {
     App::ServiceProxy proxy;
     ApplyCatalog(proxy);
-    proxy.GetConfigStore().set<Config::ConfigValue>("service.auto_mode", true);
 
     Config::ConfigV3SnapshotPayload snapshot{};
     snapshot.schemaVersion = 10;
@@ -374,15 +604,13 @@ void TestV3SnapshotSkipsUnknownKeyId() {
     const auto bytes = Config::serializeConfigV3Snapshot(snapshot);
 
     Require(proxy.ApplyConfigV3SnapshotBytesForTest(bytes.data(), bytes.size()), "unknown keyId should be skipped safely");
-    Require(proxy.GetConfigStore().getOr<bool>("service.auto_mode", true) == false,
+    Require(proxy.GetConfigDraftStore().getOr<bool>("service.auto_mode", true) == false,
             "known key after unknown keyId should still apply");
 }
 
 void TestV3SnapshotSkipsUnmappedNumericEnum() {
     App::ServiceProxy proxy;
     ApplyCatalog(proxy);
-    proxy.GetConfigStore().set<Config::ConfigValue>("service.mode", std::string("full"));
-    proxy.GetConfigStore().set<Config::ConfigValue>("service.auto_mode", true);
 
     Config::ConfigV3SnapshotPayload snapshot{};
     snapshot.schemaVersion = 10;
@@ -392,16 +620,15 @@ void TestV3SnapshotSkipsUnmappedNumericEnum() {
     const auto bytes = Config::serializeConfigV3Snapshot(snapshot);
 
     Require(proxy.ApplyConfigV3SnapshotBytesForTest(bytes.data(), bytes.size()), "unmapped enum snapshot should not fail payload apply");
-    Require(proxy.GetConfigStore().getOr<std::string>("service.mode", "") == "full",
+    Require(proxy.GetConfigDraftStore().getOr<std::string>("service.mode", "") == "full",
             "unmapped numeric enum should not overwrite existing string enum value");
-    Require(proxy.GetConfigStore().getOr<bool>("service.auto_mode", true) == false,
+    Require(proxy.GetConfigDraftStore().getOr<bool>("service.auto_mode", true) == false,
             "valid entry after unmapped numeric enum should still apply");
 }
 
 void TestInvalidV3PayloadDoesNotClearSchemaOrStore() {
     App::ServiceProxy proxy;
     const auto beforeEntries = proxy.GetConfigSchemaSnapshot().entries.size();
-    proxy.GetConfigStore().set<Config::ConfigValue>("service.mode", std::string("full"));
     const std::vector<uint8_t> invalid{0, 1, 2, 3};
 
     Require(!proxy.ApplyConfigV3CatalogBytesForTest(invalid.data(), invalid.size()),
@@ -411,7 +638,7 @@ void TestInvalidV3PayloadDoesNotClearSchemaOrStore() {
     const auto beforeVersions = proxy.GetConfigV3BaselineVersionsForTest();
     Require(!proxy.ApplyConfigV3SnapshotBytesForTest(invalid.data(), invalid.size()),
             "invalid v3 snapshot should fail");
-    Require(proxy.GetConfigStore().getOr<std::string>("service.mode", "") == "full",
+    Require(proxy.GetConfigDraftStore().getOr<std::string>("service.mode", "") == "full",
             "failed v3 snapshot should not clear store");
     const auto afterVersions = proxy.GetConfigV3BaselineVersionsForTest();
     Require(afterVersions.snapshotSchemaVersion == beforeVersions.snapshotSchemaVersion,
@@ -435,9 +662,14 @@ int main() {
         TestV3SnapshotSkipsUnmappedNumericEnum();
         TestInvalidV3PayloadDoesNotClearSchemaOrStore();
         TestConnectedApplyUsesConfigPatchV3();
+        TestConnectedApplyOkPersistFailKeepsDirty();
+        TestAppliedUnpersistedSameValueCommitStillRetriesPersist();
         TestConnectedRestartRequiredApplyUsesConfigPatchV3();
         TestConnectedRejectedApplyResultIsPropagated();
         TestVersionMismatchRetryRejectsInvalidWireVersion();
+        TestVersionMismatchRebaseUsesRefreshedBaseline();
+        TestVersionMismatchRebaseToPersistOnlyRetriesPersist();
+        TestNonUserOverridePersistPolicyRemainsUnpersisted();
         std::cout << "[TEST] ServiceProxy catalog schema tests passed.\n";
         return 0;
     } catch (const std::exception& ex) {

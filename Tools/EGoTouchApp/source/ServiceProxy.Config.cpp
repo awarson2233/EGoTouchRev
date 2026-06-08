@@ -229,6 +229,50 @@ std::optional<Ipc::ConfigV3ApplyResultWire> DecodeConfigV3ApplyResult(const Ipc:
     return result;
 }
 
+std::optional<Ipc::PersistConfigV3ResponseWire> DecodeConfigV3PersistResult(const Ipc::IpcResponse& response) {
+    if (!response.success || response.dataLen < sizeof(Ipc::PersistConfigV3ResponseWire)) {
+        return std::nullopt;
+    }
+
+    Ipc::PersistConfigV3ResponseWire result{};
+    std::memcpy(&result, response.data, sizeof(result));
+    if (result.wireVersion != Ipc::kIpcProtocolVersion || !IsKnownConfigV3MutationStatus(result.status)) {
+        return std::nullopt;
+    }
+    return result;
+}
+
+const Config::ConfigSchemaEntry* FindSchemaEntryByPath(const Config::ConfigSchemaSnapshot& schema,
+                                                       std::string_view path) {
+    const auto it = std::ranges::find_if(schema.entries, [path](const Config::ConfigSchemaEntry& entry) {
+        return entry.yamlPath == path;
+    });
+    return it == schema.entries.end() ? nullptr : &*it;
+}
+
+std::optional<Config::ConfigValue> TryGetStoreValue(const Config::ConfigStore& store,
+                                                    std::string_view path) {
+    if (!store.has(path)) {
+        return std::nullopt;
+    }
+    return store.get<Config::ConfigValue>(path);
+}
+
+bool StoreValueEquals(const Config::ConfigStore& store,
+                      std::string_view path,
+                      const Config::ConfigValue& value) {
+    const auto current = TryGetStoreValue(store, path);
+    return current.has_value() && *current == value;
+}
+
+bool IsAppliedButUnpersisted(const ConfigDraftPathState& state) {
+    const bool applied = state.applyState == ConfigDraftApplyState::LiveApplied ||
+                         state.applyState == ConfigDraftApplyState::StagedRestartRequired;
+    const bool unpersisted = state.persistState == ConfigDraftPersistState::Unpersisted ||
+                             state.persistState == ConfigDraftPersistState::Failed;
+    return state.dirty && applied && unpersisted;
+}
+
 enum class ServiceModeSchema {
     Full,
     TouchOnly,
@@ -325,6 +369,36 @@ void SyncServiceMirrorsFromStore(Config::ConfigStore& store,
         penButtonRoute.load(std::memory_order_relaxed));
 }
 
+void SyncServiceDraftMirrorsFromStore(const Config::ConfigStore& store,
+                                      std::atomic<bool>& desiredModeFull,
+                                      std::atomic<bool>& autoMode,
+                                      std::atomic<bool>& stylusVhfEnabled,
+                                      std::atomic<PenButtonMode>& penButtonMode,
+                                      std::atomic<PenButtonRoute>& penButtonRoute) {
+    desiredModeFull.store(
+        ServiceModeFullFromConfig(store, desiredModeFull.load(std::memory_order_relaxed)),
+        std::memory_order_relaxed);
+    autoMode.store(store.getOr<bool>("service.auto_mode", autoMode.load(std::memory_order_relaxed)),
+                   std::memory_order_relaxed);
+    stylusVhfEnabled.store(store.getOr<bool>("service.stylus_vhf_enabled", stylusVhfEnabled.load(std::memory_order_relaxed)),
+                           std::memory_order_relaxed);
+    if (store.has("service.pen_button_mode")) {
+        const auto parsed = ParsePenButtonModeConfig(store.get<Config::ConfigValue>("service.pen_button_mode"));
+        penButtonMode.store(parsed.value_or(penButtonMode.load(std::memory_order_relaxed)), std::memory_order_relaxed);
+    }
+    if (store.has("service.pen_button_route")) {
+        const auto parsed = ParsePenButtonRouteConfig(store.get<Config::ConfigValue>("service.pen_button_route"));
+        penButtonRoute.store(parsed.value_or(penButtonRoute.load(std::memory_order_relaxed)), std::memory_order_relaxed);
+    }
+}
+
+void SyncServiceActiveMirrorFromSnapshot(const Config::ConfigStore& store,
+                                         std::atomic<bool>& activeModeFull) {
+    activeModeFull.store(
+        ServiceModeFullFromConfig(store, activeModeFull.load(std::memory_order_relaxed)),
+        std::memory_order_relaxed);
+}
+
 } // namespace
 
 void ServiceProxy::InitConfigSchema() {
@@ -335,26 +409,26 @@ void ServiceProxy::InitConfigSchema() {
     m_stylusPipeline.registerBindings(binder);
     Config::registerRuntimeKeyMappings(binder);
 
-    m_configDefaults = Config::ConfigStore{};
-    PopulateServiceDefaults(m_configDefaults);
-    binder.writeDefaults(m_configDefaults);
+    m_configDraft = ConfigDraft{};
+    PopulateServiceDefaults(m_configDraft.catalogDefaults);
+    binder.writeDefaults(m_configDraft.catalogDefaults);
 
-    m_configStore = Config::ConfigStore{};
-    m_configStore.mergeFrom(m_configDefaults);
-    binder.writeCurrent(m_configStore);
+    m_configDraft.editableDraft = Config::ConfigStore{};
+    m_configDraft.editableDraft.mergeFrom(m_configDraft.catalogDefaults);
+    binder.writeCurrent(m_configDraft.editableDraft);
 
     const auto paths = Config::resolve();
     if (paths.has_value()) {
         try {
             Config::ConfigStore yamlStore;
             yamlStore.loadFromYaml(paths->defaultConfig);
-            m_configStore.mergeFrom(yamlStore);
-            ApplyLegacyServiceModeMigration(m_configStore, yamlStore);
+            m_configDraft.editableDraft.mergeFrom(yamlStore);
+            ApplyLegacyServiceModeMigration(m_configDraft.editableDraft, yamlStore);
             if (paths->overrideExists) {
                 Config::ConfigStore overrides;
                 overrides.loadFromYaml(paths->overrideConfig);
-                m_configStore.mergeFrom(overrides);
-                ApplyLegacyServiceModeMigration(m_configStore, overrides);
+                m_configDraft.editableDraft.mergeFrom(overrides);
+                ApplyLegacyServiceModeMigration(m_configDraft.editableDraft, overrides);
             }
             LOG_INFO("App", __func__, "Config", "Loaded app-local preview config: default='{}' overrides='{}' overrideExists={}",
                      paths->defaultConfig, paths->overrideConfig, paths->overrideExists);
@@ -366,7 +440,7 @@ void ServiceProxy::InitConfigSchema() {
     }
 
     SyncServiceMirrorsFromStore(
-        m_configStore,
+        m_configDraft.editableDraft,
         m_srvDesiredModeFull,
         m_srvActiveModeFull,
         m_srvAutoMode,
@@ -375,7 +449,7 @@ void ServiceProxy::InitConfigSchema() {
         m_srvPenButtonRoute);
     ApplyConfigStoreToLocalRuntime();
 
-    m_configSchema = Config::BuildMergedSchema(m_configDefaults, binder);
+    m_configSchema = Config::BuildMergedSchema(m_configDraft.catalogDefaults, binder);
 }
 
 Config::ConfigSchemaSnapshot BuildServiceProxyConfigSchemaSnapshotForTest() {
@@ -396,8 +470,8 @@ Config::ConfigSchemaSnapshot BuildServiceProxyConfigSchemaSnapshotForTest() {
 }
 
 void ServiceProxy::ApplyConfigStoreToLocalRuntime() {
-    m_pipeline.applyConfig(m_configStore);
-    m_stylusPipeline.applyConfig(m_configStore);
+    m_pipeline.applyConfig(m_configDraft.editableDraft);
+    m_stylusPipeline.applyConfig(m_configDraft.editableDraft);
 }
 
 std::vector<std::string> ServiceProxy::GetConfigModuleTags() const {
@@ -415,8 +489,89 @@ std::vector<std::string> ServiceProxy::GetConfigModuleTags() const {
 
 void ServiceProxy::MarkConfigPathsDirty(const std::vector<std::string>& paths) {
     for (const auto& path : paths) {
-        m_dirtyConfigPaths.insert(path);
+        if (path.empty()) {
+            continue;
+        }
+
+        const auto draftValue = TryGetStoreValue(m_configDraft.editableDraft, path);
+        const auto existingIt = m_configDraft.pathStates.find(path);
+        const bool appliedButUnpersisted = existingIt != m_configDraft.pathStates.end() &&
+                                           IsAppliedButUnpersisted(existingIt->second);
+        if (draftValue.has_value() &&
+            StoreValueEquals(m_configDraft.serviceSnapshot, path, *draftValue)) {
+            auto& state = m_configDraft.pathStates[path];
+            if (appliedButUnpersisted) {
+                state.hasServiceSnapshot = true;
+                state.hasDirtyBaseline = m_configDraft.dirtyBaseline.contains(path);
+                continue;
+            }
+            state.dirty = false;
+            state.hasServiceSnapshot = true;
+            state.hasDirtyBaseline = false;
+            state.applyState = ConfigDraftApplyState::Clean;
+            state.persistState = ConfigDraftPersistState::NotAttempted;
+            state.persistStatus = Ipc::IpcStatusCode::InternalError;
+            state.mutationStatus = static_cast<uint8_t>(Ipc::ConfigV3MutationStatus::Ok);
+            state.failedKeyId = Config::ConfigKeyId::MaxKeyId;
+            state.errorMessage.clear();
+            m_configDraft.dirtyBaseline.erase(path);
+            continue;
+        }
+
+        auto& state = m_configDraft.pathStates[path];
+        if (!state.dirty) {
+            if (const auto baseline = TryGetStoreValue(m_configDraft.serviceSnapshot, path)) {
+                m_configDraft.dirtyBaseline[path] = *baseline;
+            } else if (const auto fallback = TryGetStoreValue(m_configDraft.editableDraft, path)) {
+                m_configDraft.dirtyBaseline[path] = *fallback;
+            }
+            state.baselineSchemaVersion = m_configDraft.snapshotSchemaVersion;
+            state.baselineSnapshotVersion = m_configDraft.snapshotVersion;
+        }
+        state.dirty = true;
+        state.hasServiceSnapshot = m_configDraft.serviceSnapshot.has(path);
+        state.hasDirtyBaseline = m_configDraft.dirtyBaseline.contains(path);
+        state.applyState = ConfigDraftApplyState::Pending;
+        state.persistState = ConfigDraftPersistState::NotAttempted;
+        state.persistStatus = Ipc::IpcStatusCode::InternalError;
+        state.mutationStatus = static_cast<uint8_t>(Ipc::ConfigV3MutationStatus::Ok);
+        state.failedKeyId = Config::ConfigKeyId::MaxKeyId;
+        state.errorMessage.clear();
     }
+}
+
+void ServiceProxy::SetConfigDraftValue(std::string_view path, Config::ConfigValue value) {
+    m_configDraft.editableDraft.set<Config::ConfigValue>(path, std::move(value));
+    CommitConfigDraftEdits({std::string(path)});
+}
+
+void ServiceProxy::CommitConfigDraftEdits(const std::vector<std::string>& paths) {
+    if (paths.empty()) {
+        return;
+    }
+
+    MarkConfigPathsDirty(paths);
+    SyncServiceDraftMirrorsFromStore(
+        m_configDraft.editableDraft,
+        m_srvDesiredModeFull,
+        m_srvAutoMode,
+        m_srvStylusVhfEnabled,
+        m_srvPenButtonMode,
+        m_srvPenButtonRoute);
+}
+
+ConfigDraftPathState ServiceProxy::GetConfigDraftPathState(std::string_view path) const {
+    ConfigDraftPathState result{};
+    result.hasServiceSnapshot = m_configDraft.serviceSnapshot.has(path);
+    result.hasDirtyBaseline = m_configDraft.dirtyBaseline.contains(std::string(path));
+
+    const auto it = m_configDraft.pathStates.find(std::string(path));
+    if (it != m_configDraft.pathStates.end()) {
+        result = it->second;
+        result.hasServiceSnapshot = m_configDraft.serviceSnapshot.has(path);
+        result.hasDirtyBaseline = m_configDraft.dirtyBaseline.contains(std::string(path));
+    }
+    return result;
 }
 
 ApplyConfigResult ServiceProxy::GetLastApplyConfigResult() const {
@@ -445,148 +600,356 @@ bool ServiceProxy::ApplyConfigStoreGlobally() {
     return false;
 #endif
 
-    Config::ConfigPatchTlv patch{};
-    size_t skippedKeys = 0;
-    bool hasRestartRequiredEntry = false;
-    std::vector<std::string> appliedPaths;
-    std::vector<std::string> dirtyPaths(m_dirtyConfigPaths.begin(), m_dirtyConfigPaths.end());
-    std::sort(dirtyPaths.begin(), dirtyPaths.end());
-    for (const auto& path : dirtyPaths) {
-        const auto schemaIt = std::find_if(m_configSchema.entries.begin(), m_configSchema.entries.end(),
-            [&path](const Config::ConfigSchemaEntry& entry) { return entry.yamlPath == path; });
-        if (schemaIt == m_configSchema.entries.end() ||
-            schemaIt->keyId == Config::ConfigKeyId::MaxKeyId ||
-            !m_configStore.has(path) || !IsV3PatchableEntry(*schemaIt)) {
-            ++skippedKeys;
-            continue;
-        }
+    struct PreparedPatch {
+        Config::ConfigPatchTlv patch;
+        std::vector<std::string> patchPaths;
+        std::vector<std::string> persistOnlyPaths;
+        std::vector<std::string> noChangePaths;
+        size_t skippedKeys = 0;
+        bool hasRestartRequiredEntry = false;
+    };
 
-        const Config::ConfigValue value = m_configStore.get<Config::ConfigValue>(path);
-        patch.entries.push_back(BuildTlvEntry(schemaIt->keyId, value));
-        hasRestartRequiredEntry = hasRestartRequiredEntry ||
-            schemaIt->applyTiming == Config::ConfigApplyTiming::RestartRequired;
-        appliedPaths.push_back(path);
+    auto hasUnpersistedDirtyState = [this]() {
+        return std::ranges::any_of(m_configDraft.pathStates, [](const auto& item) {
+            return IsAppliedButUnpersisted(item.second);
+        });
+    };
+
+    auto clearNoChangePaths = [this](const std::vector<std::string>& paths) {
+        for (const auto& path : paths) {
+            auto it = m_configDraft.pathStates.find(path);
+            if (it != m_configDraft.pathStates.end() && !IsAppliedButUnpersisted(it->second)) {
+                it->second.dirty = false;
+                it->second.applyState = ConfigDraftApplyState::Clean;
+                it->second.persistState = ConfigDraftPersistState::NotAttempted;
+                it->second.errorMessage.clear();
+                m_configDraft.dirtyBaseline.erase(path);
+            }
+        }
+    };
+
+    auto preparePatch = [this]() {
+        PreparedPatch prepared;
+        std::vector<std::string> dirtyPaths;
+        dirtyPaths.reserve(m_configDraft.pathStates.size());
+        for (const auto& [path, state] : m_configDraft.pathStates) {
+            if (state.dirty) {
+                dirtyPaths.push_back(path);
+            }
+        }
+        std::sort(dirtyPaths.begin(), dirtyPaths.end());
+
+        for (const auto& path : dirtyPaths) {
+            const auto* schemaEntry = FindSchemaEntryByPath(m_configSchema, path);
+            if (schemaEntry == nullptr ||
+                schemaEntry->keyId == Config::ConfigKeyId::MaxKeyId ||
+                !m_configDraft.editableDraft.has(path) ||
+                !IsV3PatchableEntry(*schemaEntry)) {
+                ++prepared.skippedKeys;
+                continue;
+            }
+
+            const Config::ConfigValue value = m_configDraft.editableDraft.get<Config::ConfigValue>(path);
+            const auto stateIt = m_configDraft.pathStates.find(path);
+            const bool sameAsServiceSnapshot = StoreValueEquals(m_configDraft.serviceSnapshot, path, value);
+            if (sameAsServiceSnapshot) {
+                if (stateIt != m_configDraft.pathStates.end() && IsAppliedButUnpersisted(stateIt->second)) {
+                    prepared.persistOnlyPaths.push_back(path);
+                    prepared.hasRestartRequiredEntry = prepared.hasRestartRequiredEntry ||
+                        schemaEntry->applyTiming == Config::ConfigApplyTiming::RestartRequired;
+                } else {
+                    prepared.noChangePaths.push_back(path);
+                }
+                continue;
+            }
+
+            prepared.patch.entries.push_back(BuildTlvEntry(schemaEntry->keyId, value));
+            prepared.patchPaths.push_back(path);
+            prepared.hasRestartRequiredEntry = prepared.hasRestartRequiredEntry ||
+                schemaEntry->applyTiming == Config::ConfigApplyTiming::RestartRequired;
+        }
+        return prepared;
+    };
+
+    auto markPathsApplyFailed = [this](const std::vector<std::string>& paths,
+                                       Ipc::ConfigV3MutationStatus status,
+                                       Config::ConfigKeyId failedKeyId,
+                                       std::string_view message) {
+        for (const auto& path : paths) {
+            auto& state = m_configDraft.pathStates[path];
+            state.dirty = true;
+            state.applyState = ConfigDraftApplyState::Failed;
+            state.persistState = ConfigDraftPersistState::NotAttempted;
+            state.mutationStatus = static_cast<uint8_t>(status);
+            state.failedKeyId = failedKeyId;
+            state.errorMessage = std::string(message);
+        }
+    };
+
+    auto markRejected = [this, &markPathsApplyFailed](const Ipc::ConfigV3ApplyResultWire& applyResult) {
+        const auto failedKeyId = static_cast<Config::ConfigKeyId>(applyResult.failedKeyId);
+        std::vector<std::string> failedPaths;
+        if (failedKeyId != Config::ConfigKeyId::MaxKeyId) {
+            for (const auto& entry : m_configSchema.entries) {
+                if (entry.keyId == failedKeyId && !entry.yamlPath.empty()) {
+                    failedPaths.push_back(entry.yamlPath);
+                    break;
+                }
+            }
+        }
+        if (failedPaths.empty()) {
+            for (const auto& [path, state] : m_configDraft.pathStates) {
+                if (state.dirty) {
+                    failedPaths.push_back(path);
+                }
+            }
+        }
+        markPathsApplyFailed(
+            failedPaths,
+            static_cast<Ipc::ConfigV3MutationStatus>(applyResult.status),
+            failedKeyId,
+            "Service rejected this config value.");
+    };
+
+    auto markPatchPathsApplied = [this](const std::vector<std::string>& paths,
+                                        const Ipc::ConfigV3ApplyResultWire& applyResult) {
+        for (const auto& path : paths) {
+            const auto* schemaEntry = FindSchemaEntryByPath(m_configSchema, path);
+            auto& state = m_configDraft.pathStates[path];
+            state.dirty = true;
+            state.applyState = (schemaEntry != nullptr &&
+                                schemaEntry->applyTiming == Config::ConfigApplyTiming::RestartRequired)
+                ? ConfigDraftApplyState::StagedRestartRequired
+                : ConfigDraftApplyState::LiveApplied;
+            state.persistState = ConfigDraftPersistState::NotAttempted;
+            state.mutationStatus = applyResult.status;
+            state.failedKeyId = Config::ConfigKeyId::MaxKeyId;
+            state.errorMessage.clear();
+        }
+    };
+
+    auto markPersistOutcome = [this](const std::vector<std::string>& paths,
+                                     bool persisted,
+                                     Ipc::IpcStatusCode persistStatus) {
+        for (const auto& path : paths) {
+            auto& state = m_configDraft.pathStates[path];
+            state.persistStatus = persistStatus;
+            if (persisted) {
+                state.dirty = false;
+                state.persistState = ConfigDraftPersistState::Persisted;
+                state.errorMessage.clear();
+                m_configDraft.dirtyBaseline.erase(path);
+            } else {
+                state.dirty = true;
+                state.persistState = ConfigDraftPersistState::Unpersisted;
+                state.errorMessage = "Applied in Service but not persisted.";
+            }
+        }
+    };
+
+    if (IsConfigIpcConnectedForApply() &&
+        (m_configDraft.snapshotSchemaVersion == 0 || m_configDraft.snapshotVersion == 0) &&
+        !RefreshConfigSnapshotV3()) {
+        setApplyOutcome(ApplyConfigStatus::LiveApplyFailed, false, false);
+        LOG_WARN("App", __func__, "Config", "Cannot apply config v3 patch without a snapshot baseline.");
+        return false;
     }
 
-    if (patch.entries.empty()) {
+    PreparedPatch prepared = preparePatch();
+    clearNoChangePaths(prepared.noChangePaths);
+
+    if (prepared.patch.entries.empty() && prepared.persistOnlyPaths.empty()) {
         setApplyOutcome(ApplyConfigStatus::NoChanges, false, false);
-        LOG_INFO("App", __func__, "Config", "Global config apply produced no TLV entries; skippedKeys={}", skippedKeys);
+        m_hasUnpersistedLiveConfigChanges.store(hasUnpersistedDirtyState(), std::memory_order_relaxed);
+        LOG_INFO("App", __func__, "Config", "Global config apply produced no TLV entries; skippedKeys={}", prepared.skippedKeys);
         return true;
     }
 
     if (!IsLiveControlAllowed() || !IsConfigIpcConnectedForApply()) {
         ApplyConfigStoreToLocalRuntime();
-        setApplyOutcome(hasRestartRequiredEntry ? ApplyConfigStatus::RestartRequired : ApplyConfigStatus::LiveApplied,
-                        !hasRestartRequiredEntry,
-                        hasRestartRequiredEntry);
+        Ipc::ConfigV3ApplyResultWire localApplyResult{};
+        localApplyResult.status = static_cast<uint8_t>(Ipc::ConfigV3MutationStatus::Ok);
+        markPatchPathsApplied(prepared.patchPaths, localApplyResult);
+        markPersistOutcome(prepared.patchPaths, false, Ipc::IpcStatusCode::InvalidState);
+        setApplyOutcome(prepared.hasRestartRequiredEntry ? ApplyConfigStatus::RestartRequired : ApplyConfigStatus::LiveApplied,
+                        !prepared.hasRestartRequiredEntry,
+                        prepared.hasRestartRequiredEntry);
         m_hasUnpersistedLiveConfigChanges.store(true, std::memory_order_relaxed);
         LOG_WARN("App", __func__, "IPC", "Global config apply used app-local fallback; live control unavailable or IPC disconnected.");
         return true;
     }
 
-    std::vector<uint8_t> payload;
-    try {
-        payload = Config::serializePatch(patch);
-    } catch (const std::exception& ex) {
-        setApplyOutcome(ApplyConfigStatus::LiveApplyFailed, false, false);
-        LOG_WARN("App", __func__, "Config", "Failed to serialize global config patch: {}", ex.what());
-        return false;
-    }
-
-    if (payload.empty() || payload.size() > Ipc::kConfigPatchV3PayloadBytes) {
-        setApplyOutcome(ApplyConfigStatus::LiveApplyFailed, false, false);
-        LOG_WARN("App", __func__, "IPC", "Global config v3 patch too large: {} bytes", payload.size());
-        return false;
-    }
-
-    if (m_configV3SnapshotSchemaVersion == 0 || m_configV3SnapshotVersion == 0) {
-        if (!RefreshConfigSnapshotV3()) {
-            setApplyOutcome(ApplyConfigStatus::LiveApplyFailed, false, false);
-            LOG_WARN("App", __func__, "Config", "Cannot apply config v3 patch without a snapshot baseline.");
-            return false;
+    auto serializePreparedPatch = [&](const PreparedPatch& patchToSerialize) -> std::optional<std::vector<uint8_t>> {
+        try {
+            auto payload = Config::serializePatch(patchToSerialize.patch);
+            if (payload.empty() || payload.size() > Ipc::kConfigPatchV3PayloadBytes) {
+                LOG_WARN("App", __func__, "IPC", "Global config v3 patch too large: {} bytes", payload.size());
+                return std::nullopt;
+            }
+            return payload;
+        } catch (const std::exception& ex) {
+            LOG_WARN("App", __func__, "Config", "Failed to serialize global config patch: {}", ex.what());
+            return std::nullopt;
         }
-    }
+    };
 
-    auto sendApply = [&]() {
+    auto sendApply = [&](std::span<const uint8_t> payload) {
         Ipc::ApplyConfigPatchV3RequestWire request{};
-        request.baseSchemaVersion = m_configV3SnapshotSchemaVersion;
-        request.baseSnapshotVersion = m_configV3SnapshotVersion;
+        request.baseSchemaVersion = m_configDraft.snapshotSchemaVersion;
+        request.baseSnapshotVersion = m_configDraft.snapshotVersion;
         request.payloadBytes = static_cast<uint16_t>(payload.size());
         std::memcpy(request.bytes, payload.data(), payload.size());
         return SendApplyConfigPatchV3Request(request);
     };
 
-    auto applyResp = sendApply();
-    auto decodedApply = DecodeConfigV3ApplyResult(applyResp);
-    if (!decodedApply.has_value()) {
-        setApplyOutcome(ApplyConfigStatus::LiveApplyFailed, false, false);
-        LOG_WARN("App", __func__, "IPC", "ApplyConfigPatchV3 failed with status={}; dirty paths retained for retry",
-                 static_cast<unsigned int>(applyResp.status));
-        return false;
-    }
-    Ipc::ConfigV3ApplyResultWire applyResult = *decodedApply;
-
-    if (static_cast<Ipc::ConfigV3MutationStatus>(applyResult.status) == Ipc::ConfigV3MutationStatus::VersionMismatch) {
-        if (!RefreshConfigSnapshotV3()) {
+    Ipc::ConfigV3ApplyResultWire applyResult{};
+    if (!prepared.patch.entries.empty()) {
+        auto payload = serializePreparedPatch(prepared);
+        if (!payload.has_value()) {
             setApplyOutcome(ApplyConfigStatus::LiveApplyFailed, false, false);
-            LOG_WARN("App", __func__, "Config", "ApplyConfigPatchV3 version mismatch and snapshot refresh failed.");
+            markPathsApplyFailed(prepared.patchPaths, Ipc::ConfigV3MutationStatus::Rejected,
+                                 Config::ConfigKeyId::MaxKeyId, "Config patch could not be serialized.");
             return false;
         }
-        applyResp = sendApply();
-        decodedApply = DecodeConfigV3ApplyResult(applyResp);
+
+        auto applyResp = sendApply(std::span<const uint8_t>(payload->data(), payload->size()));
+        auto decodedApply = DecodeConfigV3ApplyResult(applyResp);
         if (!decodedApply.has_value()) {
             setApplyOutcome(ApplyConfigStatus::LiveApplyFailed, false, false);
-            LOG_WARN("App", __func__, "IPC", "ApplyConfigPatchV3 retry failed with status={}", static_cast<unsigned int>(applyResp.status));
+            markPathsApplyFailed(prepared.patchPaths, Ipc::ConfigV3MutationStatus::Rejected,
+                                 Config::ConfigKeyId::MaxKeyId, "ApplyConfigPatchV3 did not return a valid result.");
+            LOG_WARN("App", __func__, "IPC", "ApplyConfigPatchV3 failed with status={}; dirty paths retained for retry",
+                     static_cast<unsigned int>(applyResp.status));
             return false;
         }
         applyResult = *decodedApply;
+
+        if (static_cast<Ipc::ConfigV3MutationStatus>(applyResult.status) == Ipc::ConfigV3MutationStatus::VersionMismatch) {
+            if (!RefreshConfigSnapshotV3()) {
+                setApplyOutcome(ApplyConfigStatus::LiveApplyFailed, false, false);
+                markPathsApplyFailed(prepared.patchPaths, Ipc::ConfigV3MutationStatus::VersionMismatch,
+                                     Config::ConfigKeyId::MaxKeyId, "Snapshot refresh failed after version mismatch.");
+                LOG_WARN("App", __func__, "Config", "ApplyConfigPatchV3 version mismatch and snapshot refresh failed.");
+                return false;
+            }
+
+            prepared = preparePatch();
+            clearNoChangePaths(prepared.noChangePaths);
+            if (!prepared.patch.entries.empty()) {
+                payload = serializePreparedPatch(prepared);
+                if (!payload.has_value()) {
+                    setApplyOutcome(ApplyConfigStatus::LiveApplyFailed, false, false);
+                    markPathsApplyFailed(prepared.patchPaths, Ipc::ConfigV3MutationStatus::Rejected,
+                                         Config::ConfigKeyId::MaxKeyId, "Rebased config patch could not be serialized.");
+                    return false;
+                }
+                applyResp = sendApply(std::span<const uint8_t>(payload->data(), payload->size()));
+                decodedApply = DecodeConfigV3ApplyResult(applyResp);
+                if (!decodedApply.has_value()) {
+                    setApplyOutcome(ApplyConfigStatus::LiveApplyFailed, false, false);
+                    markPathsApplyFailed(prepared.patchPaths, Ipc::ConfigV3MutationStatus::Rejected,
+                                         Config::ConfigKeyId::MaxKeyId, "ApplyConfigPatchV3 retry did not return a valid result.");
+                    LOG_WARN("App", __func__, "IPC", "ApplyConfigPatchV3 retry failed with status={}", static_cast<unsigned int>(applyResp.status));
+                    return false;
+                }
+                applyResult = *decodedApply;
+            } else if (prepared.persistOnlyPaths.empty()) {
+                setApplyOutcome(ApplyConfigStatus::NoChanges, false, false);
+                m_hasUnpersistedLiveConfigChanges.store(hasUnpersistedDirtyState(), std::memory_order_relaxed);
+                LOG_INFO("App", __func__, "Config", "VersionMismatch rebase produced no remaining dirty patch entries.");
+                return true;
+            } else {
+                applyResult = Ipc::ConfigV3ApplyResultWire{};
+                LOG_INFO("App", __func__, "Config", "VersionMismatch rebase produced persist-only paths; skipping retry apply and retrying persist.");
+            }
+        }
+
+        const auto mutationStatus = static_cast<Ipc::ConfigV3MutationStatus>(applyResult.status);
+        if (mutationStatus != Ipc::ConfigV3MutationStatus::Ok &&
+            mutationStatus != Ipc::ConfigV3MutationStatus::NoChanges) {
+            setApplyOutcome(ApplyConfigStatus::LiveApplyFailed, false, false);
+            markRejected(applyResult);
+            LOG_WARN("App", __func__, "IPC", "ApplyConfigPatchV3 rejected status={} failedKeyId=0x{:04X}",
+                     static_cast<unsigned int>(applyResult.status), applyResult.failedKeyId);
+            return false;
+        }
+
+        markPatchPathsApplied(prepared.patchPaths, applyResult);
     }
 
+    auto hasPathApplyState = [this](const std::vector<std::string>& paths, ConfigDraftApplyState applyState) {
+        return std::ranges::any_of(paths, [this, applyState](const auto& path) {
+            const auto it = m_configDraft.pathStates.find(path);
+            return it != m_configDraft.pathStates.end() &&
+                   it->second.applyState == applyState;
+        });
+    };
+
+    const bool liveApplied = applyResult.appliedCount != 0 ||
+        hasPathApplyState(prepared.patchPaths, ConfigDraftApplyState::LiveApplied) ||
+        hasPathApplyState(prepared.persistOnlyPaths, ConfigDraftApplyState::LiveApplied);
+    const bool restartRequired = applyResult.restartRequiredCount != 0 ||
+        hasPathApplyState(prepared.patchPaths, ConfigDraftApplyState::StagedRestartRequired) ||
+        hasPathApplyState(prepared.persistOnlyPaths, ConfigDraftApplyState::StagedRestartRequired);
     const auto mutationStatus = static_cast<Ipc::ConfigV3MutationStatus>(applyResult.status);
-    if (mutationStatus != Ipc::ConfigV3MutationStatus::Ok &&
-        mutationStatus != Ipc::ConfigV3MutationStatus::NoChanges) {
-        setApplyOutcome(ApplyConfigStatus::LiveApplyFailed, false, false);
-        LOG_WARN("App", __func__, "IPC", "ApplyConfigPatchV3 rejected status={} failedKeyId=0x{:04X}",
-                 static_cast<unsigned int>(applyResult.status), applyResult.failedKeyId);
-        return false;
-    }
-
-    const bool liveApplied = applyResult.appliedCount != 0;
-    const bool restartRequired = applyResult.restartRequiredCount != 0;
-    const auto applyStatus = mutationStatus == Ipc::ConfigV3MutationStatus::NoChanges
-        ? ApplyConfigStatus::NoChanges
-        : (restartRequired ? ApplyConfigStatus::RestartRequired : ApplyConfigStatus::LiveApplied);
+    const auto applyStatus = prepared.patch.entries.empty() && !prepared.persistOnlyPaths.empty()
+        ? (restartRequired ? ApplyConfigStatus::RestartRequired : ApplyConfigStatus::LiveApplied)
+        : (mutationStatus == Ipc::ConfigV3MutationStatus::NoChanges
+            ? ApplyConfigStatus::NoChanges
+            : (restartRequired ? ApplyConfigStatus::RestartRequired : ApplyConfigStatus::LiveApplied));
     setApplyOutcome(applyStatus, liveApplied, restartRequired);
+
+    std::vector<std::string> persistTrackedPaths = prepared.patchPaths;
+    persistTrackedPaths.insert(persistTrackedPaths.end(), prepared.persistOnlyPaths.begin(), prepared.persistOnlyPaths.end());
+
+    auto isUserOverridePersistable = [this](std::string_view path) {
+        const auto* schemaEntry = FindSchemaEntryByPath(m_configSchema, path);
+        return schemaEntry != nullptr &&
+               schemaEntry->persistPolicy == Config::ConfigPersistPolicy::UserOverride;
+    };
+
+    std::vector<std::string> userOverridePersistPaths;
+    std::vector<std::string> nonUserOverridePersistPaths;
+    userOverridePersistPaths.reserve(persistTrackedPaths.size());
+    for (const auto& path : persistTrackedPaths) {
+        if (isUserOverridePersistable(path)) {
+            userOverridePersistPaths.push_back(path);
+        } else {
+            nonUserOverridePersistPaths.push_back(path);
+        }
+    }
 
     const auto persistResp = SendPersistConfigV3Request();
     m_lastApplyConfigPersistAttempted.store(true, std::memory_order_relaxed);
     m_lastApplyConfigPersistStatus.store(static_cast<uint8_t>(persistResp.status), std::memory_order_relaxed);
-    bool persisted = false;
+    const auto decodedPersist = DecodeConfigV3PersistResult(persistResp);
     Ipc::PersistConfigV3ResponseWire persistResult{};
-    if (persistResp.success && persistResp.dataLen >= sizeof(Ipc::PersistConfigV3ResponseWire)) {
-        std::memcpy(&persistResult, persistResp.data, sizeof(persistResult));
-        persisted = persistResult.wireVersion == Ipc::kIpcProtocolVersion &&
-            static_cast<Ipc::ConfigV3MutationStatus>(persistResult.status) == Ipc::ConfigV3MutationStatus::Ok;
+    if (decodedPersist.has_value()) {
+        persistResult = *decodedPersist;
     }
+    const bool persistResponseOk = decodedPersist.has_value() &&
+        static_cast<Ipc::ConfigV3MutationStatus>(persistResult.status) == Ipc::ConfigV3MutationStatus::Ok;
+    const bool persisted = persistResponseOk && nonUserOverridePersistPaths.empty();
     m_lastApplyConfigPersisted.store(persisted, std::memory_order_relaxed);
+    markPersistOutcome(userOverridePersistPaths, persistResponseOk, persistResp.status);
+    markPersistOutcome(nonUserOverridePersistPaths, false, persistResp.status);
     if (!persisted) {
         m_hasUnpersistedLiveConfigChanges.store(true, std::memory_order_relaxed);
-        LOG_WARN("App", __func__, "IPC", "PersistConfigV3 failed after apply with status={}; keeping dirty paths for retry",
-                 static_cast<unsigned int>(persistResp.status));
+        if (persistResponseOk) {
+            LOG_WARN("App", __func__, "IPC", "PersistConfigV3 skipped {} non-user-override path(s); keeping dirty paths for retry",
+                     nonUserOverridePersistPaths.size());
+        } else {
+            LOG_WARN("App", __func__, "IPC", "PersistConfigV3 failed after apply with status={}; keeping dirty paths for retry",
+                     static_cast<unsigned int>(persistResp.status));
+        }
+    } else {
+        m_hasUnpersistedLiveConfigChanges.store(hasUnpersistedDirtyState(), std::memory_order_relaxed);
     }
 
     RefreshConfigSnapshot();
     ApplyConfigStoreToLocalRuntime();
-    if (persisted) {
-        for (const auto& path : appliedPaths) {
-            m_dirtyConfigPaths.erase(path);
-        }
-        if (m_dirtyConfigPaths.empty()) {
-            m_hasUnpersistedLiveConfigChanges.store(false, std::memory_order_relaxed);
-        }
-    }
-    LOG_INFO("App", __func__, "IPC", "Global config v3 applied entries={} skippedKeys={} payloadBytes={} liveApplied={} restartRequired={} persisted={} persistedCount={} skippedPersist={} unpersistedLiveChanges={}",
-             patch.entries.size(), skippedKeys, payload.size(), liveApplied ? 1 : 0, restartRequired ? 1 : 0,
+    LOG_INFO("App", __func__, "IPC", "Global config v3 applied entries={} skippedKeys={} liveApplied={} restartRequired={} persisted={} persistedCount={} skippedPersist={} unpersistedLiveChanges={}",
+             prepared.patch.entries.size(), prepared.skippedKeys, liveApplied ? 1 : 0, restartRequired ? 1 : 0,
              persisted ? 1 : 0, persistResult.persistedCount, persistResult.skippedCount,
              m_hasUnpersistedLiveConfigChanges.load(std::memory_order_relaxed) ? 1 : 0);
     return true;
@@ -741,11 +1104,14 @@ bool ServiceProxy::ApplyConfigV3CatalogBytes(const uint8_t* data, size_t size) {
         const auto payload = Config::deserializeConfigV3Catalog(data, size);
         Config::ConfigCatalog catalog(payload.entries);
         m_configSchema = Config::BuildSchemaSnapshot(catalog);
-        m_configV3CatalogSchemaVersion = payload.schemaVersion;
-        m_configV3CatalogSnapshotVersion = payload.snapshotVersion;
+        m_configDraft.catalogSchemaVersion = payload.schemaVersion;
+        m_configDraft.catalogSnapshotVersion = payload.snapshotVersion;
         for (const auto& entry : payload.entries) {
             if (!entry.path.empty()) {
-                m_configDefaults.set<Config::ConfigValue>(entry.path, entry.defaultValue);
+                m_configDraft.catalogDefaults.set<Config::ConfigValue>(entry.path, entry.defaultValue);
+                if (!m_configDraft.editableDraft.has(entry.path)) {
+                    m_configDraft.editableDraft.set<Config::ConfigValue>(entry.path, entry.defaultValue);
+                }
             }
         }
         LOG_INFO("App", __func__, "Config", "Applied config v3 catalog entries={} schemaVersion={} snapshotVersion={}",
@@ -777,23 +1143,32 @@ bool ServiceProxy::ApplyConfigV3SnapshotBytes(const uint8_t* data, size_t size) 
                 continue;
             }
             const auto& schemaEntry = *it->second;
-            if (m_dirtyConfigPaths.contains(schemaEntry.yamlPath)) {
-                ++dirtySkipped;
-                continue;
-            }
             const auto normalizedValue = NormalizeSnapshotValueForSchema(schemaEntry, entry.value);
             if (!normalizedValue.has_value()) {
                 continue;
             }
-            m_configStore.set<Config::ConfigValue>(schemaEntry.yamlPath, *normalizedValue);
+            m_configDraft.serviceSnapshot.set<Config::ConfigValue>(schemaEntry.yamlPath, *normalizedValue);
+            const auto stateIt = m_configDraft.pathStates.find(schemaEntry.yamlPath);
+            if (stateIt != m_configDraft.pathStates.end()) {
+                auto& state = stateIt->second;
+                state.hasServiceSnapshot = true;
+                state.hasDirtyBaseline = m_configDraft.dirtyBaseline.contains(schemaEntry.yamlPath);
+                if (state.dirty) {
+                    ++dirtySkipped;
+                    continue;
+                }
+            }
+            m_configDraft.editableDraft.set<Config::ConfigValue>(schemaEntry.yamlPath, *normalizedValue);
             ++applied;
         }
-        m_configV3SnapshotSchemaVersion = payload.schemaVersion;
-        m_configV3SnapshotVersion = payload.snapshotVersion;
-        SyncServiceMirrorsFromStore(
-            m_configStore,
+        m_configDraft.snapshotSchemaVersion = payload.schemaVersion;
+        m_configDraft.snapshotVersion = payload.snapshotVersion;
+        SyncServiceActiveMirrorFromSnapshot(
+            m_configDraft.serviceSnapshot,
+            m_srvActiveModeFull);
+        SyncServiceDraftMirrorsFromStore(
+            m_configDraft.editableDraft,
             m_srvDesiredModeFull,
-            m_srvActiveModeFull,
             m_srvAutoMode,
             m_srvStylusVhfEnabled,
             m_srvPenButtonMode,
@@ -818,10 +1193,10 @@ bool ServiceProxy::ApplyConfigV3SnapshotBytesForTest(const uint8_t* data, size_t
 
 ConfigV3BaselineVersions ServiceProxy::GetConfigV3BaselineVersionsForTest() const {
     return ConfigV3BaselineVersions{
-        .catalogSchemaVersion = m_configV3CatalogSchemaVersion,
-        .catalogSnapshotVersion = m_configV3CatalogSnapshotVersion,
-        .snapshotSchemaVersion = m_configV3SnapshotSchemaVersion,
-        .snapshotVersion = m_configV3SnapshotVersion,
+        .catalogSchemaVersion = m_configDraft.catalogSchemaVersion,
+        .catalogSnapshotVersion = m_configDraft.catalogSnapshotVersion,
+        .snapshotSchemaVersion = m_configDraft.snapshotSchemaVersion,
+        .snapshotVersion = m_configDraft.snapshotVersion,
     };
 }
 
@@ -847,36 +1222,31 @@ void ServiceProxy::RefreshConfigSnapshot() {
 void ServiceProxy::SetSrvModeFull(bool full) {
     if (!IsLiveControlAllowed()) return;
     m_srvDesiredModeFull.store(full, std::memory_order_relaxed);
-    SetValue(m_configStore, "service.mode", ToConfigValue(ToServiceModeConfig(full)));
-    m_dirtyConfigPaths.insert("service.mode");
+    SetConfigDraftValue("service.mode", ToConfigValue(ToServiceModeConfig(full)));
 }
 
 void ServiceProxy::SetSrvStylusVhfEnabled(bool enabled) {
     if (!IsLiveControlAllowed()) return;
     m_srvStylusVhfEnabled.store(enabled, std::memory_order_relaxed);
-    SetValue(m_configStore, "service.stylus_vhf_enabled", ToConfigValue(enabled));
-    m_dirtyConfigPaths.insert("service.stylus_vhf_enabled");
+    SetConfigDraftValue("service.stylus_vhf_enabled", ToConfigValue(enabled));
 }
 
 void ServiceProxy::SetSrvAutoMode(bool enabled) {
     if (!IsLiveControlAllowed()) return;
     m_srvAutoMode.store(enabled, std::memory_order_relaxed);
-    SetValue(m_configStore, "service.auto_mode", ToConfigValue(enabled));
-    m_dirtyConfigPaths.insert("service.auto_mode");
+    SetConfigDraftValue("service.auto_mode", ToConfigValue(enabled));
 }
 
 void ServiceProxy::SetPenButtonMode(PenButtonMode m) {
     if (!IsLiveControlAllowed()) return;
     m_srvPenButtonMode.store(m, std::memory_order_relaxed);
-    SetValue(m_configStore, "service.pen_button_mode", ToConfigValue(m));
-    m_dirtyConfigPaths.insert("service.pen_button_mode");
+    SetConfigDraftValue("service.pen_button_mode", ToConfigValue(m));
 }
 
 void ServiceProxy::SetPenButtonRoute(PenButtonRoute r) {
     if (!IsLiveControlAllowed()) return;
     m_srvPenButtonRoute.store(r, std::memory_order_relaxed);
-    SetValue(m_configStore, "service.pen_button_route", ToConfigValue(r));
-    m_dirtyConfigPaths.insert("service.pen_button_route");
+    SetConfigDraftValue("service.pen_button_route", ToConfigValue(r));
 }
 
 // ── MasterParser-only mode (local) ──

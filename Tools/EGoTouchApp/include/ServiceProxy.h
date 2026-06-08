@@ -5,7 +5,6 @@
 #include "PenButtonConfig.h"
 #include "Ipc/IpcPipeClient.h"
 #include "Ipc/SharedFrameBuffer.h"
-#include "Ipc/ConfigSync.h"
 #include "SolverTypes.h"
 #include "ServiceProxyTypes.h"
 #include "Ipc/IpcProtocol.h"
@@ -22,9 +21,10 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 namespace App {
@@ -54,6 +54,35 @@ struct ApplyConfigResult {
     bool persisted = false;
     bool unpersistedLiveChanges = false;
     Ipc::IpcStatusCode persistStatus = Ipc::IpcStatusCode::InternalError;
+};
+
+enum class ConfigDraftApplyState : uint8_t {
+    Clean = 0,
+    Pending,
+    LiveApplied,
+    StagedRestartRequired,
+    Failed,
+};
+
+enum class ConfigDraftPersistState : uint8_t {
+    NotAttempted = 0,
+    Persisted,
+    Unpersisted,
+    Failed,
+};
+
+struct ConfigDraftPathState {
+    bool dirty = false;
+    bool hasServiceSnapshot = false;
+    bool hasDirtyBaseline = false;
+    ConfigDraftApplyState applyState = ConfigDraftApplyState::Clean;
+    ConfigDraftPersistState persistState = ConfigDraftPersistState::NotAttempted;
+    Ipc::IpcStatusCode persistStatus = Ipc::IpcStatusCode::InternalError;
+    uint8_t mutationStatus = static_cast<uint8_t>(Ipc::ConfigV3MutationStatus::Ok);
+    Config::ConfigKeyId failedKeyId = Config::ConfigKeyId::MaxKeyId;
+    uint32_t baselineSchemaVersion = 0;
+    uint32_t baselineSnapshotVersion = 0;
+    std::string errorMessage;
 };
 
 struct ConfigV3BaselineVersions {
@@ -146,7 +175,15 @@ public:
     // Does not live-apply Service-side pipelines; no-op when runtime config is disabled.
     void ApplyConfigStoreToLocalRuntime();
     const Config::ConfigSchemaSnapshot& GetConfigSchemaSnapshot() const { return m_configSchema; }
-    Config::ConfigStore& GetConfigStore() { return m_configStore; }
+    const Config::ConfigStore& GetConfigDraftStore() const { return m_configDraft.editableDraft; }
+    Config::ConfigStore& GetMutableConfigDraftStoreForUi() { return m_configDraft.editableDraft; }
+    const Config::ConfigStore& GetConfigStore() const { return GetConfigDraftStore(); }
+    void SetConfigDraftValue(std::string_view path, Config::ConfigValue value);
+    void CommitConfigDraftEdits(const std::vector<std::string>& paths);
+    ConfigDraftPathState GetConfigDraftPathState(std::string_view path) const;
+#if defined(EGOTOUCH_APP_SERVICE_PROXY_TEST)
+    const Config::ConfigStore& GetServiceConfigSnapshotStoreForTest() const { return m_configDraft.serviceSnapshot; }
+#endif
     std::vector<std::string> GetConfigModuleTags() const;
 
     // VHF control (forwarded to Service via IPC)
@@ -227,13 +264,18 @@ private:
     Solvers::TouchPipeline m_pipeline;
     Solvers::StylusPipeline m_stylusPipeline;
     Config::ConfigSchemaSnapshot m_configSchema;
-    Config::ConfigStore m_configStore;
-    Config::ConfigStore m_configDefaults;
-    uint32_t m_configV3CatalogSchemaVersion = 0;
-    uint32_t m_configV3CatalogSnapshotVersion = 0;
-    uint32_t m_configV3SnapshotSchemaVersion = 0;
-    uint32_t m_configV3SnapshotVersion = 0;
-    std::unordered_set<std::string> m_dirtyConfigPaths;
+    struct ConfigDraft {
+        Config::ConfigStore catalogDefaults;
+        Config::ConfigStore serviceSnapshot;
+        Config::ConfigStore editableDraft;
+        std::unordered_map<std::string, Config::ConfigValue> dirtyBaseline;
+        std::unordered_map<std::string, ConfigDraftPathState> pathStates;
+        uint32_t catalogSchemaVersion = 0;
+        uint32_t catalogSnapshotVersion = 0;
+        uint32_t snapshotSchemaVersion = 0;
+        uint32_t snapshotVersion = 0;
+    };
+    ConfigDraft m_configDraft;
     std::atomic<ApplyConfigStatus> m_lastApplyConfigStatus{ApplyConfigStatus::NotAttempted};
     std::atomic<bool> m_lastApplyConfigLiveApplied{false};
     std::atomic<bool> m_lastApplyConfigRestartRequired{false};
