@@ -258,9 +258,19 @@ int main() {
     Require(!handlerFailureResponse.success, "handler failure response is unsuccessful");
     Require(handlerFailureResponse.status == IpcStatusCode::InvalidRequest, "handler failure status is propagated");
 
-    IpcResponse legacyConfigResponse = SendRequest(IpcCommand::GetConfigSnapshot);
-    Require(!legacyConfigResponse.success, "legacy config tombstone response is unsuccessful");
-    Require(legacyConfigResponse.status == IpcStatusCode::UnsupportedCommand, "legacy config tombstone returns UnsupportedCommand before handler dispatch");
+    constexpr IpcCommand legacyConfigTombstoneCommands[] = {
+        IpcCommand::ReloadConfig,
+        IpcCommand::SaveConfig,
+        IpcCommand::GetConfigSnapshot,
+        IpcCommand::ApplyConfigPatch,
+        IpcCommand::PersistConfig,
+        IpcCommand::ApplyConfigTlvChunk,
+    };
+    for (const IpcCommand command : legacyConfigTombstoneCommands) {
+        IpcResponse legacyConfigResponse = SendRequest(command);
+        Require(!legacyConfigResponse.success, "legacy config tombstone response is unsuccessful");
+        Require(legacyConfigResponse.status == IpcStatusCode::UnsupportedCommand, "legacy config tombstone returns UnsupportedCommand before handler dispatch");
+    }
 
     IpcResponse handlerOversizedResponse = SendRequest(IpcCommand::StopRuntime);
     Require(!handlerOversizedResponse.success, "server rejects handler oversized response dataLen");

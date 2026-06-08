@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <cassert>
 #include <chrono>
-#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <initializer_list>
@@ -28,21 +27,9 @@ const Config::ConfigV3SnapshotEntry* FindSnapshotEntry(const Config::ConfigV3Sna
     return it == snapshot.entries.end() ? nullptr : &*it;
 }
 
-bool HasAction(const Service::ConfigRuntime::TlvApplyResult& result, Service::ConfigApplyActionKind kind) {
-    return std::any_of(result.applyActions.begin(), result.applyActions.end(),
-        [kind](const Service::ConfigApplyAction& action) { return action.kind == kind; });
-}
-
 bool HasAction(const Service::ConfigRuntime::V3ApplyResult& result, Service::ConfigApplyActionKind kind) {
     return std::any_of(result.applyActions.begin(), result.applyActions.end(),
         [kind](const Service::ConfigApplyAction& action) { return action.kind == kind; });
-}
-
-bool HasFailedTargetResult(const Service::ConfigRuntime::TlvApplyResult& result, std::string_view targetName) {
-    return std::any_of(result.targetResults.begin(), result.targetResults.end(),
-        [targetName](const Service::ConfigTargetResult& targetResult) {
-            return targetResult.targetName == targetName && !targetResult.ok;
-        });
 }
 
 bool HasFailedTargetResult(const Service::ConfigRuntime::V3ApplyResult& result, std::string_view targetName) {
@@ -50,17 +37,6 @@ bool HasFailedTargetResult(const Service::ConfigRuntime::V3ApplyResult& result, 
         [targetName](const Service::ConfigTargetResult& targetResult) {
             return targetResult.targetName == targetName && !targetResult.ok;
         });
-}
-
-Ipc::ConfigTlvChunkRequestWire MakeSingleChunk(uint16_t sessionId, const std::vector<uint8_t>& payload) {
-    Ipc::ConfigTlvChunkRequestWire chunk{};
-    chunk.wireVersion = Ipc::kIpcProtocolVersion;
-    chunk.sessionId = sessionId;
-    chunk.flags = Ipc::kConfigTlvChunkFirst | Ipc::kConfigTlvChunkLast;
-    chunk.totalLen = static_cast<uint16_t>(payload.size());
-    chunk.chunkLen = static_cast<uint16_t>(payload.size());
-    std::memcpy(chunk.bytes, payload.data(), payload.size());
-    return chunk;
 }
 
 std::vector<uint8_t> MakePatchPayload(std::initializer_list<Config::ConfigTlvEntry> entries) {
@@ -172,12 +148,12 @@ int main() {
     const auto autoModeKeyId = Config::tryKeyIdForPath("service.auto_mode");
     assert(autoModeKeyId.has_value());
     const auto payload = MakePatchPayload({Config::ConfigTlvEntry{*autoModeKeyId, Config::ConfigValueType::Bool, "false"}});
-    auto chunk = MakeSingleChunk(7, payload);
 
-    const auto applied = runtime.ApplyTlvChunk(chunk);
-    assert(applied.status == Ipc::IpcStatusCode::Ok);
-    assert(applied.completed);
+    const auto applied = ApplyV3Patch(runtime, payload);
+    assert(applied.ipcStatus == Ipc::IpcStatusCode::Ok);
+    assert(applied.status == Ipc::ConfigV3MutationStatus::Ok);
     assert(applied.changedCount == 1);
+    assert(applied.appliedCount == 1);
     assert(!applied.desiredServiceConfig.autoMode);
     assert(HasAction(applied, Service::ConfigApplyActionKind::ServicePolicy));
     assert(!HasAction(applied, Service::ConfigApplyActionKind::PipelineRuntime));
@@ -194,10 +170,11 @@ int main() {
     assert(!Config::getValue<bool>(autoMode->value));
 
     const auto beforeRejectSnapshotBlob = runtime.BuildSnapshotV3Blob();
-    auto invalidChunk = MakeSingleChunk(8, payload);
-    invalidChunk.bytes[0] ^= 0xFF;
-    const auto rejected = runtime.ApplyTlvChunk(invalidChunk);
-    assert(rejected.status == Ipc::IpcStatusCode::InvalidRequest);
+    auto invalidPayload = payload;
+    invalidPayload[0] ^= 0xFF;
+    const auto rejected = ApplyV3Patch(runtime, invalidPayload);
+    assert(rejected.ipcStatus == Ipc::IpcStatusCode::InvalidRequest);
+    assert(rejected.status == Ipc::ConfigV3MutationStatus::Rejected);
     assert(!runtime.ServiceState().autoMode);
     const auto afterRejectSnapshotBlob = runtime.BuildSnapshotV3Blob();
     assert(afterRejectSnapshotBlob.bytes == beforeRejectSnapshotBlob.bytes);
@@ -207,10 +184,11 @@ int main() {
     const auto touchStepKeyId = Config::tryKeyIdForPath("touch.signal_cond.baseline_no_finger_max_step");
     assert(touchStepKeyId.has_value());
     const auto touchPayload = MakePatchPayload({Config::ConfigTlvEntry{*touchStepKeyId, Config::ConfigValueType::Int32, "513"}});
-    const auto touchApplied = runtime.ApplyTlvChunk(MakeSingleChunk(9, touchPayload));
-    assert(touchApplied.status == Ipc::IpcStatusCode::Ok);
-    assert(touchApplied.completed);
+    const auto touchApplied = ApplyV3Patch(runtime, touchPayload);
+    assert(touchApplied.ipcStatus == Ipc::IpcStatusCode::Ok);
+    assert(touchApplied.status == Ipc::ConfigV3MutationStatus::Ok);
     assert(touchApplied.changedCount == 1);
+    assert(touchApplied.appliedCount == 1);
     assert(HasAction(touchApplied, Service::ConfigApplyActionKind::PipelineRuntime));
 
     const auto iirMaxKeyId = Config::tryKeyIdForPath("stylus.sp.iir_max_coef");
@@ -222,8 +200,9 @@ int main() {
         Config::ConfigTlvEntry{*iirMaxKeyId, Config::ConfigValueType::Int32, "1"},
         Config::ConfigTlvEntry{*iirLowHoverKeyId, Config::ConfigValueType::Int32, "2"},
     });
-    const auto iirRejected = runtime.ApplyTlvChunk(MakeSingleChunk(10, invalidIirPayload));
-    assert(iirRejected.status == Ipc::IpcStatusCode::InvalidRequest);
+    const auto iirRejected = ApplyV3Patch(runtime, invalidIirPayload);
+    assert(iirRejected.ipcStatus == Ipc::IpcStatusCode::Ok);
+    assert(iirRejected.status == Ipc::ConfigV3MutationStatus::Rejected);
     assert(HasFailedTargetResult(iirRejected, "PipelineConfigTarget"));
     const auto afterIirReject = runtime.BuildSnapshotV3Blob();
     assert(afterIirReject.bytes == beforeIirReject.bytes);
@@ -291,8 +270,9 @@ int main() {
     rejectingRuntime.RegisterConfigTarget(std::make_unique<RejectAutoModeTarget>());
     assert(rejectingRuntime.Initialize("", [](const Config::ConfigStore&) { return true; }));
     const auto rejectingBefore = rejectingRuntime.BuildSnapshotV3Blob();
-    const auto targetRejected = rejectingRuntime.ApplyTlvChunk(MakeSingleChunk(11, payload));
-    assert(targetRejected.status == Ipc::IpcStatusCode::InvalidRequest);
+    const auto targetRejected = ApplyV3Patch(rejectingRuntime, payload);
+    assert(targetRejected.ipcStatus == Ipc::IpcStatusCode::Ok);
+    assert(targetRejected.status == Ipc::ConfigV3MutationStatus::Rejected);
     assert(HasFailedTargetResult(targetRejected, "RejectAutoModeTarget"));
     assert(rejectingRuntime.ServiceState().autoMode);
     const auto rejectingAfter = rejectingRuntime.BuildSnapshotV3Blob();

@@ -77,38 +77,6 @@ int main() {
     Require(U(IpcStatusCode::PermissionDenied) == 5, "PermissionDenied status value remains stable");
     Require(U(IpcStatusCode::InternalError) == 6, "InternalError status value remains stable");
 
-    constexpr uint8_t allConfigFields =
-        ToBits(ServiceConfigFieldWire::Mode) |
-        ToBits(ServiceConfigFieldWire::AutoMode) |
-        ToBits(ServiceConfigFieldWire::StylusVhfEnabled) |
-        ToBits(ServiceConfigFieldWire::PenButtonMode) |
-        ToBits(ServiceConfigFieldWire::PenButtonRoute);
-    Require(allConfigFields == 0x1f, "config field mask remains stable");
-    Require(HasField(allConfigFields, ServiceConfigFieldWire::Mode), "HasField detects mode bit");
-    Require(!HasField(ToBits(ServiceConfigFieldWire::Mode), ServiceConfigFieldWire::AutoMode), "HasField rejects absent bit");
-
-    // Legacy fixed config wire structs are retained only for ABI tombstone coverage.
-    ConfigSnapshotWire snapshot{};
-    Require(snapshot.wireVersion == kIpcProtocolVersion, "ConfigSnapshotWire tombstone version defaults to protocol version");
-    Require(snapshot.definedFields == allConfigFields, "ConfigSnapshotWire tombstone exposes all expected fields");
-    Require(snapshot.desiredMode == U(ServiceModeWire::Full), "ConfigSnapshotWire tombstone desired mode defaults to Full");
-    Require(snapshot.activeMode == U(ServiceModeWire::Full), "ConfigSnapshotWire tombstone active mode defaults to Full");
-    Require(snapshot.autoMode == 1, "ConfigSnapshotWire tombstone autoMode defaults enabled");
-    Require(snapshot.stylusVhfEnabled == 1, "ConfigSnapshotWire tombstone stylus VHF defaults enabled");
-    Require(snapshot.penButtonMode == U(PenButtonModeWire::OemCustom), "ConfigSnapshotWire tombstone pen button mode default is OEM custom");
-    Require(snapshot.penButtonRoute == U(PenButtonRouteWire::VhfOnly), "ConfigSnapshotWire tombstone pen button route default is VHF only");
-
-    ApplyConfigPatchRequestWire patch{};
-    Require(patch.wireVersion == kIpcProtocolVersion, "ApplyConfigPatchRequestWire tombstone version defaults to protocol version");
-    Require(patch.fieldMask == 0, "ApplyConfigPatchRequestWire tombstone field mask defaults empty");
-    Require(patch.desiredMode == U(ServiceModeWire::Full), "ApplyConfigPatchRequestWire tombstone desired mode defaults to Full");
-
-    ConfigTlvChunkRequestWire chunk{};
-    Require(sizeof(ConfigTlvChunkRequestWire) <= 256, "ConfigTlvChunkRequestWire fits in request param");
-    Require(sizeof(chunk.bytes) == 244, "ConfigTlvChunkRequestWire payload buffer remains 244 bytes");
-    Require(chunk.wireVersion == kIpcProtocolVersion, "ConfigTlvChunkRequestWire version defaults to protocol version");
-    Require(kConfigTlvChunkPayloadBytes == 244, "Config TLV chunk payload size remains stable");
-
     ConfigV3PageRequestWire pageRequest{};
     Require(sizeof(ConfigV3PageRequestWire) <= 256, "ConfigV3PageRequestWire fits in request param");
     Require(pageRequest.wireVersion == kIpcProtocolVersion, "ConfigV3PageRequestWire version defaults to protocol version");

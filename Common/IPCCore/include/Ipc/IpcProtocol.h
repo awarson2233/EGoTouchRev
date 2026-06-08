@@ -105,98 +105,6 @@ enum class IpcStatusCode : uint8_t {
     InternalError = 6,
 };
 
-enum class ServiceModeWire : uint8_t {
-    Full = 0,
-    TouchOnly = 1,
-};
-
-enum class ServiceConfigFieldWire : uint8_t {
-    None = 0,
-    Mode = 1u << 0,
-    AutoMode = 1u << 1,
-    StylusVhfEnabled = 1u << 2,
-    PenButtonMode = 1u << 3,
-    PenButtonRoute = 1u << 4,
-};
-
-enum class PenButtonModeWire : uint8_t {
-    OemCustom = 0,
-    NativeBarrel = 1,
-    NativeEraser = 2,
-};
-
-enum class PenButtonRouteWire : uint8_t {
-    VhfOnly = 0,
-    Win32Only = 1,
-    VhfAndWin32 = 2,
-};
-
-constexpr uint8_t ToBits(ServiceConfigFieldWire field) noexcept {
-    return static_cast<uint8_t>(field);
-}
-
-constexpr bool HasField(uint8_t fieldMask, ServiceConfigFieldWire field) noexcept {
-    return (fieldMask & ToBits(field)) != 0;
-}
-
-// Legacy fixed config ABI retained only for tombstone compatibility and ABI tests.
-// Connected config IPC must use ConfigV3PageRequestWire / ApplyConfigPatchV3RequestWire.
-struct ConfigSnapshotWire {
-    uint16_t wireVersion = kIpcProtocolVersion;
-    uint8_t definedFields =
-        ToBits(ServiceConfigFieldWire::Mode) |
-        ToBits(ServiceConfigFieldWire::AutoMode) |
-        ToBits(ServiceConfigFieldWire::StylusVhfEnabled) |
-        ToBits(ServiceConfigFieldWire::PenButtonMode) |
-        ToBits(ServiceConfigFieldWire::PenButtonRoute);
-    uint8_t desiredMode = static_cast<uint8_t>(ServiceModeWire::Full);
-    uint8_t activeMode = static_cast<uint8_t>(ServiceModeWire::Full);
-    uint8_t autoMode = 1;
-    uint8_t stylusVhfEnabled = 1;
-    uint8_t penButtonMode = static_cast<uint8_t>(PenButtonModeWire::OemCustom);
-    uint8_t penButtonRoute = static_cast<uint8_t>(PenButtonRouteWire::VhfOnly);
-};
-
-struct ApplyConfigPatchRequestWire {
-    uint16_t wireVersion = kIpcProtocolVersion;
-    uint8_t fieldMask = 0;
-    uint8_t desiredMode = static_cast<uint8_t>(ServiceModeWire::Full);
-    uint8_t autoMode = 1;
-    uint8_t stylusVhfEnabled = 1;
-    uint8_t penButtonMode = static_cast<uint8_t>(PenButtonModeWire::OemCustom);
-    uint8_t penButtonRoute = static_cast<uint8_t>(PenButtonRouteWire::VhfOnly);
-};
-
-struct ConfigMutationResultWire {
-    uint16_t wireVersion = kIpcProtocolVersion;
-    uint8_t changedFields = 0;
-    uint8_t appliedFields = 0;
-    uint8_t restartRequiredFields = 0;
-    uint8_t _reserved0 = 0;
-};
-
-struct PersistConfigResponseWire {
-    uint16_t wireVersion = kIpcProtocolVersion;
-    uint8_t persistedFields = 0;
-    uint8_t _reserved0 = 0;
-};
-
-constexpr uint8_t kConfigTlvChunkFirst = 1u << 0;
-constexpr uint8_t kConfigTlvChunkLast = 1u << 1;
-constexpr uint16_t kConfigTlvChunkPayloadBytes = 244;
-constexpr uint16_t kConfigTlvMaxPayloadBytes = 64 * 1024 - 1;
-
-struct ConfigTlvChunkRequestWire {
-    uint16_t wireVersion = kIpcProtocolVersion;
-    uint16_t sessionId = 0;
-    uint16_t totalLen = 0;
-    uint16_t offset = 0;
-    uint16_t chunkLen = 0;
-    uint8_t flags = 0;
-    uint8_t _reserved0 = 0;
-    uint8_t bytes[kConfigTlvChunkPayloadBytes]{};
-};
-
 enum class ConfigV3PayloadKind : uint8_t {
     Catalog = 1,
     Snapshot = 2,
@@ -430,17 +338,6 @@ struct DebugSnapshotMetadataWire {
     uint64_t frameTimestamp = 0;
 };
 
-// Legacy response wire for ReloadConfig. Keep the 3-byte layout for transition compatibility.
-struct ReloadConfigSummaryWire {
-    // Bit layout (LSB-first):
-    // bit0: [Service].mode
-    // bit1: [Service].auto_mode
-    // bit2: [Service].stylus_vhf_enabled
-    uint8_t changedFields = 0;
-    uint8_t appliedFields = 0;
-    uint8_t restartRequiredFields = 0;
-};
-
 constexpr uint8_t kPenIdentityHasStylusId = 1u << 0;
 constexpr uint8_t kPenIdentityHasPenModuleModelId = 1u << 1;
 constexpr uint8_t kPenIdentityHasHardwareVersion = 1u << 2;
@@ -490,8 +387,6 @@ static_assert(sizeof(DebugSnapshotMetadataWire) == kDebugSnapshotMetadataWireSiz
     "DebugSnapshotMetadataWire size changed");
 static_assert(kDebugSnapshotMaxValues == 255,
     "DebugSnapshot value capacity changed");
-static_assert(sizeof(ConfigTlvChunkRequestWire) <= 256,
-    "Config TLV chunk must fit in IpcRequest::param");
 static_assert(sizeof(ConfigV3PageRequestWire) <= 256,
     "Config v3 page request must fit in IpcRequest::param");
 static_assert(sizeof(ApplyConfigPatchV3RequestWire) <= 256,

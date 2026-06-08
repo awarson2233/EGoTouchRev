@@ -12,7 +12,6 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <cstring>
 #include <exception>
 #include <memory>
 #include <span>
@@ -504,73 +503,8 @@ bool ConfigRuntime::PersistServicePolicyConfig(const ServiceConfigState& config)
     }
 }
 
-ConfigRuntime::TlvApplyResult ConfigRuntime::ApplyTlvChunk(const Ipc::ConfigTlvChunkRequestWire& chunk) {
-    TlvApplyResult result{};
-    if (chunk.wireVersion != Ipc::kIpcProtocolVersion ||
-        chunk.totalLen == 0 || chunk.totalLen > Ipc::kConfigTlvMaxPayloadBytes ||
-        chunk.chunkLen > Ipc::kConfigTlvChunkPayloadBytes ||
-        static_cast<uint32_t>(chunk.offset) + chunk.chunkLen > chunk.totalLen) {
-        result.status = Ipc::IpcStatusCode::InvalidRequest;
-        return result;
-    }
-
-    std::lock_guard<std::mutex> lk(m_mutex);
-    const bool first = (chunk.flags & Ipc::kConfigTlvChunkFirst) != 0;
-    if (first) {
-        m_pendingTlvSessionId = chunk.sessionId;
-        m_pendingTlvTotalLen = chunk.totalLen;
-        m_pendingTlvReceived = 0;
-        m_pendingTlvPayload.assign(chunk.totalLen, uint8_t{0});
-    }
-    if (m_pendingTlvSessionId != chunk.sessionId ||
-        m_pendingTlvTotalLen != chunk.totalLen ||
-        m_pendingTlvPayload.size() != chunk.totalLen ||
-        chunk.offset != m_pendingTlvReceived) {
-        result.status = Ipc::IpcStatusCode::InvalidRequest;
-        return result;
-    }
-    std::memcpy(m_pendingTlvPayload.data() + chunk.offset, chunk.bytes, chunk.chunkLen);
-    m_pendingTlvReceived = static_cast<uint16_t>(m_pendingTlvReceived + chunk.chunkLen);
-    if ((chunk.flags & Ipc::kConfigTlvChunkLast) == 0) return result;
-    if (m_pendingTlvReceived != m_pendingTlvTotalLen) {
-        result.status = Ipc::IpcStatusCode::InvalidRequest;
-        return result;
-    }
-    const auto payload = m_pendingTlvPayload;
-    m_pendingTlvPayload.clear();
-    m_pendingTlvSessionId = 0;
-    m_pendingTlvTotalLen = 0;
-    m_pendingTlvReceived = 0;
-    result.completed = true;
-    ApplyCompletedTlvPayloadLocked(payload, result);
-    return result;
-}
-
-bool ConfigRuntime::ApplyCompletedTlvPayloadLocked(const std::vector<uint8_t>& payload, TlvApplyResult& result) {
-    V3ApplyResult v3Result{};
-    if (!ApplyPatchPayloadLocked(payload.data(), payload.size(), true, v3Result)) {
-        result.status = v3Result.ipcStatus == Ipc::IpcStatusCode::Ok
-            ? Ipc::IpcStatusCode::InvalidRequest
-            : v3Result.ipcStatus;
-        result.entryCount = v3Result.entryCount;
-        result.changedCount = v3Result.changedCount;
-        result.targetResults = std::move(v3Result.targetResults);
-        return false;
-    }
-
-    result.status = v3Result.ipcStatus;
-    result.entryCount = v3Result.entryCount;
-    result.changedCount = v3Result.changedCount;
-    result.desiredServiceConfig = v3Result.desiredServiceConfig;
-    result.pipelineConfig = std::move(v3Result.pipelineConfig);
-    result.targetResults = std::move(v3Result.targetResults);
-    result.applyActions = std::move(v3Result.applyActions);
-    return true;
-}
-
 bool ConfigRuntime::ApplyPatchPayloadLocked(const uint8_t* data,
                                             size_t size,
-                                            bool requireLiveApply,
                                             V3ApplyResult& result) {
     const auto parseResult = Config::deserializePatchDetailed(data, size);
     if (!parseResult.ok()) {
@@ -623,9 +557,7 @@ bool ConfigRuntime::ApplyPatchPayloadLocked(const uint8_t* data,
             !schemaEntry->boundToRuntime ||
             (schemaEntry->runtimeBinding != Config::ConfigRuntimeBinding::LiveSetter &&
              schemaEntry->runtimeBinding != Config::ConfigRuntimeBinding::ManualLiveApply) ||
-            (requireLiveApply
-                ? !Config::isLiveApplyTiming(schemaEntry->applyTiming)
-                : !IsPatchableV3Timing(schemaEntry->applyTiming)) ||
+            !IsPatchableV3Timing(schemaEntry->applyTiming) ||
             !ConfigValueAllowedBySchema(pathString, value, m_schema, false)) {
             rejectEntry(entry);
             return false;
@@ -647,7 +579,7 @@ bool ConfigRuntime::ApplyPatchPayloadLocked(const uint8_t* data,
         change.newValue = value;
         change.hadPreviousValue = hadPreviousValue;
 
-        if (!requireLiveApply && schemaEntry->applyTiming == Config::ConfigApplyTiming::RestartRequired) {
+        if (schemaEntry->applyTiming == Config::ConfigApplyTiming::RestartRequired) {
             restartChangeSet.changes.push_back(std::move(change));
         } else {
             liveChangeSet.changes.push_back(std::move(change));
@@ -725,7 +657,7 @@ ConfigRuntime::V3ApplyResult ConfigRuntime::ApplyConfigPatchV3(uint32_t baseSche
         return result;
     }
 
-    (void)ApplyPatchPayloadLocked(data, size, false, result);
+    (void)ApplyPatchPayloadLocked(data, size, result);
     return result;
 }
 

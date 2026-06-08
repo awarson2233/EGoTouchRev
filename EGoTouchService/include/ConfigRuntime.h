@@ -24,17 +24,6 @@ class ConfigRuntime {
 public:
     using StartupValidator = std::function<bool(const Config::ConfigStore&)>;
 
-    struct TlvApplyResult {
-        bool completed = false;
-        Ipc::IpcStatusCode status = Ipc::IpcStatusCode::Ok;
-        size_t entryCount = 0;
-        size_t changedCount = 0;
-        ServiceConfigState desiredServiceConfig{};
-        Config::ConfigStore pipelineConfig{};
-        std::vector<ConfigTargetResult> targetResults;
-        std::vector<ConfigApplyAction> applyActions;
-    };
-
     struct V3ApplyResult {
         Ipc::IpcStatusCode ipcStatus = Ipc::IpcStatusCode::Ok;
         Ipc::ConfigV3MutationStatus status = Ipc::ConfigV3MutationStatus::Ok;
@@ -79,7 +68,6 @@ public:
     ServiceConfigState ServiceState() const;
     void WriteServiceState(const ServiceConfigState& config);
     bool PersistServicePolicyConfig(const ServiceConfigState& config);
-    TlvApplyResult ApplyTlvChunk(const Ipc::ConfigTlvChunkRequestWire& chunk);
     V3ApplyResult ApplyConfigPatchV3(uint32_t baseSchemaVersion,
                                      uint32_t baseSnapshotVersion,
                                      const uint8_t* data,
@@ -90,10 +78,8 @@ private:
     bool ValidateStartupConfig(const Config::ConfigStore& store, const StartupValidator& validateStartupConfig) const;
     ServiceConfigState ReadServiceConfigStateFromStoreLocked() const;
     void WriteServiceConfigStateToStoreLocked(const ServiceConfigState& config);
-    bool ApplyCompletedTlvPayloadLocked(const std::vector<uint8_t>& payload, TlvApplyResult& result);
     bool ApplyPatchPayloadLocked(const uint8_t* data,
                                  size_t size,
-                                 bool requireLiveApply,
                                  V3ApplyResult& result);
     void RegisterDefaultConfigTargets();
 
@@ -105,10 +91,6 @@ private:
     Config::ConfigSchemaSnapshot m_schema;
     std::optional<Config::ConfigPaths> m_paths;
     bool m_penButtonRouteExplicit = false;
-    uint16_t m_pendingTlvSessionId = 0;
-    uint16_t m_pendingTlvTotalLen = 0;
-    uint16_t m_pendingTlvReceived = 0;
-    std::vector<uint8_t> m_pendingTlvPayload;
     std::vector<std::unique_ptr<IConfigTarget>> m_targets;
 };
 
