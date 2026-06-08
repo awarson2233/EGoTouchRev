@@ -14,9 +14,9 @@ constexpr const wchar_t* kLogReadyEventName = L"Global\\EGoTouchLogReady";
 constexpr const wchar_t* kPenReadyEventName = L"Global\\EGoTouchPenStatusReady";
 
 // NOTE:
-// - ReloadConfig / SaveConfig remain for transition compatibility.
-// - GetConfigSnapshot / ApplyConfigPatch / PersistConfig are the Phase 0
-//   canonical config-control commands.
+// - Config commands 40-45 are legacy ABI tombstones. Service connected IPC must
+//   return UnsupportedCommand for them; use the v3 commands 46-49 instead.
+// - Config v3 is the only connected config-control path.
 enum class IpcCommand : uint8_t {
     Ping = 0,
     // Debug mode: App tells Service to open shared memory and start pushing
@@ -30,14 +30,14 @@ enum class IpcCommand : uint8_t {
     // VHF
     SetVhfEnabled    = 30,
     SetVhfTranspose  = 31,
-    // Config (legacy compatibility)
-    ReloadConfig   = 40,  // Re-read config.ini; response data may include ReloadConfigSummaryWire
-    SaveConfig     = 41,  // Legacy alias for PersistConfig
-    // Config (Phase 0 canonical control path)
+    // Config legacy ABI tombstones: retained values, unsupported by connected Service IPC.
+    ReloadConfig   = 40,
+    SaveConfig     = 41,
     GetConfigSnapshot = 42,
     ApplyConfigPatch  = 43,
     PersistConfig     = 44,
     ApplyConfigTlvChunk = 45,
+    // Config v3 canonical control path.
     GetConfigCatalogV3 = 46,
     GetConfigSnapshotV3 = 47,
     ApplyConfigPatchV3 = 48,
@@ -53,6 +53,47 @@ enum class IpcCommand : uint8_t {
     SetMasterParserOnly = 64,  // param[0]: 0=normal, 1=service-side master parser only
     GetPenIdentityStatus = 65, // App queries current stylus identity + UTF-8 HW version
 };
+
+constexpr bool IsLegacyConfigTombstoneCommand(IpcCommand command) noexcept {
+    switch (command) {
+    case IpcCommand::ReloadConfig:
+    case IpcCommand::SaveConfig:
+    case IpcCommand::GetConfigSnapshot:
+    case IpcCommand::ApplyConfigPatch:
+    case IpcCommand::PersistConfig:
+    case IpcCommand::ApplyConfigTlvChunk:
+        return true;
+    default:
+        return false;
+    }
+}
+
+constexpr bool IsSupportedIpcCommand(IpcCommand command) noexcept {
+    switch (command) {
+    case IpcCommand::Ping:
+    case IpcCommand::EnterDebugMode:
+    case IpcCommand::ExitDebugMode:
+    case IpcCommand::StartRuntime:
+    case IpcCommand::StopRuntime:
+    case IpcCommand::AfeCommand:
+    case IpcCommand::SetVhfEnabled:
+    case IpcCommand::SetVhfTranspose:
+    case IpcCommand::GetConfigCatalogV3:
+    case IpcCommand::GetConfigSnapshotV3:
+    case IpcCommand::ApplyConfigPatchV3:
+    case IpcCommand::PersistConfigV3:
+    case IpcCommand::GetLogs:
+    case IpcCommand::GetPenBridgeStatus:
+    case IpcCommand::GetPenIdentityStatus:
+    case IpcCommand::GetDebugSchema:
+    case IpcCommand::GetDebugSnapshot:
+    case IpcCommand::SetPenPressureMode:
+    case IpcCommand::SetMasterParserOnly:
+        return true;
+    default:
+        return false;
+    }
+}
 
 enum class IpcStatusCode : uint8_t {
     Ok = 0,
@@ -98,6 +139,8 @@ constexpr bool HasField(uint8_t fieldMask, ServiceConfigFieldWire field) noexcep
     return (fieldMask & ToBits(field)) != 0;
 }
 
+// Legacy fixed config ABI retained only for tombstone compatibility and ABI tests.
+// Connected config IPC must use ConfigV3PageRequestWire / ApplyConfigPatchV3RequestWire.
 struct ConfigSnapshotWire {
     uint16_t wireVersion = kIpcProtocolVersion;
     uint8_t definedFields =

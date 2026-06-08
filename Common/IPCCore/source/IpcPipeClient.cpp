@@ -126,37 +126,6 @@ IpcResponse IpcPipeClient::StopRuntime() {
     return Send(req);
 }
 
-IpcResponse IpcPipeClient::ReloadConfig() {
-    IpcRequest req{}; req.command = IpcCommand::ReloadConfig;
-    return Send(req);
-}
-
-IpcResponse IpcPipeClient::SaveConfig() {
-    IpcRequest req{}; req.command = IpcCommand::SaveConfig;
-    return Send(req);
-}
-
-IpcResponse IpcPipeClient::GetConfigSnapshot() {
-    IpcRequest req{}; req.command = IpcCommand::GetConfigSnapshot;
-    return Send(req);
-}
-
-IpcResponse IpcPipeClient::ApplyConfigPatch(const ApplyConfigPatchRequestWire& patch) {
-    IpcRequest req{};
-    req.command = IpcCommand::ApplyConfigPatch;
-    req.paramLen = static_cast<uint16_t>(sizeof(patch));
-    std::memcpy(req.param, &patch, sizeof(patch));
-    return Send(req);
-}
-
-IpcResponse IpcPipeClient::ApplyConfigTlvChunk(const ConfigTlvChunkRequestWire& chunk) {
-    IpcRequest req{};
-    req.command = IpcCommand::ApplyConfigTlvChunk;
-    req.paramLen = static_cast<uint16_t>(sizeof(chunk));
-    std::memcpy(req.param, &chunk, sizeof(chunk));
-    return Send(req);
-}
-
 IpcResponse IpcPipeClient::GetConfigCatalogV3Page(const ConfigV3PageRequestWire& request) {
     IpcRequest req{};
     req.command = IpcCommand::GetConfigCatalogV3;
@@ -183,11 +152,6 @@ IpcResponse IpcPipeClient::ApplyConfigPatchV3(const ApplyConfigPatchV3RequestWir
 
 IpcResponse IpcPipeClient::PersistConfigV3() {
     IpcRequest req{}; req.command = IpcCommand::PersistConfigV3;
-    return Send(req);
-}
-
-IpcResponse IpcPipeClient::PersistConfig() {
-    IpcRequest req{}; req.command = IpcCommand::PersistConfig;
     return Send(req);
 }
 

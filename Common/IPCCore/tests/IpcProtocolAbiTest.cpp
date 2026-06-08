@@ -35,17 +35,39 @@ int main() {
     Require(U(IpcCommand::StartRuntime) == 10, "StartRuntime command value remains stable");
     Require(U(IpcCommand::StopRuntime) == 11, "StopRuntime command value remains stable");
     Require(U(IpcCommand::AfeCommand) == 20, "AfeCommand command value remains stable");
-    Require(U(IpcCommand::GetConfigSnapshot) == 42, "GetConfigSnapshot command value remains stable");
-    Require(U(IpcCommand::ApplyConfigPatch) == 43, "ApplyConfigPatch command value remains stable");
-    Require(U(IpcCommand::PersistConfig) == 44, "PersistConfig command value remains stable");
-    Require(U(IpcCommand::ApplyConfigTlvChunk) == 45, "ApplyConfigTlvChunk command value remains stable");
+    Require(U(IpcCommand::ReloadConfig) == 40, "ReloadConfig command value remains stable as a tombstone");
+    Require(U(IpcCommand::SaveConfig) == 41, "SaveConfig command value remains stable as a tombstone");
+    Require(U(IpcCommand::GetConfigSnapshot) == 42, "GetConfigSnapshot command value remains stable as a tombstone");
+    Require(U(IpcCommand::ApplyConfigPatch) == 43, "ApplyConfigPatch command value remains stable as a tombstone");
+    Require(U(IpcCommand::PersistConfig) == 44, "PersistConfig command value remains stable as a tombstone");
+    Require(U(IpcCommand::ApplyConfigTlvChunk) == 45, "ApplyConfigTlvChunk command value remains stable as a tombstone");
     Require(U(IpcCommand::GetConfigCatalogV3) == 46, "GetConfigCatalogV3 command value is assigned");
     Require(U(IpcCommand::GetConfigSnapshotV3) == 47, "GetConfigSnapshotV3 command value is assigned");
     Require(U(IpcCommand::ApplyConfigPatchV3) == 48, "ApplyConfigPatchV3 command value is assigned");
     Require(U(IpcCommand::PersistConfigV3) == 49, "PersistConfigV3 command value is assigned");
+    Require(IsLegacyConfigTombstoneCommand(IpcCommand::ReloadConfig), "ReloadConfig is classified as legacy tombstone");
+    Require(IsLegacyConfigTombstoneCommand(IpcCommand::SaveConfig), "SaveConfig is classified as legacy tombstone");
+    Require(IsLegacyConfigTombstoneCommand(IpcCommand::GetConfigSnapshot), "GetConfigSnapshot is classified as legacy tombstone");
+    Require(IsLegacyConfigTombstoneCommand(IpcCommand::ApplyConfigPatch), "ApplyConfigPatch is classified as legacy tombstone");
+    Require(IsLegacyConfigTombstoneCommand(IpcCommand::PersistConfig), "PersistConfig is classified as legacy tombstone");
+    Require(IsLegacyConfigTombstoneCommand(IpcCommand::ApplyConfigTlvChunk), "ApplyConfigTlvChunk is classified as legacy tombstone");
+    Require(!IsSupportedIpcCommand(IpcCommand::ReloadConfig), "ReloadConfig is unsupported by connected IPC");
+    Require(!IsSupportedIpcCommand(IpcCommand::SaveConfig), "SaveConfig is unsupported by connected IPC");
+    Require(!IsSupportedIpcCommand(IpcCommand::GetConfigSnapshot), "GetConfigSnapshot is unsupported by connected IPC");
+    Require(!IsSupportedIpcCommand(IpcCommand::ApplyConfigPatch), "ApplyConfigPatch is unsupported by connected IPC");
+    Require(!IsSupportedIpcCommand(IpcCommand::PersistConfig), "PersistConfig is unsupported by connected IPC");
+    Require(!IsSupportedIpcCommand(IpcCommand::ApplyConfigTlvChunk), "ApplyConfigTlvChunk is unsupported by connected IPC");
+    Require(IsSupportedIpcCommand(IpcCommand::GetConfigCatalogV3), "GetConfigCatalogV3 remains supported");
+    Require(IsSupportedIpcCommand(IpcCommand::GetConfigSnapshotV3), "GetConfigSnapshotV3 remains supported");
+    Require(IsSupportedIpcCommand(IpcCommand::ApplyConfigPatchV3), "ApplyConfigPatchV3 remains supported");
+    Require(IsSupportedIpcCommand(IpcCommand::PersistConfigV3), "PersistConfigV3 remains supported");
     Require(U(IpcCommand::GetDebugSchema) == 61, "GetDebugSchema command value remains stable");
     Require(U(IpcCommand::SetMasterParserOnly) == 64, "SetMasterParserOnly command value remains stable");
     Require(U(IpcCommand::GetPenIdentityStatus) == 65, "GetPenIdentityStatus command value remains stable");
+    Require(IsSupportedIpcCommand(IpcCommand::Ping), "Ping remains supported");
+    Require(IsSupportedIpcCommand(IpcCommand::SetVhfEnabled), "SetVhfEnabled remains supported");
+    Require(IsSupportedIpcCommand(IpcCommand::GetDebugSchema), "GetDebugSchema remains supported");
+    Require(IsSupportedIpcCommand(IpcCommand::GetPenIdentityStatus), "GetPenIdentityStatus remains supported");
 
     Require(U(IpcStatusCode::Ok) == 0, "Ok status value remains stable");
     Require(U(IpcStatusCode::UnsupportedCommand) == 1, "UnsupportedCommand status value remains stable");
@@ -65,20 +87,21 @@ int main() {
     Require(HasField(allConfigFields, ServiceConfigFieldWire::Mode), "HasField detects mode bit");
     Require(!HasField(ToBits(ServiceConfigFieldWire::Mode), ServiceConfigFieldWire::AutoMode), "HasField rejects absent bit");
 
+    // Legacy fixed config wire structs are retained only for ABI tombstone coverage.
     ConfigSnapshotWire snapshot{};
-    Require(snapshot.wireVersion == kIpcProtocolVersion, "ConfigSnapshotWire version defaults to protocol version");
-    Require(snapshot.definedFields == allConfigFields, "ConfigSnapshotWire exposes all expected fields");
-    Require(snapshot.desiredMode == U(ServiceModeWire::Full), "ConfigSnapshotWire desired mode defaults to Full");
-    Require(snapshot.activeMode == U(ServiceModeWire::Full), "ConfigSnapshotWire active mode defaults to Full");
-    Require(snapshot.autoMode == 1, "ConfigSnapshotWire autoMode defaults enabled");
-    Require(snapshot.stylusVhfEnabled == 1, "ConfigSnapshotWire stylus VHF defaults enabled");
-    Require(snapshot.penButtonMode == U(PenButtonModeWire::OemCustom), "ConfigSnapshotWire pen button mode default is OEM custom");
-    Require(snapshot.penButtonRoute == U(PenButtonRouteWire::VhfOnly), "ConfigSnapshotWire pen button route default is VHF only");
+    Require(snapshot.wireVersion == kIpcProtocolVersion, "ConfigSnapshotWire tombstone version defaults to protocol version");
+    Require(snapshot.definedFields == allConfigFields, "ConfigSnapshotWire tombstone exposes all expected fields");
+    Require(snapshot.desiredMode == U(ServiceModeWire::Full), "ConfigSnapshotWire tombstone desired mode defaults to Full");
+    Require(snapshot.activeMode == U(ServiceModeWire::Full), "ConfigSnapshotWire tombstone active mode defaults to Full");
+    Require(snapshot.autoMode == 1, "ConfigSnapshotWire tombstone autoMode defaults enabled");
+    Require(snapshot.stylusVhfEnabled == 1, "ConfigSnapshotWire tombstone stylus VHF defaults enabled");
+    Require(snapshot.penButtonMode == U(PenButtonModeWire::OemCustom), "ConfigSnapshotWire tombstone pen button mode default is OEM custom");
+    Require(snapshot.penButtonRoute == U(PenButtonRouteWire::VhfOnly), "ConfigSnapshotWire tombstone pen button route default is VHF only");
 
     ApplyConfigPatchRequestWire patch{};
-    Require(patch.wireVersion == kIpcProtocolVersion, "ApplyConfigPatchRequestWire version defaults to protocol version");
-    Require(patch.fieldMask == 0, "ApplyConfigPatchRequestWire field mask defaults empty");
-    Require(patch.desiredMode == U(ServiceModeWire::Full), "ApplyConfigPatchRequestWire desired mode defaults to Full");
+    Require(patch.wireVersion == kIpcProtocolVersion, "ApplyConfigPatchRequestWire tombstone version defaults to protocol version");
+    Require(patch.fieldMask == 0, "ApplyConfigPatchRequestWire tombstone field mask defaults empty");
+    Require(patch.desiredMode == U(ServiceModeWire::Full), "ApplyConfigPatchRequestWire tombstone desired mode defaults to Full");
 
     ConfigTlvChunkRequestWire chunk{};
     Require(sizeof(ConfigTlvChunkRequestWire) <= 256, "ConfigTlvChunkRequestWire fits in request param");

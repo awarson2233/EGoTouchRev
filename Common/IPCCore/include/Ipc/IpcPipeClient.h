@@ -33,16 +33,10 @@ public:
     IpcResponse SendAfeCommand(uint8_t afeCmd, uint8_t param);
     IpcResponse StartRuntime();
     IpcResponse StopRuntime();
-    IpcResponse ReloadConfig();
-    IpcResponse SaveConfig();
-    IpcResponse GetConfigSnapshot();
-    IpcResponse ApplyConfigPatch(const ApplyConfigPatchRequestWire& patch);
-    IpcResponse ApplyConfigTlvChunk(const ConfigTlvChunkRequestWire& chunk);
     IpcResponse GetConfigCatalogV3Page(const ConfigV3PageRequestWire& request);
     IpcResponse GetConfigSnapshotV3Page(const ConfigV3PageRequestWire& request);
     IpcResponse ApplyConfigPatchV3(const ApplyConfigPatchV3RequestWire& request);
     IpcResponse PersistConfigV3();
-    IpcResponse PersistConfig();
 
 private:
     mutable std::mutex m_pipeMutex;

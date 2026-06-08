@@ -77,7 +77,6 @@ private:
     void ApplyServiceConfigToRuntime(const ServiceConfigState& config);
     ReloadServiceConfigResult HandleReloadServiceConfig(const ServiceConfigState& reloadedConfig);
     bool ValidateStartupConfig(const Config::ConfigStore& store) const;
-    bool PersistServicePolicyConfig();
     bool StartRuntimeAndPipeline(const std::string& configPath);
     void StartSystemStateMonitor();
     void StartIpcSubsystem();
@@ -90,16 +89,10 @@ private:
 
     void HandleIpcEnterDebugMode(Ipc::IpcResponse& resp);
     void HandleIpcExitDebugMode(Ipc::IpcResponse& resp);
-    void HandleIpcGetConfigSnapshot(Ipc::IpcResponse& resp);
     void HandleIpcGetConfigCatalogV3(const Ipc::IpcRequest& req, Ipc::IpcResponse& resp);
-    void HandleIpcGetConfigSnapshotV3(const Ipc::IpcRequest& req, Ipc::IpcResponse& resp);
-    void HandleIpcApplyConfigPatch(const Ipc::IpcRequest& req, Ipc::IpcResponse& resp);
-    void HandleIpcApplyConfigTlvChunk(const Ipc::IpcRequest& req, Ipc::IpcResponse& resp);
-    void HandleIpcApplyConfigPatchV3(const Ipc::IpcRequest& req, Ipc::IpcResponse& resp);
-    void HandleIpcPersistConfigV3(Ipc::IpcResponse& resp);
-    void HandleIpcPersistConfig(Ipc::IpcResponse& resp);
-    void HandleIpcReloadConfig(Ipc::IpcResponse& resp);
-    void HandleIpcSaveConfig(Ipc::IpcResponse& resp);
+    void HandleIpcGetConfigV3Snapshot(const Ipc::IpcRequest& req, Ipc::IpcResponse& resp);
+    void HandleIpcConfigV3ApplyPatch(const Ipc::IpcRequest& req, Ipc::IpcResponse& resp);
+    void HandleIpcConfigV3Persist(Ipc::IpcResponse& resp);
     void HandleIpcGetLogs(Ipc::IpcResponse& resp);
     void HandleIpcGetPenBridgeStatus(Ipc::IpcResponse& resp);
     void HandleIpcGetPenIdentityStatus(Ipc::IpcResponse& resp);

@@ -20,7 +20,6 @@
 #include "config/ConfigKeyMap.h"
 #include "config/ConfigPath.h"
 #include "config/ConfigStore.h"
-#include "config/ConfigTlv.h"
 #include "config/SchemaValidator.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -38,7 +37,6 @@
 #include <exception>
 #include <filesystem>
 #include <mutex>
-#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -164,42 +162,6 @@ enum class DebugDerivedSourceIndex : int16_t {
     FrameTimestamp = 3,
 };
 
-constexpr uint8_t ToPersistedFieldBits() {
-    return Ipc::ToBits(Ipc::ServiceConfigFieldWire::Mode) |
-           Ipc::ToBits(Ipc::ServiceConfigFieldWire::AutoMode) |
-           Ipc::ToBits(Ipc::ServiceConfigFieldWire::StylusVhfEnabled) |
-           Ipc::ToBits(Ipc::ServiceConfigFieldWire::PenButtonMode) |
-           Ipc::ToBits(Ipc::ServiceConfigFieldWire::PenButtonRoute);
-}
-
-const char* ToConfigValue(PenButtonMode mode) {
-    switch (mode) {
-    case PenButtonMode::OemCustom: return "oem_custom";
-    case PenButtonMode::NativeBarrel: return "native_barrel";
-    case PenButtonMode::NativeEraser: return "native_eraser";
-    }
-    return "oem_custom";
-}
-
-const char* ToConfigValue(PenButtonRoute route) {
-    switch (route) {
-    case PenButtonRoute::VhfOnly: return "vhf_only";
-    case PenButtonRoute::Win32Only: return "win32_only";
-    case PenButtonRoute::VhfAndWin32: return "vhf_and_win32";
-    }
-    return "vhf_only";
-}
-
-constexpr uint8_t ToWireServiceMode(ServiceMode mode) {
-    switch (mode) {
-    case ServiceMode::Full:
-        return static_cast<uint8_t>(Ipc::ServiceModeWire::Full);
-    case ServiceMode::TouchOnly:
-        return static_cast<uint8_t>(Ipc::ServiceModeWire::TouchOnly);
-    }
-    return static_cast<uint8_t>(Ipc::ServiceModeWire::Full);
-}
-
 std::size_t Utf8TruncatedLength(std::string_view text, std::size_t capacity) noexcept {
     std::size_t i = 0;
     std::size_t lastGood = 0;
@@ -289,95 +251,10 @@ bool BuildConfigV3PageResponse(Ipc::IpcCommand command,
     return true;
 }
 
-bool TryParseWireServiceMode(uint8_t wireValue, ServiceMode& out) {
-    switch (static_cast<Ipc::ServiceModeWire>(wireValue)) {
-    case Ipc::ServiceModeWire::Full:
-        out = ServiceMode::Full;
-        return true;
-    case Ipc::ServiceModeWire::TouchOnly:
-        out = ServiceMode::TouchOnly;
-        return true;
-    default:
-        return false;
-    }
-}
-
-ServiceMode ParseServiceMode(std::string_view value) {
-    return value == "touch_only" ? ServiceMode::TouchOnly : ServiceMode::Full;
-}
-
-PenButtonMode ParsePenButtonMode(std::string_view value) {
-    if (value == "native_barrel" || value == "Native Barrel") return PenButtonMode::NativeBarrel;
-    if (value == "native_eraser" || value == "Native Eraser") return PenButtonMode::NativeEraser;
-    return PenButtonMode::OemCustom;
-}
-
-const char* PenButtonModeToConfig(PenButtonMode value) {
-    switch (value) {
-    case PenButtonMode::OemCustom: return "oem_custom";
-    case PenButtonMode::NativeBarrel: return "native_barrel";
-    case PenButtonMode::NativeEraser: return "native_eraser";
-    default: return "oem_custom";
-    }
-}
-
-PenButtonRoute ParsePenButtonRoute(std::string_view value) {
-    if (value == "win32_only" || value == "Win32 Only") return PenButtonRoute::Win32Only;
-    if (value == "vhf_and_win32" || value == "VHF + Win32") return PenButtonRoute::VhfAndWin32;
-    return PenButtonRoute::VhfOnly;
-}
-
-const char* PenButtonRouteToConfig(PenButtonRoute value) {
-    switch (value) {
-    case PenButtonRoute::VhfOnly: return "vhf_only";
-    case PenButtonRoute::Win32Only: return "win32_only";
-    case PenButtonRoute::VhfAndWin32: return "vhf_and_win32";
-    default: return "vhf_only";
-    }
-}
-
-Config::ConfigValue ConfigValueFromTlvEntry(const Config::ConfigTlvEntry& entry, bool& ok) {
-    ok = true;
-    try {
-        switch (entry.valueType) {
-        case Config::ConfigValueType::Bool:
-            if (entry.stringValue == "true" || entry.stringValue == "1") {
-                return Config::ConfigValue(true);
-            }
-            if (entry.stringValue == "false" || entry.stringValue == "0") {
-                return Config::ConfigValue(false);
-            }
-            ok = false;
-            return Config::ConfigValue(false);
-        case Config::ConfigValueType::Int32: {
-            size_t pos = 0;
-            const int parsed = std::stoi(entry.stringValue, &pos);
-            if (pos != entry.stringValue.size()) {
-                ok = false;
-                return Config::ConfigValue(int32_t{0});
-            }
-            return Config::ConfigValue(static_cast<int32_t>(parsed));
-        }
-        case Config::ConfigValueType::Float: {
-            size_t pos = 0;
-            const float parsed = std::stof(entry.stringValue, &pos);
-            if (pos != entry.stringValue.size() || !std::isfinite(parsed)) {
-                ok = false;
-                return Config::ConfigValue(0.0f);
-            }
-            return Config::ConfigValue(parsed);
-        }
-        case Config::ConfigValueType::String:
-            return Config::ConfigValue(entry.stringValue);
-        case Config::ConfigValueType::Null:
-        default:
-            ok = false;
-            return Config::ConfigValue(std::string{});
-        }
-    } catch (const std::exception&) {
-        ok = false;
-        return Config::ConfigValue(std::string{});
-    }
+void MarkLegacyConfigCommandUnsupported(Ipc::IpcCommand command, Ipc::IpcResponse& resp) {
+    Ipc::MarkFailure(resp, Ipc::IpcStatusCode::UnsupportedCommand);
+    LOG_WARN("Service", __func__, "IPC", "Legacy config IPC command {} is unsupported; use config v3 IPC.",
+             static_cast<unsigned int>(command));
 }
 
 constexpr std::array<std::pair<std::string_view, std::string_view>, 4> kStylusIirCoefficientPathPairs{
@@ -573,13 +450,6 @@ bool ServiceHost::ValidateStartupConfig(const Config::ConfigStore& store) const 
     return true;
 }
 
-bool ServiceHost::PersistServicePolicyConfig() {
-#if EGOTOUCH_CONFIG_ENABLED
-    return m_configRuntime.PersistServicePolicyConfig(m_configState);
-#else
-    return false;
-#endif
-}
 ReloadServiceConfigResult ServiceHost::HandleReloadServiceConfig(
     const ServiceConfigState& reloadedConfig) {
     const bool modeChanged = (m_configState.mode != reloadedConfig.mode);
@@ -1213,142 +1083,17 @@ void ServiceHost::HandleIpcExitDebugMode(Ipc::IpcResponse& resp) {
     LOG_INFO("Service", __func__, "IPC", "Exited debug mode.");
 }
 
-void ServiceHost::HandleIpcGetConfigSnapshot(Ipc::IpcResponse& resp) {
-    Ipc::ConfigSnapshotWire snapshot{};
-    snapshot.definedFields = ToPersistedFieldBits();
-    snapshot.desiredMode = ToWireServiceMode(m_configState.mode);
-    snapshot.activeMode = ToWireServiceMode(m_runtimeMode);
-    snapshot.autoMode = m_configState.autoMode ? 1 : 0;
-    snapshot.stylusVhfEnabled = m_configState.stylusVhfEnabled ? 1 : 0;
-    snapshot.penButtonMode = static_cast<uint8_t>(m_configState.penButtonMode);
-    snapshot.penButtonRoute = static_cast<uint8_t>(m_configState.penButtonRoute);
-
-    std::memcpy(resp.data, &snapshot, sizeof(snapshot));
-    resp.dataLen = static_cast<uint16_t>(sizeof(snapshot));
-    Ipc::MarkSuccess(resp);
-}
-
 void ServiceHost::HandleIpcGetConfigCatalogV3(const Ipc::IpcRequest& req, Ipc::IpcResponse& resp) {
     const auto blob = m_configRuntime.BuildCatalogV3Blob();
     BuildConfigV3PageResponse(Ipc::IpcCommand::GetConfigCatalogV3, req, blob, resp);
 }
 
-void ServiceHost::HandleIpcGetConfigSnapshotV3(const Ipc::IpcRequest& req, Ipc::IpcResponse& resp) {
+void ServiceHost::HandleIpcGetConfigV3Snapshot(const Ipc::IpcRequest& req, Ipc::IpcResponse& resp) {
     const auto blob = m_configRuntime.BuildSnapshotV3Blob();
     BuildConfigV3PageResponse(Ipc::IpcCommand::GetConfigSnapshotV3, req, blob, resp);
 }
 
-void ServiceHost::HandleIpcApplyConfigPatch(const Ipc::IpcRequest& req, Ipc::IpcResponse& resp) {
-#ifndef _DEBUG
-    (void)req;
-    Ipc::MarkFailure(resp, Ipc::IpcStatusCode::UnsupportedCommand);
-    LOG_WARN("Service", __func__, "IPC", "Release builds read YAML only at startup; live config mutation is not supported.");
-    return;
-#else
-    if (!m_deviceRuntime) {
-        Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidState);
-        return;
-    }
-    if (req.paramLen < sizeof(Ipc::ApplyConfigPatchRequestWire)) {
-        Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidRequest);
-        return;
-    }
-
-    Ipc::ApplyConfigPatchRequestWire patch{};
-    std::memcpy(&patch, req.param, sizeof(patch));
-    if (patch.wireVersion != Ipc::kIpcProtocolVersion) {
-        Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidRequest);
-        return;
-    }
-
-    ServiceConfigState desired = m_configState;
-    if (Ipc::HasField(patch.fieldMask, Ipc::ServiceConfigFieldWire::Mode)) {
-        if (!TryParseWireServiceMode(patch.desiredMode, desired.mode)) {
-            Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidRequest);
-            return;
-        }
-    }
-    if (Ipc::HasField(patch.fieldMask, Ipc::ServiceConfigFieldWire::AutoMode)) {
-        desired.autoMode = patch.autoMode != 0;
-    }
-    if (Ipc::HasField(patch.fieldMask, Ipc::ServiceConfigFieldWire::StylusVhfEnabled)) {
-        desired.stylusVhfEnabled = patch.stylusVhfEnabled != 0;
-    }
-    if (Ipc::HasField(patch.fieldMask, Ipc::ServiceConfigFieldWire::PenButtonMode)) {
-        desired.penButtonMode = static_cast<PenButtonMode>(
-            std::clamp(static_cast<int>(patch.penButtonMode), 0, 2));
-    }
-    if (Ipc::HasField(patch.fieldMask, Ipc::ServiceConfigFieldWire::PenButtonRoute)) {
-        desired.penButtonRoute = static_cast<PenButtonRoute>(
-            std::clamp(static_cast<int>(patch.penButtonRoute), 0, 2));
-        desired.penButtonRouteExplicit = true;
-    }
-
-    const auto reloadState = HandleReloadServiceConfig(desired);
-    m_configRuntime.WriteServiceState(m_configState);
-
-    Ipc::ConfigMutationResultWire result{};
-    result.changedFields = reloadState.changedFields;
-    result.appliedFields = reloadState.appliedFields;
-    result.restartRequiredFields = reloadState.restartRequiredFields;
-
-    std::memcpy(resp.data, &result, sizeof(result));
-    resp.dataLen = static_cast<uint16_t>(sizeof(result));
-    Ipc::MarkSuccess(resp);
-#endif
-}
-
-void ServiceHost::HandleIpcApplyConfigTlvChunk(const Ipc::IpcRequest& req, Ipc::IpcResponse& resp) {
-    if (!m_deviceRuntime) {
-        Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidState);
-        return;
-    }
-    if (req.paramLen < sizeof(Ipc::ConfigTlvChunkRequestWire)) {
-        Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidRequest);
-        return;
-    }
-
-    Ipc::ConfigTlvChunkRequestWire chunk{};
-    std::memcpy(&chunk, req.param, sizeof(chunk));
-    const auto apply = m_configRuntime.ApplyTlvChunk(chunk);
-    if (apply.status != Ipc::IpcStatusCode::Ok) {
-        Ipc::MarkFailure(resp, apply.status);
-        return;
-    }
-    if (!apply.completed) {
-        Ipc::MarkSuccess(resp);
-        return;
-    }
-
-    ReloadServiceConfigResult reloadState{};
-    for (const auto& action : apply.applyActions) {
-        switch (action.kind) {
-        case ConfigApplyActionKind::ServicePolicy: {
-            const auto serviceReload = HandleReloadServiceConfig(action.serviceConfig);
-            m_configRuntime.WriteServiceState(m_configState);
-            reloadState.changedFields |= serviceReload.changedFields;
-            reloadState.appliedFields |= serviceReload.appliedFields;
-            reloadState.restartRequiredFields |= serviceReload.restartRequiredFields;
-            break;
-        }
-        case ConfigApplyActionKind::PipelineRuntime:
-            // ConfigRuntime returns only an apply plan; DeviceRuntime calls stay outside the config lock.
-            m_deviceRuntime->ApplyPipelineConfig(action.configStore);
-            break;
-        }
-    }
-
-    Ipc::ConfigMutationResultWire result{};
-    result.changedFields = reloadState.changedFields;
-    result.appliedFields = reloadState.appliedFields;
-    result.restartRequiredFields = reloadState.restartRequiredFields;
-    std::memcpy(resp.data, &result, sizeof(result));
-    resp.dataLen = static_cast<uint16_t>(sizeof(result));
-    Ipc::MarkSuccess(resp);
-    LOG_INFO("Service", __func__, "Config", "Applied global config TLV entries={} changed={}", apply.entryCount, apply.changedCount);
-}
-
-void ServiceHost::HandleIpcApplyConfigPatchV3(const Ipc::IpcRequest& req, Ipc::IpcResponse& resp) {
+void ServiceHost::HandleIpcConfigV3ApplyPatch(const Ipc::IpcRequest& req, Ipc::IpcResponse& resp) {
     if (!m_deviceRuntime) {
         Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidState);
         return;
@@ -1403,7 +1148,7 @@ void ServiceHost::HandleIpcApplyConfigPatchV3(const Ipc::IpcRequest& req, Ipc::I
              static_cast<unsigned int>(apply.status));
 }
 
-void ServiceHost::HandleIpcPersistConfigV3(Ipc::IpcResponse& resp) {
+void ServiceHost::HandleIpcConfigV3Persist(Ipc::IpcResponse& resp) {
     const auto persist = m_configRuntime.PersistConfigV3();
     if (persist.ipcStatus != Ipc::IpcStatusCode::Ok) {
         Ipc::MarkFailure(resp, persist.ipcStatus);
@@ -1420,58 +1165,6 @@ void ServiceHost::HandleIpcPersistConfigV3(Ipc::IpcResponse& resp) {
     Ipc::MarkSuccess(resp);
     LOG_INFO("Service", __func__, "IPC", "PersistConfigV3 saved overrides persisted={} skipped={} failed={}",
              persist.persistedCount, persist.skippedCount, persist.failedCount);
-}
-
-void ServiceHost::HandleIpcPersistConfig(Ipc::IpcResponse& resp) {
-#ifndef _DEBUG
-    Ipc::MarkFailure(resp, Ipc::IpcStatusCode::UnsupportedCommand);
-    LOG_WARN("Service", __func__, "IPC", "Release builds read YAML only at startup; PersistConfig is not supported.");
-    return;
-#else
-    if (!m_deviceRuntime) {
-        Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidState);
-        return;
-    }
-
-    if (!PersistServicePolicyConfig()) {
-        Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InternalError);
-        return;
-    }
-
-    Ipc::PersistConfigResponseWire result{};
-    result.persistedFields = ToPersistedFieldBits();
-    std::memcpy(resp.data, &result, sizeof(result));
-    resp.dataLen = static_cast<uint16_t>(sizeof(result));
-    Ipc::MarkSuccess(resp);
-    LOG_INFO("Service", __func__, "IPC", "PersistConfig saved service policy fields to YAML overrides; pipeline runtime keys are outside the current IPC ABI.");
-#endif
-}
-
-void ServiceHost::HandleIpcReloadConfig(Ipc::IpcResponse& resp) {
-#ifndef _DEBUG
-    Ipc::MarkFailure(resp, Ipc::IpcStatusCode::UnsupportedCommand);
-    LOG_WARN("Service", __func__, "IPC", "Release builds read YAML only at startup; ReloadConfig is not supported.");
-    return;
-#else
-    if (!m_deviceRuntime) {
-        Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidState);
-        return;
-    }
-
-    const auto reloadState = HandleReloadServiceConfig(m_configState);
-    Ipc::ReloadConfigSummaryWire summary{};
-    summary.changedFields = reloadState.changedFields;
-    summary.appliedFields = reloadState.appliedFields;
-    summary.restartRequiredFields = reloadState.restartRequiredFields;
-    std::memcpy(resp.data, &summary, sizeof(summary));
-    resp.dataLen = static_cast<uint16_t>(sizeof(summary));
-    Ipc::MarkSuccess(resp);
-    LOG_INFO("Service", __func__, "IPC", "ReloadConfig accepted; legacy INI reload is disabled.");
-#endif
-}
-
-void ServiceHost::HandleIpcSaveConfig(Ipc::IpcResponse& resp) {
-    HandleIpcPersistConfig(resp);
 }
 
 void ServiceHost::HandleIpcGetLogs(Ipc::IpcResponse& resp) {
@@ -1656,6 +1349,11 @@ void ServiceHost::HandleIpcGetDebugSnapshot(Ipc::IpcResponse& resp) {
 Ipc::IpcResponse ServiceHost::HandleIpcCommand(const Ipc::IpcRequest& req) {
     Ipc::IpcResponse resp{};
 
+    if (Ipc::IsLegacyConfigTombstoneCommand(req.command)) {
+        MarkLegacyConfigCommandUnsupported(req.command, resp);
+        return resp;
+    }
+
     switch (req.command) {
     case Ipc::IpcCommand::Ping:
         Ipc::MarkSuccess(resp);
@@ -1721,44 +1419,20 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(const Ipc::IpcRequest& req) {
         }
         break;
 
-    case Ipc::IpcCommand::GetConfigSnapshot:
-        HandleIpcGetConfigSnapshot(resp);
-        break;
-
     case Ipc::IpcCommand::GetConfigCatalogV3:
         HandleIpcGetConfigCatalogV3(req, resp);
         break;
 
     case Ipc::IpcCommand::GetConfigSnapshotV3:
-        HandleIpcGetConfigSnapshotV3(req, resp);
-        break;
-
-    case Ipc::IpcCommand::ApplyConfigPatch:
-        HandleIpcApplyConfigPatch(req, resp);
-        break;
-
-    case Ipc::IpcCommand::ApplyConfigTlvChunk:
-        HandleIpcApplyConfigTlvChunk(req, resp);
+        HandleIpcGetConfigV3Snapshot(req, resp);
         break;
 
     case Ipc::IpcCommand::ApplyConfigPatchV3:
-        HandleIpcApplyConfigPatchV3(req, resp);
+        HandleIpcConfigV3ApplyPatch(req, resp);
         break;
 
     case Ipc::IpcCommand::PersistConfigV3:
-        HandleIpcPersistConfigV3(resp);
-        break;
-
-    case Ipc::IpcCommand::PersistConfig:
-        HandleIpcPersistConfig(resp);
-        break;
-
-    case Ipc::IpcCommand::ReloadConfig:
-        HandleIpcReloadConfig(resp);
-        break;
-
-    case Ipc::IpcCommand::SaveConfig:
-        HandleIpcSaveConfig(resp);
+        HandleIpcConfigV3Persist(resp);
         break;
 
     case Ipc::IpcCommand::SetVhfEnabled:

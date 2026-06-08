@@ -40,36 +40,7 @@ struct ClientSecurityContext {
 };
 
 bool IsKnownCommand(IpcCommand command) noexcept {
-    switch (command) {
-    case IpcCommand::Ping:
-    case IpcCommand::EnterDebugMode:
-    case IpcCommand::ExitDebugMode:
-    case IpcCommand::StartRuntime:
-    case IpcCommand::StopRuntime:
-    case IpcCommand::AfeCommand:
-    case IpcCommand::SetVhfEnabled:
-    case IpcCommand::SetVhfTranspose:
-    case IpcCommand::ReloadConfig:
-    case IpcCommand::SaveConfig:
-    case IpcCommand::GetConfigSnapshot:
-    case IpcCommand::ApplyConfigPatch:
-    case IpcCommand::PersistConfig:
-    case IpcCommand::ApplyConfigTlvChunk:
-    case IpcCommand::GetConfigCatalogV3:
-    case IpcCommand::GetConfigSnapshotV3:
-    case IpcCommand::ApplyConfigPatchV3:
-    case IpcCommand::PersistConfigV3:
-    case IpcCommand::GetLogs:
-    case IpcCommand::GetPenBridgeStatus:
-    case IpcCommand::GetPenIdentityStatus:
-    case IpcCommand::GetDebugSchema:
-    case IpcCommand::GetDebugSnapshot:
-    case IpcCommand::SetPenPressureMode:
-    case IpcCommand::SetMasterParserOnly:
-        return true;
-    default:
-        return false;
-    }
+    return IsSupportedIpcCommand(command);
 }
 
 bool ValidateClient(HANDLE pipe, ClientSecurityContext& context) noexcept {
