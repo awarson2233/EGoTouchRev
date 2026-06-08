@@ -619,15 +619,15 @@ graph LR
 
 ## 6. 配置系统
 
-管线使用两套配置机制并存：
+> Historical note: 本节旧版曾描述 `EGOTOUCH_CONFIG_ENABLED`、`TouchPipelineConfigKeys.h/.cpp` 与 `GetConfigSchema/SaveConfig/LoadConfig` 并存。该描述已由 Config v3 取代；当前权威见 [config_framework_api.md](api/config_framework_api.md)。
+
+当前 Touch pipeline 配置通过 `TouchPipeline::registerBindings()` 注册到 `ConfigBinder`，由 `ConfigRuntime` / v3 IPC 负责 snapshot、patch 与 persist。本地 YAML/binder 路径只作为 App 离线预览或 Service 不可用 fallback。
 
 | 机制 | 条件 | 实现 |
 |------|------|------|
-| **自动生成** | `EGOTOUCH_CONFIG_ENABLED` | [TouchPipelineConfigKeys.h](../EGoTouchService/Solvers/TouchSolver/TouchPipelineConfigKeys.h) / [TouchPipelineConfigKeys.cpp](../EGoTouchService/Solvers/TouchSolver/TouchPipelineConfigKeys.cpp) |
+| **Config v3 binding** | 当前产品路径 | [TouchPipeline.cpp](../EGoTouchService/Solvers/TouchSolver/TouchPipeline.cpp) 中 `registerBindings()` / `applyConfig()` |
 | **冻结键保护** | 始终生效 | `IsFrozenCurrentTouchConfigKey()` — 二分查找 117 个已冻结键名 |
-| **Legacy 手写** | `#if 0`（保留参考） | TouchPipeline.cpp 内联的 GetConfigSchema/SaveConfig/LoadConfig |
-
-配置文件由 `scripts/config_key_sync.py` 从 `config/touch_pipeline_config.yaml` 自动生成，通过 `TouchPipelineMembers` 结构将管线各模块指针传入统一的 Load/Save/Schema 接口。
+| **KeyId map** | v3 IPC patch/snapshot | [ConfigKeyId.h](../Common/include/config/ConfigKeyId.h) / [ConfigKeyMap.cpp](../Common/source/config/ConfigKeyMap.cpp) |
 
 ---
 
@@ -636,9 +636,7 @@ graph LR
 | 文件 | 大小 | 阶段 | 职责 |
 |------|------|------|------|
 | [TouchPipeline.h](../EGoTouchService/Solvers/TouchSolver/TouchPipeline.h) | 4.9KB | 编排 | 管线声明、成员持有所有模块 |
-| [TouchPipeline.cpp](../EGoTouchService/Solvers/TouchSolver/TouchPipeline.cpp) | 92KB | 编排 | Process() + Config Schema/Save/Load |
-| [TouchPipelineConfigKeys.h](../EGoTouchService/Solvers/TouchSolver/TouchPipelineConfigKeys.h) | 2.7KB | 配置 | 自动生成的配置键声明 |
-| [TouchPipelineConfigKeys.cpp](../EGoTouchService/Solvers/TouchSolver/TouchPipelineConfigKeys.cpp) | 4.7KB | 配置 | 自动生成的配置键实现 |
+| [TouchPipeline.cpp](../EGoTouchService/Solvers/TouchSolver/TouchPipeline.cpp) | 92KB | 编排/配置 | Process() + `registerBindings()` + `applyConfig()` |
 | [MasterFrameParser.hpp](../EGoTouchService/Solvers/TouchSolver/MasterFrameParser.hpp) | 2.1KB | P1 | 帧解析 |
 | [BaselineTracker.hpp](../EGoTouchService/Solvers/TouchSolver/BaselineTracker.hpp) | 16.8KB | P2 | 自适应基线跟踪 |
 | [CMFProcessor.hpp](../EGoTouchService/Solvers/TouchSolver/CMFProcessor.hpp) | 6.5KB | P2 | 共模滤波 |

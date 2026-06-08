@@ -43,6 +43,8 @@
 - [x] `BuildRuntimeConfigSnapshotFromState()` / `ServiceProxy::CaptureRuntimeConfigSnapshot()` 已实现并注册 `EGoTouchApp.ServiceProxyRuntimeConfigSnapshotTest`。
 - [x] CMake `install()` 规则安装 `config/default.yaml`；WiX `EGoTouchSetup.wxs` / `EGoTouchTestSetup.wxs` 通过 `$(var.BuildOutputDir)\config\default.yaml` 引用当前 build output。
 - [x] 新增 `PackagingConfigLayoutTest`，校验 `EGoTouchService.exe` / `EGoTouchApp.exe` 输出目录旁的 `config/default.yaml`、真实 install prefix、以及 WiX `DefaultConfigYAML` source 文件均与仓库默认配置 hash 一致。
+- [x] 当前默认 gate 不启动/停止真实 Windows service process；service-process e2e 仅在 dedicated disposable service/hardware harness 上 opt-in。默认证据是 `ConfigRuntimeTest` + `PackagingConfigLayoutTest` + App fake v3 IPC tests。
+- [x] YAML allowlist 当前不需要：`default.yaml` leaf、binder schema entry、static `ConfigKeyId` 当前均为 130/130/130 对齐。
 
 ---
 

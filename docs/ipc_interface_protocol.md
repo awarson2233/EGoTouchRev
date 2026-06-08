@@ -1,7 +1,7 @@
-# EGoTouch IPC 接口协议说明（Phase 1-3 as-built）
+# EGoTouch IPC 接口协议说明（historical Phase 1-3）
 
 > 最后更新：2026-04-20  
-> 状态：按当前已落地代码对齐（非规划稿）
+> 状态：历史记录；当前 Config v3 契约见 [api/ipc_protocol.md](api/ipc_protocol.md) 与 [api/config_framework_api.md](api/config_framework_api.md)。
 
 ---
 
@@ -92,11 +92,16 @@ struct IpcResponse {
 | `AfeCommand` | 20 | AFE 命令转发 |
 | `SetVhfEnabled` | 30 | VHF 开关 |
 | `SetVhfTranspose` | 31 | VHF transpose 开关 |
-| `ReloadConfig` | 40 | 兼容命令：重载配置 |
-| `SaveConfig` | 41 | 兼容别名：转发到 `PersistConfig` |
-| `GetConfigSnapshot` | 42 | 获取 Service authoritative 配置快照 |
-| `ApplyConfigPatch` | 43 | 提交配置修改意图 |
-| `PersistConfig` | 44 | 持久化 canonical 配置 |
+| `ReloadConfig` | 40 | legacy config tombstone，unsupported |
+| `SaveConfig` | 41 | legacy config tombstone，unsupported |
+| `GetConfigSnapshot` | 42 | legacy config tombstone，unsupported |
+| `ApplyConfigPatch` | 43 | legacy config tombstone，unsupported |
+| `PersistConfig` | 44 | legacy config tombstone，unsupported |
+| `ApplyConfigTlvChunk` | 45 | legacy config tombstone，unsupported |
+| `GetConfigCatalogV3` | 46 | Config v3 catalog 分页读取 |
+| `GetConfigSnapshotV3` | 47 | Config v3 snapshot 分页读取 |
+| `ApplyConfigPatchV3` | 48 | Config v3 TLV patch |
+| `PersistConfigV3` | 49 | Config v3 `UserOverride` persist |
 | `GetLogs` | 50 | 拉取日志 |
 | `GetPenBridgeStatus` | 60 | 查询 PenBridge 状态 |
 | `GetDebugSchema` | 61 | 获取动态调试字段 schema |
@@ -107,41 +112,28 @@ struct IpcResponse {
 
 ---
 
-## 5. 配置相关协议（Phase 1-3 已落地）
+## 5. 配置相关协议（superseded）
 
-### 5.1 `GetConfigSnapshot` (`42`)
+以下 fixed config ABI 是历史 Phase 1-3 记录，不是当前 connected config 主路径。当前 Service connected mode 使用 Config v3 command `46`-`49`；legacy config command `40`-`45` 仅保留 ABI tombstone 并返回 unsupported。
 
-返回 `ConfigSnapshotWire`，关键字段：
+### 5.1 `GetConfigCatalogV3` (`46`) / `GetConfigSnapshotV3` (`47`)
 
-- `desiredMode`（配置目标）
-- `activeMode`（当前运行）
-- `autoMode`
-- `stylusVhfEnabled`
-- `definedFields`
-- `wireVersion`
+分页返回 Config v3 catalog/snapshot payload，条目使用 static `ConfigKeyId` 绑定 YAML path。schema/current value/strategy metadata 由 `ConfigRuntime` 构建。
 
-### 5.2 `ApplyConfigPatch` (`43`)
+### 5.2 `ApplyConfigPatchV3` (`48`)
 
-请求：`ApplyConfigPatchRequestWire`  
-响应：`ConfigMutationResultWire`
+请求携带 base schema/snapshot version 和 TLV patch payload。语义结果包括 `Ok`、`NoChanges`、`VersionMismatch`、`Rejected`、`PersistFailed`；格式错误请求仍走 IPC failure。
 
-语义：
-
-- `changedFields`
-- `appliedFields`
-- `restartRequiredFields`
-
-### 5.3 `PersistConfig` (`44`)
+### 5.3 `PersistConfigV3` (`49`)
 
 请求：无  
-响应：`PersistConfigResponseWire`
+响应：`PersistConfigV3ResponseWire`
 
-语义：由 Service 将当前 canonical 配置写入 `C:/ProgramData/EGoTouchRev/config.ini`。
+语义：Service 按 catalog 中 `ConfigPersistPolicy::UserOverride` 写 `overrides.yaml`；`default.yaml` 是 factory default 输入，legacy `config.ini` 不是当前目标格式。
 
-### 5.4 兼容命令
+### 5.4 legacy command tombstone
 
-- `ReloadConfig` (`40`)：返回 `ReloadConfigSummaryWire`（3 字节）。
-- `SaveConfig` (`41`)：服务端内部转发到 `PersistConfig`。
+- `ReloadConfig` (`40`) / `SaveConfig` (`41`) / `GetConfigSnapshot` (`42`) / `ApplyConfigPatch` (`43`) / `PersistConfig` (`44`) / `ApplyConfigTlvChunk` (`45`)：保留 command value，connected IPC 返回 `UnsupportedCommand`。
 
 ---
 
@@ -229,12 +221,12 @@ struct IpcResponse {
 
 1. Pipe 协议仍是固定结构体整包，尚未引入独立 framing/version header。
 2. `success + status` 并存；新路径已使用 `status`，旧路径仍存在兼容语义。
-3. 配置 canonical 路径已落地，但 `ReloadConfig/SaveConfig` 仍保留兼容。
+3. 配置 canonical 路径已落地为 Config v3；`ReloadConfig/SaveConfig` 仅保留 legacy tombstone。
 
 ---
 
 ## 9. 下一阶段 follow-ups（延期项）
 
-1. **退役 legacy 配置主路径**：逐步退出 `ReloadConfig/SaveConfig` 的主控制角色。  
+1. **保持 legacy tombstone ABI 稳定**：`ReloadConfig/SaveConfig` 等旧 command value 不再恢复为主路径。
 2. **统一状态码语义**：将剩余老命令补齐一致的 `IpcStatusCode` 赋值策略。  
 3. **明确 EnterDebugMode 请求参数语义**：要么真正按请求名工作，要么收敛为无参命令。

@@ -5,6 +5,9 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <optional>
+#include <string>
+#include <utility>
 #include <vector>
 
 namespace App {
@@ -17,13 +20,106 @@ bool IsLiveEditableEntry(const Config::ConfigSchemaEntry& entry) {
            Config::isLiveApplyTiming(entry.applyTiming);
 }
 
+ImVec4 ApplyStateColor(ConfigUIApplyState state) {
+    switch (state) {
+    case ConfigUIApplyState::Clean: return ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled);
+    case ConfigUIApplyState::Pending: return ImVec4(1.0f, 0.78f, 0.20f, 1.0f);
+    case ConfigUIApplyState::LiveApplied: return ImVec4(0.30f, 0.85f, 0.35f, 1.0f);
+    case ConfigUIApplyState::StagedRestartRequired: return ImVec4(1.0f, 0.62f, 0.20f, 1.0f);
+    case ConfigUIApplyState::Failed: return ImVec4(1.0f, 0.35f, 0.30f, 1.0f);
+    }
+    return ImGui::GetStyleColorVec4(ImGuiCol_Text);
+}
+
+ImVec4 PersistStateColor(ConfigUIPersistState state) {
+    switch (state) {
+    case ConfigUIPersistState::NotAttempted: return ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled);
+    case ConfigUIPersistState::Persisted: return ImVec4(0.30f, 0.85f, 0.35f, 1.0f);
+    case ConfigUIPersistState::Unpersisted: return ImVec4(1.0f, 0.78f, 0.20f, 1.0f);
+    case ConfigUIPersistState::Failed: return ImVec4(1.0f, 0.35f, 0.30f, 1.0f);
+    }
+    return ImGui::GetStyleColorVec4(ImGuiCol_Text);
+}
+
+bool DrawEntryBadges(const Config::ConfigSchemaEntry& entry,
+                     const std::optional<ConfigUIPathState>& pathState) {
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const char* scope = ConfigScopeBadge(entry.scope);
+    const char* timing = ConfigApplyTimingBadge(entry.applyTiming);
+    const char* policy = ConfigPersistPolicyBadge(entry.persistPolicy);
+    const float strategyWidth = ImGui::CalcTextSize("[Stylus] [Restart] [UserOverride]").x;
+    const bool sameLine = ImGui::GetContentRegionAvail().x > strategyWidth + style.ItemInnerSpacing.x;
+    bool hovered = false;
+
+    if (sameLine) {
+        ImGui::SameLine();
+    } else {
+        ImGui::Indent(style.IndentSpacing);
+    }
+
+    ImGui::TextDisabled("[%s] [%s] [%s]", scope, timing, policy);
+    hovered = hovered || ImGui::IsItemHovered();
+
+    if (pathState.has_value()) {
+        ImGui::SameLine();
+        ImGui::TextColored(
+            ApplyStateColor(pathState->applyState),
+            "[Apply:%s%s]",
+            ConfigApplyStateBadge(pathState->applyState),
+            pathState->dirty ? "*" : "");
+        hovered = hovered || ImGui::IsItemHovered();
+
+        ImGui::SameLine();
+        ImGui::TextColored(
+            PersistStateColor(pathState->persistState),
+            "[Persist:%s]",
+            ConfigPersistStateBadge(pathState->persistState));
+        hovered = hovered || ImGui::IsItemHovered();
+    }
+
+    if (!sameLine) {
+        ImGui::Unindent(style.IndentSpacing);
+    }
+
+    return hovered;
+}
+
+void DrawEntryTooltip(const Config::ConfigSchemaEntry& entry,
+                      const std::optional<ConfigUIPathState>& pathState) {
+    ImGui::BeginTooltip();
+    if (!entry.description.empty()) {
+        ImGui::TextWrapped("%s", entry.description.c_str());
+        ImGui::Separator();
+    }
+    ImGui::Text("Path: %s", entry.yamlPath.c_str());
+    ImGui::Text("Scope: %s", ConfigScopeBadge(entry.scope));
+    ImGui::Text("Apply: %s", ConfigApplyTimingBadge(entry.applyTiming));
+    ImGui::Text("Persist: %s", ConfigPersistPolicyBadge(entry.persistPolicy));
+    if (pathState.has_value()) {
+        ImGui::Separator();
+        ImGui::Text("Apply State: %s%s",
+                    ConfigApplyStateBadge(pathState->applyState),
+                    pathState->dirty ? " (dirty)" : "");
+        ImGui::Text("Persist State: %s", ConfigPersistStateBadge(pathState->persistState));
+        if (pathState->failedKeyId != Config::ConfigKeyId::MaxKeyId) {
+            ImGui::Text("failedKeyId: 0x%04X",
+                        static_cast<unsigned int>(static_cast<uint16_t>(pathState->failedKeyId)));
+        }
+        if (!pathState->errorMessage.empty()) {
+            ImGui::TextWrapped("errorMessage: %s", pathState->errorMessage.c_str());
+        }
+    }
+    ImGui::EndTooltip();
+}
+
 } // namespace
 
 void ConfigUIRenderer::RenderConfigStore(
     const Config::ConfigSchemaSnapshot& schema,
     Config::ConfigStore& values,
     const std::string& sectionName,
-    std::vector<std::string>* changedPaths) {
+    std::vector<std::string>* changedPaths,
+    ConfigPathStateProvider pathStateProvider) {
 
     (void)sectionName;
 
@@ -46,6 +142,8 @@ void ConfigUIRenderer::RenderConfigStore(
         const std::string label = entry.displayName + "##" + entry.yamlPath;
         const bool hasRange = entry.range.has_value();
         const bool liveEditable = IsLiveEditableEntry(entry);
+        const std::optional<ConfigUIPathState> pathState =
+            pathStateProvider ? pathStateProvider(entry.yamlPath) : std::nullopt;
         if (!liveEditable) {
             ImGui::BeginDisabled();
         }
@@ -123,12 +221,14 @@ void ConfigUIRenderer::RenderConfigStore(
             }
         }
 
+        const bool valueHovered = ImGui::IsItemHovered();
         if (!liveEditable) {
             ImGui::EndDisabled();
         }
 
-        if (ImGui::IsItemHovered() && !entry.description.empty()) {
-            ImGui::SetTooltip("%s\nPath: %s", entry.description.c_str(), entry.yamlPath.c_str());
+        const bool badgesHovered = DrawEntryBadges(entry, pathState);
+        if (valueHovered || badgesHovered) {
+            DrawEntryTooltip(entry, pathState);
         }
     }
 }
@@ -137,7 +237,8 @@ void ConfigUIRenderer::RenderConfigStoreByModule(
     const Config::ConfigSchemaSnapshot& schema,
     Config::ConfigStore& values,
     const std::string& moduleTag,
-    std::vector<std::string>* changedPaths) {
+    std::vector<std::string>* changedPaths,
+    ConfigPathStateProvider pathStateProvider) {
 
     Config::ConfigSchemaSnapshot filtered;
     for (const auto& entry : schema.entries) {
@@ -146,7 +247,7 @@ void ConfigUIRenderer::RenderConfigStoreByModule(
         }
     }
 
-    RenderConfigStore(filtered, values, moduleTag, changedPaths);
+    RenderConfigStore(filtered, values, moduleTag, changedPaths, std::move(pathStateProvider));
 }
 
 std::vector<std::string> ConfigUIRenderer::CollectModuleTags(

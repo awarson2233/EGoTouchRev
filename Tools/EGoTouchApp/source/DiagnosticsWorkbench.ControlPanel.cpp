@@ -162,7 +162,7 @@ void DiagnosticsWorkbench::DrawControlPanel() {
 #ifdef _DEBUG
     if (!allowLiveControl) ImGui::BeginDisabled();
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
-    if (ImGui::Button("Save Global Parameters")) {
+    if (ImGui::Button("Apply/Persist Global Parameters")) {
         m_proxy->SaveConfig();
     }
     ImGui::PopStyleColor();

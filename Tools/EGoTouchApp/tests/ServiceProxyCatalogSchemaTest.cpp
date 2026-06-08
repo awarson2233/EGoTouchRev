@@ -1,3 +1,4 @@
+#include "ConfigUIRenderer.h"
 #include "ServiceProxyInternal.h"
 #include "config/ConfigKeyMap.h"
 #include "config/ConfigPath.h"
@@ -109,6 +110,21 @@ void TestDefaultYamlContainsCatalogBackedKeys() {
     Require(store.has("touch.signal_cond.baseline_no_finger_max_step"), "default.yaml should contain touch baseline key");
     Require(store.has("stylus.sp.bt_freq_shift_debounce_frames"), "default.yaml should contain stylus SP key");
     Require(store.has("stylus.sp.lock_flash_edge_y"), "default.yaml should contain stylus lock key");
+}
+
+void TestConfigUiRendererBadges() {
+    Require(std::string(App::ConfigScopeBadge(Config::ConfigScope::ServicePolicy)) == "Service",
+            "service scope badge mismatch");
+    Require(std::string(App::ConfigScopeBadge(Config::ConfigScope::TouchPipeline)) == "Touch",
+            "touch scope badge mismatch");
+    Require(std::string(App::ConfigApplyTimingBadge(Config::ConfigApplyTiming::RestartRequired)) == "Restart",
+            "restart timing badge mismatch");
+    Require(std::string(App::ConfigPersistPolicyBadge(Config::ConfigPersistPolicy::UserOverride)) == "UserOverride",
+            "user override persist badge mismatch");
+    Require(std::string(App::ConfigApplyStateBadge(App::ConfigUIApplyState::StagedRestartRequired)) == "StagedRestartRequired",
+            "staged apply state badge mismatch");
+    Require(std::string(App::ConfigPersistStateBadge(App::ConfigUIPersistState::Unpersisted)) == "Unpersisted",
+            "unpersisted state badge mismatch");
 }
 
 Config::ConfigV3CatalogPayload BuildCatalogPayload() {
@@ -796,6 +812,7 @@ int main() {
         TestSchemaCoversServiceTouchAndStylusCatalogKeys();
         TestDirtyPathKeyIdsRemainStable();
         TestDefaultYamlContainsCatalogBackedKeys();
+        TestConfigUiRendererBadges();
         TestV3CatalogPayloadAppliesSchemaAndDefaults();
         TestLocalFallbackInitializesSchemaAndDefaultStore();
         TestOfflineLiveApplyUsesLocalFallbackAndKeepsUnpersistedState();

@@ -115,6 +115,8 @@ Current implementation:
 | Step 6 packaging/e2e verification | [x] | `PackagingConfigLayoutTest`, `ConfigRuntimeTest`, DVR/App runtime config tests |
 | Step 7 docs/API sync | [x] | current docs match header/wire/test facts |
 
+Step 6 当前 gate 不启动或停止真实 Windows service process。real service-process e2e 只允许在 dedicated disposable service/hardware harness 上 opt-in；本机默认验收使用 `ConfigRuntimeTest`、`PackagingConfigLayoutTest` 和 App fake v3 IPC tests。YAML allowlist 当前不需要，因为 `default.yaml` leaf、binder schema entry、static `ConfigKeyId` 均为 130/130/130 对齐。
+
 ## 8. Verification Commands
 
 ```powershell
@@ -128,7 +130,4 @@ git diff --check
 
 The following historical items remain outside this P0 finalization gate:
 
-- Remove old generated/config parsing source files that are no longer active product paths.
-- Expand App UI polish for per-row strategy badges and per-key state display.
-- Add real service-process e2e if a hardware/service harness is available.
-- Decide whether YAML-only/non-user-override allowlist is needed.
+- Real service-process e2e remains opt-in only for a dedicated disposable service/hardware harness.

@@ -65,29 +65,13 @@ ego_add_solvers_unit(SolversUnit_TouchStylusSuppress touch
 ego_add_solvers_unit(SolversUnit_TouchEdgeCompensation touch
     unit/touch/TouchEdgeCompensationTest.cpp
 )
-# TouchPalmClassifierTest disabled: uses deleted LoadConfig/SaveConfig
-# ego_add_solvers_unit(SolversUnit_TouchPalmClassifier touch
-#     unit/touch/TouchPalmClassifierTest.cpp
-# )
 ego_add_solvers_unit(SolversUnit_TouchCloseSplit touch
     unit/touch/TouchCloseSplitTest.cpp
 )
 
-# StylusLinearFilterTest/StylusHpp3PostPressureTest disabled: use deleted LoadConfig/SaveConfig
-# ego_add_solvers_unit(SolversUnit_StylusLinearFilter stylus
-#     unit/stylus/StylusLinearFilterTest.cpp
-# )
-# ego_add_solvers_unit(SolversUnit_StylusHpp3PostPressure stylus
-#     unit/stylus/StylusHpp3PostPressureTest.cpp
-# )
 ego_add_solvers_unit(SolversUnit_StylusHpp2Pipeline stylus
     unit/stylus/StylusHpp2PipelineTest.cpp
 )
 ego_add_solvers_config_unit(SolversUnit_StylusPipelineConfigRoundTrip stylus
     unit/stylus/StylusPipelineConfigRoundTripTest.cpp
 )
-
-# RawdataBenchmark disabled: uses deleted LoadConfig/SaveConfig + old INI config
-# ego_add_solvers_perf(SolversPerf_RawdataBenchmark
-#     perf/RawdataBenchmark.cpp
-# )

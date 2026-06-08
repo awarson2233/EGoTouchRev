@@ -397,13 +397,14 @@ device:               # 硬件配置
       "binaryDir": "${sourceDir}/build/arm64-Release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "HIMAX_ENABLE_NEON": "ON",
-        "EGOTOUCH_ENABLE_RUNTIME_CONFIG": "ON"
+        "HIMAX_ENABLE_NEON": "ON"
       }
     }
   ]
 }
 ```
+
+`EGOTOUCH_ENABLE_RUNTIME_CONFIG` / `EGOTOUCH_CONFIG_ENABLED` 已不再作为产品源码分支；runtime config 是当前唯一配置路径。
 
 ### 7.3 部署结构
 

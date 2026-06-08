@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -100,6 +101,44 @@ ImVec4 FpsColor(int fps) {
     case FpsStatusClass::Bad:
     default: return BadColor();
     }
+}
+
+ConfigUIApplyState ToConfigUIApplyState(ConfigDraftApplyState state) {
+    switch (state) {
+    case ConfigDraftApplyState::Clean: return ConfigUIApplyState::Clean;
+    case ConfigDraftApplyState::Pending: return ConfigUIApplyState::Pending;
+    case ConfigDraftApplyState::LiveApplied: return ConfigUIApplyState::LiveApplied;
+    case ConfigDraftApplyState::StagedRestartRequired: return ConfigUIApplyState::StagedRestartRequired;
+    case ConfigDraftApplyState::Failed: return ConfigUIApplyState::Failed;
+    }
+    return ConfigUIApplyState::Failed;
+}
+
+ConfigUIPersistState ToConfigUIPersistState(ConfigDraftPersistState state) {
+    switch (state) {
+    case ConfigDraftPersistState::NotAttempted: return ConfigUIPersistState::NotAttempted;
+    case ConfigDraftPersistState::Persisted: return ConfigUIPersistState::Persisted;
+    case ConfigDraftPersistState::Unpersisted: return ConfigUIPersistState::Unpersisted;
+    case ConfigDraftPersistState::Failed: return ConfigUIPersistState::Failed;
+    }
+    return ConfigUIPersistState::Failed;
+}
+
+ConfigUIRenderer::ConfigPathStateProvider MakeConfigPathStateProvider(ServiceProxy* proxy) {
+    return [proxy](std::string_view path) -> std::optional<ConfigUIPathState> {
+        if (proxy == nullptr) {
+            return std::nullopt;
+        }
+
+        const auto state = proxy->GetConfigDraftPathState(path);
+        ConfigUIPathState result;
+        result.dirty = state.dirty;
+        result.applyState = ToConfigUIApplyState(state.applyState);
+        result.persistState = ToConfigUIPersistState(state.persistState);
+        result.failedKeyId = state.failedKeyId;
+        result.errorMessage = state.errorMessage;
+        return result;
+    };
 }
 
 } // namespace
@@ -330,7 +369,12 @@ void DiagnosticsWorkbench::DrawTouchPipelineConfigPanel() {
         }
         std::vector<std::string> changedPaths;
         Config::ConfigStore& draftView = m_proxy->GetMutableConfigDraftStoreForUi();
-        ConfigUIRenderer::RenderConfigStoreByModule(schema, draftView, activeModule, &changedPaths);
+        ConfigUIRenderer::RenderConfigStoreByModule(
+            schema,
+            draftView,
+            activeModule,
+            &changedPaths,
+            MakeConfigPathStateProvider(m_proxy));
         m_proxy->CommitConfigDraftEdits(changedPaths);
         if (masterParserOnly) {
             ImGui::EndDisabled();
@@ -597,11 +641,17 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
             if (modules.empty()) {
                 ImGui::TextDisabled("No ConfigStore/ConfigBinder stylus parameters are registered.");
             } else if (ImGui::BeginTabBar("StylusConfigTabs")) {
+                const auto pathStateProvider = MakeConfigPathStateProvider(m_proxy);
                 for (const auto& module : modules) {
                     if (ImGui::BeginTabItem(ModuleDisplayName(module))) {
                         std::vector<std::string> changedPaths;
                         Config::ConfigStore& draftView = m_proxy->GetMutableConfigDraftStoreForUi();
-                        ConfigUIRenderer::RenderConfigStoreByModule(schema, draftView, module, &changedPaths);
+                        ConfigUIRenderer::RenderConfigStoreByModule(
+                            schema,
+                            draftView,
+                            module,
+                            &changedPaths,
+                            pathStateProvider);
                         m_proxy->CommitConfigDraftEdits(changedPaths);
                         if (ImGui::Button("Apply Global")) {
                             m_proxy->ApplyConfigStoreGlobally();

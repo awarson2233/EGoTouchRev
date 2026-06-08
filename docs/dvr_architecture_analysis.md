@@ -206,7 +206,7 @@ RuntimeConfig 使用与 Dynamic Debug 类似的可选自描述 Section 组合，
 | `Dvr2RuntimeConfigValuesHeader` | `valueCount / recordSize / schemaHash` |
 | `Dvr2RuntimeConfigValueRecord` | `fieldId / valueType / valid flag / rawValue / stringValue` |
 
-配置来源是导出瞬间的运行时对象：`ServiceProxy` 内部 atomics、`TouchPipeline::GetConfigSchema()`、`StylusPipeline::GetConfigSchema()`。导出路径不会反读 `config.ini`；如果 MasterParser-only 模式正在生效，记录的是当时 `m_pipeline` 实际生效值。
+配置来源是导出瞬间的运行时对象：`ServiceProxy::CaptureRuntimeConfigSnapshot()` 汇总 App/Service atomics、TouchPipeline 和 StylusPipeline 当前 runtime fields。导出路径不会反读磁盘配置；如果 MasterParser-only 模式正在生效，记录的是当时 `m_pipeline` 实际生效值。
 
 ---
 
@@ -314,7 +314,7 @@ flowchart LR
 | `LegacyServiceTimestamp` | Service 端原始时间戳 | ~ms | 旧版格式兼容 |
 | `SyntheticFrameIndex` | `帧索引 × 10000μs` | 10ms 固定步进 | 时间戳损坏/缺失 |
 
-`LoadDvrDataset()` 会把解析出的 Dynamic Debug schema/values 和 RuntimeConfig snapshot 一起保存到 `DvrPlaybackDataset`。回放后的 CSV 导出使用 DVR 文件内嵌配置，而不是当前 App 的 `m_pipeline` 或磁盘上的 `config.ini`。
+`LoadDvrDataset()` 会把解析出的 Dynamic Debug schema/values 和 RuntimeConfig snapshot 一起保存到 `DvrPlaybackDataset`。回放后的 CSV 导出使用 DVR 文件内嵌配置，而不是当前 App 的 `m_pipeline` 或磁盘配置。
 
 #### 回放控制接口
 

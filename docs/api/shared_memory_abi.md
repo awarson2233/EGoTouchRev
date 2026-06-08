@@ -289,6 +289,8 @@ struct SharedStylusRawGrid {
 
 ### 4.1 内存布局
 
+> Historical/legacy: `ConfigDirtyFlag` 描述保留用于解释旧 App 写 `config.ini` 后通知 Service reload 的兼容背景。当前 connected config 主路径是 Config v3 IPC (`GetConfigCatalogV3` / `GetConfigSnapshotV3` / `ApplyConfigPatchV3` / `PersistConfigV3`)，详见 [ipc_protocol.md](ipc_protocol.md) 与 [config_framework_api.md](config_framework_api.md)。
+
 ```
 ConfigDirtyFlag (4 bytes)
 ┌──────────────────────────┐
@@ -303,7 +305,7 @@ Shared Memory Name: Global\EGoTouchConfigDirty
 ```
 App (Writer):                      Service (Reader):
                                     每帧:
-  config.ini 更新完成后:              if CheckAndClear():
+  legacy config.ini 更新完成后:       if CheckAndClear():
   m_flag->store(1, release)            ReloadConfig()
 ```
 
@@ -320,7 +322,7 @@ public:
 };
 ```
 
-> :warning: 重构后将逐步废弃，由 IPC `ApplyConfigPatch` + `PersistConfig` 直接管理配置变更。
+> :warning: 该路径是 historical/legacy 说明；当前由 Config v3 IPC patch/persist 管理 connected 配置变更。
 
 ---
 
