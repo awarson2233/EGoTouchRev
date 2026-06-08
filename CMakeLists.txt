@@ -97,7 +97,6 @@ endif()
 # --- SIMD options ---
 # This project targets a specific platform; enable NEON by default.
 option(HIMAX_ENABLE_NEON "Enable ARM NEON intrinsics when available" ON)
-option(EGOTOUCH_ENABLE_RUNTIME_CONFIG "Enable config schema/I/O and startup YAML apply in Solvers/Service/App" ON)
 
 # --- Common Library ---
 # Use the source directory as the root for subprojects/resources so paths
@@ -233,13 +232,10 @@ set(SOLVERS_SOURCES
     EGoTouchService/Solvers/StylusSolver/StylusPipeline.cpp
 )
 
-function(ego_configure_solvers_target target config_enabled)
+function(ego_configure_solvers_target target)
     target_compile_definitions(${target} PUBLIC
         $<$<BOOL:${HIMAX_ENABLE_NEON}>:HIMAX_ENABLE_NEON=1>
         $<$<NOT:$<BOOL:${HIMAX_ENABLE_NEON}>>:HIMAX_ENABLE_NEON=0>
-    )
-    target_compile_definitions(${target} PRIVATE
-        EGOTOUCH_CONFIG_ENABLED=${config_enabled}
     )
     target_include_directories(${target} PUBLIC
         "${SOLVERS_ROOT}"
@@ -251,14 +247,8 @@ function(ego_configure_solvers_target target config_enabled)
     target_link_libraries(${target} PUBLIC Common)
 endfunction()
 
-if (EGOTOUCH_ENABLE_RUNTIME_CONFIG)
-    set(EGO_SOLVERS_RUNTIME_CONFIG_ENABLED 1)
-else()
-    set(EGO_SOLVERS_RUNTIME_CONFIG_ENABLED 0)
-endif()
-
 add_library(Solvers STATIC ${SOLVERS_SOURCES})
-ego_configure_solvers_target(Solvers ${EGO_SOLVERS_RUNTIME_CONFIG_ENABLED})
+ego_configure_solvers_target(Solvers)
 # Let Common see Solvers headers for SharedFrameBuffer
 target_include_directories(Common PUBLIC "${SOLVERS_ROOT}")
 
@@ -284,13 +274,10 @@ set(IPCCORE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/Common/IPCCore")
 file(GLOB DVR_SOURCES "${DVR_ROOT}/source/*.cpp")
 file(GLOB DVR_HEADERS "${DVR_ROOT}/include/*.h")
 
-function(ego_configure_dvrcore_target target solvers_target config_enabled)
+function(ego_configure_dvrcore_target target solvers_target)
     target_include_directories(${target} PUBLIC
         "${DVR_ROOT}/include"
         "${IPCCORE_ROOT}/include/Ipc"
-    )
-    target_compile_definitions(${target} PRIVATE
-        EGOTOUCH_CONFIG_ENABLED=${config_enabled}
     )
     target_link_libraries(${target} PUBLIC ${solvers_target} IPCCore Common)
 endfunction()
@@ -299,7 +286,7 @@ add_library(DVRCore STATIC
     ${DVR_SOURCES}
     ${DVR_HEADERS}
 )
-ego_configure_dvrcore_target(DVRCore Solvers ${EGO_SOLVERS_RUNTIME_CONFIG_ENABLED})
+ego_configure_dvrcore_target(DVRCore Solvers)
 
 # --- EGoTouchApp (Debug Diagnostics Workbench) ---
 file(GLOB APP_SOURCES "${APP_ROOT}/source/*.cpp")
@@ -325,10 +312,7 @@ target_include_directories(EGoTouchApp PRIVATE
 )
 
 # Link D3D11 for the ImGui DX11 backend
-target_compile_definitions(EGoTouchApp PRIVATE
-    EGOTOUCH_DIAGNOSTICS
-    EGOTOUCH_CONFIG_ENABLED=${EGO_SOLVERS_RUNTIME_CONFIG_ENABLED}
-)
+target_compile_definitions(EGoTouchApp PRIVATE EGOTOUCH_DIAGNOSTICS)
 target_link_libraries(EGoTouchApp PRIVATE DVRCore IPCCore Device Solvers Host Common ImGuiCommon d3d11 d3dcompiler dwmapi setupapi)
 if(MSVC)
     target_link_options(EGoTouchApp PRIVATE "/MANIFESTUAC:level='requireAdministrator'")
@@ -356,9 +340,6 @@ add_library(EGoTouchServiceCore STATIC
 target_include_directories(EGoTouchServiceCore PUBLIC
     "${SERVICE_ROOT}/include"
 )
-target_compile_definitions(EGoTouchServiceCore PUBLIC
-    EGOTOUCH_CONFIG_ENABLED=${EGO_SOLVERS_RUNTIME_CONFIG_ENABLED}
-)
 target_link_libraries(EGoTouchServiceCore PUBLIC Common Solvers IPCCore advapi32)
 
 add_executable(EGoTouchService
@@ -368,9 +349,6 @@ add_executable(EGoTouchService
 )
 target_include_directories(EGoTouchService PRIVATE
     "${SERVICE_ROOT}/include"
-)
-target_compile_definitions(EGoTouchService PRIVATE
-    EGOTOUCH_CONFIG_ENABLED=${EGO_SOLVERS_RUNTIME_CONFIG_ENABLED}
 )
 target_link_libraries(EGoTouchService PRIVATE EGoTouchServiceCore DVRCore IPCCore Device Host Common advapi32 setupapi hid)
 ego_copy_config_to_output(EGoTouchService)
@@ -397,15 +375,6 @@ target_link_libraries(BtMcuTestTool PRIVATE Device Common ImGuiCommon d3d11 d3dc
 
 option(EGO_BUILD_TESTS "Build local test executables" ON)
 if (EGO_BUILD_TESTS)
-    add_library(SolversRuntimeConfig STATIC ${SOLVERS_SOURCES})
-    ego_configure_solvers_target(SolversRuntimeConfig 1)
-
-    add_library(DVRCoreRuntimeConfig STATIC
-        ${DVR_SOURCES}
-        ${DVR_HEADERS}
-    )
-    ego_configure_dvrcore_target(DVRCoreRuntimeConfig SolversRuntimeConfig 1)
-
     function(ego_add_common_test target source)
         add_executable(${target} ${source})
         target_include_directories(${target} PRIVATE "${COMMON_ROOT}/include")
@@ -484,10 +453,9 @@ if (EGO_BUILD_TESTS)
     endif()
 
 
-    function(add_dvrcore_test_with_variant target source labels timeout dvrcore_target solvers_target config_enabled)
+    function(add_dvrcore_test target source labels timeout)
         add_executable(${target} ${source})
-        target_compile_definitions(${target} PRIVATE EGOTOUCH_CONFIG_ENABLED=${config_enabled})
-        target_link_libraries(${target} PRIVATE ${dvrcore_target} ${solvers_target} Common)
+        target_link_libraries(${target} PRIVATE DVRCore Solvers Common)
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test-workdirs/${target}")
         add_test(NAME ${target} COMMAND ${target})
         set_tests_properties(${target} PROPERTIES
@@ -497,12 +465,8 @@ if (EGO_BUILD_TESTS)
         )
     endfunction()
 
-    function(add_dvrcore_test target source labels timeout)
-        add_dvrcore_test_with_variant(${target} ${source} "${labels}" ${timeout} DVRCore Solvers ${EGO_SOLVERS_RUNTIME_CONFIG_ENABLED})
-    endfunction()
-
     function(add_dvrcore_runtime_config_test target source labels timeout)
-        add_dvrcore_test_with_variant(${target} ${source} "${labels}" ${timeout} DVRCoreRuntimeConfig SolversRuntimeConfig 1)
+        add_dvrcore_test(${target} ${source} "${labels}" ${timeout})
     endfunction()
 
     add_dvrcore_test(DvrCoreFormatLayoutTest
@@ -565,10 +529,7 @@ if (EGO_BUILD_TESTS)
         Tools/EGoTouchApp/source/ServiceProxy.DynamicDebug.cpp
         Tools/EGoTouchApp/source/ServiceProxy.cpp
     )
-    target_compile_definitions(EGoTouchApp_ServiceProxyCatalogSchemaTest PRIVATE
-        EGOTOUCH_CONFIG_ENABLED=${EGO_SOLVERS_RUNTIME_CONFIG_ENABLED}
-        EGOTOUCH_APP_SERVICE_PROXY_TEST=1
-    )
+    target_compile_definitions(EGoTouchApp_ServiceProxyCatalogSchemaTest PRIVATE EGOTOUCH_APP_SERVICE_PROXY_TEST=1)
     target_include_directories(EGoTouchApp_ServiceProxyCatalogSchemaTest PRIVATE
         "${APP_ROOT}/include"
         "${APP_ROOT}/source"

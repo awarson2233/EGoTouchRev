@@ -598,11 +598,6 @@ bool ServiceProxy::ApplyConfigStoreGlobally() {
         m_lastApplyConfigPersisted.store(false, std::memory_order_relaxed);
         m_lastApplyConfigPersistStatus.store(static_cast<uint8_t>(Ipc::IpcStatusCode::InternalError), std::memory_order_relaxed);
     };
-#if !EGOTOUCH_CONFIG_ENABLED
-    setApplyOutcome(ApplyConfigStatus::LiveApplyFailed, false, false);
-    return false;
-#endif
-
     struct PreparedPatch {
         Config::ConfigPatchTlv patch;
         std::vector<std::string> patchPaths;

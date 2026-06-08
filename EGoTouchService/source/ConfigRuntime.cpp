@@ -331,12 +331,10 @@ bool ConfigRuntime::Initialize(const std::string& configPath, const StartupValid
     std::optional<std::string> cliConfigPath;
     if (!configPath.empty()) cliConfigPath = configPath;
     auto paths = Config::resolve(cliConfigPath);
-#if EGOTOUCH_CONFIG_ENABLED
     if (!paths.has_value()) {
         LOG_ERROR("Service", __func__, "Config", "config/default.yaml was not resolved; startup blocked.");
         return false;
     }
-#endif
     if (paths.has_value()) {
         try {
             Config::ConfigStore yamlDefaults;
@@ -483,7 +481,6 @@ void ConfigRuntime::WriteServiceConfigStateToStoreLocked(const ServiceConfigStat
 }
 
 bool ConfigRuntime::PersistServicePolicyConfig(const ServiceConfigState& config) {
-#if EGOTOUCH_CONFIG_ENABLED
     Config::ConfigStore storeToPersist;
     Config::ConfigStore defaultsToPersist;
     Config::ConfigPaths pathsToPersist;
@@ -505,10 +502,6 @@ bool ConfigRuntime::PersistServicePolicyConfig(const ServiceConfigState& config)
         LOG_ERROR("Service", __func__, "Config", "PersistConfig failed: {}", ex.what());
         return false;
     }
-#else
-    (void)config;
-    return false;
-#endif
 }
 
 ConfigRuntime::TlvApplyResult ConfigRuntime::ApplyTlvChunk(const Ipc::ConfigTlvChunkRequestWire& chunk) {
@@ -738,7 +731,6 @@ ConfigRuntime::V3ApplyResult ConfigRuntime::ApplyConfigPatchV3(uint32_t baseSche
 
 ConfigRuntime::V3PersistResult ConfigRuntime::PersistConfigV3() {
     V3PersistResult result{};
-#if EGOTOUCH_CONFIG_ENABLED
     Config::ConfigStore storeToPersist;
     Config::ConfigStore defaultsToPersist;
     Config::ConfigPaths pathsToPersist;
@@ -790,12 +782,6 @@ ConfigRuntime::V3PersistResult ConfigRuntime::PersistConfigV3() {
         LOG_ERROR("Service", __func__, "Config", "PersistConfigV3 failed: {}", ex.what());
     }
     return result;
-#else
-    result.ipcStatus = Ipc::IpcStatusCode::UnsupportedCommand;
-    result.status = Ipc::ConfigV3MutationStatus::PersistFailed;
-    result.failedCount = 1;
-    return result;
-#endif
 }
 
 } // namespace Service

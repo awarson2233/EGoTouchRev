@@ -9,11 +9,7 @@
 #endif
 #endif
 
-// Runtime config is independent from diagnostic fields. It is enabled only when
-// the build system explicitly defines EGOTOUCH_CONFIG_ENABLED=1.
-#ifndef EGOTOUCH_CONFIG_ENABLED
-#define EGOTOUCH_CONFIG_ENABLED 0
-#endif
+// Runtime config is the product path and is always compiled in.
 
 #if defined(_M_ARM64) || defined(__aarch64__) || defined(__ARM_NEON)
 #if defined(__clang__)

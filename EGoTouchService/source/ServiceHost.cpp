@@ -43,7 +43,6 @@
 #include <utility>
 #include <vector>
 
-#if EGOTOUCH_CONFIG_ENABLED
 static std::string g_overrideConfigPath;
 static bool g_commandLineParsed = false;
 
@@ -115,12 +114,6 @@ static std::string GetConfigPath() {
     EnsureCommandLineParsed();
     return g_overrideConfigPath;
 }
-#else
-// Release: returns empty string — callers should skip file I/O when path is empty
-static std::string GetConfigPath() {
-    return "";
-}
-#endif
 
 namespace Service {
 

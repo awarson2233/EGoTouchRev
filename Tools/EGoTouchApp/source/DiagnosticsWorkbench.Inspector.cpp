@@ -284,10 +284,6 @@ void DiagnosticsWorkbench::DrawTouchPipelineConfigPanel() {
         return;
     }
 
-#if !EGOTOUCH_CONFIG_ENABLED
-    ImGui::TextColored(WarnColor(), "Runtime config apply is disabled in this build (EGOTOUCH_CONFIG_ENABLED=0).");
-    ImGui::TextWrapped("Touch pipeline parameters remain editable in the app-local ConfigStore, but Apply Global is disabled and cannot update Service/YAML.");
-#endif
 
     const auto& schema = m_proxy->GetConfigSchemaSnapshot();
     const auto modules = CollectModuleTagsWithPrefix(schema, "Touch /");
@@ -340,20 +336,12 @@ void DiagnosticsWorkbench::DrawTouchPipelineConfigPanel() {
             ImGui::EndDisabled();
         }
 
-#if !EGOTOUCH_CONFIG_ENABLED
-        ImGui::BeginDisabled();
-        ImGui::Button("Apply Global");
-        ImGui::EndDisabled();
-        ImGui::SameLine();
-        ImGui::TextDisabled("Apply disabled; global Service/YAML apply is unavailable.");
-#else
         if (ImGui::Button("Apply Global")) {
             m_proxy->ApplyConfigStoreGlobally();
         }
         ImGui::SameLine();
-        ImGui::TextDisabled("Live-applies supported keys; persistence depends on Service/build support.");
+        ImGui::TextDisabled("Live-applies supported keys; persistence depends on Service/YAML availability.");
         DrawApplyConfigResultStatus();
-#endif
 
         ImGui::EndTable();
     }
@@ -603,12 +591,7 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
         }
 
         if (ImGui::BeginTabItem("Config")) {
-#if !EGOTOUCH_CONFIG_ENABLED
-            ImGui::TextColored(WarnColor(), "Runtime config apply is disabled in this build (EGOTOUCH_CONFIG_ENABLED=0).");
-            ImGui::TextWrapped("Stylus pipeline parameters remain editable in the app-local ConfigStore, but Apply Global is disabled and cannot update Service/YAML.");
-#else
-            ImGui::TextWrapped("Edit stylus pipeline parameters by module. Apply Global sends supported keys to the Service for live apply; persistence depends on Service/build support.");
-#endif
+            ImGui::TextWrapped("Edit stylus pipeline parameters by module. Apply Global sends supported keys to the Service for live apply; persistence depends on Service/YAML availability.");
             const auto& schema = m_proxy->GetConfigSchemaSnapshot();
             auto modules = CollectModuleTagsWithPrefix(schema, "Stylus /");
             if (modules.empty()) {
@@ -620,20 +603,12 @@ void DiagnosticsWorkbench::DrawStylusControlPanel() {
                         Config::ConfigStore& draftView = m_proxy->GetMutableConfigDraftStoreForUi();
                         ConfigUIRenderer::RenderConfigStoreByModule(schema, draftView, module, &changedPaths);
                         m_proxy->CommitConfigDraftEdits(changedPaths);
-#if !EGOTOUCH_CONFIG_ENABLED
-                        ImGui::BeginDisabled();
-                        ImGui::Button("Apply Global");
-                        ImGui::EndDisabled();
-                        ImGui::SameLine();
-                        ImGui::TextDisabled("Apply disabled; global Service/YAML apply is unavailable.");
-#else
                         if (ImGui::Button("Apply Global")) {
                             m_proxy->ApplyConfigStoreGlobally();
                         }
                         ImGui::SameLine();
-                        ImGui::TextDisabled("Live-applies supported keys; persistence depends on Service/build support.");
+                        ImGui::TextDisabled("Live-applies supported keys; persistence depends on Service/YAML availability.");
                         DrawApplyConfigResultStatus();
-#endif
                         ImGui::EndTabItem();
                     }
                 }

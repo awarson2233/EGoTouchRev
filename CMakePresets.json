@@ -30,16 +30,45 @@
         },
         "CMAKE_C_COMPILER_TARGET": "arm64-pc-windows-msvc",
         "CMAKE_CXX_COMPILER_TARGET": "arm64-pc-windows-msvc",
-        "EGOTOUCH_ENABLE_RUNTIME_CONFIG": {
-          "type": "BOOL",
-          "value": "ON"
-        },
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}"
       },
       "vendor": {
         "microsoft.com/VisualStudioSettings/CMake/1.0": {
           "hostOS": "Windows",
           "intelliSenseMode": "windows-msvc-arm64"
+        }
+      }
+    },
+    {
+      "name": "amd64-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": {
+          "type": "BOOL",
+          "value": "ON"
+        },
+        "CMAKE_C_COMPILER": {
+          "type": "FILEPATH",
+          "value": "C:/Program Files/LLVM/bin/clang-cl.exe"
+        },
+        "CMAKE_CXX_COMPILER": {
+          "type": "FILEPATH",
+          "value": "C:/Program Files/LLVM/bin/clang-cl.exe"
+        },
+        "CMAKE_C_COMPILER_TARGET": "x86_64-pc-windows-msvc",
+        "CMAKE_CXX_COMPILER_TARGET": "x86_64-pc-windows-msvc",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "hostOS": "Windows",
+          "intelliSenseMode": "windows-msvc-x64"
         }
       }
     },
@@ -58,6 +87,14 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
+    },
+    {
+      "name": "amd64-Debug",
+      "displayName": "amd64 Debug",
+      "inherits": "amd64-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
     }
   ],
   "buildPresets": [
@@ -70,6 +107,11 @@
       "name": "arm64-Release",
       "displayName": "arm64 Release Build",
       "configurePreset": "arm64-Release"
+    },
+    {
+      "name": "amd64-Debug",
+      "displayName": "amd64 Debug Build",
+      "configurePreset": "amd64-Debug"
     }
   ],
   "testPresets": [
@@ -82,6 +124,11 @@
       "name": "arm64-Release",
       "displayName": "arm64 Release Test",
       "configurePreset": "arm64-Release"
+    },
+    {
+      "name": "amd64-Debug",
+      "displayName": "amd64 Debug Test",
+      "configurePreset": "amd64-Debug"
     }
   ]
 }
