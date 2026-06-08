@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <bit>
 #include <cstdint>
+#include <limits>
 #include <string>
 
 namespace Dvr {
@@ -38,12 +39,25 @@ Config::ConfigStore RuntimeConfigSnapshot::toConfigStore() const {
             store.set<bool>(path, valueIt->rawValue != 0);
             break;
         case Format::Dvr2ConfigValueType::UInt8:
+            if (valueIt->rawValue > std::numeric_limits<uint8_t>::max()) {
+                continue;
+            }
+            store.set<int32_t>(path, static_cast<int32_t>(valueIt->rawValue));
+            break;
         case Format::Dvr2ConfigValueType::UInt16:
+            if (valueIt->rawValue > std::numeric_limits<uint16_t>::max()) {
+                continue;
+            }
+            store.set<int32_t>(path, static_cast<int32_t>(valueIt->rawValue));
+            break;
         case Format::Dvr2ConfigValueType::UInt32:
+            if (valueIt->rawValue > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
+                continue;
+            }
             store.set<int32_t>(path, static_cast<int32_t>(valueIt->rawValue));
             break;
         case Format::Dvr2ConfigValueType::Int32:
-            store.set<int32_t>(path, static_cast<int32_t>(std::bit_cast<int64_t>(valueIt->rawValue)));
+            store.set<int32_t>(path, std::bit_cast<int32_t>(static_cast<uint32_t>(valueIt->rawValue & 0xFFFFFFFFull)));
             break;
         case Format::Dvr2ConfigValueType::Float32:
             store.set<float>(path, std::bit_cast<float>(static_cast<uint32_t>(valueIt->rawValue)));

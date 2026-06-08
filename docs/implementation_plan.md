@@ -81,8 +81,8 @@ Build output and installer layout are validated by `PackagingConfigLayoutTest`:
 - `EGoTouchService.exe` output directory contains `config/default.yaml`.
 - `EGoTouchApp.exe` output directory contains `config/default.yaml`.
 - output `default.yaml` SHA-256 matches repository `config/default.yaml`.
-- `scripts/EGoTouchSetup.wxs` packages `build\config\default.yaml`.
-- `scripts/EGoTouchTestSetup.wxs` packages `build\config\default.yaml`.
+- `cmake --install` into the test install prefix produces `EGoTouchService.exe`, `EGoTouchApp.exe`, and `config/default.yaml`.
+- WiX `DefaultConfigYAML` uses `$(var.BuildOutputDir)\config\default.yaml`; the test expands this source path for the active build dir and verifies the file exists and hash-matches repository `config/default.yaml`.
 
 CMake install rules also install:
 
@@ -100,7 +100,7 @@ Current implementation:
 
 - `ServiceProxy::CaptureRuntimeConfigSnapshot()` reads Service/App atomics plus selected pipeline fields.
 - `BuildRuntimeConfigSnapshotFromState()` builds contiguous field/value ids and computes DVR2 runtime config schema hash.
-- `RuntimeConfigSnapshot::toConfigStore()` converts bool, signed int, unsigned int, float32, float64, and string runtime config values to `ConfigStore`.
+- `RuntimeConfigSnapshot::toConfigStore()` converts bool, signed int, bounded unsigned int, float32, float64, and string runtime config values to `ConfigStore`; `UInt32` values above `INT32_MAX` are skipped because `ConfigStore` has no unsigned 32-bit value type.
 - `DvrCoreRuntimeConfigRoundTripTest` validates DVR2 write/read and `toConfigStore()` conversion.
 - `EGoTouchApp.ServiceProxyRuntimeConfigSnapshotTest` validates App snapshot fields, types, field/value alignment, and schema metadata.
 

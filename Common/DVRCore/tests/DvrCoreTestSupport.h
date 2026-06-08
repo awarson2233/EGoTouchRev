@@ -153,6 +153,8 @@ inline Dvr::RuntimeConfigSnapshot MakeRuntimeConfigSnapshot() {
     addField(5, Dvr::Format::Dvr2ConfigValueType::Float32, "Filter", "Alpha");
     addField(6, Dvr::Format::Dvr2ConfigValueType::Float64, "Filter", "Beta");
     addField(7, Dvr::Format::Dvr2ConfigValueType::String, "Service", "desired_mode");
+    addField(8, Dvr::Format::Dvr2ConfigValueType::UInt32, "Service", "safe_counter");
+    addField(9, Dvr::Format::Dvr2ConfigValueType::UInt32, "Service", "too_large_counter");
 
     auto addValue = [&](uint32_t id, Dvr::Format::Dvr2ConfigValueType type, uint64_t raw, std::string text = {}) {
         Dvr::RuntimeConfigValue value{};
@@ -172,6 +174,8 @@ inline Dvr::RuntimeConfigSnapshot MakeRuntimeConfigSnapshot() {
     addValue(5, Dvr::Format::Dvr2ConfigValueType::Float32, f32);
     addValue(6, Dvr::Format::Dvr2ConfigValueType::Float64, f64);
     addValue(7, Dvr::Format::Dvr2ConfigValueType::String, 0, "full");
+    addValue(8, Dvr::Format::Dvr2ConfigValueType::UInt32, 0x7FFFFFFFull);
+    addValue(9, Dvr::Format::Dvr2ConfigValueType::UInt32, 0x80000000ull);
     return snapshot;
 }
 

@@ -1,5 +1,8 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <?ifndef BuildOutputDir ?>
+    <?define BuildOutputDir = "build" ?>
+  <?endif ?>
   <!--
     EGoTouchRev 测试版安装包
     包含核心服务 + 诊断上位机 + 测试工具。
@@ -26,7 +29,7 @@
 
       <!-- 核心服务 -->
       <Component Id="EGoTouchServiceComp" Guid="FCF77309-64AC-4F98-8424-B1D6144D9757">
-        <File Id="EGoTouchServiceEXE" Source="build\EGoTouchService.exe" KeyPath="yes" />
+        <File Id="EGoTouchServiceEXE" Source="$(var.BuildOutputDir)\EGoTouchService.exe" KeyPath="yes" />
 
         <ServiceInstall
             Id="EGoTouchServiceInstaller"
@@ -46,16 +49,16 @@
 
       <!-- 诊断上位机 EGoTouchApp -->
       <Component Id="EGoTouchAppComp" Guid="E198F02C-4BA7-4E90-B7FD-A99A0FA5EB21">
-        <File Id="EGoTouchAppEXE" Source="build\EGoTouchApp.exe" KeyPath="yes" />
+        <File Id="EGoTouchAppEXE" Source="$(var.BuildOutputDir)\EGoTouchApp.exe" KeyPath="yes" />
       </Component>
 
       <!-- BT MCU 测试工具 -->
       <Component Id="BtMcuTestToolComp" Guid="5247FBFC-E500-47E4-BCE5-23FE9A0C3817">
-        <File Id="BtMcuTestToolEXE" Source="build\BtMcuTestTool.exe" KeyPath="yes" />
+        <File Id="BtMcuTestToolEXE" Source="$(var.BuildOutputDir)\BtMcuTestTool.exe" KeyPath="yes" />
       </Component>
 
       <Component Id="DefaultConfigComp" Directory="CONFIGFOLDER" Guid="B0D74677-16A8-4D95-B5FC-A7023D652079">
-        <File Id="DefaultConfigYAML" Source="build\config\default.yaml" KeyPath="yes" />
+        <File Id="DefaultConfigYAML" Source="$(var.BuildOutputDir)\config\default.yaml" KeyPath="yes" />
       </Component>
 
     </ComponentGroup>

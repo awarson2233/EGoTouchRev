@@ -1,5 +1,8 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <?ifndef BuildOutputDir ?>
+    <?define BuildOutputDir = "build" ?>
+  <?endif ?>
   <!--
     EGoTouchRev 核心服务安装包
     - UpgradeCode 全局唯一，永不修改，用于覆盖更新旧版本。
@@ -33,7 +36,7 @@
     <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
 
       <Component Id="EGoTouchServiceComp" Guid="FCF77309-64AC-4F98-8424-B1D6144D9757">
-        <File Id="EGoTouchServiceEXE" Source="build\EGoTouchService.exe" KeyPath="yes" />
+        <File Id="EGoTouchServiceEXE" Source="$(var.BuildOutputDir)\EGoTouchService.exe" KeyPath="yes" />
 
         <!-- 由 Windows Installer 原生注册系统服务 -->
         <ServiceInstall
@@ -54,7 +57,7 @@
       </Component>
 
       <Component Id="DefaultConfigComp" Directory="CONFIGFOLDER" Guid="B0D74677-16A8-4D95-B5FC-A7023D652079">
-        <File Id="DefaultConfigYAML" Source="build\config\default.yaml" KeyPath="yes" />
+        <File Id="DefaultConfigYAML" Source="$(var.BuildOutputDir)\config\default.yaml" KeyPath="yes" />
       </Component>
 
     </ComponentGroup>

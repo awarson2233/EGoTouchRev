@@ -39,10 +39,10 @@
 - [x] `ConfigKeyId` / `ConfigKeyMap` 覆盖所有当前 `TouchPipeline::registerBindings()` 中 runtime-bound/UserOverride/live patchable `touch.*` key。
 - [x] `ConfigDefaultYamlDriftTest` 要求 patchable `UserOverride` key 必须有静态 `ConfigKeyId`，并校验 path/keyId 双向 round-trip。
 - [x] `ConfigRuntimeTest` 覆盖 live key、restart-required key、新映射 touch key 的 patch、persist、restart reload；同时校验 `overrides.yaml` 只保存与 default 不同的 `UserOverride` key。
-- [x] `RuntimeConfigSnapshot::toConfigStore()` 已实现，DVR runtime config bool/int/uint/float/string 可转换到 `ConfigStore`。
+- [x] `RuntimeConfigSnapshot::toConfigStore()` 已实现，DVR runtime config bool/int/bounded uint/float/string 可转换到 `ConfigStore`；`UInt32 > INT32_MAX` 因 `ConfigStore` 无 unsigned 32-bit 类型而跳过。
 - [x] `BuildRuntimeConfigSnapshotFromState()` / `ServiceProxy::CaptureRuntimeConfigSnapshot()` 已实现并注册 `EGoTouchApp.ServiceProxyRuntimeConfigSnapshotTest`。
-- [x] CMake `install()` 规则安装 `config/default.yaml`；WiX `EGoTouchSetup.wxs` / `EGoTouchTestSetup.wxs` 打包 `build\config\default.yaml`。
-- [x] 新增 `PackagingConfigLayoutTest`，校验 `EGoTouchService.exe` / `EGoTouchApp.exe` 输出目录旁的 `config/default.yaml` 与仓库默认配置 hash 一致，并校验 WiX source。
+- [x] CMake `install()` 规则安装 `config/default.yaml`；WiX `EGoTouchSetup.wxs` / `EGoTouchTestSetup.wxs` 通过 `$(var.BuildOutputDir)\config\default.yaml` 引用当前 build output。
+- [x] 新增 `PackagingConfigLayoutTest`，校验 `EGoTouchService.exe` / `EGoTouchApp.exe` 输出目录旁的 `config/default.yaml`、真实 install prefix、以及 WiX `DefaultConfigYAML` source 文件均与仓库默认配置 hash 一致。
 
 ---
 
@@ -57,8 +57,8 @@
 
 - [x] 2.1.2 `TouchPipeline::registerBindings()` 已覆盖当前 active touch runtime keys。
 - [x] 2.1.3 `TouchPipeline::applyConfig()` 从 `ConfigStore` 一次性读取并缓存成员字段。
-- [x] 2.4.2 `RuntimeConfigSnapshot::toConfigStore()` 已实现。
-- [x] 2.4.4 `DvrCoreRuntimeConfigRoundTripTest` 覆盖 runtime config DVR2 round-trip 与 `ConfigStore` 转换。
+- [x] 2.4.2 `RuntimeConfigSnapshot::toConfigStore()` 已实现，`UInt32` 超出 `int32_t` 表示范围时跳过。
+- [x] 2.4.4 `DvrCoreRuntimeConfigRoundTripTest` 覆盖 runtime config DVR2 round-trip、`ConfigStore` 转换与 `UInt32` 边界。
 
 ### Phase 3: IPC 协议
 
@@ -69,9 +69,9 @@
 
 ### Phase 4: UI + 打包
 
-- [x] 4.2.1 `POST_BUILD` 规则复制 `config/` 到输出目录。
+- [x] 4.2.1 `POST_BUILD` 规则复制 `config/default.yaml` 到输出目录。
 - [x] 4.2.2 `install()` 规则安装 `config/default.yaml`。
-- [x] 4.2.3 `PackagingConfigLayoutTest` 验证 build output `config/default.yaml` 在 exe 同目录且内容一致。
+- [x] 4.2.3 `PackagingConfigLayoutTest` 验证 build output `config/default.yaml` 在 exe 同目录且内容一致，验证 `cmake --install` 的 install prefix，并验证 WiX `DefaultConfigYAML` source 文件存在且 hash 一致。
 - [x] 4.3.2 配置修改 persist 行为由 `ConfigRuntimeTest` 覆盖。
 - [x] 4.3.3 `overrides.yaml` 只包含与 default 不同的 `UserOverride` key，由 `ConfigRuntimeTest` 覆盖。
 - [x] 4.3.4 Service restart reload 后保持 persisted live/restart-required key，由 `ConfigRuntimeTest` 覆盖。
@@ -81,6 +81,7 @@
 ```powershell
 cmake --preset arm64-Debug
 cmake --build --preset arm64-Debug --target ConfigRuntimeTest ConfigDefaultYamlDriftTest DvrCoreRuntimeConfigRoundTripTest EGoTouchApp_ServiceProxyRuntimeConfigSnapshotTest EGoTouchApp EGoTouchService
+cmake --install build/arm64-Debug --prefix build/arm64-Debug/test-workdirs/manual-install-check
 ctest --test-dir build/arm64-Debug -R "ConfigRuntimeTest|ConfigDefaultYamlDriftTest|DvrCoreRuntimeConfigRoundTripTest|EGoTouchApp\.ServiceProxyRuntimeConfigSnapshotTest|PackagingConfigLayoutTest|EGoTouchApp\.ServiceProxyCatalogSchemaTest" --output-on-failure
 git diff --check
 ```

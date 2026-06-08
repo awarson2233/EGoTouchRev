@@ -320,10 +320,12 @@ endif()
 
 function(ego_copy_config_to_output target)
     add_custom_command(TARGET ${target} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${CMAKE_CURRENT_SOURCE_DIR}/config"
+        COMMAND ${CMAKE_COMMAND} -E make_directory
             "$<TARGET_FILE_DIR:${target}>/config"
-        COMMENT "Copy config/default.yaml and optional overrides.yaml for ${target}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/config/default.yaml"
+            "$<TARGET_FILE_DIR:${target}>/config/default.yaml"
+        COMMENT "Copy config/default.yaml for ${target}"
     )
 endfunction()
 
@@ -635,9 +637,13 @@ if (EGO_BUILD_TESTS)
         COMMAND ${CMAKE_COMMAND}
             "-DSERVICE_EXE=$<TARGET_FILE:EGoTouchService>"
             "-DAPP_EXE=$<TARGET_FILE:EGoTouchApp>"
+            "-DBUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+            "-DINSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}/test-workdirs/PackagingConfigLayoutTest/install"
             "-DSOURCE_DEFAULT_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/config/default.yaml"
             "-DWIX_SETUP=${CMAKE_CURRENT_SOURCE_DIR}/scripts/EGoTouchSetup.wxs"
             "-DWIX_TEST_SETUP=${CMAKE_CURRENT_SOURCE_DIR}/scripts/EGoTouchTestSetup.wxs"
+            "-DWIX_SOURCE_BASE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+            "-DWIX_BUILD_OUTPUT_DIR=$<TARGET_FILE_DIR:EGoTouchService>"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyConfigLayout.cmake")
     set_tests_properties(PackagingConfigLayoutTest PROPERTIES
         LABELS "packaging;config;device-free"

@@ -2,6 +2,7 @@
 #include "config/ConfigStore.h"
 
 #include <iostream>
+#include <limits>
 
 namespace {
 
@@ -36,6 +37,8 @@ void TestRuntimeConfigRoundTrip() {
     DvrCoreTest::Require(readConfig.values[4].rawValue == 0x3F000000u, "runtime float32 bits should round-trip");
     DvrCoreTest::Require(readConfig.values[5].rawValue == 0x3FF8000000000000ull, "runtime float64 bits should round-trip");
     DvrCoreTest::Require(readConfig.values[6].stringValue == "full", "runtime string value should round-trip");
+    DvrCoreTest::Require(readConfig.values[7].rawValue == 0x7FFFFFFFull, "runtime uint32 safe value should round-trip");
+    DvrCoreTest::Require(readConfig.values[8].rawValue == 0x80000000ull, "runtime uint32 overflow value should round-trip");
 
     const auto configStore = readConfig.toConfigStore();
     DvrCoreTest::Require(configStore.getOr<bool>("TouchPipeline.BaselineEnabled", false),
@@ -48,6 +51,10 @@ void TestRuntimeConfigRoundTrip() {
                          "runtime config float32 should convert to ConfigStore");
     DvrCoreTest::Require(configStore.getOr<std::string>("Service.desired_mode", "") == "full",
                          "runtime config string should convert to ConfigStore");
+    DvrCoreTest::Require(configStore.getOr<int32_t>("Service.safe_counter", 0) == std::numeric_limits<int32_t>::max(),
+                         "runtime config uint32 within int32 range should convert to ConfigStore");
+    DvrCoreTest::Require(!configStore.has("Service.too_large_counter"),
+                         "runtime config uint32 above int32 range should be skipped");
 
     std::filesystem::remove(path);
 }
