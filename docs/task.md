@@ -1,6 +1,7 @@
 # Config 重构任务清单
 
-> 基于: [implementation_plan.md](implementation_plan.md) | 当前权威进度见: [config_v3_full_upgrade_plan.md](artifacts/config_v3_full_upgrade_plan.md)
+> 基于: [implementation_plan.md](implementation_plan.md) | 当前权威: 本文顶部“Config v3 当前主线”与 [implementation_plan.md](implementation_plan.md) 的“后续实施编排 Gate”
+> 历史参考: `docs/artifacts/config_v3_full_upgrade_plan.md` 是 P1-2 后 artifact，不再作为当前权威进度；其中对 strategy fields / IConfigTarget 的未落地描述已被 P1-3/P1-4 后续实现覆盖。
 > 原则: 分阶段迁移到 Config v3；最终删除 legacy fixed ABI fallback，本地 fallback 保留为 Service 不可用/离线场景
 
 状态: `[ ]` 待开始 `[~]` 进行中 `[x]` 已完成 `[-]` 已取消
@@ -16,7 +17,7 @@
 - [x] P1-2 App connected mode 删除 legacy `GetConfigSnapshot=42` fallback；本地 binder/YAML fallback 仅保留为 Service 不可用/离线路径
 - [x] P1-3 Catalog strategy fields：`ConfigScope` / `ConfigApplyTiming` / `ConfigPersistPolicy` 进入 schema、descriptor、binding 与 v3 catalog payload；catalog wire version 升为 2，snapshot 保持 version 1；App/UI live patch 过滤 `ReadOnly` / `StartupOnly` / `RestartRequired`
 - [x] P1-4 `IConfigTarget` / target registry：`ConfigRuntime` 通过 target validate 后 commit，失败不落库；默认注册 `ServicePolicyTarget` / `PipelineConfigTarget`；ServiceHost 按 apply action plan 在 runtime mutex 外执行 pipeline apply；IIR 关系校验迁入 pipeline target
-- [x] P1-5 Catalog-to-`default.yaml` generator/check；runtime-derived drift check 已接入 CTest，消除 Catalog/default.yaml 漂移
+- [x] P1-5 runtime-derived `default.yaml` drift check；已接入 CTest，校验 Catalog/schema/default 一致性，避免 `config/default.yaml` 漂移
 - [x] P1-6 v3 Patch/Persist result 完整化；`ApplyConfigPatchV3` / `PersistConfigV3` 已落地，支持 restart-required staged/persist/restart 语义（当前 patch payload cap: 240 bytes）
 - [ ] P1-7 App `ConfigDraft` 完整拆分 snapshot cache、editable draft、dirty baseline、apply/persist state
 - [ ] P2 legacy fixed ABI cleanup：删除 Service/Common 旧 `ConfigSnapshotWire` / `ApplyConfigPatchRequestWire` 主路径；保留本地离线 fallback

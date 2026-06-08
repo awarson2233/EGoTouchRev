@@ -1,6 +1,6 @@
 # Config 配置系统重构方案 — 纯运行时 Config-Driven 架构
 
-> 日期: 2026-06-05 | 策略: 完全重构, 不兼容旧格式 | 原则: 配置文件是唯一权威数据源
+> 日期: 2026-06-05 | 策略: 完全重构, 不兼容旧格式 | 原则: `default.yaml` + `overrides.yaml` 提供启动/持久化来源，`ConfigRuntime` 是运行时事务权威
 
 > 当前实现进度: 截至 2026-06-08，P1-3 Catalog 策略字段、P1-4 `IConfigTarget` registry、P1-5 runtime-derived `default.yaml` drift check、P1-6 v3 Patch/Persist result 已合入并通过 review。当前架构仍是 v3 过渡态：Catalog/Snapshot/Patch/Persist v3 IPC 已落地，ConfigRuntime 已通过 target validate/rollback/action plan 管理 live patch 与 restart-required staged patch；App `ConfigDraft`、legacy fixed ABI cleanup、build macro cleanup、packaging/e2e 仍待完成。
 
@@ -10,7 +10,7 @@
 
 ### 1.1 核心原则
 
-1. **配置文件是唯一权威数据源** — 所有可配置值来自 `default.yaml`, 用户覆盖来自 `overrides.yaml`
+1. **启动/持久化来源与运行时权威分离** — `default.yaml` + `overrides.yaml` 是 Service 启动加载和持久化输入；`ConfigRuntime` 是 live patch、target validate、commit/rollback、restart-required staged patch 的运行时事务权威；Catalog/schema/default 通过 runtime-derived drift check 保持一致。
 2. **无代码生成, 无编译期硬编码** — 修改配置不需要重新编译; 发行时携带配置文件
 3. **运行时加载 + Schema 校验** — 启动时加载, 类型错误/越界/缺键在启动阶段精确报告
 
@@ -372,8 +372,8 @@ enum class ConfigApplyTiming : uint8_t {
 };
 
 enum class ConfigPersistPolicy : uint8_t {
-    Persistable,
     RuntimeOnly,
+    UserOverride,
     GeneratedDefault,
     Deprecated,
 };
@@ -384,6 +384,7 @@ enum class ConfigPersistPolicy : uint8_t {
 - `ConfigSchemaEntry` / `ConfigDescriptor` / `BindingEntry` round-trip 这些字段。
 - `GetConfigCatalogV3` 输出 catalog v2，App 解析后按 `applyTiming` 过滤不可 live patch 的键。
 - `service.mode` 标记为 `RestartRequired`，不会被 App 当作 live immediate patch 发送。
+- `PersistConfigV3` 只保存 `UserOverride` entries；`RuntimeOnly` / `GeneratedDefault` / `Deprecated` 计入 skipped。
 
 仍待完成:
 
@@ -415,7 +416,7 @@ parse TLV -> schema/type/range validation -> candidate ConfigStore
 - target 不应在 `ConfigRuntime` mutex 内执行阻塞 I/O 或回调 runtime。
 - 外部设备/pipeline apply 必须通过 action plan 在 mutex 外执行。
 
-### 2.8 default.yaml drift check — Catalog 默认值门禁
+### 2.8 default.yaml drift check — runtime-derived 默认值门禁
 
 当前已新增 runtime-derived drift check:
 
@@ -508,11 +509,12 @@ touch:
   #   area_threshold: 500
 
 stylus:
-  hpp2:
-    enabled: true
-    sensor_tx_count: 60            # 1..100
-    sensor_rx_count: 40            # 1..100
-  # ... (全部 ~65 键在此列出)
+  sp:
+    frame_parser_enabled: true        # Frame Parser Enabled
+    iir_filter_enabled: true          # IIR Filter Enabled
+    lock_sensor_tx_count: 60          # 1..200
+    lock_sensor_rx_count: 40          # 1..200
+  # HPP2 runtime configuration 已移除；当前默认配置使用 stylus.sp.*。
 
 dvr:
   # ... (DVR 配置键)
@@ -687,7 +689,7 @@ EGoTouchRev-2.0.0/
 
 ## 六、实施计划
 
-### 当前 v3 主线进度 (2026-06-07)
+### 当前 v3 主线进度 (2026-06-08)
 
 | 阶段 | 状态 | 当前结果 |
 |------|------|----------|
@@ -696,7 +698,7 @@ EGoTouchRev-2.0.0/
 | P1-2 App connected legacy snapshot fallback 删除 | 已完成 | connected mode 不再 fallback 到 legacy `GetConfigSnapshot=42`; 本地 fallback 仅用于 Service 不可用/离线 |
 | P1-3 Catalog strategy fields | 已完成 | `ConfigScope` / `ConfigApplyTiming` / `ConfigPersistPolicy` 已进入 catalog v2 round-trip; App live patch 过滤不可 live apply 键 |
 | P1-4 `IConfigTarget` registry | 已完成 | `ConfigRuntime` 通过 target validate 后 commit，失败 rollback; `ServicePolicyTarget` / `PipelineConfigTarget` 默认注册; apply action 在 mutex 外执行 |
-| P1-5 Catalog-to-`default.yaml` generator/check | 已完成 | `ConfigDefaultYamlDriftTest` 从 runtime factory defaults/schema 生成 YAML 并与仓库 `config/default.yaml` 语义比较；CTest 增至 40 |
+| P1-5 runtime-derived `default.yaml` drift check | 已完成 | `ConfigDefaultYamlDriftTest` 从 runtime factory defaults/schema 生成 YAML 并与仓库 `config/default.yaml` 语义比较；CTest 增至 40 |
 | P1-6 v3 Patch/Persist result | 已完成 | `ApplyConfigPatchV3` / `PersistConfigV3` 已落地；支持 result wire、VersionMismatch retry、semantic reject result、restart-required staged flow；patch payload cap 240 bytes |
 | P1-7 App `ConfigDraft` | 待完成 | 拆分 Service snapshot cache、用户 draft、dirty baseline、apply/persist state |
 | P2 legacy fixed ABI cleanup | 待完成 | 删除 Service/Common 旧 fixed ABI 主路径；本地离线 fallback 保留 |
@@ -797,7 +799,11 @@ EGoTouchRev-2.0.0/
 - Parallelization: docs 写入不并行。
 - Review focus: 文档不能超前声明未验证完成；每个完成项必须能追溯到 review accepted summary 和测试证据；`docs` 是主 agent 独占写入范围。
 
-### Phase 0: 依赖 + 基础组件 (1-2 天)
+### 历史附录：早期 Phase 0–4 方案（非当前执行 Gate）
+
+> 以下 Phase 0–4 来自 2026-06-05 初始拆分，仅保留作为演进记录；不再作为当前执行 Gate 或权威进度。当前执行顺序以上方“当前 v3 主线进度”和“后续实施编排 Gate”为准。
+
+#### Phase 0: 依赖 + 基础组件 (1-2 天)
 
 ```mermaid
 graph LR
@@ -814,7 +820,7 @@ graph LR
 | YamlParser | `Common/include/config/YamlParser.h`, `Common/source/config/YamlParser.cpp` |
 | ConfigStore (基础) | `Common/include/config/ConfigStore.h`, `Common/source/config/ConfigStore.cpp` |
 
-### Phase 1: Schema + Binder + 默认配置 (2-3 天)
+#### Phase 1: Schema + Binder + 默认配置 (2-3 天)
 
 ```mermaid
 graph LR
@@ -829,7 +835,7 @@ graph LR
 | SchemaValidator | `Common/include/config/SchemaValidator.h` |
 | default.yaml | `config/default.yaml` (完整, 所有键+注释) |
 
-### Phase 2: Pipeline 迁移 (3-4 天)
+#### Phase 2: Pipeline 迁移 (3-4 天)
 
 ```mermaid
 graph LR
@@ -852,7 +858,7 @@ graph LR
 | — | 三处重复的 `TrimCopy`/`ParseBoolValue`/`ParseIniKeyValue` |
 | — | `IsLegacyTouchSection()` / `MapLegacyTouchKey()` |
 
-### Phase 3: IPC 协议 (2 天)
+#### Phase 3: IPC 协议 (2 天)
 
 ```mermaid
 graph LR
@@ -867,7 +873,7 @@ graph LR
 | Service IPC handler | `ServiceHost.cpp` |
 | App 侧适配 | `ServiceProxy.Config.cpp`, `ServiceProxy.cpp` |
 
-### Phase 4: UI + 打包 (1-2 天)
+#### Phase 4: UI + 打包 (1-2 天)
 
 ```mermaid
 graph LR
