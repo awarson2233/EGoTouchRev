@@ -22,6 +22,100 @@
 | Service runtime | `EGoTouchService/include/ConfigRuntime.h`, `EGoTouchService/include/ConfigTarget.h` |
 | DVR runtime config snapshot | `Common/DVRCore/include/DvrTypes.h` |
 
+## 1.1 当前架构与配置 CRUD 维护指南
+
+当前 Config 系统的数据流是：
+
+```text
+config/default.yaml + config/overrides.yaml
+    -> ConfigStore
+    -> ConfigBinder / ConfigCatalog / ConfigKeyMap
+    -> ConfigRuntime
+    -> Config v3 IPC catalog/snapshot/patch/persist
+    -> EGoTouchApp ConfigDraft UI
+```
+
+`ConfigRuntime` 是 Service 端运行时事务权威；App connected mode 不能直接改磁盘 YAML，必须通过 Config v3 IPC 读取 catalog/snapshot，并通过 patch/persist 修改配置。App 本地 `ConfigStore` / binder 路径只用于 Service 不可用或离线 fallback。
+
+### 查询配置
+
+| 场景 | 当前入口 | 说明 |
+|------|----------|------|
+| Service 内部读取当前值 | `ConfigRuntime::SnapshotStore()` / `ServiceState()` | 返回当前 runtime store 或 service policy state。 |
+| App connected mode 查询 | `GetConfigCatalogV3` + `GetConfigSnapshotV3` | catalog 给出 schema/keyId/UI/policy，snapshot 给出当前值。 |
+| App UI 读取 draft | `ServiceProxy::GetConfigDraftStore()` / `GetConfigDraftPathState()` | UI 应读取 editable draft 和 per-key state，不直接读取 service YAML。 |
+| 启动/离线读取 | `ConfigStore::loadFromYaml()` + `mergeFrom()` | 只用于 startup load 或 App local fallback。 |
+
+实现事实：`ConfigRuntime` 构建 factory defaults/schema 并提供 catalog/snapshot blob，见 [ConfigRuntime.cpp:315-421](../../EGoTouchService/source/ConfigRuntime.cpp#L315-L421)；App draft 读取和 v3 fetch 入口见 [ServiceProxy.Config.cpp:546-592](../../Tools/EGoTouchApp/source/ServiceProxy.Config.cpp#L546-L592) 与 [ServiceProxy.Config.cpp:1229-1253](../../Tools/EGoTouchApp/source/ServiceProxy.Config.cpp#L1229-L1253)。
+
+### 新增配置项
+
+新增配置项必须同时满足 “YAML 默认值、binder schema、static keyId、runtime apply、测试 gate” 五个约束：
+
+1. 选择稳定 YAML path。当前模块前缀为 `service.*`、`touch.*`、`stylus.*`；不要新增临时/实验性 path 到 public catalog。
+2. 在对应 owner 注册 binding：
+   - Service policy key 在 [ServiceConfigCore.cpp:60-86](../../EGoTouchService/source/ServiceConfigCore.cpp#L60-L86) 注册。
+   - Touch runtime key 在 [TouchPipeline.cpp:233-558](../../EGoTouchService/Solvers/TouchSolver/TouchPipeline.cpp#L233-L558) 注册，并由 `applyConfig()` 缓存到 pipeline 成员。
+   - Stylus runtime key 在 [StylusPipeline.cpp:11-91](../../EGoTouchService/Solvers/StylusSolver/StylusPipeline.cpp#L11-L91) 注册；硬件宽度或手动转换字段使用 `bindSchema(..., ManualLiveApply)`。
+3. 为 patchable `UserOverride` key 分配 static `ConfigKeyId`，并在 `ConfigKeyMap.cpp` 增加双向映射。`ConfigKeyId` 是 IPC ABI，只能追加，不能复用旧 ID；当前 static map 见 [ConfigKeyMap.cpp:14-166](../../Common/source/config/ConfigKeyMap.cpp#L14-L166)。
+4. 更新 `config/default.yaml`，保持默认值与 binding default 一致。不要只改 YAML，也不要只改 C++ default。
+5. 如果该 key 需要 live apply 或 restart-required 行为，确认 target validation/apply 语义。`ConfigRuntime::ApplyConfigPatchV3()` 会校验 base version、TLV、keyId/path、schema policy 和 target validation，见 [ConfigRuntime.cpp:639-663](../../EGoTouchService/source/ConfigRuntime.cpp#L639-L663)。
+
+新增后必须运行 `ConfigDefaultYamlDriftTest`。该测试会校验 repo `default.yaml`、factory defaults、schema 与 static keyId round-trip，见 [ConfigDefaultYamlDriftTest.cpp:103-138](../../EGoTouchService/tests/unit/ConfigDefaultYamlDriftTest.cpp#L103-L138)。
+
+### 修改配置项
+
+| 修改类型 | 处理规则 |
+|----------|----------|
+| 修改默认值 | 同时改 binding default 和 `config/default.yaml`；运行 drift test。 |
+| 修改范围/说明/UI 类型 | 改 binder range/description/type metadata；确认 App catalog/schema test。 |
+| 修改 live/restart 行为 | 改 binding runtime policy 或 target action；补 `ConfigRuntimeTest` 覆盖 apply/persist/restart reload。 |
+| 重命名 YAML path | 按 “新增新 key + 保留/迁移旧 key” 处理；不要把旧 `ConfigKeyId` 直接换绑到语义不同的新 path。 |
+| 修改 enum 值 | 保持 wire/string 表示兼容；变更 mapping 后补 App catalog/schema 与 runtime patch 测试。 |
+
+`ConfigRuntimeTest` 已覆盖 v3 patch、persist、restart reload 和 `overrides.yaml` diff 行为，新增或改变 runtime mutation 语义时应在同一测试附近补用例，参考 [ConfigRuntimeTest.cpp:142-279](../../EGoTouchService/tests/unit/ConfigRuntimeTest.cpp#L142-L279)。
+
+### 删除或废弃配置项
+
+删除配置项要先判断是否已经进入 public IPC/catalog：
+
+1. 如果 key 从未进入 static `ConfigKeyId` / public catalog，可以删除 binding 和 YAML default，并运行 drift test。
+2. 如果 key 已有 static `ConfigKeyId`，不要复用该 ID。优先保留 enum 值为 tombstone/reserved；如仍需 catalog 可见，使用 `ConfigRuntimeBinding::Removed` 或 deprecated policy 表达废弃语义。
+3. 删除 YAML path 时同步清理 `config/default.yaml`、binding、key map 和相关 tests。不要留下 repo YAML-only key；当前 allowlist 为空。
+4. 旧 App/IPC command 不恢复为配置主路径。`ReloadConfig` / `SaveConfig` 等 `40-45` command 只保留 tombstone。
+
+### 运行时修改与持久化
+
+Connected App 修改流程固定为：
+
+```text
+SetConfigDraftValue(path, value)
+    -> CommitConfigDraftEdits(paths)
+    -> ApplyConfigStoreGlobally()
+    -> ApplyConfigPatchV3
+    -> PersistConfigV3
+```
+
+`ServiceProxy::SaveConfig()` 只是兼容入口，内部仍调用 v3 apply/persist 路径，见 [ServiceProxy.Config.cpp:592-973](../../Tools/EGoTouchApp/source/ServiceProxy.Config.cpp#L592-L973)。`PersistConfigV3()` 只写 `ConfigPersistPolicy::UserOverride` 且与 default 不同的值到 `overrides.yaml`，见 [ConfigRuntime.cpp:664-715](../../EGoTouchService/source/ConfigRuntime.cpp#L664-L715)。
+
+### 验证清单
+
+| 改动范围 | 必跑验证 |
+|----------|----------|
+| 新增/删除/改名 key | `ConfigDefaultYamlDriftTest` |
+| patch/persist/restart 行为 | `ConfigRuntimeTest` |
+| App connected UI/draft 行为 | `EGoTouchApp.ServiceProxyCatalogSchemaTest` |
+| keyId/IPC ABI | `IPCCoreProtocolAbiTest` |
+| packaging/default.yaml layout | `PackagingConfigLayoutTest` |
+
+CTest 注册位置见 [CMakeLists.txt:415-438](../../CMakeLists.txt#L415-L438)、[CMakeLists.txt:547-648](../../CMakeLists.txt#L547-L648)。推荐命令：
+
+```powershell
+cmake --build --preset arm64-Debug --target ConfigRuntimeTest ConfigDefaultYamlDriftTest EGoTouchApp_ServiceProxyCatalogSchemaTest IPCCoreProtocolAbiTest
+ctest --test-dir build/arm64-Debug -R "ConfigRuntimeTest|ConfigDefaultYamlDriftTest|EGoTouchApp\.ServiceProxyCatalogSchemaTest|IPCCoreProtocolAbiTest|PackagingConfigLayoutTest" --output-on-failure
+git diff --check
+```
+
 ---
 
 ## 2. ConfigValue
