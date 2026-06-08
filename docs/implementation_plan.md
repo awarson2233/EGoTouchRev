@@ -2,7 +2,7 @@
 
 > 日期: 2026-06-05 | 策略: 完全重构, 不兼容旧格式 | 原则: `default.yaml` + `overrides.yaml` 提供启动/持久化来源，`ConfigRuntime` 是运行时事务权威
 
-> 当前实现进度: 截至 2026-06-08，P1-3 Catalog 策略字段、P1-4 `IConfigTarget` registry、P1-5 runtime-derived `default.yaml` drift check、P1-6 v3 Patch/Persist result 已合入并通过 review。当前架构仍是 v3 过渡态：Catalog/Snapshot/Patch/Persist v3 IPC 已落地，ConfigRuntime 已通过 target validate/rollback/action plan 管理 live patch 与 restart-required staged patch；App `ConfigDraft`、legacy fixed ABI cleanup、build macro cleanup、packaging/e2e 仍待完成。
+> 当前实现进度: 截至 2026-06-08，P1-3 Catalog 策略字段、P1-4 `IConfigTarget` registry、P1-5 runtime-derived `default.yaml` drift check、P1-6 v3 Patch/Persist result、P1-7 App `ConfigDraft` 已合入并通过 review。当前架构仍是 v3 过渡态：Catalog/Snapshot/Patch/Persist v3 IPC 已落地，ConfigRuntime 已通过 target validate/rollback/action plan 管理 live patch 与 restart-required staged patch；App 侧已拆分 `ConfigDraft` snapshot/draft/dirty/apply/persist state；legacy fixed ABI cleanup、build macro cleanup、packaging/e2e 仍待完成。
 
 ---
 
@@ -388,7 +388,7 @@ enum class ConfigPersistPolicy : uint8_t {
 
 仍待完成:
 
-- 完整 App `ConfigDraft` 状态展示和 per-key apply/persist state。
+- App UI 如需 per-row badge/tooltip 展示 `ConfigDraft` per-key state，可作为后续 UI polish 单独处理；当前 per-key state model 与 aggregate 状态已落地。
 - YAML-only / non-user override 是否允许保留的 allowlist 策略。
 
 ### 2.7 IConfigTarget — 事务化 validate/apply 边界
@@ -700,7 +700,7 @@ EGoTouchRev-2.0.0/
 | P1-4 `IConfigTarget` registry | 已完成 | `ConfigRuntime` 通过 target validate 后 commit，失败 rollback; `ServicePolicyTarget` / `PipelineConfigTarget` 默认注册; apply action 在 mutex 外执行 |
 | P1-5 runtime-derived `default.yaml` drift check | 已完成 | `ConfigDefaultYamlDriftTest` 从 runtime factory defaults/schema 生成 YAML 并与仓库 `config/default.yaml` 语义比较；CTest 增至 40 |
 | P1-6 v3 Patch/Persist result | 已完成 | `ApplyConfigPatchV3` / `PersistConfigV3` 已落地；支持 result wire、VersionMismatch retry、semantic reject result、restart-required staged flow；patch payload cap 240 bytes |
-| P1-7 App `ConfigDraft` | 待完成 | 拆分 Service snapshot cache、用户 draft、dirty baseline、apply/persist state |
+| P1-7 App `ConfigDraft` | 已完成 | 已合入本地 `main`（`c003341`）；拆分 Service snapshot cache、editable draft、dirty baseline、per-key apply/persist state；覆盖 dirty snapshot preservation、persist retry、VersionMismatch rebase、RestartRequired staged、offline fallback |
 | P2 legacy fixed ABI cleanup | 待完成 | 删除 Service/Common 旧 fixed ABI 主路径；本地离线 fallback 保留 |
 
 ### 后续实施编排 Gate
@@ -727,17 +727,18 @@ EGoTouchRev-2.0.0/
 - Parallelization: 不允许多 impl agent 并行。当前 dirty diff 覆盖 IPC、Runtime、ServiceHost、App，冲突风险过高。
 - Review focus: 先审 wire layout、status enum、版本、计数、transport failure vs semantic rejection，再审 commit/rollback、restart-required、persist policy、App retry。
 
-#### Step 2: P1-7 ConfigDraft
+#### Step 2: P1-7 ConfigDraft (已完成)
 
-- Task: 先确立 App 侧 `ConfigDraft` 状态模型，再实施；拆分 Service catalog cache、Service snapshot cache、editable draft、dirty baseline、apply state、persist state；UI/ServiceProxy 不再把 `m_configStore` 同时当 snapshot、draft、local preview、apply input。
-- Write scope: `Tools/EGoTouchApp/include/ServiceProxy.h`, `Tools/EGoTouchApp/source/ServiceProxy.Config.cpp`, `Tools/EGoTouchApp/source/DiagnosticsWorkbench.Inspector.cpp`, `Tools/EGoTouchApp/source/ConfigUIRenderer.cpp`, `Tools/EGoTouchApp/tests/ServiceProxyCatalogSchemaTest.cpp`, 可新增 App draft tests。
-- Forbidden scope: 不修改 IPC wire layout；不删除 Service/Common legacy fixed ABI；不清理 `EGOTOUCH_CONFIG_ENABLED`；不修改 docs。
-- Expected behavior: Refresh snapshot 不覆盖 dirty draft；apply+persist 成功后清除对应 dirty key；apply 成功但 persist 失败后 dirty key 保留为 live-applied/unpersisted；apply rejected 后 failed key 保留 dirty 并显示错误状态；VersionMismatch 后 refresh snapshot 并用当前 dirty draft rebase 构造 patch；RestartRequired key 显示 staged/restart-required 而非 live-applied；offline/local fallback 仍可初始化本地 schema/default draft；connected mode 只消费 Service v3 catalog/snapshot。
-- Acceptance: App draft tests 覆盖 snapshot refresh does not clobber dirty draft、apply ok + persist fail keeps dirty、rejected key remains dirty with error、VersionMismatch rebase uses refreshed baseline、RestartRequired staged state；`git diff --check`; `cmake --build --preset arm64-Debug`; `ctest --preset arm64-Debug --output-on-failure`。
-- Agent orchestration: 串行，1 个 impl agent -> 1 个 review agent 循环；review 通过时输出 `Accepted Change Summary for Docs`。
-- Dependencies: 必须在 P1-6 result wire 稳定后开始。
-- Parallelization: 不建议和任何 App cleanup 并行；可并行派只读 audit agent 列 UI 写入点，但不能写代码。
-- Review focus: `ConfigDraft` 是否真实分离 snapshot/draft/dirty/apply/persist，而非仅重命名；不得顺手删除 legacy IPC 或 fallback。
+- Status: 已完成并合入本地 `main`（`c003341 feat: split app config draft state`）；最终 Opus review 返回 `ACCEPT`，Required fixes 为空。主 agent 在 p1-7 worktree 记录 full build passed；`ctest --test-dir build/arm64-Debug --output-on-failure` 40/40 passed。
+- Task: 已确立 App 侧 `ConfigDraft` 状态模型；拆分 Service catalog cache、Service snapshot cache、editable draft、dirty baseline、apply state、persist state；UI/ServiceProxy 不再把旧 `m_configStore` 同时当 snapshot、draft、local preview、apply input。
+- Write scope: `Tools/EGoTouchApp/include/ServiceProxy.h`, `Tools/EGoTouchApp/source/ServiceProxy.Config.cpp`, `Tools/EGoTouchApp/source/DiagnosticsWorkbench.Inspector.cpp`, `Tools/EGoTouchApp/tests/ServiceProxyCatalogSchemaTest.cpp`。
+- Preserved boundaries: 未修改 IPC wire layout；未删除 Service/Common legacy fixed ABI；未清理 `EGOTOUCH_CONFIG_ENABLED`；本地 binder/YAML fallback 继续保留为 Service 不可用/离线路径。
+- Verified behavior: Refresh snapshot 不覆盖 dirty draft；apply+persist 成功后清除对应 dirty key；apply 成功但 persist 失败后 dirty key 保留为 live-applied/unpersisted；同值重提交仍可 retry persist；apply rejected 后 failed key 保留 dirty 并显示错误状态；VersionMismatch 后 refresh snapshot 并用当前 dirty draft rebase 构造 patch；VersionMismatch rebase 到 persist-only 时只 persist、不误判 reject；RestartRequired key 显示 staged/restart-required 而非 live-applied；非 `UserOverride` persist policy 保持 dirty/unpersisted；offline/local fallback 仍可初始化本地 schema/default draft；connected mode 只消费 Service v3 catalog/snapshot。
+- Acceptance: App draft tests 覆盖 snapshot dirty preservation、apply/persist success clean、persist fail unpersisted、same-value persist retry、rejected failed dirty、VersionMismatch rebase、VersionMismatch persist-only rebase、RestartRequired staged、non-user override unpersisted、offline fallback；`git diff --check` passed；full build passed；CTest 40/40 passed。
+- Agent orchestration: 已串行完成；多轮 Opus implement/fix -> review 循环后合入。
+- Dependencies: P1-6 result wire 已稳定；P1-7 已完成，P2 Step 3/4 依赖已满足。
+- Parallelization: 本步骤已结束；后续 App cleanup 不再与 Draft agent 冲突，但 Step 3/4 仍需按写入范围分 worktree。
+- Review focus result: 已确认 `ConfigDraft` 是真实分离 snapshot/draft/dirty/apply/persist，而非仅重命名；未顺手删除 legacy IPC 或 fallback。
 
 #### Step 3: P2 Common/Service Legacy IPC Cleanup
 
@@ -747,7 +748,7 @@ EGoTouchRev-2.0.0/
 - Expected behavior: Service 不再处理 connected legacy fixed config snapshot/apply command；IPC ABI tests 更新为 v3 canonical path；旧 command 值如需保留 tombstone，必须明确 unsupported；v3 catalog/snapshot/patch/persist 仍通过。
 - Acceptance: `git grep` for `ConfigSnapshotWire`, `ApplyConfigPatchRequestWire`, `HandleIpcGetConfigSnapshot`, legacy config apply handler，结果只允许 docs、历史注释或明确 tombstone tests；`git diff --check`; `cmake --build --preset arm64-Debug`; `ctest --preset arm64-Debug --output-on-failure`。
 - Agent orchestration: 可与 Step 4 并行，但必须分 worktree；本步骤 impl agent 专注 Common/Service；独立 review agent 审查。
-- Dependencies: 必须在 P1-6 和 P1-7 后。
+- Dependencies: P1-6 和 P1-7 已完成，依赖已满足。
 - Parallelization: 可与 Step 4 并行；不可与 macro cleanup 并行；`IpcProtocol.h`、`ServiceHost.cpp` 本步骤独占，App cleanup agent 不得写。
 - Review focus: 是否真的删除 Service/Common legacy fixed ABI 主路径；是否误删 v3 paging 或 v3 patch/persist；是否保留合理 unsupported/tombstone 行为。
 
@@ -759,7 +760,7 @@ EGoTouchRev-2.0.0/
 - Expected behavior: connected mode apply/save 只走 v3 patch/persist；connected mode snapshot/catalog 只走 v3；legacy INI merge helpers 若只服务旧 connected path，应删除；offline/local fallback 仍可加载 local schema/default store，UI 可离线展示/编辑本地配置；offline fallback 不得在 connected v3 fetch 失败时伪装成 Service snapshot fallback，除非明确处于 disconnected/offline mode。
 - Acceptance: `git grep` connected legacy helper symbols，确认只剩 offline fallback 或删除；App tests 覆盖 connected does not call legacy snapshot/apply、offline fallback still initializes schema/store、v3 fetch failure in connected mode does not silently replace Service state with legacy snapshot；`git diff --check`; `cmake --build --preset arm64-Debug`; `ctest --preset arm64-Debug --output-on-failure`。
 - Agent orchestration: 可与 Step 3 并行，独立 worktree；review agent 必须确认未破坏 offline fallback。
-- Dependencies: 必须在 P1-7 后；最好和 Step 3 同批，但由主 agent 负责合并冲突。
+- Dependencies: P1-7 已完成，依赖已满足；最好和 Step 3 同批，但由主 agent 负责合并冲突。
 - Parallelization: 可与 Step 3 并行；不可与 Step 2 并行，因为都写 `ServiceProxy.Config.cpp` / `ServiceProxy.h`。
 - Review focus: connected/offline 边界是否清楚；是否误删本地 fallback；`ServiceProxy.Config.cpp` 不能和 Draft agent 同时写。
 

@@ -19,7 +19,7 @@
 - [x] P1-4 `IConfigTarget` / target registry：`ConfigRuntime` 通过 target validate 后 commit，失败不落库；默认注册 `ServicePolicyTarget` / `PipelineConfigTarget`；ServiceHost 按 apply action plan 在 runtime mutex 外执行 pipeline apply；IIR 关系校验迁入 pipeline target
 - [x] P1-5 runtime-derived `default.yaml` drift check；已接入 CTest，校验 Catalog/schema/default 一致性，避免 `config/default.yaml` 漂移
 - [x] P1-6 v3 Patch/Persist result 完整化；`ApplyConfigPatchV3` / `PersistConfigV3` 已落地，支持 restart-required staged/persist/restart 语义（当前 patch payload cap: 240 bytes）
-- [ ] P1-7 App `ConfigDraft` 完整拆分 snapshot cache、editable draft、dirty baseline、apply/persist state
+- [x] P1-7 App `ConfigDraft` 完整拆分 snapshot cache、editable draft、dirty baseline、per-key apply/persist state；已合入本地 `main`（`c003341`）
 - [ ] P2 legacy fixed ABI cleanup：删除 Service/Common 旧 `ConfigSnapshotWire` / `ApplyConfigPatchRequestWire` 主路径；保留本地离线 fallback
 
 ## 后续执行 Gate
@@ -30,9 +30,9 @@
 | Gate | 状态 | 任务内容 | 修改范围 | 预期行为 | 验收方式 | 并行规则 |
 |------|------|----------|----------|----------|----------|----------|
 | Step 1 P1-6 final review/fix | [x] 已完成 | 冻结并验收 `ApplyConfigPatchV3` / `PersistConfigV3` wire/result；完成 restart-required staged + persist 语义 | IPC wire/client/server, `ConfigRuntime`, `ServiceHost`, `ServiceProxy`, ABI/runtime/App tests | semantic reject 返回 result wire `Rejected`; malformed request 才 IPC failure; `VersionMismatch` refresh/retry; restart-required 不 live apply; persist policy skip/count | `ctest --preset arm64-Debug --output-on-failure` 40/40 passed；full build 受运行中 `EGoTouchService.exe` 锁定影响，相关 target build passed | 已串行完成 |
-| Step 2 P1-7 ConfigDraft | [ ] 待开始 | 拆分 Service catalog cache、snapshot cache、editable draft、dirty baseline、apply/persist state | App `ServiceProxy`, `ConfigUIRenderer`, inspector, App tests | refresh 不覆盖 dirty draft; apply/persist 状态可表达 rejected、unpersisted、restart-required、VersionMismatch rebase | App draft tests + full ctest | 串行；不可与 App legacy cleanup 并行 |
-| Step 3 P2 Common/Service legacy IPC cleanup | [ ] 待开始 | 删除/隔离 Service/Common legacy fixed ABI 主路径 | Common IPC, ServiceHost, IPC ABI tests | connected config IPC 只保留 v3 catalog/snapshot/patch/persist；旧 command tombstone 或 unsupported | `git grep` legacy symbols; build; ctest | 可与 Step 4 并行，独立 worktree |
-| Step 4 P2 App connected legacy cleanup + offline fallback | [ ] 待开始 | 清理 App connected legacy merge/apply/helper；保留离线 binder/YAML fallback | App `ServiceProxy`, inspector, App fallback tests | connected 只走 v3；offline fallback 仍可初始化 schema/store；v3 fetch failure 不伪装成 legacy snapshot | App connected/offline tests + full ctest | 可与 Step 3 并行；不可与 Step 2 并行 |
+| Step 2 P1-7 ConfigDraft | [x] 已完成 | 拆分 Service catalog cache、snapshot cache、editable draft、dirty baseline、apply/persist state | App `ServiceProxy`, inspector, App tests | refresh 不覆盖 dirty draft; apply/persist 状态可表达 rejected、unpersisted、restart-required、VersionMismatch rebase | App draft tests + full build + `ctest` 40/40 passed | 已串行完成 |
+| Step 3 P2 Common/Service legacy IPC cleanup | [ ] 待开始 | 删除/隔离 Service/Common legacy fixed ABI 主路径 | Common IPC, ServiceHost, IPC ABI tests | connected config IPC 只保留 v3 catalog/snapshot/patch/persist；旧 command tombstone 或 unsupported | `git grep` legacy symbols; build; ctest | P1-7 依赖已满足；可与 Step 4 并行，独立 worktree |
+| Step 4 P2 App connected legacy cleanup + offline fallback | [ ] 待开始 | 清理 App connected legacy merge/apply/helper；保留离线 binder/YAML fallback | App `ServiceProxy`, inspector, App fallback tests | connected 只走 v3；offline fallback 仍可初始化 schema/store；v3 fetch failure 不伪装成 legacy snapshot | App connected/offline tests + full ctest | P1-7 依赖已满足；可与 Step 3 并行 |
 | Step 5 build macro cleanup | [ ] 待开始 | 清理 `EGOTOUCH_CONFIG_ENABLED` / `EGOTOUCH_ENABLE_RUNTIME_CONFIG` 双路径 | CMake/presets, SolverBuildConfig, guarded Service/App/Solver code | runtime config 成为唯一主路径；disabled runtime UI/branches 移除或降为兼容 shim | grep macros; arm64-Debug/Release/amd64-Debug configure/build gates | 默认串行 |
 | Step 6 packaging/e2e verification | [ ] 待开始 | 验证 build output config、startup、connected edit/apply/persist、restart persistence | 优先只读；必要时补 e2e tests/scripts | `config/default.yaml` 随 exe；overrides 仅保存差异且可重启保持 | ctest; preset builds; config copy/install check; persist/restart evidence | 可并行只读验证 |
 | Step 7 final docs/API sync | [ ] 待开始 | 同步实施文档、任务清单、IPC/API 文档 | docs only | 文档与代码、grep、测试证据一致；legacy 主路径描述删除或标历史 | docs diff-check; task checklist audit | 仅主 agent 写 docs |
@@ -51,17 +51,17 @@
 
 #### Step 2: P1-7 ConfigDraft
 
-- 状态: 待开始，下一步串行 gate。
-- 任务内容: 先确立 App 侧 `ConfigDraft` 状态模型，再实施；拆分 Service catalog cache、Service snapshot cache、editable draft、dirty baseline、apply state、persist state；UI/ServiceProxy 不再把 `m_configStore` 同时当 snapshot、draft、local preview、apply input。
-- 修改范围: `Tools/EGoTouchApp/include/ServiceProxy.h`、`Tools/EGoTouchApp/source/ServiceProxy.Config.cpp`、`Tools/EGoTouchApp/source/DiagnosticsWorkbench.Inspector.cpp`、`Tools/EGoTouchApp/source/ConfigUIRenderer.cpp`、`Tools/EGoTouchApp/tests/ServiceProxyCatalogSchemaTest.cpp`，可新增 App draft tests。
-- 禁止范围: 不修改 IPC wire layout；不删除 Service/Common legacy fixed ABI；不清理 `EGOTOUCH_CONFIG_ENABLED`；不让 subagent 修改 docs。
-- 预期行为: Refresh snapshot 不覆盖 dirty draft；apply+persist 成功后清除对应 dirty key；apply 成功但 persist 失败后 dirty key 保留为 live-applied/unpersisted；apply rejected 后 failed key 保留 dirty 并显示错误状态；VersionMismatch 后 refresh snapshot，再用当前 dirty draft rebase 构造 patch；RestartRequired key 显示 staged/restart-required，不显示为 live-applied；offline/local fallback 仍能初始化本地 schema/default draft；connected mode 只消费 Service v3 catalog/snapshot。
-- 验收方式: App draft tests 覆盖 snapshot refresh does not clobber dirty draft、apply ok + persist fail keeps dirty、rejected key remains dirty with error、VersionMismatch rebase uses refreshed baseline、RestartRequired staged state；`git diff --check`；`cmake --build --preset arm64-Debug`；`ctest --preset arm64-Debug --output-on-failure`。
-- 编排规则: 串行；不可与任何 App cleanup 并行；可并行派只读 audit agent 列 UI 写入点但不得写代码。review 重点确认 `ConfigDraft` 是真实分离，而不是重命名 `m_configStore`。
+- 状态: 已完成并合入本地 `main`（`c003341 feat: split app config draft state`）。最终 Opus review 返回 `ACCEPT`，Required fixes 为空。
+- 任务内容: 已确立 App 侧 `ConfigDraft` 状态模型；拆分 Service catalog cache、Service snapshot cache、editable draft、dirty baseline、apply state、persist state；UI/ServiceProxy 不再把旧 `m_configStore` 同时当 snapshot、draft、local preview、apply input。
+- 修改范围: `Tools/EGoTouchApp/include/ServiceProxy.h`、`Tools/EGoTouchApp/source/ServiceProxy.Config.cpp`、`Tools/EGoTouchApp/source/DiagnosticsWorkbench.Inspector.cpp`、`Tools/EGoTouchApp/tests/ServiceProxyCatalogSchemaTest.cpp`。
+- 保持边界: 未修改 IPC wire layout；未删除 Service/Common legacy fixed ABI；未清理 `EGOTOUCH_CONFIG_ENABLED`；本地 binder/YAML fallback 继续保留为 Service 不可用/离线路径。
+- 已验证行为: Refresh snapshot 不覆盖 dirty draft；apply+persist 成功后清除对应 dirty key；apply 成功但 persist 失败后 dirty key 保留为 live-applied/unpersisted；同值重提交仍可 retry persist；apply rejected 后 failed key 保留 dirty 并显示错误状态；VersionMismatch 后 refresh snapshot，再用当前 dirty draft rebase 构造 patch；VersionMismatch rebase 到 persist-only 时只 persist、不误判 reject；RestartRequired key 显示 staged/restart-required，不显示为 live-applied；非 `UserOverride` persist policy 保持 dirty/unpersisted；offline/local fallback 仍能初始化本地 schema/default draft；connected mode 只消费 Service v3 catalog/snapshot。
+- 验收结果: App draft tests 已覆盖 snapshot dirty preservation、apply/persist success clean、persist fail unpersisted、same-value persist retry、rejected failed dirty、VersionMismatch rebase、VersionMismatch persist-only rebase、RestartRequired staged、non-user override unpersisted、offline fallback；主 agent 在 p1-7 worktree 记录 `git diff --check` passed、full build passed、`ctest --test-dir build/arm64-Debug --output-on-failure` 40/40 passed。
+- 编排规则: 已串行完成；多轮 Opus implement/fix -> review 循环后合入。下一步进入 P2 legacy fixed ABI cleanup。
 
 #### Step 3: P2 Common/Service Legacy IPC Cleanup
 
-- 状态: 待开始，必须在 P1-7 后。
+- 状态: 待开始；P1-7 依赖已满足。
 - 任务内容: 删除或隔离 Service/Common 侧 legacy fixed ABI 主路径；connected config IPC 主路径只保留 v3 catalog/snapshot/patch/persist；旧 `ConfigSnapshotWire` / `ApplyConfigPatchRequestWire` / legacy handler 不再作为 Service 主路径存在。
 - 修改范围: `Common/IPCCore/include/Ipc/IpcProtocol.h`、`Common/IPCCore/include/Ipc/IpcPipeClient.h`、`Common/IPCCore/source/IpcPipeClient.cpp`、`Common/IPCCore/source/IpcPipeServer.cpp`、`Common/IPCCore/tests/IpcProtocolAbiTest.cpp`、`EGoTouchService/include/ServiceHost.h`、`EGoTouchService/source/ServiceHost.cpp`，以及必要 Service IPC tests。
 - 禁止范围: 不修改 App draft 状态模型；不删除 offline/local YAML fallback；不清理 build macro；不让 subagent 修改 docs。
@@ -71,7 +71,7 @@
 
 #### Step 4: P2 App Connected Legacy Cleanup + Offline Fallback Preservation
 
-- 状态: 待开始，必须在 P1-7 后。
+- 状态: 待开始；P1-7 依赖已满足。
 - 任务内容: 清理 App connected mode 中遗留的 legacy merge/apply/helper 路径；保留 Service 不可用/离线场景的本地 binder/YAML fallback；明确 connected 与 offline 两种模式的入口和边界。
 - 修改范围: `Tools/EGoTouchApp/include/ServiceProxy.h`、`Tools/EGoTouchApp/source/ServiceProxy.Config.cpp`、`Tools/EGoTouchApp/source/DiagnosticsWorkbench.Inspector.cpp`、`Tools/EGoTouchApp/tests/ServiceProxyConfigMergeTest.cpp`、`Tools/EGoTouchApp/tests/ServiceProxyCatalogSchemaTest.cpp`，以及 App-local fallback tests。
 - 禁止范围: 不写 `IpcProtocol.h`；不写 `ServiceHost.cpp`；不改 Runtime target logic；不清理 build macro；不让 subagent 修改 docs。
@@ -248,7 +248,7 @@
 
 ### 3.3 App 侧适配
 - [x] 3.3.1 `ServiceProxy` connected mode 优先通过 `GetConfigCatalogV3` / `GetConfigSnapshotV3` 获取 Service catalog/snapshot
-- [~] 3.3.2 新增 `ConfigDraft`，拆分 Service snapshot cache、用户 draft、dirty baseline version（当前仅完成轻量 v3 baseline version 记录）
+- [x] 3.3.2 新增 `ConfigDraft`，拆分 Service snapshot cache、editable draft、dirty baseline、per-path apply/persist state 与 baseline versions
 - [x] 3.3.3 删除 connected mode 对 legacy `GetConfigSnapshot=42` 的 fallback
 - [x] 3.3.4 保留本地 binder/YAML fallback 作为 Service 不可用/离线场景，不作为 legacy 删除目标
 - [x] 3.3.5 `ServiceProxy::SaveConfig()` / Apply 流程升级为 v3 Patch + v3 Persist result；VersionMismatch 后 refresh v3 snapshot 并 retry，retry response 同样校验 wireVersion/status
@@ -277,13 +277,13 @@
 - [ ] 4.3.4 重启 Service: `default.yaml` + `overrides.yaml` 合并 → 校验 → 应用 → 配置与重启前一致
 - [ ] 4.3.5 arm64-Debug / arm64-Release 编译通过且行为一致
 - [ ] 4.3.6 所有现有单元测试通过 (无回归)
-- [x] 4.3.7 `ctest --preset arm64-Debug --output-on-failure` 通过，40/40 tests passed（含 `ConfigDefaultYamlDriftTest`）
+- [x] 4.3.7 `ctest --preset arm64-Debug --output-on-failure` 通过，40/40 tests passed（含 `ConfigDefaultYamlDriftTest`）；P1-7 worktree validation 记录 full build passed 与 `ctest --test-dir build/arm64-Debug --output-on-failure` 40/40 passed
 
 ---
 
 ## 进度总览
 
-> 下表是 2026-06-05 早期任务拆分的历史统计，不再作为当前 Config v3 权威进度。当前状态：P0、P1-1、P1-2、P1-3 Catalog 策略字段、P1-4 `IConfigTarget` registry、P1-5 default.yaml drift check、P1-6 v3 Patch/Persist result 已完成；下一步是完整 `ConfigDraft`、legacy fixed ABI cleanup、build macro cleanup、packaging/e2e。详见本文档顶部“Config v3 当前主线”。
+> 下表是 2026-06-05 早期任务拆分的历史统计，不再作为当前 Config v3 权威进度。当前状态：P0、P1-1、P1-2、P1-3 Catalog 策略字段、P1-4 `IConfigTarget` registry、P1-5 default.yaml drift check、P1-6 v3 Patch/Persist result、P1-7 App `ConfigDraft` 均已完成；下一步是 P2 legacy fixed ABI cleanup、build macro cleanup、packaging/e2e。详见本文档顶部“Config v3 当前主线”。
 
 | Phase | 任务数 | 已完成 | 状态 |
 |-------|--------|--------|------|
@@ -302,4 +302,4 @@
 
 ---
 
-> 最后更新: 2026-06-08 (同步 P1-6 v3 Patch/Persist result 已合入；Service/Common legacy fixed ABI cleanup 后续处理，本地 fallback 保留为离线/Service 不可用路径)
+> 最后更新: 2026-06-08 (同步 P1-7 ConfigDraft 已合入本地 main；P1 complete；Service/Common legacy fixed ABI cleanup 后续处理，本地 fallback 保留为离线/Service 不可用路径)
