@@ -508,7 +508,11 @@ ReloadServiceConfigResult ServiceHost::HandleReloadServiceConfig(
             (penButtonRouteChanged ? ToServiceConfigFieldBit(ServiceConfigField::PenButtonRoute) : 0u));
     }
 
-    m_configState = reloadedConfig;
+    ServiceConfigState activeConfig = reloadedConfig;
+    if (modeChanged) {
+        activeConfig.mode = m_configState.mode;
+    }
+    m_configState = activeConfig;
     return result;
 }
 

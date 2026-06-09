@@ -32,6 +32,13 @@ bool HasAction(const Service::ConfigRuntime::V3ApplyResult& result, Service::Con
         [kind](const Service::ConfigApplyAction& action) { return action.kind == kind; });
 }
 
+const Service::ConfigApplyAction* FindAction(const Service::ConfigRuntime::V3ApplyResult& result,
+                                             Service::ConfigApplyActionKind kind) {
+    const auto it = std::find_if(result.applyActions.begin(), result.applyActions.end(),
+        [kind](const Service::ConfigApplyAction& action) { return action.kind == kind; });
+    return it == result.applyActions.end() ? nullptr : &*it;
+}
+
 bool HasFailedTargetResult(const Service::ConfigRuntime::V3ApplyResult& result, std::string_view targetName) {
     return std::any_of(result.targetResults.begin(), result.targetResults.end(),
         [targetName](const Service::ConfigTargetResult& targetResult) {
@@ -247,6 +254,22 @@ int main() {
     assert(restartApplied.restartRequiredCount == 1);
     assert(restartApplied.desiredServiceConfig.mode == Service::ServiceMode::Full);
     assert(!HasAction(restartApplied, Service::ConfigApplyActionKind::ServicePolicy));
+    assert(restartRuntime.ServiceState().mode == Service::ServiceMode::Full);
+    assert(restartRuntime.SnapshotStore().getOr<std::string>("service.mode", "") == "touch_only");
+
+    const auto stagedThenLiveApplied = ApplyV3Patch(restartRuntime, payload);
+    assert(stagedThenLiveApplied.ipcStatus == Ipc::IpcStatusCode::Ok);
+    assert(stagedThenLiveApplied.status == Ipc::ConfigV3MutationStatus::Ok);
+    assert(stagedThenLiveApplied.appliedCount == 1);
+    assert(stagedThenLiveApplied.restartRequiredCount == 0);
+    assert(stagedThenLiveApplied.desiredServiceConfig.mode == Service::ServiceMode::Full);
+    assert(!stagedThenLiveApplied.desiredServiceConfig.autoMode);
+    const auto* stagedThenLiveAction = FindAction(stagedThenLiveApplied, Service::ConfigApplyActionKind::ServicePolicy);
+    assert(stagedThenLiveAction != nullptr);
+    assert(stagedThenLiveAction->serviceConfig.mode == Service::ServiceMode::Full);
+    assert(!stagedThenLiveAction->serviceConfig.autoMode);
+    assert(restartRuntime.ServiceState().mode == Service::ServiceMode::Full);
+    assert(!restartRuntime.ServiceState().autoMode);
     assert(restartRuntime.SnapshotStore().getOr<std::string>("service.mode", "") == "touch_only");
 
     TempConfigDir tempConfig;
@@ -284,6 +307,40 @@ int main() {
     assert(restartedRuntime.SnapshotStore().getOr<std::string>("service.mode", "") == "touch_only");
     assert(restartedRuntime.SnapshotStore().getOr<int32_t>("touch.peak_detection.threshold", 0) == 351);
 
+    TempConfigDir explicitRouteConfig;
+    CopyDefaultYamlTo(explicitRouteConfig.path);
+    Service::ConfigRuntime explicitRouteRuntime;
+    assert(explicitRouteRuntime.Initialize(explicitRouteConfig.path.string(), [](const Config::ConfigStore&) { return true; }));
+    const auto penButtonModeKeyId = Config::tryKeyIdForPath("service.pen_button_mode");
+    const auto penButtonRouteKeyId = Config::tryKeyIdForPath("service.pen_button_route");
+    assert(penButtonModeKeyId.has_value());
+    assert(penButtonRouteKeyId.has_value());
+    const auto explicitRoutePayload = MakePatchPayload({
+        Config::ConfigTlvEntry{*penButtonModeKeyId, Config::ConfigValueType::String, "native_barrel"},
+        Config::ConfigTlvEntry{*penButtonRouteKeyId, Config::ConfigValueType::String, "vhf_only"},
+    });
+    const auto explicitRouteApplied = ApplyV3Patch(explicitRouteRuntime, explicitRoutePayload);
+    assert(explicitRouteApplied.ipcStatus == Ipc::IpcStatusCode::Ok);
+    assert(explicitRouteApplied.status == Ipc::ConfigV3MutationStatus::Ok);
+    assert(explicitRouteApplied.appliedCount == 2);
+    assert(explicitRouteApplied.desiredServiceConfig.penButtonMode == PenButtonMode::NativeBarrel);
+    assert(explicitRouteApplied.desiredServiceConfig.penButtonRoute == PenButtonRoute::VhfOnly);
+    assert(explicitRouteApplied.desiredServiceConfig.penButtonRouteExplicit);
+    const auto explicitRoutePersist = explicitRouteRuntime.PersistConfigV3();
+    assert(explicitRoutePersist.ipcStatus == Ipc::IpcStatusCode::Ok);
+    assert(explicitRoutePersist.status == Ipc::ConfigV3MutationStatus::Ok);
+    assert(explicitRoutePersist.persistedCount >= 2);
+    Config::ConfigStore explicitRouteOverrides;
+    explicitRouteOverrides.loadFromYaml((explicitRouteConfig.path / "overrides.yaml").string());
+    assert(explicitRouteOverrides.has("service.pen_button_mode"));
+    assert(explicitRouteOverrides.has("service.pen_button_route"));
+    assert(Config::getValue<std::string>(explicitRouteOverrides.get<Config::ConfigValue>("service.pen_button_route")) == "vhf_only");
+    Service::ConfigRuntime explicitRouteRestarted;
+    assert(explicitRouteRestarted.Initialize(explicitRouteConfig.path.string(), [](const Config::ConfigStore&) { return true; }));
+    assert(explicitRouteRestarted.ServiceState().penButtonMode == PenButtonMode::NativeBarrel);
+    assert(explicitRouteRestarted.ServiceState().penButtonRoute == PenButtonRoute::VhfOnly);
+    assert(explicitRouteRestarted.ServiceState().penButtonRouteExplicit);
+
     Service::ConfigRuntime v3RejectRuntime;
     assert(v3RejectRuntime.Initialize("", [](const Config::ConfigStore&) { return true; }));
     const auto beforeV3Reject = v3RejectRuntime.BuildSnapshotV3Blob();
@@ -311,6 +368,34 @@ int main() {
     assert(rejectingAfter.bytes == rejectingBefore.bytes);
     assert(rejectingAfter.snapshotVersion == rejectingBefore.snapshotVersion);
     assert(rejectingAfter.checksum == rejectingBefore.checksum);
+
+    TempConfigDir malformedDefaultConfig;
+    {
+        std::ofstream malformedDefault(malformedDefaultConfig.path / "default.yaml", std::ios::out | std::ios::trunc);
+        malformedDefault << "service: [\n";
+    }
+    Service::ConfigRuntime malformedDefaultRuntime;
+    assert(!malformedDefaultRuntime.Initialize(malformedDefaultConfig.path.string(), [](const Config::ConfigStore&) { return true; }));
+
+    TempConfigDir integerFloatConfig;
+    CopyDefaultYamlTo(integerFloatConfig.path);
+    {
+        std::ofstream integerFloatOverride(integerFloatConfig.path / "overrides.yaml", std::ios::out | std::ios::trunc);
+        integerFloatOverride << "touch:\n  classifier:\n    finger_sharpness: 2\n";
+    }
+    Service::ConfigRuntime integerFloatRuntime;
+    assert(integerFloatRuntime.Initialize(integerFloatConfig.path.string(), [](const Config::ConfigStore&) { return true; }));
+    const auto fingerSharpnessValue = integerFloatRuntime.SnapshotStore().get<Config::ConfigValue>("touch.classifier.finger_sharpness");
+    const auto normalizedFingerSharpness = Config::tryGetValue<float>(fingerSharpnessValue);
+    assert(normalizedFingerSharpness.has_value());
+    assert(*normalizedFingerSharpness == 2.0f);
+    const auto fingerSharpnessKeyId = Config::tryKeyIdForPath("touch.classifier.finger_sharpness");
+    assert(fingerSharpnessKeyId.has_value());
+    const auto boolFloatRejected = ApplyV3Patch(
+        integerFloatRuntime,
+        MakePatchPayload({Config::ConfigTlvEntry{*fingerSharpnessKeyId, Config::ConfigValueType::Bool, "true"}}));
+    assert(boolFloatRejected.ipcStatus == Ipc::IpcStatusCode::Ok);
+    assert(boolFloatRejected.status == Ipc::ConfigV3MutationStatus::Rejected);
 
     return 0;
 }

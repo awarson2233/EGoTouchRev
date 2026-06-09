@@ -14,6 +14,7 @@
 #include <cmath>
 #include <exception>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -83,6 +84,10 @@ constexpr std::array<std::pair<std::string_view, std::string_view>, 4> kStylusIi
     std::pair{"stylus.sp.iir_coef_high_writing", "stylus.sp.iir_coef_high_edge"},
 };
 
+constexpr std::array<std::string_view, 1> kExplicitDefaultOverridePaths{
+    "service.pen_button_route",
+};
+
 bool StylusIirCoefficientsWithinMax(const Config::ConfigStore& store) {
     const int32_t maxCoef = store.getOr<int32_t>("stylus.sp.iir_max_coef", 32);
     if (maxCoef < 1) return false;
@@ -129,39 +134,68 @@ decltype(auto) WithRuntimeConfigDefaults(Callback&& callback) {
     }
 }
 
-bool ConfigValueAllowedBySchema(std::string_view path,
-                                const Config::ConfigValue& value,
-                                const Config::ConfigSchemaSnapshot& schema,
-                                bool requireLiveApply) {
+bool ValueInRange(double value, const std::optional<Config::ConfigRange>& range) {
+    return !range.has_value() || (value >= range->min && value <= range->max);
+}
+
+std::optional<Config::ConfigValue> NormalizeConfigValueForSchema(std::string_view path,
+                                                                 const Config::ConfigValue& value,
+                                                                 const Config::ConfigSchemaSnapshot& schema,
+                                                                 bool requireLiveApply) {
     const auto it = std::find_if(schema.entries.begin(), schema.entries.end(),
         [path](const Config::ConfigSchemaEntry& entry) { return entry.yamlPath == path; });
-    if (it == schema.entries.end()) return false;
+    if (it == schema.entries.end()) return std::nullopt;
     if (requireLiveApply) {
         if (!it->boundToRuntime ||
             (it->runtimeBinding != Config::ConfigRuntimeBinding::LiveSetter &&
              it->runtimeBinding != Config::ConfigRuntimeBinding::ManualLiveApply) ||
-            !Config::isLiveApplyTiming(it->applyTiming)) return false;
+            !Config::isLiveApplyTiming(it->applyTiming)) return std::nullopt;
     }
     if (path == "service.mode") {
         const auto str = Config::tryGetValue<std::string>(value);
-        return str.has_value() && (*str == "full" || *str == "touch_only");
+        if (str.has_value() && (*str == "full" || *str == "touch_only")) return value;
+        return std::nullopt;
     }
-    if (path == "service.pen_button_mode") return ParsePenButtonModeValue(value).has_value();
-    if (path == "service.pen_button_route") return ParsePenButtonRouteValue(value).has_value();
+    if (path == "service.pen_button_mode") {
+        return ParsePenButtonModeValue(value).has_value() ? std::optional<Config::ConfigValue>{value} : std::nullopt;
+    }
+    if (path == "service.pen_button_route") {
+        return ParsePenButtonRouteValue(value).has_value() ? std::optional<Config::ConfigValue>{value} : std::nullopt;
+    }
     switch (it->uiType) {
-    case Config::ConfigUiType::Bool: return Config::tryGetValue<bool>(value).has_value();
+    case Config::ConfigUiType::Bool:
+        if (Config::tryGetValue<bool>(value).has_value()) return value;
+        break;
     case Config::ConfigUiType::Int32: {
         const auto v = Config::tryGetValue<int32_t>(value);
-        return v.has_value() && (!it->range.has_value() || (*v >= it->range->min && *v <= it->range->max));
+        if (v.has_value() && ValueInRange(*v, it->range)) return value;
+        break;
     }
     case Config::ConfigUiType::Float: {
-        const auto v = Config::tryGetValue<float>(value);
-        return v.has_value() && (!it->range.has_value() || (*v >= it->range->min && *v <= it->range->max));
+        if (const auto v = Config::tryGetValue<float>(value)) {
+            if (std::isfinite(*v) && ValueInRange(*v, it->range)) return value;
+        }
+        if (const auto v = Config::tryGetValue<int32_t>(value)) {
+            const float normalized = static_cast<float>(*v);
+            if (std::isfinite(normalized) && ValueInRange(normalized, it->range)) {
+                return Config::ConfigValue(normalized);
+            }
+        }
+        break;
     }
     case Config::ConfigUiType::Enum:
-    case Config::ConfigUiType::String: return Config::tryGetValue<std::string>(value).has_value();
+    case Config::ConfigUiType::String:
+        if (Config::tryGetValue<std::string>(value).has_value()) return value;
+        break;
     }
-    return false;
+    return std::nullopt;
+}
+
+bool ConfigValueAllowedBySchema(std::string_view path,
+                                const Config::ConfigValue& value,
+                                const Config::ConfigSchemaSnapshot& schema,
+                                bool requireLiveApply) {
+    return NormalizeConfigValueForSchema(path, value, schema, requireLiveApply).has_value();
 }
 
 const Config::ConfigSchemaEntry* FindSchemaEntry(const Config::ConfigSchemaSnapshot& schema,
@@ -334,15 +368,14 @@ bool ConfigRuntime::Initialize(const std::string& configPath, const StartupValid
         LOG_ERROR("Service", __func__, "Config", "config/default.yaml was not resolved; startup blocked.");
         return false;
     }
-    if (paths.has_value()) {
-        try {
-            Config::ConfigStore yamlDefaults;
-            yamlDefaults.loadFromYaml(paths->defaultConfig);
-            defaults.mergeFrom(yamlDefaults);
-            ApplyLegacyServiceModeMigration(defaults, yamlDefaults);
-        } catch (const std::exception& ex) {
-            LOG_WARN("Service", __func__, "Config", "Failed to load default config '{}': {}", paths->defaultConfig, ex.what());
-        }
+    try {
+        Config::ConfigStore yamlDefaults;
+        yamlDefaults.loadFromYaml(paths->defaultConfig);
+        defaults.mergeFrom(yamlDefaults);
+        ApplyLegacyServiceModeMigration(defaults, yamlDefaults);
+    } catch (const std::exception& ex) {
+        LOG_ERROR("Service", __func__, "Config", "Failed to load mandatory default config '{}': {}; startup blocked.", paths->defaultConfig, ex.what());
+        return false;
     }
 
     WithRuntimeConfigDefaults([&defaults, &schema](Config::ConfigBinder& binder, Config::ConfigStore& factoryDefaults) {
@@ -373,7 +406,11 @@ bool ConfigRuntime::Initialize(const std::string& configPath, const StartupValid
 
     for (const auto& path : current.allPaths()) {
         const auto value = current.get<Config::ConfigValue>(path);
-        if (!ConfigValueAllowedBySchema(path, value, schema, false) && defaults.has(path)) {
+        if (const auto normalizedValue = NormalizeConfigValueForSchema(path, value, schema, false)) {
+            if (*normalizedValue != value) {
+                current.set<Config::ConfigValue>(path, *normalizedValue);
+            }
+        } else if (defaults.has(path)) {
             current.set<Config::ConfigValue>(path, defaults.get<Config::ConfigValue>(path));
             LOG_WARN("Service", __func__, "Config", "Invalid config value at '{}'; restored default.", path);
         }
@@ -386,11 +423,14 @@ bool ConfigRuntime::Initialize(const std::string& configPath, const StartupValid
     std::lock_guard<std::mutex> lk(m_mutex);
     m_defaults = std::move(defaults);
     m_store = std::move(current);
+    m_activeStore = m_store;
     m_schema = std::move(schema);
     m_paths = std::move(paths);
     m_penButtonRouteExplicit = penButtonRouteExplicit;
-    auto state = ReadServiceConfigStateFromStoreLocked();
-    WriteServiceConfigStateToStoreLocked(state);
+    m_activePenButtonRouteExplicit = penButtonRouteExplicit;
+    auto state = ReadActiveServiceConfigStateLocked();
+    WriteServiceConfigStateToStoreLocked(m_store, m_penButtonRouteExplicit, state);
+    WriteServiceConfigStateToStoreLocked(m_activeStore, m_activePenButtonRouteExplicit, state);
     return true;
 }
 
@@ -454,29 +494,37 @@ Config::ConfigStore ConfigRuntime::SnapshotStore() const {
 
 ServiceConfigState ConfigRuntime::ServiceState() const {
     std::lock_guard<std::mutex> lk(m_mutex);
-    return ReadServiceConfigStateFromStoreLocked();
+    return ReadActiveServiceConfigStateLocked();
 }
 
 void ConfigRuntime::WriteServiceState(const ServiceConfigState& config) {
     std::lock_guard<std::mutex> lk(m_mutex);
-    WriteServiceConfigStateToStoreLocked(config);
+    WriteServiceConfigStateToStoreLocked(m_store, m_penButtonRouteExplicit, config);
+    WriteServiceConfigStateToStoreLocked(m_activeStore, m_activePenButtonRouteExplicit, config);
 }
 
-ServiceConfigState ConfigRuntime::ReadServiceConfigStateFromStoreLocked() const {
+ServiceConfigState ConfigRuntime::ReadServiceConfigStateFromStoreLocked(const Config::ConfigStore& store,
+                                                                        bool penButtonRouteExplicit) const {
     ServiceConfigState state{};
-    state.penButtonRouteExplicit = m_penButtonRouteExplicit;
-    ApplyConfig(state, m_store);
-    state.penButtonRouteExplicit = m_penButtonRouteExplicit;
+    state.penButtonRouteExplicit = penButtonRouteExplicit;
+    ApplyConfig(state, store);
+    state.penButtonRouteExplicit = penButtonRouteExplicit;
     return state;
 }
 
-void ConfigRuntime::WriteServiceConfigStateToStoreLocked(const ServiceConfigState& config) {
-    m_store.set<std::string>("service.mode", ServiceModeToConfig(config.mode));
-    m_store.set<bool>("service.auto_mode", config.autoMode);
-    m_store.set<bool>("service.stylus_vhf_enabled", config.stylusVhfEnabled);
-    m_store.set<std::string>("service.pen_button_mode", ToConfigValue(config.penButtonMode));
-    m_store.set<std::string>("service.pen_button_route", ToConfigValue(config.penButtonRoute));
-    m_penButtonRouteExplicit = config.penButtonRouteExplicit;
+ServiceConfigState ConfigRuntime::ReadActiveServiceConfigStateLocked() const {
+    return ReadServiceConfigStateFromStoreLocked(m_activeStore, m_activePenButtonRouteExplicit);
+}
+
+void ConfigRuntime::WriteServiceConfigStateToStoreLocked(Config::ConfigStore& store,
+                                                         bool& penButtonRouteExplicit,
+                                                         const ServiceConfigState& config) {
+    store.set<std::string>("service.mode", ServiceModeToConfig(config.mode));
+    store.set<bool>("service.auto_mode", config.autoMode);
+    store.set<bool>("service.stylus_vhf_enabled", config.stylusVhfEnabled);
+    store.set<std::string>("service.pen_button_mode", ToConfigValue(config.penButtonMode));
+    store.set<std::string>("service.pen_button_route", ToConfigValue(config.penButtonRoute));
+    penButtonRouteExplicit = config.penButtonRouteExplicit;
 }
 
 bool ConfigRuntime::PersistServicePolicyConfig(const ServiceConfigState& config) {
@@ -489,13 +537,17 @@ bool ConfigRuntime::PersistServicePolicyConfig(const ServiceConfigState& config)
             LOG_ERROR("Service", __func__, "Config", "Cannot persist config before startup paths are resolved.");
             return false;
         }
-        WriteServiceConfigStateToStoreLocked(config);
+        WriteServiceConfigStateToStoreLocked(m_store, m_penButtonRouteExplicit, config);
+        WriteServiceConfigStateToStoreLocked(m_activeStore, m_activePenButtonRouteExplicit, config);
         storeToPersist = m_store;
         defaultsToPersist = m_defaults;
         pathsToPersist = *m_paths;
     }
     try {
-        storeToPersist.saveOverrides(pathsToPersist.overrideConfig, defaultsToPersist);
+        const auto forcedPaths = config.penButtonRouteExplicit
+            ? std::span<const std::string_view>(kExplicitDefaultOverridePaths)
+            : std::span<const std::string_view>{};
+        storeToPersist.saveOverrides(pathsToPersist.overrideConfig, defaultsToPersist, forcedPaths);
         return true;
     } catch (const std::exception& ex) {
         LOG_ERROR("Service", __func__, "Config", "PersistConfig failed: {}", ex.what());
@@ -523,7 +575,10 @@ bool ConfigRuntime::ApplyPatchPayloadLocked(const uint8_t* data,
 
     const auto& patch = parseResult.patch;
     bool penButtonRouteTouched = false;
-    Config::ConfigStore candidate = m_store;
+    Config::ConfigStore candidateDesired = m_store;
+    Config::ConfigStore candidateActive = m_activeStore;
+    const bool currentDesiredPenButtonRouteExplicit = m_penButtonRouteExplicit;
+    const bool currentActivePenButtonRouteExplicit = m_activePenButtonRouteExplicit;
     ConfigChangeSet liveChangeSet{};
     ConfigChangeSet restartChangeSet{};
     liveChangeSet.entryCount = patch.entries.size();
@@ -545,7 +600,7 @@ bool ConfigRuntime::ApplyPatchPayloadLocked(const uint8_t* data,
         }
 
         bool valueOk = false;
-        const Config::ConfigValue value = ConfigValueFromTlvEntry(entry, valueOk);
+        const Config::ConfigValue parsedValue = ConfigValueFromTlvEntry(entry, valueOk);
         if (!valueOk) {
             rejectEntry(entry);
             return false;
@@ -553,23 +608,31 @@ bool ConfigRuntime::ApplyPatchPayloadLocked(const uint8_t* data,
 
         const std::string pathString(*path);
         const auto* schemaEntry = FindSchemaEntry(m_schema, pathString);
+        const auto normalizedValue = NormalizeConfigValueForSchema(pathString, parsedValue, m_schema, false);
         if (schemaEntry == nullptr ||
             !schemaEntry->boundToRuntime ||
             (schemaEntry->runtimeBinding != Config::ConfigRuntimeBinding::LiveSetter &&
              schemaEntry->runtimeBinding != Config::ConfigRuntimeBinding::ManualLiveApply) ||
             !IsPatchableV3Timing(schemaEntry->applyTiming) ||
-            !ConfigValueAllowedBySchema(pathString, value, m_schema, false)) {
+            !normalizedValue.has_value()) {
             rejectEntry(entry);
             return false;
         }
 
-        if (pathString == "service.pen_button_route") penButtonRouteTouched = true;
-        const bool hadPreviousValue = candidate.has(pathString);
+        const Config::ConfigValue& value = *normalizedValue;
+        const bool touchesPenButtonRoute = pathString == "service.pen_button_route";
+        if (touchesPenButtonRoute) penButtonRouteTouched = true;
+        const bool hadPreviousValue = candidateDesired.has(pathString);
         const Config::ConfigValue previousValue = hadPreviousValue
-            ? candidate.get<Config::ConfigValue>(pathString)
+            ? candidateDesired.get<Config::ConfigValue>(pathString)
             : Config::ConfigValue(std::string{});
-        const bool changed = !hadPreviousValue || previousValue != value;
-        candidate.set<Config::ConfigValue>(pathString, value);
+        const bool valueChanged = !hadPreviousValue || previousValue != value;
+        const bool explicitnessChanged = touchesPenButtonRoute && !currentDesiredPenButtonRouteExplicit;
+        const bool changed = valueChanged || explicitnessChanged;
+        candidateDesired.set<Config::ConfigValue>(pathString, value);
+        if (schemaEntry->applyTiming != Config::ConfigApplyTiming::RestartRequired) {
+            candidateActive.set<Config::ConfigValue>(pathString, value);
+        }
         if (!changed) continue;
 
         ConfigChange change{};
@@ -593,7 +656,7 @@ bool ConfigRuntime::ApplyPatchPayloadLocked(const uint8_t* data,
 
     for (const auto& target : m_targets) {
         if (!target->isInterested(liveChangeSet)) continue;
-        auto validation = target->validateConfig(candidate, liveChangeSet);
+        auto validation = target->validateConfig(candidateActive, liveChangeSet);
         result.targetResults.push_back(validation);
         if (!validation.ok) {
             result.ipcStatus = Ipc::IpcStatusCode::Ok;
@@ -605,26 +668,25 @@ bool ConfigRuntime::ApplyPatchPayloadLocked(const uint8_t* data,
         }
     }
 
-    const auto currentServiceConfig = ReadServiceConfigStateFromStoreLocked();
+    const auto currentServiceConfig = ReadActiveServiceConfigStateLocked();
     result.desiredServiceConfig = currentServiceConfig;
-    ApplyConfig(result.desiredServiceConfig, candidate);
-    result.desiredServiceConfig.penButtonRouteExplicit = m_penButtonRouteExplicit || penButtonRouteTouched;
-    if (restartChangeSet.containsPath("service.mode")) {
-        result.desiredServiceConfig.mode = currentServiceConfig.mode;
-    }
+    ApplyConfig(result.desiredServiceConfig, candidateActive);
+    result.desiredServiceConfig.penButtonRouteExplicit = currentActivePenButtonRouteExplicit || penButtonRouteTouched;
 
-    m_store = candidate;
-    m_penButtonRouteExplicit = m_penButtonRouteExplicit || penButtonRouteTouched;
-    result.pipelineConfig = m_store;
+    m_store = candidateDesired;
+    m_activeStore = candidateActive;
+    m_penButtonRouteExplicit = currentDesiredPenButtonRouteExplicit || penButtonRouteTouched;
+    m_activePenButtonRouteExplicit = currentActivePenButtonRouteExplicit || penButtonRouteTouched;
+    result.pipelineConfig = m_activeStore;
 
     for (const auto& target : m_targets) {
         if (!target->isInterested(liveChangeSet)) continue;
-        auto applyResult = target->applyConfig(m_store, liveChangeSet, ConfigApplyPhase::Live);
+        auto applyResult = target->applyConfig(m_activeStore, liveChangeSet, ConfigApplyPhase::Live);
         for (auto& action : applyResult.actions) {
             if (action.kind == ConfigApplyActionKind::ServicePolicy) {
                 action.serviceConfig = result.desiredServiceConfig;
             } else if (action.kind == ConfigApplyActionKind::PipelineRuntime) {
-                action.configStore = m_store;
+                action.configStore = m_activeStore;
             }
             result.applyActions.push_back(action);
         }
@@ -666,6 +728,7 @@ ConfigRuntime::V3PersistResult ConfigRuntime::PersistConfigV3() {
     Config::ConfigStore storeToPersist;
     Config::ConfigStore defaultsToPersist;
     Config::ConfigPaths pathsToPersist;
+    bool forcePenButtonRouteOverride = false;
     {
         std::lock_guard<std::mutex> lk(m_mutex);
         if (!m_paths.has_value()) {
@@ -696,15 +759,20 @@ ConfigRuntime::V3PersistResult ConfigRuntime::PersistConfigV3() {
                 ? m_defaults.get<Config::ConfigValue>(entry.yamlPath)
                 : entry.defaultValue;
             defaultsToPersist.set<Config::ConfigValue>(entry.yamlPath, defaultValue);
-            if (currentValue != defaultValue) {
+            const bool forcedOverride = m_penButtonRouteExplicit && entry.yamlPath == "service.pen_button_route";
+            if (forcedOverride || currentValue != defaultValue) {
                 ++result.persistedCount;
             }
         }
+        forcePenButtonRouteOverride = m_penButtonRouteExplicit;
         pathsToPersist = *m_paths;
     }
 
     try {
-        storeToPersist.saveOverrides(pathsToPersist.overrideConfig, defaultsToPersist);
+        const auto forcedPaths = forcePenButtonRouteOverride
+            ? std::span<const std::string_view>(kExplicitDefaultOverridePaths)
+            : std::span<const std::string_view>{};
+        storeToPersist.saveOverrides(pathsToPersist.overrideConfig, defaultsToPersist, forcedPaths);
         result.ipcStatus = Ipc::IpcStatusCode::Ok;
         result.status = Ipc::ConfigV3MutationStatus::Ok;
     } catch (const std::exception& ex) {

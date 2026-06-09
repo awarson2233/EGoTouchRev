@@ -4,6 +4,7 @@
 #include "SchemaValidator.h"
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -33,7 +34,10 @@ public:
 
     // ── 持久化 ──
     void saveToYaml(const std::string& path) const;
-    void saveOverrides(const std::string& path, const ConfigStore& defaults);
+    void saveOverrides(const std::string& path, const ConfigStore& defaults) const;
+    void saveOverrides(const std::string& path,
+                       const ConfigStore& defaults,
+                       std::span<const std::string_view> forcedOverridePaths) const;
 
     // ── 元数据 ──
     std::vector<std::string> allPaths() const;

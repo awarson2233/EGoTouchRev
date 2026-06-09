@@ -76,8 +76,12 @@ public:
 
 private:
     bool ValidateStartupConfig(const Config::ConfigStore& store, const StartupValidator& validateStartupConfig) const;
-    ServiceConfigState ReadServiceConfigStateFromStoreLocked() const;
-    void WriteServiceConfigStateToStoreLocked(const ServiceConfigState& config);
+    ServiceConfigState ReadServiceConfigStateFromStoreLocked(const Config::ConfigStore& store,
+                                                             bool penButtonRouteExplicit) const;
+    ServiceConfigState ReadActiveServiceConfigStateLocked() const;
+    void WriteServiceConfigStateToStoreLocked(Config::ConfigStore& store,
+                                              bool& penButtonRouteExplicit,
+                                              const ServiceConfigState& config);
     bool ApplyPatchPayloadLocked(const uint8_t* data,
                                  size_t size,
                                  V3ApplyResult& result);
@@ -88,9 +92,11 @@ private:
     mutable std::mutex m_mutex;
     Config::ConfigStore m_defaults;
     Config::ConfigStore m_store;
+    Config::ConfigStore m_activeStore;
     Config::ConfigSchemaSnapshot m_schema;
     std::optional<Config::ConfigPaths> m_paths;
     bool m_penButtonRouteExplicit = false;
+    bool m_activePenButtonRouteExplicit = false;
     std::vector<std::unique_ptr<IConfigTarget>> m_targets;
 };
 

@@ -156,11 +156,20 @@ void ConfigStore::saveToYaml(const std::string& path) const {
     YamlParser::save(path, unflattenToYaml());
 }
 
-void ConfigStore::saveOverrides(const std::string& path, const ConfigStore& defaults) {
+void ConfigStore::saveOverrides(const std::string& path, const ConfigStore& defaults) const {
+    saveOverrides(path, defaults, std::span<const std::string_view>{});
+}
+
+void ConfigStore::saveOverrides(const std::string& path,
+                                const ConfigStore& defaults,
+                                std::span<const std::string_view> forcedOverridePaths) const {
     ConfigStore overrides;
     for (const auto& [key, entry] : m_entries) {
         const auto defaultIt = defaults.m_entries.find(key);
-        if (defaultIt == defaults.m_entries.end() || entry.value != defaultIt->second.value) {
+        const bool forcedOverride = std::ranges::any_of(
+            forcedOverridePaths,
+            [&key](std::string_view forcedPath) { return forcedPath == key; });
+        if (forcedOverride || defaultIt == defaults.m_entries.end() || entry.value != defaultIt->second.value) {
             overrides.m_entries.emplace(key, entry);
         }
     }
