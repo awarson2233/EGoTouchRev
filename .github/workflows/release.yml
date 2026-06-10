@@ -1,9 +1,6 @@
 name: Publish ARM64 MSI Release
 
 on:
-  push:
-    tags:
-      - 'v*'
   release:
     types: [published]
 
