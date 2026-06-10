@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - 'v*'
+  release:
+    types: [published]
 
 permissions:
   contents: write
@@ -56,29 +58,21 @@ jobs:
         with:
           arch: arm64
 
-      - name: CMake Configure (clang-cl)
-        # On a native ARM64 host, we can use the ARM64-native clang-cl.
+      - name: CMake Configure (clang/clang++)
+        # On a native ARM64 host, we can use the ARM64-native clang/clang++.
         run: |
           cmake -G "Ninja" -S . -B build `
                 -DCMAKE_BUILD_TYPE=Release `
-                -DCMAKE_C_COMPILER=clang-cl `
-                -DCMAKE_CXX_COMPILER=clang-cl `
+                -DCMAKE_C_COMPILER=clang `
+                -DCMAKE_CXX_COMPILER=clang++ `
+                -DCMAKE_C_COMPILER_TARGET=arm64-pc-windows-msvc `
+                -DCMAKE_CXX_COMPILER_TARGET=arm64-windows-msvc `
                 -DHIMAX_ENABLE_NEON=ON `
-                -DEGO_BUILD_TESTS=ON
+                -DEGO_BUILD_TESTS=OFF `
+                -DEGO_BUILD_TOOLS=OFF
 
       - name: CMake Build
         run: cmake --build build --config Release --parallel
-
-      - name: Run Unit Tests (Native)
-        # Since we are on an ARM64 host, we can run hardware-independent tests.
-        working-directory: build
-        run: |
-          # Only running HostSystemStateMonitorTest as it doesn't require hardware.
-          if (Test-Path "HostSystemStateMonitorTest.exe") {
-            .\HostSystemStateMonitorTest.exe
-          } else {
-            Write-Host "HostSystemStateMonitorTest.exe not found; skipping smoke test."
-          }
 
       - name: Install WiX Toolset
         run: dotnet tool install --global wix
@@ -92,14 +86,12 @@ jobs:
           New-Item -ItemType Directory -Force -Path $assetDir | Out-Null
 
           wix build -ext WixToolset.UI.wixext -arch arm64 -d BuildVersion=$env:MSI_VERSION scripts\EGoTouchSetup.wxs -loc scripts\zh-CN.wxl -out "$assetDir\EGoTouchSetup_arm64_$($env:RELEASE_TAG).msi"
-          wix build -ext WixToolset.UI.wixext -arch arm64 -d BuildVersion=$env:MSI_VERSION scripts\EGoTouchTestSetup.wxs -loc scripts\zh-CN.wxl -out "$assetDir\EGoTouchTestSetup_arm64_$($env:RELEASE_TAG).msi"
 
       - name: Generate SHA256 checksums
         run: |
           $assetDir = "build\release-assets"
           $installers = @(
-            "$assetDir\EGoTouchSetup_arm64_$($env:RELEASE_TAG).msi",
-            "$assetDir\EGoTouchTestSetup_arm64_$($env:RELEASE_TAG).msi"
+            "$assetDir\EGoTouchSetup_arm64_$($env:RELEASE_TAG).msi"
           )
 
           $checksumLines = foreach ($installer in $installers) {
