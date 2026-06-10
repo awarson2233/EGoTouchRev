@@ -255,6 +255,7 @@ function(ego_configure_solvers_target target)
         "${SOLVERS_ROOT}/TouchSolver"
         "${SOLVERS_ROOT}/StylusSolver"
         "${SOLVERS_ROOT}/StylusSolver/shared"
+        "${SOLVERS_ROOT}/StylusSolver/hpp2"
         "${SOLVERS_ROOT}/StylusSolver/hpp3"
     )
     target_link_libraries(${target} PUBLIC Common)

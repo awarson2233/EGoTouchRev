@@ -1,7 +1,6 @@
 #pragma once
 
-#include "SolverTypes.h"
-
+#include "Hpp3Runtime.hpp"
 #include <algorithm>
 #include <cstdint>
 

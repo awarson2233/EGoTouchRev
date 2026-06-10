@@ -6,7 +6,6 @@
 #include "SolverBuildConfig.h"
 
 #include <array>
-#include <cstddef>
 #include <cstdint>
 
 namespace Solvers {

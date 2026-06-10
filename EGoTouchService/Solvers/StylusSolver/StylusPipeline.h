@@ -12,9 +12,6 @@
 #include <array>
 #include <cstdint>
 #include <mutex>
-#include <iosfwd>    // std::ostream 前向声明
-#include <string>
-#include <vector>
 
 namespace Config {
 class ConfigBinder;

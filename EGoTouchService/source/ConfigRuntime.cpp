@@ -1,7 +1,6 @@
 #include "ConfigRuntime.h"
 
 #include "Logger.h"
-#include "SolverTypes.h"
 #include "TouchPipeline.h"
 #include "StylusPipeline.h"
 #include "config/ConfigBinder.h"
@@ -16,7 +15,6 @@
 #include <memory>
 #include <optional>
 #include <span>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <type_traits>

@@ -9,8 +9,6 @@
 #include "GuiLogSink.h"
 #endif
 
-#include <string_view>
-
 // ── 服务自注册 / 自卸载 ──────────────────────────────────
 
 static bool EnsureDataDirectory() {

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "SolverTypes.h"
 #include "Hpp2Runtime.hpp"
 
 #include <algorithm>

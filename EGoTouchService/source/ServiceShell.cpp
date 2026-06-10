@@ -3,7 +3,6 @@
 #include "ServiceHost.h"
 #include "Logger.h"
 
-#include <string_view>
 #include <powersetting.h>
 
 namespace Service {
