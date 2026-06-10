@@ -126,8 +126,8 @@ int main() {
     const auto payload = MakePatchPayload({Config::ConfigTlvEntry{*autoModeKeyId, Config::ConfigValueType::Bool, "false"}});
 
     const auto applied = ApplyV3Patch(runtime, payload);
-    assert(applied.ipcStatus == Ipc::IpcStatusCode::Ok);
-    assert(applied.status == Ipc::ConfigV3MutationStatus::Ok);
+    assert(applied.runtimeStatus == Service::ServiceRuntimeStatusCode::Ok);
+    assert(applied.status == Service::ConfigV3MutationStatus::Ok);
     assert(applied.changedCount == 1);
     assert(applied.appliedCount == 1);
     assert(!applied.desiredServiceConfig.autoMode);
@@ -149,8 +149,8 @@ int main() {
     auto invalidPayload = payload;
     invalidPayload[0] ^= 0xFF;
     const auto rejected = ApplyV3Patch(runtime, invalidPayload);
-    assert(rejected.ipcStatus == Ipc::IpcStatusCode::InvalidRequest);
-    assert(rejected.status == Ipc::ConfigV3MutationStatus::Rejected);
+    assert(rejected.runtimeStatus == Service::ServiceRuntimeStatusCode::InvalidRequest);
+    assert(rejected.status == Service::ConfigV3MutationStatus::Rejected);
     assert(!runtime.ServiceState().autoMode);
     const auto afterRejectSnapshotBlob = runtime.BuildSnapshotV3Blob();
     assert(afterRejectSnapshotBlob.bytes == beforeRejectSnapshotBlob.bytes);
@@ -161,8 +161,8 @@ int main() {
     assert(touchStepKeyId.has_value());
     const auto touchPayload = MakePatchPayload({Config::ConfigTlvEntry{*touchStepKeyId, Config::ConfigValueType::Int32, "513"}});
     const auto touchApplied = ApplyV3Patch(runtime, touchPayload);
-    assert(touchApplied.ipcStatus == Ipc::IpcStatusCode::Ok);
-    assert(touchApplied.status == Ipc::ConfigV3MutationStatus::Ok);
+    assert(touchApplied.runtimeStatus == Service::ServiceRuntimeStatusCode::Ok);
+    assert(touchApplied.status == Service::ConfigV3MutationStatus::Ok);
     assert(touchApplied.changedCount == 1);
     assert(touchApplied.appliedCount == 1);
     assert(HasAction(touchApplied, Service::ConfigApplyActionKind::PipelineRuntime));
@@ -171,8 +171,8 @@ int main() {
     assert(touchPeakThresholdKeyId.has_value());
     const auto touchPeakPayload = MakePatchPayload({Config::ConfigTlvEntry{*touchPeakThresholdKeyId, Config::ConfigValueType::Int32, "351"}});
     const auto touchPeakApplied = ApplyV3Patch(runtime, touchPeakPayload);
-    assert(touchPeakApplied.ipcStatus == Ipc::IpcStatusCode::Ok);
-    assert(touchPeakApplied.status == Ipc::ConfigV3MutationStatus::Ok);
+    assert(touchPeakApplied.runtimeStatus == Service::ServiceRuntimeStatusCode::Ok);
+    assert(touchPeakApplied.status == Service::ConfigV3MutationStatus::Ok);
     assert(touchPeakApplied.changedCount == 1);
     assert(touchPeakApplied.appliedCount == 1);
     assert(HasAction(touchPeakApplied, Service::ConfigApplyActionKind::PipelineRuntime));
@@ -188,8 +188,8 @@ int main() {
         Config::ConfigTlvEntry{*iirLowHoverKeyId, Config::ConfigValueType::Int32, "2"},
     });
     const auto iirRejected = ApplyV3Patch(runtime, invalidIirPayload);
-    assert(iirRejected.ipcStatus == Ipc::IpcStatusCode::Ok);
-    assert(iirRejected.status == Ipc::ConfigV3MutationStatus::Rejected);
+    assert(iirRejected.runtimeStatus == Service::ServiceRuntimeStatusCode::Ok);
+    assert(iirRejected.status == Service::ConfigV3MutationStatus::Rejected);
     assert(HasFailedTargetResult(iirRejected, "PipelineConfigTarget"));
     const auto afterIirReject = runtime.BuildSnapshotV3Blob();
     assert(afterIirReject.bytes == beforeIirReject.bytes);
@@ -202,8 +202,8 @@ int main() {
     assert(v3AutoModeKeyId.has_value());
     const auto v3LivePayload = MakePatchPayload({Config::ConfigTlvEntry{*v3AutoModeKeyId, Config::ConfigValueType::Bool, "false"}});
     const auto v3LiveApplied = ApplyV3Patch(v3Runtime, v3LivePayload);
-    assert(v3LiveApplied.ipcStatus == Ipc::IpcStatusCode::Ok);
-    assert(v3LiveApplied.status == Ipc::ConfigV3MutationStatus::Ok);
+    assert(v3LiveApplied.runtimeStatus == Service::ServiceRuntimeStatusCode::Ok);
+    assert(v3LiveApplied.status == Service::ConfigV3MutationStatus::Ok);
     assert(v3LiveApplied.changedCount == 1);
     assert(v3LiveApplied.appliedCount == 1);
     assert(v3LiveApplied.restartRequiredCount == 0);
@@ -216,8 +216,8 @@ int main() {
     assert(serviceModeKeyId2.has_value());
     const auto restartPayload = MakePatchPayload({Config::ConfigTlvEntry{*serviceModeKeyId2, Config::ConfigValueType::String, "touch_only"}});
     const auto restartApplied = ApplyV3Patch(restartRuntime, restartPayload);
-    assert(restartApplied.ipcStatus == Ipc::IpcStatusCode::Ok);
-    assert(restartApplied.status == Ipc::ConfigV3MutationStatus::Ok);
+    assert(restartApplied.runtimeStatus == Service::ServiceRuntimeStatusCode::Ok);
+    assert(restartApplied.status == Service::ConfigV3MutationStatus::Ok);
     assert(restartApplied.changedCount == 1);
     assert(restartApplied.appliedCount == 0);
     assert(restartApplied.restartRequiredCount == 1);
@@ -227,8 +227,8 @@ int main() {
     assert(restartRuntime.SnapshotStore().getOr<std::string>("service.mode", "") == "touch_only");
 
     const auto stagedThenLiveApplied = ApplyV3Patch(restartRuntime, payload);
-    assert(stagedThenLiveApplied.ipcStatus == Ipc::IpcStatusCode::Ok);
-    assert(stagedThenLiveApplied.status == Ipc::ConfigV3MutationStatus::Ok);
+    assert(stagedThenLiveApplied.runtimeStatus == Service::ServiceRuntimeStatusCode::Ok);
+    assert(stagedThenLiveApplied.status == Service::ConfigV3MutationStatus::Ok);
     assert(stagedThenLiveApplied.appliedCount == 1);
     assert(stagedThenLiveApplied.restartRequiredCount == 0);
     assert(stagedThenLiveApplied.desiredServiceConfig.mode == Service::ServiceMode::Full);
@@ -244,21 +244,21 @@ int main() {
     Service::ConfigRuntime sessionRuntime;
     assert(sessionRuntime.Initialize("ignored-config-dir", [](const Config::ConfigStore&) { return true; }));
     const auto sessionLive = ApplyV3Patch(sessionRuntime, payload);
-    assert(sessionLive.ipcStatus == Ipc::IpcStatusCode::Ok);
-    assert(sessionLive.status == Ipc::ConfigV3MutationStatus::Ok);
+    assert(sessionLive.runtimeStatus == Service::ServiceRuntimeStatusCode::Ok);
+    assert(sessionLive.status == Service::ConfigV3MutationStatus::Ok);
     assert(sessionLive.appliedCount == 1);
     assert(!sessionRuntime.ServiceState().autoMode);
     const auto sessionTouchPeak = ApplyV3Patch(sessionRuntime, touchPeakPayload);
-    assert(sessionTouchPeak.ipcStatus == Ipc::IpcStatusCode::Ok);
-    assert(sessionTouchPeak.status == Ipc::ConfigV3MutationStatus::Ok);
+    assert(sessionTouchPeak.runtimeStatus == Service::ServiceRuntimeStatusCode::Ok);
+    assert(sessionTouchPeak.status == Service::ConfigV3MutationStatus::Ok);
     assert(sessionTouchPeak.appliedCount == 1);
     const auto sessionRestart = ApplyV3Patch(sessionRuntime, restartPayload);
-    assert(sessionRestart.ipcStatus == Ipc::IpcStatusCode::Ok);
+    assert(sessionRestart.runtimeStatus == Service::ServiceRuntimeStatusCode::Ok);
     assert(sessionRestart.restartRequiredCount == 1);
     assert(sessionRestart.desiredServiceConfig.mode == Service::ServiceMode::Full);
     const auto persistResult = sessionRuntime.PersistConfigV3();
-    assert(persistResult.ipcStatus == Ipc::IpcStatusCode::UnsupportedCommand);
-    assert(persistResult.status == Ipc::ConfigV3MutationStatus::PersistFailed);
+    assert(persistResult.runtimeStatus == Service::ServiceRuntimeStatusCode::UnsupportedCommand);
+    assert(persistResult.status == Service::ConfigV3MutationStatus::PersistFailed);
     assert(persistResult.persistedCount == 0);
     assert(persistResult.failedCount == 1);
     Service::ConfigRuntime restartedRuntime;
@@ -279,15 +279,15 @@ int main() {
         Config::ConfigTlvEntry{*penButtonRouteKeyId, Config::ConfigValueType::String, "vhf_only"},
     });
     const auto explicitRouteApplied = ApplyV3Patch(explicitRouteRuntime, explicitRoutePayload);
-    assert(explicitRouteApplied.ipcStatus == Ipc::IpcStatusCode::Ok);
-    assert(explicitRouteApplied.status == Ipc::ConfigV3MutationStatus::Ok);
+    assert(explicitRouteApplied.runtimeStatus == Service::ServiceRuntimeStatusCode::Ok);
+    assert(explicitRouteApplied.status == Service::ConfigV3MutationStatus::Ok);
     assert(explicitRouteApplied.appliedCount == 2);
     assert(explicitRouteApplied.desiredServiceConfig.penButtonMode == PenButtonMode::NativeBarrel);
     assert(explicitRouteApplied.desiredServiceConfig.penButtonRoute == PenButtonRoute::VhfOnly);
     assert(explicitRouteApplied.desiredServiceConfig.penButtonRouteExplicit);
     const auto explicitRoutePersist = explicitRouteRuntime.PersistConfigV3();
-    assert(explicitRoutePersist.ipcStatus == Ipc::IpcStatusCode::UnsupportedCommand);
-    assert(explicitRoutePersist.status == Ipc::ConfigV3MutationStatus::PersistFailed);
+    assert(explicitRoutePersist.runtimeStatus == Service::ServiceRuntimeStatusCode::UnsupportedCommand);
+    assert(explicitRoutePersist.status == Service::ConfigV3MutationStatus::PersistFailed);
     Service::ConfigRuntime explicitRouteRestarted;
     assert(explicitRouteRestarted.Initialize("", [](const Config::ConfigStore&) { return true; }));
     assert(explicitRouteRestarted.ServiceState().penButtonMode == PenButtonMode::OemCustom);
@@ -300,8 +300,8 @@ int main() {
     const auto startupOnlyRejected = ApplyV3Patch(
         v3RejectRuntime,
         MakePatchPayload({Config::ConfigTlvEntry{*serviceModeKeyId2, Config::ConfigValueType::String, "invalid_mode"}}));
-    assert(startupOnlyRejected.ipcStatus == Ipc::IpcStatusCode::Ok);
-    assert(startupOnlyRejected.status == Ipc::ConfigV3MutationStatus::Rejected);
+    assert(startupOnlyRejected.runtimeStatus == Service::ServiceRuntimeStatusCode::Ok);
+    assert(startupOnlyRejected.status == Service::ConfigV3MutationStatus::Rejected);
     assert(startupOnlyRejected.rejectedCount == 1);
     const auto afterV3Reject = v3RejectRuntime.BuildSnapshotV3Blob();
     assert(afterV3Reject.bytes == beforeV3Reject.bytes);
@@ -313,8 +313,8 @@ int main() {
     assert(rejectingRuntime.Initialize("", [](const Config::ConfigStore&) { return true; }));
     const auto rejectingBefore = rejectingRuntime.BuildSnapshotV3Blob();
     const auto targetRejected = ApplyV3Patch(rejectingRuntime, payload);
-    assert(targetRejected.ipcStatus == Ipc::IpcStatusCode::Ok);
-    assert(targetRejected.status == Ipc::ConfigV3MutationStatus::Rejected);
+    assert(targetRejected.runtimeStatus == Service::ServiceRuntimeStatusCode::Ok);
+    assert(targetRejected.status == Service::ConfigV3MutationStatus::Rejected);
     assert(HasFailedTargetResult(targetRejected, "RejectAutoModeTarget"));
     assert(rejectingRuntime.ServiceState().autoMode);
     const auto rejectingAfter = rejectingRuntime.BuildSnapshotV3Blob();
@@ -332,8 +332,8 @@ int main() {
     const auto boolFloatRejected = ApplyV3Patch(
         floatRuntime,
         MakePatchPayload({Config::ConfigTlvEntry{*fingerSharpnessKeyId, Config::ConfigValueType::Bool, "true"}}));
-    assert(boolFloatRejected.ipcStatus == Ipc::IpcStatusCode::Ok);
-    assert(boolFloatRejected.status == Ipc::ConfigV3MutationStatus::Rejected);
+    assert(boolFloatRejected.runtimeStatus == Service::ServiceRuntimeStatusCode::Ok);
+    assert(boolFloatRejected.status == Service::ConfigV3MutationStatus::Rejected);
 
     return 0;
 }

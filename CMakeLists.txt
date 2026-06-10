@@ -362,6 +362,9 @@ target_include_directories(EGoTouchServiceCore PUBLIC
     "${SERVICE_ROOT}/include"
 )
 target_link_libraries(EGoTouchServiceCore PUBLIC Common Solvers IPCCore advapi32)
+target_compile_definitions(EGoTouchServiceCore PUBLIC
+    EGOTOUCH_SERVICE_ENABLE_IPC=$<IF:$<CONFIG:Debug>,1,0>
+)
 
 add_executable(EGoTouchService
     "${SERVICE_ROOT}/source/ServiceEntry.cpp"
@@ -372,6 +375,9 @@ target_include_directories(EGoTouchService PRIVATE
     "${SERVICE_ROOT}/include"
 )
 target_link_libraries(EGoTouchService PRIVATE EGoTouchServiceCore DVRCore IPCCore Device Host Common advapi32 setupapi hid)
+target_compile_definitions(EGoTouchService PRIVATE
+    EGOTOUCH_SERVICE_ENABLE_IPC=$<IF:$<CONFIG:Debug>,1,0>
+)
 ego_copy_config_to_output(EGoTouchService)
 
 install(TARGETS EGoTouchService

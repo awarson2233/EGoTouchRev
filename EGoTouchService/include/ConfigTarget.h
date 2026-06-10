@@ -12,6 +12,26 @@
 
 namespace Service {
 
+enum class ServiceRuntimeStatusCode : uint8_t {
+    Ok = 0,
+    UnsupportedCommand = 1,
+    InvalidRequest = 2,
+    InvalidState = 3,
+    NotFound = 4,
+    PermissionDenied = 5,
+    InternalError = 6,
+};
+
+enum class ConfigV3MutationStatus : uint8_t {
+    Ok = 0,
+    NoChanges = 1,
+    VersionMismatch = 2,
+    Rejected = 3,
+    PersistFailed = 4,
+};
+
+constexpr uint16_t kConfigPatchV3PayloadBytes = 240;
+
 enum class ConfigApplyPhase {
     Live,
     Startup,

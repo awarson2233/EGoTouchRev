@@ -510,10 +510,10 @@ bool ConfigRuntime::ApplyPatchPayloadLocked(const uint8_t* data,
                                             V3ApplyResult& result) {
     const auto parseResult = Config::deserializePatchDetailed(data, size);
     if (!parseResult.ok()) {
-        result.ipcStatus = parseResult.status == Config::ConfigTlvParseStatus::InvalidArgument
-            ? Ipc::IpcStatusCode::InternalError
-            : Ipc::IpcStatusCode::InvalidRequest;
-        result.status = Ipc::ConfigV3MutationStatus::Rejected;
+        result.runtimeStatus = parseResult.status == Config::ConfigTlvParseStatus::InvalidArgument
+            ? ServiceRuntimeStatusCode::InternalError
+            : ServiceRuntimeStatusCode::InvalidRequest;
+        result.status = ConfigV3MutationStatus::Rejected;
         result.rejectedCount = 1;
         result.failedKeyId = static_cast<Config::ConfigKeyId>(parseResult.issue.rawKeyId);
         result.failedValueType = static_cast<Config::ConfigValueType>(parseResult.issue.rawValueType);
@@ -535,8 +535,8 @@ bool ConfigRuntime::ApplyPatchPayloadLocked(const uint8_t* data,
     restartChangeSet.entryCount = patch.entries.size();
 
     auto rejectEntry = [&](const Config::ConfigTlvEntry& entry) {
-        result.ipcStatus = Ipc::IpcStatusCode::Ok;
-        result.status = Ipc::ConfigV3MutationStatus::Rejected;
+        result.runtimeStatus = ServiceRuntimeStatusCode::Ok;
+        result.status = ConfigV3MutationStatus::Rejected;
         result.rejectedCount = 1;
         result.failedKeyId = entry.keyId;
         result.failedValueType = entry.valueType;
@@ -609,8 +609,8 @@ bool ConfigRuntime::ApplyPatchPayloadLocked(const uint8_t* data,
         auto validation = target->validateConfig(candidateActive, liveChangeSet);
         result.targetResults.push_back(validation);
         if (!validation.ok) {
-            result.ipcStatus = Ipc::IpcStatusCode::Ok;
-            result.status = Ipc::ConfigV3MutationStatus::Rejected;
+            result.runtimeStatus = ServiceRuntimeStatusCode::Ok;
+            result.status = ConfigV3MutationStatus::Rejected;
             result.rejectedCount = liveChangeSet.changedCount();
             LOG_WARN("Service", __func__, "Config", "Rejected config v3 patch by {}: {}",
                      validation.targetName, validation.message);
@@ -643,8 +643,8 @@ bool ConfigRuntime::ApplyPatchPayloadLocked(const uint8_t* data,
         result.targetResults.push_back(std::move(applyResult));
     }
 
-    result.ipcStatus = Ipc::IpcStatusCode::Ok;
-    result.status = result.changedCount == 0 ? Ipc::ConfigV3MutationStatus::NoChanges : Ipc::ConfigV3MutationStatus::Ok;
+    result.runtimeStatus = ServiceRuntimeStatusCode::Ok;
+    result.status = result.changedCount == 0 ? ConfigV3MutationStatus::NoChanges : ConfigV3MutationStatus::Ok;
     return true;
 }
 
@@ -653,9 +653,9 @@ ConfigRuntime::V3ApplyResult ConfigRuntime::ApplyConfigPatchV3(uint32_t baseSche
                                                                const uint8_t* data,
                                                                size_t size) {
     V3ApplyResult result{};
-    if (data == nullptr || size == 0 || size > Ipc::kConfigPatchV3PayloadBytes) {
-        result.ipcStatus = Ipc::IpcStatusCode::InvalidRequest;
-        result.status = Ipc::ConfigV3MutationStatus::Rejected;
+    if (data == nullptr || size == 0 || size > kConfigPatchV3PayloadBytes) {
+        result.runtimeStatus = ServiceRuntimeStatusCode::InvalidRequest;
+        result.status = ConfigV3MutationStatus::Rejected;
         result.rejectedCount = 1;
         return result;
     }
@@ -664,8 +664,8 @@ ConfigRuntime::V3ApplyResult ConfigRuntime::ApplyConfigPatchV3(uint32_t baseSche
     const uint32_t currentSchemaVersion = SchemaVersionFor(m_schema);
     const uint32_t currentSnapshotVersion = SnapshotVersionFor(m_store, m_schema, currentSchemaVersion);
     if (baseSchemaVersion != currentSchemaVersion || baseSnapshotVersion != currentSnapshotVersion) {
-        result.ipcStatus = Ipc::IpcStatusCode::Ok;
-        result.status = Ipc::ConfigV3MutationStatus::VersionMismatch;
+        result.runtimeStatus = ServiceRuntimeStatusCode::Ok;
+        result.status = ConfigV3MutationStatus::VersionMismatch;
         return result;
     }
 
@@ -675,8 +675,8 @@ ConfigRuntime::V3ApplyResult ConfigRuntime::ApplyConfigPatchV3(uint32_t baseSche
 
 ConfigRuntime::V3PersistResult ConfigRuntime::PersistConfigV3() {
     V3PersistResult result{};
-    result.ipcStatus = Ipc::IpcStatusCode::UnsupportedCommand;
-    result.status = Ipc::ConfigV3MutationStatus::PersistFailed;
+    result.runtimeStatus = ServiceRuntimeStatusCode::UnsupportedCommand;
+    result.status = ConfigV3MutationStatus::PersistFailed;
     result.failedCount = 1;
     LOG_WARN("Service", __func__, "Config", "PersistConfigV3 rejected: persistent config files are no longer supported.");
     return result;

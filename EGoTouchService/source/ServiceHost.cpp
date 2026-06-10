@@ -5,17 +5,20 @@
 #include "runtime/DeviceRuntime.h"
 #include "penevt/PenEventBridge.h"
 #include "penpress/PenPressureReader.h"
-#include "Ipc/IpcPipeServer.h"
-#include "Ipc/IpcSecurity.h"
-#include "Ipc/SharedFrameBuffer.h"
-#include "Ipc/ConfigSync.h"
 #include "SolverBuildConfig.h"
 #include "SolverTypes.h"
 #include "ServiceConfigCore.h"
 
+#if EGOTOUCH_SERVICE_ENABLE_IPC
 #include "GuiLogSink.h"
-#include "Logger.h"
+#include "Ipc/IpcPipeServer.h"
+#include "Ipc/IpcSecurity.h"
+#include "Ipc/SharedFrameBuffer.h"
+#include "Ipc/ConfigSync.h"
 #include "Ipc/IpcProtocol.h"
+#endif
+
+#include "Logger.h"
 #include "config/ConfigBinder.h"
 #include "config/ConfigKeyMap.h"
 #include "config/ConfigStore.h"
@@ -45,6 +48,7 @@ struct ServiceHost::Impl {
     // BT MCU 压力通道 (col01)：'U' 报文读取 + 频率 / 压感数据 —— 仅 Full 模式
     std::unique_ptr<Himax::Pen::PenPressureReader> m_penPressureReader;
 
+#if EGOTOUCH_SERVICE_ENABLE_IPC
     // IPC
     Ipc::IpcPipeServer m_ipcServer;
     Ipc::SharedFrameWriter m_frameWriter;
@@ -59,6 +63,7 @@ struct ServiceHost::Impl {
     std::mutex m_debugFrameMutex;
     Solvers::HeatmapFrame m_latestDebugFrame;
     bool m_hasLatestDebugFrame = false;
+#endif
 
 };
 
@@ -100,6 +105,15 @@ std::size_t Utf8TruncatedLength(std::string_view text, std::size_t capacity) noe
         lastGood = i;
     }
     return lastGood;
+}
+
+#if EGOTOUCH_SERVICE_ENABLE_IPC
+Ipc::IpcStatusCode ToIpcStatus(ServiceRuntimeStatusCode status) noexcept {
+    return static_cast<Ipc::IpcStatusCode>(static_cast<uint8_t>(status));
+}
+
+Ipc::ConfigV3MutationStatus ToIpcMutationStatus(ConfigV3MutationStatus status) noexcept {
+    return static_cast<Ipc::ConfigV3MutationStatus>(static_cast<uint8_t>(status));
 }
 
 bool BuildConfigV3PageResponse(Ipc::IpcCommand command,
@@ -170,6 +184,7 @@ void MarkLegacyConfigCommandUnsupported(Ipc::IpcCommand command, Ipc::IpcRespons
     LOG_WARN("Service", __func__, "IPC", "Legacy config IPC command {} is unsupported; use config v3 IPC.",
              static_cast<unsigned int>(command));
 }
+#endif
 
 constexpr std::array<std::pair<std::string_view, std::string_view>, 4> kStylusIirCoefficientPathPairs{
     std::pair{"stylus.sp.iir_coef_low_hover", "stylus.sp.iir_coef_low_in_band"},
@@ -452,7 +467,9 @@ bool ServiceHost::StartRuntimeAndPipeline() {
     m_deviceRuntime->ApplyConfigStore(startupConfig);
 
     ApplyServiceConfigToRuntime(m_configState);
+#if EGOTOUCH_SERVICE_ENABLE_IPC
     BuildDebugSchema();
+#endif
 
     if (!m_deviceRuntime->Start()) {
         LOG_ERROR("Service", __func__, "Boot", "DeviceRuntime::Start() failed.");
@@ -480,6 +497,7 @@ void ServiceHost::StartSystemStateMonitor() {
     LOG_INFO("Service", __func__, "Monitor", "SystemStateMonitor started.");
 }
 
+#if EGOTOUCH_SERVICE_ENABLE_IPC
 void ServiceHost::StartIpcSubsystem() {
 #ifdef _DEBUG
     // Service creates Global\\ mapping in debug builds.
@@ -519,6 +537,8 @@ void ServiceHost::StartIpcSubsystem() {
     LOG_INFO("Service", __func__, "Boot", "IPC pipe server started.");
 }
 
+#endif
+
 void ServiceHost::StartPenSubsystem() {
     if (m_runtimeMode != ServiceMode::Full) {
         LOG_INFO("Service", __func__, "MCU", "Pen modules skipped (touch_only mode).");
@@ -526,9 +546,11 @@ void ServiceHost::StartPenSubsystem() {
     }
 
     m_impl->m_penEventBridge = std::make_unique<Himax::Pen::PenEventBridge>();
+#if EGOTOUCH_SERVICE_ENABLE_IPC
     if (m_impl->m_penEvent) {
         m_impl->m_penEventBridge->SetNotifyEvent(m_impl->m_penEvent);
     }
+#endif
     m_impl->m_penEventBridge->SetEventCallback(
         [this](const Himax::Pen::PenEvent& ev) {
             if (m_deviceRuntime) {
@@ -539,9 +561,11 @@ void ServiceHost::StartPenSubsystem() {
     LOG_INFO("Service", __func__, "MCU", "PenEventBridge started (col00 event channel).");
 
     m_impl->m_penPressureReader = std::make_unique<Himax::Pen::PenPressureReader>();
+#if EGOTOUCH_SERVICE_ENABLE_IPC
     if (m_impl->m_penEvent) {
         m_impl->m_penPressureReader->SetNotifyEvent(m_impl->m_penEvent);
     }
+#endif
     m_impl->m_penPressureReader->SetPressureCallback(
         [this](const Himax::Pen::PenPressureStats& stats) {
             if (m_deviceRuntime) {
@@ -571,13 +595,16 @@ bool ServiceHost::Start() {
     }
 
     StartSystemStateMonitor();
+#if EGOTOUCH_SERVICE_ENABLE_IPC
     StartIpcSubsystem();
+#endif
     StartPenSubsystem();
 
     LOG_INFO("Service", __func__, "Boot", "All modules started.");
     return true;
 }
 
+#if EGOTOUCH_SERVICE_ENABLE_IPC
 void ServiceHost::StopIpcSubsystem() {
     m_impl->m_ipcServer.Stop();
 #ifdef _DEBUG
@@ -606,6 +633,8 @@ void ServiceHost::StopIpcSubsystem() {
         m_impl->m_penEvent = nullptr;
     }
 }
+
+#endif
 
 void ServiceHost::StopPenSubsystem() {
     if (m_impl->m_penPressureReader) {
@@ -645,13 +674,16 @@ void ServiceHost::StopRuntimeSubsystem() {
 
 void ServiceHost::Stop() {
     StopPenSubsystem();
+#if EGOTOUCH_SERVICE_ENABLE_IPC
     StopIpcSubsystem();
+#endif
     StopSystemStateMonitor();
     StopRuntimeSubsystem();
 
     LOG_INFO("Service", __func__, "Shutdown", "All modules stopped.");
 }
 
+#if EGOTOUCH_SERVICE_ENABLE_IPC
 // ── Pipeline 构建 ──────────────────────────────
 void ServiceHost::CopyCString(char* dst, size_t dstSize, std::string_view src) {
     if (!dst || dstSize == 0) return;
@@ -1032,8 +1064,8 @@ void ServiceHost::HandleIpcConfigV3ApplyPatch(const Ipc::IpcRequest& req, Ipc::I
         request.bytes,
         request.payloadBytes);
 
-    if (apply.ipcStatus != Ipc::IpcStatusCode::Ok) {
-        Ipc::MarkFailure(resp, apply.ipcStatus);
+    if (apply.runtimeStatus != ServiceRuntimeStatusCode::Ok) {
+        Ipc::MarkFailure(resp, ToIpcStatus(apply.runtimeStatus));
         return;
     }
 
@@ -1049,7 +1081,7 @@ void ServiceHost::HandleIpcConfigV3ApplyPatch(const Ipc::IpcRequest& req, Ipc::I
     }
 
     Ipc::ConfigV3ApplyResultWire result{};
-    result.status = static_cast<uint8_t>(apply.status);
+    result.status = static_cast<uint8_t>(ToIpcMutationStatus(apply.status));
     result.changedCount = static_cast<uint16_t>(std::min<size_t>(apply.changedCount, UINT16_MAX));
     result.appliedCount = static_cast<uint16_t>(std::min<size_t>(apply.appliedCount, UINT16_MAX));
     result.restartRequiredCount = static_cast<uint16_t>(std::min<size_t>(apply.restartRequiredCount, UINT16_MAX));
@@ -1066,13 +1098,13 @@ void ServiceHost::HandleIpcConfigV3ApplyPatch(const Ipc::IpcRequest& req, Ipc::I
 
 void ServiceHost::HandleIpcConfigV3Persist(Ipc::IpcResponse& resp) {
     const auto persist = m_configRuntime.PersistConfigV3();
-    if (persist.ipcStatus != Ipc::IpcStatusCode::Ok) {
-        Ipc::MarkFailure(resp, persist.ipcStatus);
+    if (persist.runtimeStatus != ServiceRuntimeStatusCode::Ok) {
+        Ipc::MarkFailure(resp, ToIpcStatus(persist.runtimeStatus));
         return;
     }
 
     Ipc::PersistConfigV3ResponseWire result{};
-    result.status = static_cast<uint8_t>(persist.status);
+    result.status = static_cast<uint8_t>(ToIpcMutationStatus(persist.status));
     result.persistedCount = static_cast<uint16_t>(std::min<size_t>(persist.persistedCount, UINT16_MAX));
     result.skippedCount = static_cast<uint16_t>(std::min<size_t>(persist.skippedCount, UINT16_MAX));
     result.failedCount = static_cast<uint16_t>(std::min<size_t>(persist.failedCount, UINT16_MAX));
@@ -1422,5 +1454,7 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(const Ipc::IpcRequest& req) {
 
     return resp;
 }
+
+#endif
 
 } // namespace Service

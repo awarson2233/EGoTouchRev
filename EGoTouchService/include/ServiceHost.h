@@ -60,6 +60,7 @@ private:
     std::unique_ptr<DeviceRuntime> m_deviceRuntime;
     std::unique_ptr<Impl> m_impl;
 
+#if EGOTOUCH_SERVICE_ENABLE_IPC
     static void CopyCString(char* dst, size_t dstSize, std::string_view src);
     static uint32_t HashDebugSchema(const std::vector<Ipc::DebugFieldSchemaWire>& defs);
     static uint16_t DeriveDebugSchemaVersion(uint32_t schemaHash);
@@ -72,6 +73,7 @@ private:
                                    int16_t sourceIndex,
                                    bool& valid);
     void BuildDebugSchema();
+#endif
 
     bool InitializeConfigStores(const std::string& configPath);
     void ApplyServiceConfigToRuntime(const ServiceConfigState& config);
@@ -79,14 +81,19 @@ private:
     bool ValidateStartupConfig(const Config::ConfigStore& store) const;
     bool StartRuntimeAndPipeline();
     void StartSystemStateMonitor();
+#if EGOTOUCH_SERVICE_ENABLE_IPC
     void StartIpcSubsystem();
+#endif
     void StartPenSubsystem();
 
+#if EGOTOUCH_SERVICE_ENABLE_IPC
     void StopIpcSubsystem();
+#endif
     void StopPenSubsystem();
     void StopSystemStateMonitor();
     void StopRuntimeSubsystem();
 
+#if EGOTOUCH_SERVICE_ENABLE_IPC
     void HandleIpcEnterDebugMode(Ipc::IpcResponse& resp);
     void HandleIpcExitDebugMode(Ipc::IpcResponse& resp);
     void HandleIpcGetConfigCatalogV3(const Ipc::IpcRequest& req, Ipc::IpcResponse& resp);
@@ -100,6 +107,7 @@ private:
     void HandleIpcGetDebugSnapshot(Ipc::IpcResponse& resp);
 
     Ipc::IpcResponse HandleIpcCommand(const Ipc::IpcRequest& req);
+#endif
 };
 
 } // namespace Service

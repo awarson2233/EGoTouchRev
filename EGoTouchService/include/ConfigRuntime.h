@@ -2,7 +2,6 @@
 
 #include "ConfigTarget.h"
 #include "ServiceConfigCore.h"
-#include "Ipc/IpcProtocol.h"
 #include "config/ConfigStore.h"
 #include "config/ConfigTlv.h"
 #include "config/ConfigValue.h"
@@ -23,8 +22,8 @@ public:
     using StartupValidator = std::function<bool(const Config::ConfigStore&)>;
 
     struct V3ApplyResult {
-        Ipc::IpcStatusCode ipcStatus = Ipc::IpcStatusCode::Ok;
-        Ipc::ConfigV3MutationStatus status = Ipc::ConfigV3MutationStatus::Ok;
+        ServiceRuntimeStatusCode runtimeStatus = ServiceRuntimeStatusCode::Ok;
+        ConfigV3MutationStatus status = ConfigV3MutationStatus::Ok;
         size_t entryCount = 0;
         size_t changedCount = 0;
         size_t appliedCount = 0;
@@ -39,8 +38,8 @@ public:
     };
 
     struct V3PersistResult {
-        Ipc::IpcStatusCode ipcStatus = Ipc::IpcStatusCode::Ok;
-        Ipc::ConfigV3MutationStatus status = Ipc::ConfigV3MutationStatus::Ok;
+        ServiceRuntimeStatusCode runtimeStatus = ServiceRuntimeStatusCode::Ok;
+        ConfigV3MutationStatus status = ConfigV3MutationStatus::Ok;
         size_t persistedCount = 0;
         size_t skippedCount = 0;
         size_t failedCount = 0;
