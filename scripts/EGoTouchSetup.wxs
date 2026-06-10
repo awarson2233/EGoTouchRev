@@ -19,6 +19,9 @@
     <!-- 安装向导界面：WixUI_InstallDir 提供欢迎页 + 许可协议 + 安装目录 + 进度 + 完成 -->
     <ui:WixUI Id="WixUI_InstallDir" />
 
+    <!-- 必须指定 WixUI_InstallDir 绑定的安装目录属性，否则运行时会报 Error 2819 -->
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+
     <!-- 许可协议 RTF -->
     <WixVariable Id="WixUILicenseRtf" Value="!(loc.LicenseRtf)" />
 
