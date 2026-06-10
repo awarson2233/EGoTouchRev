@@ -54,16 +54,6 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
-    },
-    {
-      "name": "arm64-Release-O3",
-      "displayName": "arm64 Release O3",
-      "inherits": "arm64-base",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_C_FLAGS_RELEASE": "/clang:-O3",
-        "CMAKE_CXX_FLAGS_RELEASE": "/clang:-O3"
-      }
     }
   ],
   "buildPresets": [
@@ -76,11 +66,6 @@
       "name": "arm64-Release",
       "displayName": "arm64 Release Build",
       "configurePreset": "arm64-Release"
-    },
-    {
-      "name": "arm64-Release-O3",
-      "displayName": "arm64 Release O3 Build",
-      "configurePreset": "arm64-Release-O3"
     }
   ],
   "testPresets": [
@@ -93,11 +78,6 @@
       "name": "arm64-Release",
       "displayName": "arm64 Release Test",
       "configurePreset": "arm64-Release"
-    },
-    {
-      "name": "arm64-Release-O3",
-      "displayName": "arm64 Release O3 Test",
-      "configurePreset": "arm64-Release-O3"
     }
   ]
 }

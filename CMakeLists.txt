@@ -119,35 +119,13 @@ file(GLOB COMMON_HEADERS "${COMMON_ROOT}/include/*.h")
 file(GLOB IPC_SOURCES "${IPC_ROOT}/source/*.cpp")
 file(GLOB IPC_HEADERS "${IPC_ROOT}/include/Ipc/*.h")
 
-add_subdirectory("${COMMON_ROOT}/spdlog-1.17.0" "spdlog_build")
+add_subdirectory("${COMMON_ROOT}/spdlog" "spdlog_build")
 
 # yaml-cpp
-include(FetchContent)
+set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "Disable yaml-cpp tests")
+set(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "Disable yaml-cpp tools")
+add_subdirectory("${COMMON_ROOT}/yaml-cpp" "yaml_build")
 
-execute_process(
-    COMMAND git rev-parse --path-format=absolute --git-common-dir
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    OUTPUT_VARIABLE EGOTOUCH_GIT_COMMON_DIR
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    ERROR_QUIET
-)
-if (EGOTOUCH_GIT_COMMON_DIR)
-    get_filename_component(EGOTOUCH_MAIN_WORKTREE_DIR "${EGOTOUCH_GIT_COMMON_DIR}/.." ABSOLUTE)
-    set(EGOTOUCH_FETCHCONTENT_SOURCE_CACHE_DIR "${EGOTOUCH_MAIN_WORKTREE_DIR}/.cache/fetchcontent")
-else()
-    set(EGOTOUCH_FETCHCONTENT_SOURCE_CACHE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/.cache/fetchcontent")
-endif()
-message(STATUS "FetchContent source cache dir: ${EGOTOUCH_FETCHCONTENT_SOURCE_CACHE_DIR}")
-
-FetchContent_Declare(
-    yaml-cpp
-    GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
-    GIT_TAG yaml-cpp-0.9.0
-    GIT_SHALLOW TRUE
-    UPDATE_DISCONNECTED TRUE
-    SOURCE_DIR "${EGOTOUCH_FETCHCONTENT_SOURCE_CACHE_DIR}/yaml-cpp-src"
-)
-FetchContent_MakeAvailable(yaml-cpp)
 
 # Common library: Pure utilities (Logger, SharedFrameBuffer) - NO ImGui
 add_library(Common STATIC
