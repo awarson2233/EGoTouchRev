@@ -5,7 +5,9 @@
 #include "ServiceEntry.h"
 #include "ServiceShell.h"
 #include "Logger.h"
+#if EGOTOUCH_SERVICE_ENABLE_IPC
 #include "GuiLogSink.h"
+#endif
 
 #include <string_view>
 
@@ -135,8 +137,12 @@ public:
             SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
         }
 
+#if EGOTOUCH_SERVICE_ENABLE_IPC
         Common::Logger::Init("EGoTouchService", "C:/ProgramData/EGoTouchRev/logs/",
                               Common::GuiLogSink::Instance());
+#else
+        Common::Logger::Init("EGoTouchService", "C:/ProgramData/EGoTouchRev/logs/", nullptr);
+#endif
 
         LOG_INFO("Service", __func__, "Boot", "Process priority set to REALTIME_PRIORITY_CLASS.");
     }

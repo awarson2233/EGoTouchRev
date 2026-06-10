@@ -361,7 +361,7 @@ add_library(EGoTouchServiceCore STATIC
 target_include_directories(EGoTouchServiceCore PUBLIC
     "${SERVICE_ROOT}/include"
 )
-target_link_libraries(EGoTouchServiceCore PUBLIC Common Solvers IPCCore advapi32)
+target_link_libraries(EGoTouchServiceCore PUBLIC Common Solvers $<$<CONFIG:Debug>:IPCCore> advapi32)
 target_compile_definitions(EGoTouchServiceCore PUBLIC
     EGOTOUCH_SERVICE_ENABLE_IPC=$<IF:$<CONFIG:Debug>,1,0>
 )
@@ -374,7 +374,7 @@ add_executable(EGoTouchService
 target_include_directories(EGoTouchService PRIVATE
     "${SERVICE_ROOT}/include"
 )
-target_link_libraries(EGoTouchService PRIVATE EGoTouchServiceCore IPCCore Device Host Common advapi32 setupapi hid)
+target_link_libraries(EGoTouchService PRIVATE EGoTouchServiceCore $<$<CONFIG:Debug>:IPCCore> Device Host Common advapi32 setupapi hid)
 target_compile_definitions(EGoTouchService PRIVATE
     EGOTOUCH_SERVICE_ENABLE_IPC=$<IF:$<CONFIG:Debug>,1,0>
 )
