@@ -173,6 +173,11 @@ target_include_directories(Common PUBLIC
 # Common links Solvers for SharedFrameBuffer (EngineTypes.h)
 # Forward-declare include path; Solvers target linked below after Solvers is defined
 target_link_libraries(Common PUBLIC spdlog::spdlog)
+target_compile_definitions(Common PRIVATE
+    $<$<CONFIG:Debug>:SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE>
+    $<$<CONFIG:Release>:SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO>
+    $<$<CONFIG:Release>:EGOTOUCH_LOGGER_SYNC_FILE_ONLY=1>
+)
 
 # 启用预编译头 (PCH) 以减少编译时的重复解析开销
 target_precompile_headers(Common PRIVATE
@@ -230,6 +235,10 @@ target_compile_definitions(Device PUBLIC
     $<$<BOOL:${HIMAX_ENABLE_NEON}>:HIMAX_ENABLE_NEON=1>
     $<$<NOT:$<BOOL:${HIMAX_ENABLE_NEON}>>:HIMAX_ENABLE_NEON=0>
 )
+target_compile_definitions(Device PRIVATE
+    $<$<CONFIG:Debug>:SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE>
+    $<$<CONFIG:Release>:SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO>
+)
 
 target_include_directories(Device PUBLIC
     "${DEVICE_ROOT}"
@@ -249,6 +258,10 @@ function(ego_configure_solvers_target target)
     target_compile_definitions(${target} PUBLIC
         $<$<BOOL:${HIMAX_ENABLE_NEON}>:HIMAX_ENABLE_NEON=1>
         $<$<NOT:$<BOOL:${HIMAX_ENABLE_NEON}>>:HIMAX_ENABLE_NEON=0>
+    )
+    target_compile_definitions(${target} PRIVATE
+        $<$<CONFIG:Debug>:SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE>
+        $<$<CONFIG:Release>:SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO>
     )
     target_include_directories(${target} PUBLIC
         "${SOLVERS_ROOT}"
@@ -277,6 +290,10 @@ add_library(Host STATIC
 )
 target_include_directories(Host PUBLIC "${HOST_ROOT}")
 target_link_libraries(Host PUBLIC Common)
+target_compile_definitions(Host PRIVATE
+    $<$<CONFIG:Debug>:SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE>
+    $<$<CONFIG:Release>:SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO>
+)
 if (WIN32)
     target_link_libraries(Host PUBLIC advapi32)
 endif()
@@ -366,6 +383,10 @@ target_link_libraries(EGoTouchServiceCore PUBLIC Common Solvers $<$<CONFIG:Debug
 target_compile_definitions(EGoTouchServiceCore PUBLIC
     EGOTOUCH_SERVICE_ENABLE_IPC=$<IF:$<CONFIG:Debug>,1,0>
 )
+target_compile_definitions(EGoTouchServiceCore PRIVATE
+    $<$<CONFIG:Debug>:SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE>
+    $<$<CONFIG:Release>:SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO>
+)
 
 add_executable(EGoTouchService
     "${SERVICE_ROOT}/source/ServiceEntry.cpp"
@@ -378,7 +399,10 @@ target_include_directories(EGoTouchService PRIVATE
 target_link_libraries(EGoTouchService PRIVATE EGoTouchServiceCore $<$<CONFIG:Debug>:IPCCore> Device Host Common advapi32 setupapi hid)
 target_compile_definitions(EGoTouchService PRIVATE
     EGOTOUCH_SERVICE_ENABLE_IPC=$<IF:$<CONFIG:Debug>,1,0>
+    $<$<CONFIG:Debug>:SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE>
+    $<$<CONFIG:Release>:SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO>
 )
+
 ego_copy_config_to_output(EGoTouchService)
 
 install(TARGETS EGoTouchService

@@ -18,11 +18,11 @@ public:
     int32_t m_speedTholdHover = 20;  // 0x14
 
     // Writing mode params (has pressure)
-    int32_t m_coefLowWriting = 6;        // asa[0xA5C]
-    int32_t m_coefHighWriting = 18;      // asa[0xA5D]
+    int32_t m_coefLowWriting = 18;        // asa[0xA5C]
+    int32_t m_coefHighWriting = 26;      // asa[0xA5D]
     int32_t m_speedTholdWriting = 10;    // 0x0A
 
-    int32_t m_speedMax = 140;  // 0xCD — speed value at which high coef is fully engaged
+    int32_t m_speedMax = 60;  // 0xCD — speed value at which high coef is fully engaged
     int32_t m_maxCoef = 32;    // asa[0xA60] — denominator in IIR formula
 
     // ── Output ──

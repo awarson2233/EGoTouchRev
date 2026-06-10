@@ -3,18 +3,20 @@
  * @brief 通用日志模块实现
  */
 #include "Logger.h"
+
+#include <spdlog/async.h>
+#include <spdlog/async_logger.h>
+#include <spdlog/sinks/daily_file_sink.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
+
 #include <iostream>
+#include <system_error>
+#include <vector>
 
 namespace Common {
 
 namespace {
-constexpr std::size_t kDebugAsyncQueueSize = 8192;
-constexpr std::size_t kReleaseAsyncQueueSize = 2048;
-#if defined(NDEBUG)
-constexpr std::size_t kAsyncQueueSize = kReleaseAsyncQueueSize;
-#else
-constexpr std::size_t kAsyncQueueSize = kDebugAsyncQueueSize;
-#endif
+constexpr std::size_t kAsyncQueueSize = 8192;
 } // namespace
 
 std::shared_ptr<spdlog::logger> Logger::s_logger = nullptr;
@@ -35,31 +37,41 @@ void Logger::Init(const std::string& loggerName, const std::filesystem::path& lo
             return;
         }
 
-        // 初始化异步日志线程池
-        spdlog::init_thread_pool(kAsyncQueueSize, 1);
+#if defined(EGOTOUCH_LOGGER_SYNC_FILE_ONLY) && (EGOTOUCH_LOGGER_SYNC_FILE_ONLY == 1)
+        const bool syncFileOnly = (loggerName == "EGoTouchService");
+#else
+        constexpr bool syncFileOnly = false;
+#endif
 
-        // 1. Console Sink (带颜色)
-        auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-        // 格式: [%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v
-        console_sink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%-7l%$] %v");
-
-        // 2. Daily File Sink (每天午夜轮转，最多保留 3 个文件)
+        // Daily File Sink (每天午夜轮转，最多保留 3 个文件)
         fs::path file_path = logDir / (loggerName + ".txt");
         auto file_sink = std::make_shared<spdlog::sinks::daily_file_sink_mt>(file_path.string(), 0, 0, false, 3);
         file_sink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%-7l] %v");
 
-        std::vector<spdlog::sink_ptr> sinks {console_sink, file_sink};
-        if (extraSink) sinks.push_back(extraSink);
+        if (!syncFileOnly) {
+            // 初始化异步日志线程池
+            spdlog::init_thread_pool(kAsyncQueueSize, 1);
 
-        // 创建异步 Logger
-        s_logger = std::make_shared<spdlog::async_logger>(
-            loggerName, 
-            sinks.begin(), sinks.end(), 
-            spdlog::thread_pool(), 
-            spdlog::async_overflow_policy::block
-        );
+            // Console Sink (带颜色)
+            auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+            // 格式: [%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v
+            console_sink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%-7l%$] %v");
 
-        s_logger->set_level(spdlog::level::trace);
+            std::vector<spdlog::sink_ptr> sinks {console_sink, file_sink};
+            if (extraSink) sinks.push_back(extraSink);
+
+            // 创建异步 Logger
+            s_logger = std::make_shared<spdlog::async_logger>(
+                loggerName,
+                sinks.begin(), sinks.end(),
+                spdlog::thread_pool(),
+                spdlog::async_overflow_policy::block
+            );
+        } else {
+            s_logger = std::make_shared<spdlog::logger>(loggerName, file_sink);
+        }
+
+        s_logger->set_level(syncFileOnly ? spdlog::level::info : spdlog::level::trace);
         s_logger->flush_on(spdlog::level::info);
 
         spdlog::register_logger(s_logger);

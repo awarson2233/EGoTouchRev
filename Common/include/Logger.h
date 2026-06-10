@@ -56,8 +56,18 @@ private:
     }
 
 // 暴露给业务层使用的便捷宏
+#if SPDLOG_ACTIVE_LEVEL <= SPDLOG_LEVEL_TRACE
 #define LOG_TRACE(layer, method, state, msg, ...) LOG_INTERNAL(trace, layer, method, state, msg __VA_OPT__(,) __VA_ARGS__)
+#else
+#define LOG_TRACE(layer, method, state, msg, ...) (void)0
+#endif
+
+#if SPDLOG_ACTIVE_LEVEL <= SPDLOG_LEVEL_DEBUG
 #define LOG_DEBUG(layer, method, state, msg, ...) LOG_INTERNAL(debug, layer, method, state, msg __VA_OPT__(,) __VA_ARGS__)
+#else
+#define LOG_DEBUG(layer, method, state, msg, ...) (void)0
+#endif
+
 #define LOG_INFO(layer,  method, state, msg, ...) LOG_INTERNAL(info,  layer, method, state, msg __VA_OPT__(,) __VA_ARGS__)
 #define LOG_WARN(layer,  method, state, msg, ...) LOG_INTERNAL(warn,  layer, method, state, msg __VA_OPT__(,) __VA_ARGS__)
 #define LOG_ERROR(layer, method, state, msg, ...) LOG_INTERNAL(error, layer, method, state, msg __VA_OPT__(,) __VA_ARGS__)
