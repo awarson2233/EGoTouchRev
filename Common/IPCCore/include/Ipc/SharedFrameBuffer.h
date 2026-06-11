@@ -576,9 +576,6 @@ inline void PopulateSolverFrameFromSharedFrameData(HeatmapFrame& out,
     }
 #endif
 
-    if (out.touch.output.contacts.capacity() < kMaxSharedContacts) {
-        out.touch.output.contacts.reserve(kMaxSharedContacts);
-    }
     out.touch.output.contacts.resize(src.contactCount);
     for (int i = 0; i < src.contactCount; ++i) {
         const auto& srcContact = src.contacts[i];

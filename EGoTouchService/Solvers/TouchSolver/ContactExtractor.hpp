@@ -117,7 +117,7 @@ public:
         int   m_unitPerSigMm2 = 128;
         uint8_t m_fallbackSizeMm = 5;
 
-        inline void Process(std::vector<TouchContact>& contacts) {
+        inline void Process(std::span<TouchContact> contacts) {
             for (auto& tc : contacts) {
                 uint8_t sizeMm = GetSizeInMM(tc.signalSum, m_unitPerSigMm2);
                 if (sizeMm == 0) sizeMm = m_fallbackSizeMm;
@@ -154,7 +154,7 @@ public:
                         int16_t sigThold,
                         std::span<const PeakEvaluation> evaluations = {}) {
         m_zoneExp.Process(frame, peaks, sigThold, evaluations);
-        m_touchSize.Process(frame.touch.output.contacts);
+        m_touchSize.Process(frame.touch.output.contacts.span());
     }
 
     const std::array<uint8_t, MicroZoneSegmenter::kGridSize>& GetPeakZones() const { return m_microZoneSeg.GetPeakZones(); }

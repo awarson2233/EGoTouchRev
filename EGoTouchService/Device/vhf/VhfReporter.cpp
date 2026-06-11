@@ -195,7 +195,7 @@ void VhfReporter::Dispatch(Solvers::HeatmapFrame& frame) {
     }
 
     frame.touch.output.touchPackets = VhfTouchPacket::Build(
-        frame.touch.output.contacts,
+        frame.touch.output.contacts.span(),
         m_transpose.load(std::memory_order_relaxed));
 
     const bool hasTouch = HasTouchReports(frame.touch.output.touchPackets);
@@ -273,7 +273,7 @@ void VhfReporter::DispatchTouch(Solvers::HeatmapFrame& frame) {
     }
 
     frame.touch.output.touchPackets = VhfTouchPacket::Build(
-        frame.touch.output.contacts,
+        frame.touch.output.contacts.span(),
         m_transpose.load(std::memory_order_relaxed));
 
     const bool hasTouch = HasTouchReports(frame.touch.output.touchPackets);

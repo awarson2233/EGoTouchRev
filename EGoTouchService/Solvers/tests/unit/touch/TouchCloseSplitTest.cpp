@@ -54,7 +54,7 @@ bool HasPeakAt(std::span<const Solvers::Touch::Peak> peaks, int row, int col) {
     return false;
 }
 
-const Solvers::TouchContact* FindContactById(const std::vector<Solvers::TouchContact>& contacts, int id) {
+const Solvers::TouchContact* FindContactById(std::span<const Solvers::TouchContact> contacts, int id) {
     for (const auto& contact : contacts) {
         if (contact.id == id) return &contact;
     }
@@ -150,8 +150,8 @@ void TestZoneExpanderPartitionsMergedTwoPeakZone() {
 
     Require(frame.touch.output.contacts.size() == 2, "merged two-peak zone should emit two contacts");
 
-    const auto* leftContact = FindContactById(frame.touch.output.contacts, 20);
-    const auto* rightContact = FindContactById(frame.touch.output.contacts, 22);
+    const auto* leftContact = FindContactById(frame.touch.output.contacts.span(), 20);
+    const auto* rightContact = FindContactById(frame.touch.output.contacts.span(), 22);
     Require(leftContact != nullptr, "left peak id should be preserved in output contact");
     Require(rightContact != nullptr, "right peak id should be preserved in output contact");
     Require(std::fabs(leftContact->x - rightContact->x) >= 1.0f,

@@ -612,9 +612,6 @@ private:
         m_contactEdgeInfos.clear();
         const size_t desiredCapacity = static_cast<size_t>(
             std::max(m_maxTouches, static_cast<int>(peaks.size())));
-        if (frame.touch.output.contacts.capacity() < desiredCapacity) {
-            frame.touch.output.contacts.reserve(desiredCapacity);
-        }
         if (m_contactEdgeInfos.capacity() < desiredCapacity) {
             m_contactEdgeInfos.reserve(desiredCapacity);
         }

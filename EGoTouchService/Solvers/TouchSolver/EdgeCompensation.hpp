@@ -282,7 +282,7 @@ public:
         g_defaultECProfiles[3],
     };
 
-    inline void Process(std::vector<TouchContact>& contacts,
+    inline void Process(std::span<TouchContact> contacts,
                         const std::vector<ZoneEdgeInfo>& edgeInfos,
                         const EdgeBounds& bounds) {
         if (!m_enabled) return;
@@ -406,7 +406,7 @@ public:
     int  m_moveInDelay = 2;
     int  m_edgeMargin = 2;
 
-    inline void Process(std::vector<TouchContact>& contacts,
+    inline void Process(std::span<TouchContact> contacts,
                         const std::vector<ZoneEdgeInfo>& edgeInfos,
                         const EdgeBounds& bounds) {
         if (!m_enabled) return;
