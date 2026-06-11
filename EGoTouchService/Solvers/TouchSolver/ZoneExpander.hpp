@@ -103,7 +103,7 @@ public:
 
     }
 
-    const std::vector<ZoneEdgeInfo>& GetEdgeInfos() const { return m_contactEdgeInfos; }
+    std::span<const ZoneEdgeInfo> GetEdgeInfos() const { return m_contactEdgeInfos.span(); }
     int GetZoneCount() const { return m_zoneCount; }
     const std::array<uint8_t, kGridSize>& GetTouchZones() const { return m_touchZones; }
     const std::array<uint8_t, kGridSize>& GetZoneEdge() const { return m_zoneEdge; }
@@ -152,9 +152,10 @@ private:
 
     std::array<uint8_t, kGridSize> m_touchZones{};
     std::array<uint8_t, kGridSize> m_zoneEdge{};
-    std::vector<ZoneUnit> m_units;
-    std::vector<ZoneEdgeInfo> m_edgeInfos;
-    std::vector<ZoneEdgeInfo> m_contactEdgeInfos;
+    FixedVector<ZoneUnit, kGridSize> m_units;
+    FixedVector<ZoneEdgeInfo, kGridSize> m_edgeInfos;
+    FixedVector<ZoneEdgeInfo, kMaxTouchContacts> m_contactEdgeInfos;
+    FixedVector<TouchContact, kMaxTouchContacts>* m_currentOutputContacts = nullptr;
     int m_zoneCount = 0;
     std::array<int, kGridSize> m_activeZoneCells{};
     int m_activeZoneCellCount = 0;
@@ -180,6 +181,7 @@ private:
         m_units.clear();
         m_edgeInfos.clear();
         m_contactEdgeInfos.clear();
+        m_currentOutputContacts = nullptr;
         m_zoneCount = 0;
         m_activeZoneCellCount = 0;
         m_dilateCandidateCount = 0;
@@ -610,14 +612,7 @@ private:
             std::span<const PeakEvaluation> evaluations) {
         frame.touch.output.contacts.clear();
         m_contactEdgeInfos.clear();
-        const size_t desiredCapacity = static_cast<size_t>(
-            std::max(m_maxTouches, static_cast<int>(peaks.size())));
-        if (frame.touch.output.contacts.capacity() < desiredCapacity) {
-            frame.touch.output.contacts.reserve(desiredCapacity);
-        }
-        if (m_contactEdgeInfos.capacity() < desiredCapacity) {
-            m_contactEdgeInfos.reserve(desiredCapacity);
-        }
+        m_currentOutputContacts = &frame.touch.output.contacts;
         for (int pi = 0; pi < static_cast<int>(m_units.size()); ++pi) {
             auto& u = m_units[pi];
             if (u.area == 0 || u.weightTotal == 0) continue;
@@ -650,8 +645,7 @@ private:
                 tc.signalSum = u.signalSum;
                 tc.state = 0;
                 ApplyEdgeInfo(tc, m_edgeInfos[static_cast<size_t>(pi)]);
-                frame.touch.output.contacts.push_back(tc);
-                m_contactEdgeInfos.push_back(m_edgeInfos[static_cast<size_t>(pi)]);
+                InsertContactCandidate(tc, m_edgeInfos[static_cast<size_t>(pi)]);
             } else {
                 std::array<MfAccum, ZoneUnit::kMaxPeaksPerZone> mfAccums{};
                 const int partitionCount = PartitionMultiFingerZone(
@@ -682,10 +676,34 @@ private:
                     tc.signalSum = accum.signalSum;
                     tc.state = 0;
                     ApplyEdgeInfo(tc, m_edgeInfos[static_cast<size_t>(pi)]);
-                    frame.touch.output.contacts.push_back(tc);
-                    m_contactEdgeInfos.push_back(m_edgeInfos[static_cast<size_t>(pi)]);
+                    InsertContactCandidate(tc, m_edgeInfos[static_cast<size_t>(pi)]);
                 }
             }
+        }
+    }
+
+    inline void InsertContactCandidate(const TouchContact& contact, const ZoneEdgeInfo& edgeInfo) {
+        auto& contacts = m_currentOutputContacts;
+        if (contacts == nullptr) return;
+
+        if (contacts->try_push_back(contact)) {
+            m_contactEdgeInfos.push_back(edgeInfo);
+            return;
+        }
+
+        size_t weakestIndex = 0;
+        int weakestSignal = (*contacts)[0].signalSum;
+        for (size_t i = 1; i < contacts->size(); ++i) {
+            if ((*contacts)[i].signalSum < weakestSignal) {
+                weakestSignal = (*contacts)[i].signalSum;
+                weakestIndex = i;
+            }
+        }
+
+        if (contact.signalSum <= weakestSignal) return;
+        (*contacts)[weakestIndex] = contact;
+        if (weakestIndex < m_contactEdgeInfos.size()) {
+            m_contactEdgeInfos[weakestIndex] = edgeInfo;
         }
     }
 };

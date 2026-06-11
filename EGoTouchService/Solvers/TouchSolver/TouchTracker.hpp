@@ -127,10 +127,10 @@ private:
     inline float ComputeTrackGateSq(const TrackState& track, const TouchContact& contact, int cols, int rows, float edgeMargin) const;
     inline float ComputeAssignmentCost(const TrackState& track, const TouchContact& contact, int cols, int rows, float edgeMargin) const;
     inline bool PassActiveBootstrapGate(const TrackState& track, const TouchContact& contact, int cols, int rows, float edgeMargin) const;
-    inline void MatchAgainstSubset(const std::vector<TouchContact>& contacts, int curCount, const int* prevSubset, int subsetCount, int* curToPre) const;
+    inline void MatchAgainstSubset(std::span<const TouchContact> contacts, int curCount, const int* prevSubset, int subsetCount, int* curToPre) const;
     static inline float Orientation(float ax, float ay, float bx, float by, float cx, float cy);
     static inline bool SegmentsCross(float ax, float ay, float bx, float by, float cx, float cy, float dx, float dy);
-    inline void ApplyCrossingGuard(const std::vector<TouchContact>& contacts, int curCount, int* curToPre) const;
+    inline void ApplyCrossingGuard(std::span<const TouchContact> contacts, int curCount, int* curToPre) const;
     static inline void UpdateBestCandidate(float distance, int candidateId, float& best, float& second, int& bestId);
     inline bool PassGapRelinkAmbiguity(float best, float second) const;
     inline TouchContact BuildSilentGapContact(const TrackState& track, int prevIndex, int cols, int rows, float edgeMargin) const;
@@ -324,7 +324,7 @@ inline bool TouchTracker::PassActiveBootstrapGate(const TrackState& track,
     return DistanceSq(contact.x, contact.y, refX, refY) <= bootstrapGate * bootstrapGate;
 }
 
-inline void TouchTracker::MatchAgainstSubset(const std::vector<TouchContact>& contacts,
+inline void TouchTracker::MatchAgainstSubset(std::span<const TouchContact> contacts,
                                              int curCount,
                                              const int* prevSubset,
                                              int subsetCount,
@@ -387,7 +387,7 @@ inline bool TouchTracker::SegmentsCross(float ax, float ay, float bx, float by,
     return (o1 * o2 < 0.0f) && (o3 * o4 < 0.0f);
 }
 
-inline void TouchTracker::ApplyCrossingGuard(const std::vector<TouchContact>& contacts,
+inline void TouchTracker::ApplyCrossingGuard(std::span<const TouchContact> contacts,
                                              int curCount,
                                              int* curToPre) const {
     constexpr int kRows = 40, kCols = 60;
@@ -750,7 +750,7 @@ inline bool TouchTracker::Process(HeatmapFrame& frame) {
     }
 
     if (curCount > 0 && activeCount > 0) {
-        MatchAgainstSubset(frame.touch.output.contacts, curCount, activePrev, activeCount, curToPre);
+        MatchAgainstSubset(frame.touch.output.contacts.span(), curCount, activePrev, activeCount, curToPre);
         for (int c = 0; c < curCount; ++c) {
             const int pre = curToPre[c];
             if (pre < 0) continue;

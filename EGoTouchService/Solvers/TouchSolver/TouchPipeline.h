@@ -59,6 +59,10 @@ public:
     bool Process(HeatmapFrame& frame);
     bool ProcessMasterParserOnly(HeatmapFrame& frame);
 
+    /// Runs the tracker/filter/gesture output stage. Exposed for focused unit tests.
+    bool ProcessTrackingAndGesture(HeatmapFrame& frame);
+    bool ProcessGestureOutput(HeatmapFrame& frame);
+
     /// Pipeline name for config file section header.
     std::string GetName() const { return "TouchPipeline"; }
 
@@ -98,7 +102,6 @@ private:
     void GenerateContacts(HeatmapFrame& frame);
     void PostProcessContacts(HeatmapFrame& frame);
     void UpdateContactCaches(HeatmapFrame& frame);
-    void ProcessTrackingAndGesture(HeatmapFrame& frame);
     void ResetIdleOutputs(HeatmapFrame& frame);
     void SyncStylusSuppressConfigFromTracker();
 

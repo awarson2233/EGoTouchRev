@@ -810,8 +810,7 @@ void DeviceRuntime::OnStreaming() {
     if (m_masterParserOnly.load(std::memory_order_relaxed)) {
       m_touchPipeline.ProcessMasterParserOnly(touchFrame);
     } else {
-      m_touchPipeline.Process(touchFrame);
-      dispatchTouch = true;
+      dispatchTouch = m_touchPipeline.Process(touchFrame);
     }
 
     // Serialized re-check: if parser-only was enabled between pipeline

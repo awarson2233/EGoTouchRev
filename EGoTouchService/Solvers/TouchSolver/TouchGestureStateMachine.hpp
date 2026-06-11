@@ -148,7 +148,9 @@ public:
             upEvent.isEdge = slot.isEdge; upEvent.isReported = true;
             upEvent.reportEvent = TouchReportUp;
             upEvent.lifeFlags = TouchLifeLiftOff; upEvent.reportFlags = 0;
-            frame.touch.output.contacts.push_back(upEvent);
+            if (!frame.touch.output.contacts.try_push_back(upEvent)) {
+                return false;
+            }
             slot.Reset(); slot.upEmitted = true;
         }
         return true;

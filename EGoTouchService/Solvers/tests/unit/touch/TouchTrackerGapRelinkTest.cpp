@@ -1,6 +1,7 @@
 #include "TouchSolver/CoordinateFilter.hpp"
 #include "TouchSolver/TouchGestureStateMachine.hpp"
 #include "TouchSolver/TouchTracker.hpp"
+#include "TouchSolver/TouchPipeline.h"
 
 #include <cstdint>
 #include <initializer_list>
@@ -312,6 +313,51 @@ HeatmapFrame RunTrackerFrame(TouchTracker& tracker, std::initializer_list<TouchC
     return frame;
 }
 
+void TestGestureRetainsPendingUpWhenOutputIsFull() {
+    TouchGestureStateMachine gesture;
+
+    HeatmapFrame down;
+    down.touch.output.contacts.push_back(MakeGestureContact(1, 10.0f, 10.0f, TouchStateDown, true));
+    Require(gesture.Process(down), "initial gesture down should process");
+
+    HeatmapFrame full;
+    for (size_t i = 0; i < Solvers::kMaxTouchContacts; ++i) {
+        full.touch.output.contacts.push_back(
+            MakeGestureContact(static_cast<int>(i) + 2, 20.0f + static_cast<float>(i), 20.0f, TouchStateMove, true));
+    }
+    Require(!gesture.Process(full), "gesture should report failure when Up cannot be appended");
+    Require(FindContactById(full, 1) == nullptr, "full frame should not silently drop a visible Up contact");
+    Require(gesture.HasLiveState(), "pending Up slot should be retained after append failure");
+
+    HeatmapFrame retry;
+    Require(gesture.Process(retry), "gesture should retry pending Up on a later frame");
+    const auto* up = FindContactById(retry, 1);
+    Require(up != nullptr && up->reportEvent == TouchReportUp,
+            "pending Up should be emitted once output capacity is available");
+}
+
+void TestTouchPipelinePropagatesGestureCapacityFailure() {
+    Solvers::TouchPipeline pipeline;
+
+    HeatmapFrame down;
+    down.touch.output.contacts.push_back(MakeGestureContact(1, 10.0f, 10.0f, TouchStateDown, true));
+    Require(pipeline.ProcessGestureOutput(down), "pipeline gesture should process initial down frame");
+
+    HeatmapFrame full;
+    for (size_t i = 0; i < Solvers::kMaxTouchContacts; ++i) {
+        full.touch.output.contacts.push_back(
+            MakeGestureContact(static_cast<int>(i) + 2, 20.0f + static_cast<float>(i), 20.0f, TouchStateMove, true));
+    }
+    Require(!pipeline.ProcessGestureOutput(full), "pipeline should fail when gesture output is capacity-limited");
+    Require(FindContactById(full, 1) == nullptr, "pipeline should not dispatch incomplete touch output");
+
+    HeatmapFrame retry;
+    Require(pipeline.ProcessGestureOutput(retry), "pipeline should recover on the next frame");
+    const auto* up = FindContactById(retry, 1);
+    Require(up != nullptr && up->reportEvent == TouchReportUp,
+            "pipeline should flush the pending Up once output capacity is available");
+}
+
 void TestSourcePeakIdentityKeepsCrossingTracks() {
     TouchTracker tracker;
     const auto first = RunTrackerFrame(tracker, {
@@ -379,6 +425,8 @@ int main() {
         TestTrackerClearLiveStateKeepsIdSeed();
         TestGestureClearLiveState();
         TestHiddenNewContactReportsDownWhenSuppressionEnds();
+        TestGestureRetainsPendingUpWhenOutputIsFull();
+        TestTouchPipelinePropagatesGestureCapacityFailure();
         TestSourcePeakIdentityKeepsCrossingTracks();
         TestTrackerKeepsLifecycleEventsBeyondReportCapacity();
         std::cout << "[TEST] TouchTracker silent-gap relink tests passed.\n";

@@ -2,10 +2,37 @@
 #include "TouchSolver/ZoneExpander.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
+#include <cstdlib>
 #include <iostream>
+#include <new>
 #include <stdexcept>
 #include <vector>
+
+std::atomic<bool> g_countAllocations{false};
+std::atomic<size_t> g_allocationCount{0};
+
+void* operator new(std::size_t size) {
+    if (g_countAllocations.load(std::memory_order_relaxed)) {
+        g_allocationCount.fetch_add(1, std::memory_order_relaxed);
+    }
+    if (void* ptr = std::malloc(size)) return ptr;
+    throw std::bad_alloc();
+}
+
+void* operator new[](std::size_t size) {
+    if (g_countAllocations.load(std::memory_order_relaxed)) {
+        g_allocationCount.fetch_add(1, std::memory_order_relaxed);
+    }
+    if (void* ptr = std::malloc(size)) return ptr;
+    throw std::bad_alloc();
+}
+
+void operator delete(void* ptr) noexcept { std::free(ptr); }
+void operator delete[](void* ptr) noexcept { std::free(ptr); }
+void operator delete(void* ptr, std::size_t) noexcept { std::free(ptr); }
+void operator delete[](void* ptr, std::size_t) noexcept { std::free(ptr); }
 
 namespace {
 
@@ -54,7 +81,7 @@ bool HasPeakAt(std::span<const Solvers::Touch::Peak> peaks, int row, int col) {
     return false;
 }
 
-const Solvers::TouchContact* FindContactById(const std::vector<Solvers::TouchContact>& contacts, int id) {
+const Solvers::TouchContact* FindContactById(std::span<const Solvers::TouchContact> contacts, int id) {
     for (const auto& contact : contacts) {
         if (contact.id == id) return &contact;
     }
@@ -126,6 +153,45 @@ void TestPeakDetectorPreservesTwoCloseSaddledPeaks() {
     Require(HasPeakAt(peaks, 20, 22), "right close peak should survive");
 }
 
+void TestZoneExpanderKeepsTopSignalCandidatesPastContactCapacity() {
+    Solvers::HeatmapFrame frame = MakeZeroedHeatmapFrame();
+    std::vector<Solvers::Touch::Peak> peaks;
+    peaks.reserve(Solvers::kMaxTouchContacts + 8);
+
+    for (int r = 0; r < 40 && peaks.size() < Solvers::kMaxTouchContacts + 8; r += 5) {
+        for (int c = 0; c < 60 && peaks.size() < Solvers::kMaxTouchContacts + 8; c += 7) {
+            const int signal = 100 + static_cast<int>(peaks.size());
+            frame.heatmapMatrix[r][c] = static_cast<int16_t>(signal);
+
+            Solvers::Touch::Peak peak;
+            peak.r = r;
+            peak.c = c;
+            peak.z = static_cast<int16_t>(signal);
+            peak.id = static_cast<int>(peaks.size()) + 1;
+            peaks.push_back(peak);
+        }
+    }
+
+    Solvers::Touch::ZoneExpander expander;
+    expander.m_dilateErode = false;
+    expander.m_maxTouches = static_cast<int>(Solvers::kMaxTouchContacts);
+
+    g_allocationCount.store(0, std::memory_order_relaxed);
+    g_countAllocations.store(true, std::memory_order_relaxed);
+    expander.Process(frame, peaks, 10, {});
+    g_countAllocations.store(false, std::memory_order_relaxed);
+
+    Require(g_allocationCount.load(std::memory_order_relaxed) == 0,
+            "zone expander over-capacity hot path should not allocate");
+
+    Require(frame.touch.output.contacts.size() == Solvers::kMaxTouchContacts,
+            "zone expander should cap output to max touch contacts");
+    Require(FindContactById(frame.touch.output.contacts.span(), 1) == nullptr,
+            "weak early candidate should not survive over-capacity top-signal selection");
+    Require(FindContactById(frame.touch.output.contacts.span(), static_cast<int>(peaks.size())) != nullptr,
+            "strong late candidate should survive over-capacity top-signal selection");
+}
+
 void TestZoneExpanderPartitionsMergedTwoPeakZone() {
     Solvers::HeatmapFrame frame = MakeZeroedHeatmapFrame();
     BuildMergedSplitFrame(frame);
@@ -150,8 +216,8 @@ void TestZoneExpanderPartitionsMergedTwoPeakZone() {
 
     Require(frame.touch.output.contacts.size() == 2, "merged two-peak zone should emit two contacts");
 
-    const auto* leftContact = FindContactById(frame.touch.output.contacts, 20);
-    const auto* rightContact = FindContactById(frame.touch.output.contacts, 22);
+    const auto* leftContact = FindContactById(frame.touch.output.contacts.span(), 20);
+    const auto* rightContact = FindContactById(frame.touch.output.contacts.span(), 22);
     Require(leftContact != nullptr, "left peak id should be preserved in output contact");
     Require(rightContact != nullptr, "right peak id should be preserved in output contact");
     Require(std::fabs(leftContact->x - rightContact->x) >= 1.0f,
@@ -169,6 +235,7 @@ void TestZoneExpanderPartitionsMergedTwoPeakZone() {
 int main() {
     try {
         TestPeakDetectorPreservesTwoCloseSaddledPeaks();
+        TestZoneExpanderKeepsTopSignalCandidatesPastContactCapacity();
         TestZoneExpanderPartitionsMergedTwoPeakZone();
         std::cout << "[TEST] Touch close split tests passed.\n";
         return 0;

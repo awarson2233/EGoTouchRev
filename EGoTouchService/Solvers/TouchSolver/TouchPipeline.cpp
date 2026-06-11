@@ -29,16 +29,14 @@ bool TouchPipeline::Process(HeatmapFrame& frame) {
 #if EGOTOUCH_DIAG
     UpdateDiagnosticCaches(frame);
 #endif
-    ProcessTrackingAndGesture(frame);
-    return true;
+    return ProcessTrackingAndGesture(frame);
 }
 
 void TouchPipeline::ReserveContactCapacity(HeatmapFrame& frame) const {
     const size_t desiredContactCapacity = static_cast<size_t>(
         std::max(m_contactExtractor.m_zoneExp.m_maxTouches, m_tracker.m_maxTouchCount));
-    if (frame.touch.output.contacts.capacity() < desiredContactCapacity) {
-        frame.touch.output.contacts.reserve(desiredContactCapacity);
-    }
+    (void)frame;
+    (void)desiredContactCapacity;
 }
 
 bool TouchPipeline::ProcessFrameParser(HeatmapFrame& frame) {
@@ -94,8 +92,8 @@ void TouchPipeline::GenerateContacts(HeatmapFrame& frame) {
 void TouchPipeline::PostProcessContacts(HeatmapFrame& frame) {
     const auto& edgeInfos = m_contactExtractor.GetEdgeInfos();
     const auto& edgeBounds = m_contactExtractor.GetEdgeBounds();
-    m_edgeComp.Process(frame.touch.output.contacts, edgeInfos, edgeBounds);
-    m_edgeReject.Process(frame.touch.output.contacts, edgeInfos, edgeBounds);
+    m_edgeComp.Process(frame.touch.output.contacts.span(), edgeInfos, edgeBounds);
+    m_edgeReject.Process(frame.touch.output.contacts.span(), edgeInfos, edgeBounds);
     m_stylusSuppress.Process(frame);
 }
 
@@ -105,10 +103,14 @@ void TouchPipeline::UpdateContactCaches(HeatmapFrame& frame) {
     m_cachedContactCount.store(static_cast<int>(frame.touch.output.contacts.size()), std::memory_order_relaxed);
 }
 
-void TouchPipeline::ProcessTrackingAndGesture(HeatmapFrame& frame) {
+bool TouchPipeline::ProcessTrackingAndGesture(HeatmapFrame& frame) {
     m_tracker.Process(frame);
     m_coordFilter.Process(frame);
-    m_gesture.Process(frame);
+    return ProcessGestureOutput(frame);
+}
+
+bool TouchPipeline::ProcessGestureOutput(HeatmapFrame& frame) {
+    return m_gesture.Process(frame);
 }
 
 #if EGOTOUCH_DIAG

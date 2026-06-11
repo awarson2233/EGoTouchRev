@@ -657,7 +657,6 @@ bool PopulateHeatmapFrameFromRecordBytes(const std::vector<uint8_t>& record,
     }
     const uint32_t contactCount = std::min<uint32_t>(u32, contactCapacity);
     dst.touch.output.contacts.clear();
-    dst.touch.output.contacts.reserve(contactCount);
     for (uint32_t i = 0; i < contactCount; ++i) {
         Solvers::TouchContact tc{};
         if (!TryReadStridedField(record, fields, "contacts[].id", DvrFmt::Dvr2ValueType::Int32, i, tc.id, outError)) return false;
