@@ -4,6 +4,7 @@
 #include "btmcu/PenUsbTypes.h"
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <span>
 
@@ -41,7 +42,7 @@ private:
     static constexpr const wchar_t* kPressureHidMatch = L"vid_12d1&pid_10b8&mi_00&col01";
 
     mutable std::mutex m_cbMutex;
-    PressureCallback m_pressureCallback;
+    std::shared_ptr<const PressureCallback> m_pressureCallback;
 
     void ApplyPressureModeLocked(PenPressureRangeMode mode);
 

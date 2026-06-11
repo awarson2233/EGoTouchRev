@@ -6,6 +6,7 @@
 #include <hidsdi.h>
 #include <algorithm>
 #include <cwctype>
+#include <utility>
 
 #pragma comment(lib, "setupapi.lib")
 #pragma comment(lib, "hid.lib")
@@ -18,8 +19,9 @@ PenPressureReader::~PenPressureReader() {
 
 // ── 回调设置 ───────────────────────────────────────────────────────────────
 void PenPressureReader::SetPressureCallback(PressureCallback cb) {
+    auto callback = cb ? std::make_shared<const PressureCallback>(std::move(cb)) : nullptr;
     std::lock_guard<std::mutex> lk(m_cbMutex);
-    m_pressureCallback = std::move(cb);
+    m_pressureCallback = std::move(callback);
 }
 
 PenPressureStats PenPressureReader::GetPressureStats() const {
@@ -100,11 +102,13 @@ void PenPressureReader::OnPacketReceived(std::span<const uint8_t> packet) {
         m_stats = stats;
     }
 
+    std::shared_ptr<const PressureCallback> callback;
     {
         std::lock_guard<std::mutex> lk(m_cbMutex);
-        if (m_pressureCallback) {
-            m_pressureCallback(stats);
-        }
+        callback = m_pressureCallback;
+    }
+    if (callback) {
+        (*callback)(stats);
     }
     if (m_notifyEvent) {
         SetEvent(static_cast<HANDLE>(m_notifyEvent));

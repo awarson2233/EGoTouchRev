@@ -5,6 +5,7 @@
 #include "btmcu/PenUsbTypes.h"
 
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <span>
@@ -65,7 +66,7 @@ private:
     mutable std::mutex m_cbMutex;
     mutable std::mutex m_sessionMutex;
     mutable std::mutex m_txMutex;
-    PenEventCallback m_eventCallback;
+    std::shared_ptr<const PenEventCallback> m_eventCallback;
     NativeEventHandle m_notifyEvent = nullptr;
     PenUsbInitSession m_initSession;
 };

@@ -32,8 +32,9 @@ PenEventBridge::~PenEventBridge() {
 
 // ── 回调设置 ───────────────────────────────────────────────────────────────
 void PenEventBridge::SetEventCallback(PenEventCallback cb) {
+    auto callback = cb ? std::make_shared<const PenEventCallback>(std::move(cb)) : nullptr;
     std::lock_guard<std::mutex> lk(m_cbMutex);
-    m_eventCallback = std::move(cb);
+    m_eventCallback = std::move(callback);
 }
 
 // ── 设备路径发现 ───────────────────────────────────────────────────────────
@@ -315,9 +316,13 @@ void PenEventBridge::OnPacketReceived(std::span<const uint8_t> packet) {
     }
 
     if (hasEvent) {
-        std::lock_guard<std::mutex> lk(m_cbMutex);
-        if (m_eventCallback) {
-            m_eventCallback(ev);
+        std::shared_ptr<const PenEventCallback> callback;
+        {
+            std::lock_guard<std::mutex> lk(m_cbMutex);
+            callback = m_eventCallback;
+        }
+        if (callback) {
+            (*callback)(ev);
         }
     }
 
