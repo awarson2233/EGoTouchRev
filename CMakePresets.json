@@ -44,7 +44,11 @@
       "displayName": "arm64 Debug",
       "inherits": "arm64-base",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "EGO_BUILD_TOOLS": {
+          "type": "BOOL",
+          "value": "ON"
+        }
       }
     },
     {

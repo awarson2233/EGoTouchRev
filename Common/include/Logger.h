@@ -120,6 +120,7 @@ public:
 #define LOG_INFO(layer,  method, state, msg, ...) LOG_INTERNAL(info,  layer, method, state, msg __VA_OPT__(,) __VA_ARGS__)
 #endif
 
+
 #define LOG_WARN(layer,  method, state, msg, ...) LOG_INTERNAL(warn,  layer, method, state, msg __VA_OPT__(,) __VA_ARGS__)
 #define LOG_ERROR(layer, method, state, msg, ...) LOG_INTERNAL(error, layer, method, state, msg __VA_OPT__(,) __VA_ARGS__)
 #define LOG_CRIT(layer,  method, state, msg, ...) LOG_INTERNAL(critical, layer, method, state, msg __VA_OPT__(,) __VA_ARGS__)
