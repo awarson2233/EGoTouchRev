@@ -1,13 +1,9 @@
 #include "runtime/DeviceRuntime.h"
 #include "Logger.h"
 #include "SolverTypes.h"
-#include "config/ConfigBinder.h"
-#include "config/ConfigStore.h"
-#include "config/SchemaValidator.h"
 
 
 #include <chrono>
-#include <format>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -343,6 +339,7 @@ void DeviceRuntime::ApplyServicePolicy(bool autoMode, bool stylusVhfEnabled,
       static_cast<int>(penButtonRoute), penButtonRouteExplicit);
 }
 
+#if EGOTOUCH_SERVICE_ENABLE_IPC
 Config::ValidationResult DeviceRuntime::ValidateConfigStore(
     const Config::ConfigStore &store) const {
   std::lock_guard<std::mutex> lk(m_pipelineMu);
@@ -370,6 +367,7 @@ void DeviceRuntime::ApplyConfigStore(const Config::ConfigStore& store) {
 void DeviceRuntime::ApplyPipelineConfig(const Config::ConfigStore& store) {
   ApplyConfigStore(store);
 }
+#endif
 
 bool DeviceRuntime::IsShutdownRequested() const {
   return m_stopReason.load() == StopReason::Shutdown;

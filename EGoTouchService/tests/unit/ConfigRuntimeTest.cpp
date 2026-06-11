@@ -92,7 +92,7 @@ public:
 
 int main() {
     Service::ConfigRuntime runtime;
-    assert(runtime.Initialize("", [](const Config::ConfigStore&) { return true; }));
+    assert(runtime.Initialize([](const Config::ConfigStore&) { return true; }));
 
     const auto initial = runtime.ServiceState();
     assert(initial.autoMode);
@@ -197,7 +197,7 @@ int main() {
     assert(afterIirReject.checksum == beforeIirReject.checksum);
 
     Service::ConfigRuntime v3Runtime;
-    assert(v3Runtime.Initialize("", [](const Config::ConfigStore&) { return true; }));
+    assert(v3Runtime.Initialize([](const Config::ConfigStore&) { return true; }));
     const auto v3AutoModeKeyId = Config::tryKeyIdForPath("service.auto_mode");
     assert(v3AutoModeKeyId.has_value());
     const auto v3LivePayload = MakePatchPayload({Config::ConfigTlvEntry{*v3AutoModeKeyId, Config::ConfigValueType::Bool, "false"}});
@@ -211,7 +211,7 @@ int main() {
     assert(HasAction(v3LiveApplied, Service::ConfigApplyActionKind::ServicePolicy));
 
     Service::ConfigRuntime restartRuntime;
-    assert(restartRuntime.Initialize("", [](const Config::ConfigStore&) { return true; }));
+    assert(restartRuntime.Initialize([](const Config::ConfigStore&) { return true; }));
     const auto serviceModeKeyId2 = Config::tryKeyIdForPath("service.mode");
     assert(serviceModeKeyId2.has_value());
     const auto restartPayload = MakePatchPayload({Config::ConfigTlvEntry{*serviceModeKeyId2, Config::ConfigValueType::String, "touch_only"}});
@@ -242,7 +242,7 @@ int main() {
     assert(restartRuntime.SnapshotStore().getOr<std::string>("service.mode", "") == "touch_only");
 
     Service::ConfigRuntime sessionRuntime;
-    assert(sessionRuntime.Initialize("ignored-config-dir", [](const Config::ConfigStore&) { return true; }));
+    assert(sessionRuntime.Initialize([](const Config::ConfigStore&) { return true; }));
     const auto sessionLive = ApplyV3Patch(sessionRuntime, payload);
     assert(sessionLive.runtimeStatus == Service::ServiceRuntimeStatusCode::Ok);
     assert(sessionLive.status == Service::ConfigV3MutationStatus::Ok);
@@ -262,14 +262,14 @@ int main() {
     assert(persistResult.persistedCount == 0);
     assert(persistResult.failedCount == 1);
     Service::ConfigRuntime restartedRuntime;
-    assert(restartedRuntime.Initialize("", [](const Config::ConfigStore&) { return true; }));
+    assert(restartedRuntime.Initialize([](const Config::ConfigStore&) { return true; }));
     assert(restartedRuntime.ServiceState().autoMode);
     assert(restartedRuntime.ServiceState().mode == Service::ServiceMode::Full);
     assert(restartedRuntime.SnapshotStore().getOr<std::string>("service.mode", "") == "full");
     assert(restartedRuntime.SnapshotStore().getOr<int32_t>("touch.peak_detection.threshold", 0) != 351);
 
     Service::ConfigRuntime explicitRouteRuntime;
-    assert(explicitRouteRuntime.Initialize("", [](const Config::ConfigStore&) { return true; }));
+    assert(explicitRouteRuntime.Initialize([](const Config::ConfigStore&) { return true; }));
     const auto penButtonModeKeyId = Config::tryKeyIdForPath("service.pen_button_mode");
     const auto penButtonRouteKeyId = Config::tryKeyIdForPath("service.pen_button_route");
     assert(penButtonModeKeyId.has_value());
@@ -289,13 +289,13 @@ int main() {
     assert(explicitRoutePersist.runtimeStatus == Service::ServiceRuntimeStatusCode::UnsupportedCommand);
     assert(explicitRoutePersist.status == Service::ConfigV3MutationStatus::PersistFailed);
     Service::ConfigRuntime explicitRouteRestarted;
-    assert(explicitRouteRestarted.Initialize("", [](const Config::ConfigStore&) { return true; }));
+    assert(explicitRouteRestarted.Initialize([](const Config::ConfigStore&) { return true; }));
     assert(explicitRouteRestarted.ServiceState().penButtonMode == PenButtonMode::OemCustom);
     assert(explicitRouteRestarted.ServiceState().penButtonRoute == PenButtonRoute::VhfOnly);
     assert(!explicitRouteRestarted.ServiceState().penButtonRouteExplicit);
 
     Service::ConfigRuntime v3RejectRuntime;
-    assert(v3RejectRuntime.Initialize("", [](const Config::ConfigStore&) { return true; }));
+    assert(v3RejectRuntime.Initialize([](const Config::ConfigStore&) { return true; }));
     const auto beforeV3Reject = v3RejectRuntime.BuildSnapshotV3Blob();
     const auto startupOnlyRejected = ApplyV3Patch(
         v3RejectRuntime,
@@ -310,7 +310,7 @@ int main() {
 
     Service::ConfigRuntime rejectingRuntime;
     rejectingRuntime.RegisterConfigTarget(std::make_unique<RejectAutoModeTarget>());
-    assert(rejectingRuntime.Initialize("", [](const Config::ConfigStore&) { return true; }));
+    assert(rejectingRuntime.Initialize([](const Config::ConfigStore&) { return true; }));
     const auto rejectingBefore = rejectingRuntime.BuildSnapshotV3Blob();
     const auto targetRejected = ApplyV3Patch(rejectingRuntime, payload);
     assert(targetRejected.runtimeStatus == Service::ServiceRuntimeStatusCode::Ok);
@@ -323,10 +323,10 @@ int main() {
     assert(rejectingAfter.checksum == rejectingBefore.checksum);
 
     Service::ConfigRuntime ignoredConfigPathRuntime;
-    assert(ignoredConfigPathRuntime.Initialize("legacy-config-dir", [](const Config::ConfigStore&) { return true; }));
+    assert(ignoredConfigPathRuntime.Initialize([](const Config::ConfigStore&) { return true; }));
 
     Service::ConfigRuntime floatRuntime;
-    assert(floatRuntime.Initialize("", [](const Config::ConfigStore&) { return true; }));
+    assert(floatRuntime.Initialize([](const Config::ConfigStore&) { return true; }));
     const auto fingerSharpnessKeyId = Config::tryKeyIdForPath("touch.classifier.finger_sharpness");
     assert(fingerSharpnessKeyId.has_value());
     const auto boolFloatRejected = ApplyV3Patch(

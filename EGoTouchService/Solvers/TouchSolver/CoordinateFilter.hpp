@@ -11,8 +11,8 @@ namespace Solvers { namespace Touch {
 class CoordinateFilter {
 public:
     bool  m_enabled = true;
-    float m_minCutoff = 10.0f;
-    float m_beta = 30.0f;
+    float m_minCutoff = 1.0f;   // 降低静止时的截止频率（原 20.0f），大幅增强静止时的去抖动能力
+    float m_beta = 150.0f;      // 增大速度斜率（原 50.0f），一旦移动，截止频率迅速升高，减少滤波迟滞
     float m_dCutoff = 100.0f;
 
     inline bool Process(HeatmapFrame& frame) {
@@ -49,7 +49,9 @@ public:
             state.dy = state.dy + alphaD * (dyRaw - state.dy);
 
             const float velocityMag = std::sqrt(state.dx * state.dx + state.dy * state.dy);
-            const float cutoff = m_minCutoff + m_beta * velocityMag;
+            // 采用非线性响应：手指开始移动时，速度平方（或非线性因子）会使 cutoff 呈指数/二次级增长，迅速降低滤波
+            // 使得一开始移动，滤波效果大幅降低，保持高灵敏度；静止时速度极小，几乎完全由 m_minCutoff 控制，去抖能力极强
+            const float cutoff = m_minCutoff + m_beta * (velocityMag * velocityMag);
             const float alpha = Alpha(rate, cutoff);
 
             state.x = state.x + alpha * (contact.x - state.x);

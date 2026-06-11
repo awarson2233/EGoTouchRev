@@ -116,10 +116,8 @@ DWORD WINAPI ServiceShell::SvcCtrlHandlerEx(
             DWORD state = *reinterpret_cast<DWORD*>(pbs->Data);
             LOG_INFO("Service", __func__, "Power", "GUID_CONSOLE_DISPLAY_STATE = {}", state);
             if (state >= 1) {
-                signalEvent(Host::SystemStateNamedEventId::MonitorPowerOn);
                 signalEvent(Host::SystemStateNamedEventId::MonitorConsoleDisplayOn);
             } else {
-                signalEvent(Host::SystemStateNamedEventId::MonitorPowerOff);
                 signalEvent(Host::SystemStateNamedEventId::MonitorConsoleDisplayOff);
             }
         }
@@ -144,6 +142,7 @@ DWORD WINAPI ServiceShell::SvcCtrlHandlerEx(
 
 // ─── 控制台模式 ──────────────────────────────
 
+#if EGOTOUCH_SERVICE_ENABLE_IPC
 BOOL WINAPI ServiceShell::ConsoleCtrlHandler(DWORD ctrlType) {
     switch (ctrlType) {
     case CTRL_C_EVENT:
@@ -157,6 +156,7 @@ BOOL WINAPI ServiceShell::ConsoleCtrlHandler(DWORD ctrlType) {
         return FALSE;
     }
 }
+#endif
 
 void ServiceShell::SignalShutdownTransportAndStop() noexcept {
     Host::SystemStateMonitor::SignalNamedEvent(Host::SystemStateNamedEventId::MonitorShutDown);
@@ -165,6 +165,7 @@ void ServiceShell::SignalShutdownTransportAndStop() noexcept {
     }
 }
 
+#if EGOTOUCH_SERVICE_ENABLE_IPC
 void ServiceShell::RunAsConsole() {
     m_impl->stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
 
@@ -181,6 +182,7 @@ void ServiceShell::RunAsConsole() {
     m_impl->host.Stop();
     LOG_INFO("Service", __func__, "Stopped", "Console mode stopped.");
 }
+#endif
 
 // ─── 辅助 ────────────────────────────────────
 

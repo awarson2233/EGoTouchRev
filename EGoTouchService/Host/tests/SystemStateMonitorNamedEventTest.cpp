@@ -318,70 +318,7 @@ bool RunNamedEventSequenceTest() {
     return ExpectTypes(expected, recorder.Snapshot(), "sequence test");
 }
 
-bool RunAliasAndCanonicalBatchTest() {
-    TestEventNames event_names(L"AliasCanonicalBatch");
-    ResetAllNamedEventsBestEffort(event_names.List());
 
-    TestEventHandles event_handles;
-    if (!event_handles.OpenAll(event_names.List())) {
-        std::cerr << "[TEST] Failed to create named events in alias/canonical batch test.\n";
-        return false;
-    }
-
-    if (!event_handles.Set(Host::SystemStateNamedEventId::MonitorPowerOn) ||
-        !event_handles.Set(Host::SystemStateNamedEventId::MonitorConsoleDisplayOn) ||
-        !event_handles.Set(Host::SystemStateNamedEventId::MonitorPowerOff) ||
-        !event_handles.Set(Host::SystemStateNamedEventId::MonitorConsoleDisplayOff)) {
-        std::cerr << "[TEST] Failed to pre-signal alias/canonical events.\n";
-        ResetAllNamedEventsBestEffort(event_names.List());
-        return false;
-    }
-
-    Host::SystemStateMonitor monitor(event_names.List());
-    EventRecorder recorder;
-
-    const bool started = monitor.Start([&](const Host::SystemStateEvent& event) {
-        recorder.Record(event);
-    });
-
-    if (!started) {
-        std::cerr << "[TEST] SystemStateMonitor start failed in alias/canonical batch test.\n";
-        ResetAllNamedEventsBestEffort(event_names.List());
-        return false;
-    }
-
-    if (!recorder.WaitForCount(1)) {
-        monitor.Stop();
-        ResetAllNamedEventsBestEffort(event_names.List());
-        std::cerr << "[TEST] Timeout waiting for alias/canonical batch event. observed="
-                  << recorder.Size() << "\n";
-        return false;
-    }
-
-    if (recorder.WaitForCount(2, kNoExtraCallbackWindow)) {
-        monitor.Stop();
-        ResetAllNamedEventsBestEffort(event_names.List());
-        std::cerr << "[TEST] Alias/canonical display burst emitted more than one normalized event.\n";
-        DumpObserved(recorder.Snapshot());
-        return false;
-    }
-
-    monitor.Stop();
-    ResetAllNamedEventsBestEffort(event_names.List());
-
-    const auto observed = recorder.Snapshot();
-    const std::uint32_t canonical_on_index = static_cast<std::uint32_t>(Host::ToIndex(Host::SystemStateNamedEventId::MonitorConsoleDisplayOn));
-    if (!ExpectTypes({Host::SystemStateEventType::DisplayOn}, observed, "alias/canonical batch test")) {
-        return false;
-    }
-    if (observed[0].raw_index != canonical_on_index) {
-        std::cerr << "[TEST] Canonical DisplayOn raw_index did not win alias/canonical batch. expected="
-                  << canonical_on_index << " actual=" << observed[0].raw_index << "\n";
-        return false;
-    }
-
-    return true;
-}
 
 bool RunStateNormalizationDedupTest() {
     using namespace std::chrono_literals;
@@ -404,9 +341,7 @@ bool RunStateNormalizationDedupTest() {
     std::this_thread::sleep_for(kWorkerWarmup);
 
     if (!SignalAndWaitForCount(monitor, recorder, event_names.List(), Host::SystemStateNamedEventId::MonitorConsoleDisplayOn, 1, "state normalization test") ||
-        !SignalAndExpectNoAdditionalCallback(monitor, recorder, event_names.List(), Host::SystemStateNamedEventId::MonitorPowerOn, 1, "duplicate DisplayOn alias test") ||
         !SignalAndWaitForCount(monitor, recorder, event_names.List(), Host::SystemStateNamedEventId::MonitorConsoleDisplayOff, 2, "DisplayOff transition test") ||
-        !SignalAndExpectNoAdditionalCallback(monitor, recorder, event_names.List(), Host::SystemStateNamedEventId::MonitorPowerOff, 2, "duplicate DisplayOff alias test") ||
         !SignalAndWaitForCount(monitor, recorder, event_names.List(), Host::SystemStateNamedEventId::MonitorLidOn, 3, "LidOn transition test") ||
         !SignalAndExpectNoAdditionalCallback(monitor, recorder, event_names.List(), Host::SystemStateNamedEventId::MonitorLidOn, 3, "duplicate LidOn test") ||
         !SignalAndWaitForCount(monitor, recorder, event_names.List(), Host::SystemStateNamedEventId::MonitorShutDown, 4, "Shutdown transition test") ||
@@ -567,7 +502,7 @@ bool RunCallbackReentrantStopTest() {
 
     std::this_thread::sleep_for(kWorkerWarmup);
 
-    if (!Host::SystemStateMonitor::SignalNamedEvent(Host::SystemStateNamedEventId::MonitorPowerOn, event_names.List())) {
+    if (!Host::SystemStateMonitor::SignalNamedEvent(Host::SystemStateNamedEventId::MonitorConsoleDisplayOn, event_names.List())) {
         monitor.Stop();
         std::cerr << "[TEST] Failed signal in reentrant Stop test.\n";
         return false;
@@ -650,7 +585,7 @@ bool RunCallbackStopThenDestructorTest() {
         }
 
         std::this_thread::sleep_for(kWorkerWarmup);
-        if (!Host::SystemStateMonitor::SignalNamedEvent(Host::SystemStateNamedEventId::MonitorPowerOff, event_names.List())) {
+        if (!Host::SystemStateMonitor::SignalNamedEvent(Host::SystemStateNamedEventId::MonitorConsoleDisplayOff, event_names.List())) {
             monitor.Stop();
             std::cerr << "[TEST] Failed signal in reentrant Stop destructor test.\n";
             return false;
@@ -682,28 +617,24 @@ int main() {
         return 2;
     }
 
-    if (!RunAliasAndCanonicalBatchTest()) {
+    if (!RunStateNormalizationDedupTest()) {
         return 3;
     }
 
-    if (!RunStateNormalizationDedupTest()) {
+    if (!RunDisplayBurstCoalescingTest()) {
         return 4;
     }
 
-    if (!RunDisplayBurstCoalescingTest()) {
+    if (!RunCallbackExceptionContainmentTest()) {
         return 5;
     }
 
-    if (!RunCallbackExceptionContainmentTest()) {
+    if (!RunCallbackReentrantStopTest()) {
         return 6;
     }
 
-    if (!RunCallbackReentrantStopTest()) {
-        return 7;
-    }
-
     if (!RunCallbackStopThenDestructorTest()) {
-        return 8;
+        return 7;
     }
 
     std::cout << "[TEST] SystemStateMonitor named-event tests passed.\n";

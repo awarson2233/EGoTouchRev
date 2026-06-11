@@ -26,8 +26,10 @@ public:
 
     static ServiceShell* Instance();
 
+#if EGOTOUCH_SERVICE_ENABLE_IPC
     /// 控制台调试模式（--console 参数或无 SCM 时退回）
     void RunAsConsole();
+#endif
 
     /// SCM 回调入口（静态桥接到 Instance()）
     static void WINAPI SvcMain(DWORD argc, LPWSTR* argv);
@@ -38,7 +40,9 @@ private:
     static DWORD WINAPI SvcCtrlHandlerEx(
         DWORD ctrl, DWORD evtType,
         LPVOID evtData, LPVOID ctx);
+#if EGOTOUCH_SERVICE_ENABLE_IPC
     static BOOL WINAPI ConsoleCtrlHandler(DWORD ctrlType);
+#endif
 
     void SignalShutdownTransportAndStop() noexcept;
     void RegisterPowerNotifications();

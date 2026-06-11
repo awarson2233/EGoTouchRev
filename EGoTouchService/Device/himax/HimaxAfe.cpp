@@ -2,8 +2,6 @@
 #include "himax/HimaxChip.h"
 #include "himax/HimaxProtocol.h"
 #include "Logger.h"
-#include "FrameLayout.h"
-#include <format>
 
 namespace {
 

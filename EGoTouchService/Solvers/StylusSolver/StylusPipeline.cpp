@@ -136,21 +136,13 @@ void StylusPipeline::applyConfig(const Config::ConfigStore& store) {
     if (!coorSpeedEnabled) { m_commonPost.m_coorSpeedProcess.Reset(); }
 
     const bool iirFilterEnabled = store.getOr<bool>("stylus.sp.iir_filter_enabled", true);
-    const auto getIirOrLegacy = [&store](std::string_view canonical,
-                                         std::string_view legacy,
-                                         int32_t fallback) -> int32_t {
-        if (store.has(canonical)) {
-            return store.getOr<int32_t>(canonical, fallback);
-        }
-        return store.getOr<int32_t>(legacy, fallback);
-    };
     m_commonPost.m_coorIIRProcess.m_enabled = iirFilterEnabled;
-    m_commonPost.m_coorIIRProcess.m_coefLowHover = getIirOrLegacy("stylus.sp.iir_coef_low_hover", "stylus.sp.iir_coef_low_in_band", 2);
-    m_commonPost.m_coorIIRProcess.m_coefHighHover = getIirOrLegacy("stylus.sp.iir_coef_high_hover", "stylus.sp.iir_coef_high_in_band", 16);
-    m_commonPost.m_coorIIRProcess.m_speedTholdHover = getIirOrLegacy("stylus.sp.iir_speed_thold_hover", "stylus.sp.iir_speed_thold_in_band", 20);
-    m_commonPost.m_coorIIRProcess.m_coefLowWriting = getIirOrLegacy("stylus.sp.iir_coef_low_writing", "stylus.sp.iir_coef_low_edge", 6);
-    m_commonPost.m_coorIIRProcess.m_coefHighWriting = getIirOrLegacy("stylus.sp.iir_coef_high_writing", "stylus.sp.iir_coef_high_edge", 18);
-    m_commonPost.m_coorIIRProcess.m_speedTholdWriting = getIirOrLegacy("stylus.sp.iir_speed_thold_writing", "stylus.sp.iir_speed_thold_edge", 10);
+    m_commonPost.m_coorIIRProcess.m_coefLowHover = store.getOr<int32_t>("stylus.sp.iir_coef_low_hover", 2);
+    m_commonPost.m_coorIIRProcess.m_coefHighHover = store.getOr<int32_t>("stylus.sp.iir_coef_high_hover", 16);
+    m_commonPost.m_coorIIRProcess.m_speedTholdHover = store.getOr<int32_t>("stylus.sp.iir_speed_thold_hover", 20);
+    m_commonPost.m_coorIIRProcess.m_coefLowWriting = store.getOr<int32_t>("stylus.sp.iir_coef_low_writing", 6);
+    m_commonPost.m_coorIIRProcess.m_coefHighWriting = store.getOr<int32_t>("stylus.sp.iir_coef_high_writing", 18);
+    m_commonPost.m_coorIIRProcess.m_speedTholdWriting = store.getOr<int32_t>("stylus.sp.iir_speed_thold_writing", 10);
     m_commonPost.m_coorIIRProcess.m_speedMax = store.getOr<int32_t>("stylus.sp.iir_speed_max", 205);
     m_commonPost.m_coorIIRProcess.m_maxCoef = store.getOr<int32_t>("stylus.sp.iir_max_coef", 32);
     if (!iirFilterEnabled) { m_commonPost.m_coorIIRProcess.Reset(); }

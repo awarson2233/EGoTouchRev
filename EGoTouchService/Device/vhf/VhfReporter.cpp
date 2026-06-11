@@ -184,20 +184,12 @@ VhfReporter::StylusDispatchPacket VhfReporter::BuildStylusPacket(
     return built;
 }
 
-void VhfReporter::MirrorLegacyStylusPacket(
-        Solvers::HeatmapFrame& frame,
-        const StylusDispatchPacket& built) {
-    frame.stylus.output.packet = built.packet;
-#if EGOTOUCH_DIAG
-    frame.stylus.debug.coord.vhfPenState = built.penState;
-#endif
-}
+
 
 // ── 主入口 (legacy) ──
 
 void VhfReporter::Dispatch(Solvers::HeatmapFrame& frame) {
     const auto stylusPacket = BuildStylusPacket(frame.stylus);
-    MirrorLegacyStylusPacket(frame, stylusPacket);
     if (!m_enabled.load(std::memory_order_relaxed)) {
         return;
     }
@@ -244,7 +236,6 @@ void VhfReporter::Dispatch(Solvers::HeatmapFrame& frame) {
 void VhfReporter::DispatchStylus(Solvers::HeatmapFrame& frame,
                                  bool writeEnabled) {
     const auto stylusPacket = BuildStylusPacket(frame.stylus);
-    MirrorLegacyStylusPacket(frame, stylusPacket);
     if (!writeEnabled ||
         !m_enabled.load(std::memory_order_relaxed) ||
         !stylusPacket.packet.valid) {

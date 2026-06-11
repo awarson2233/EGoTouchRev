@@ -68,9 +68,7 @@ private:
     bool UpdateTouchState(bool hasTouch);
     StylusDispatchPacket BuildStylusPacket(
         const Solvers::StylusFrameData& stylus);
-    static void MirrorLegacyStylusPacket(
-        Solvers::HeatmapFrame& frame,
-        const StylusDispatchPacket& built);
+
 
     void WriteTouchPacketsLocked(
         const std::array<Solvers::TouchPacket, 2>& packets);

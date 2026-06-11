@@ -17,6 +17,7 @@ static bool EnsureDataDirectory() {
     return true;
 }
 
+#if EGOTOUCH_SERVICE_ENABLE_IPC
 static bool InstallService() {
     wchar_t exePath[MAX_PATH]{};
     GetModuleFileNameW(nullptr, exePath, MAX_PATH);
@@ -115,13 +116,16 @@ static bool UninstallService() {
     }
     return ok != FALSE;
 }
+#endif
 
 // ── 主入口 seam ─────────────────────────────────────────
 
 class ProductionServiceEntryActions final : public Service::IServiceEntryActions {
 public:
+#if EGOTOUCH_SERVICE_ENABLE_IPC
     bool InstallService() override { return ::InstallService(); }
     bool UninstallService() override { return ::UninstallService(); }
+#endif
 
     void InitializeServiceProcess() override {
         // Hide console window — logs are forwarded to App via IPC GetLogs
@@ -145,9 +149,11 @@ public:
         LOG_INFO("Service", __func__, "Boot", "Process priority set to REALTIME_PRIORITY_CLASS.");
     }
 
+#if EGOTOUCH_SERVICE_ENABLE_IPC
     void RunConsole() override {
         Service::ServiceShell::Instance()->RunAsConsole();
     }
+#endif
 
     bool StartScmDispatcher() override {
         SERVICE_TABLE_ENTRYW table[] = {

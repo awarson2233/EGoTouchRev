@@ -6,7 +6,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <string>
 #include <string_view>
 #include <vector>
 
@@ -55,7 +54,9 @@ private:
 
     ServiceConfigState m_configState{};
     ServiceMode m_runtimeMode = ServiceMode::Full;
+#if EGOTOUCH_SERVICE_ENABLE_IPC
     ConfigRuntime m_configRuntime;
+#endif
 
     std::unique_ptr<DeviceRuntime> m_deviceRuntime;
     std::unique_ptr<Impl> m_impl;
@@ -75,10 +76,12 @@ private:
     void BuildDebugSchema();
 #endif
 
-    bool InitializeConfigStores(const std::string& configPath);
+    bool InitializeConfigStores();
     void ApplyServiceConfigToRuntime(const ServiceConfigState& config);
+#if EGOTOUCH_SERVICE_ENABLE_IPC
     ReloadServiceConfigResult HandleReloadServiceConfig(const ServiceConfigState& reloadedConfig);
     bool ValidateStartupConfig(const Config::ConfigStore& store) const;
+#endif
     bool StartRuntimeAndPipeline();
     void StartSystemStateMonitor();
 #if EGOTOUCH_SERVICE_ENABLE_IPC

@@ -1,10 +1,9 @@
 #include "ServiceEntry.h"
 #include "TestAssert.h"
 
-#include <string>
-
 namespace {
 
+#if EGOTOUCH_SERVICE_ENABLE_IPC
 struct FakeActions final : Service::IServiceEntryActions {
     bool installResult = true;
     bool uninstallResult = true;
@@ -58,8 +57,13 @@ bool ConsoleRouteSkipsScmDispatcher() {
     FakeActions actions;
     REQUIRE_EQ(Invoke(actions, {L"EGoTouchService.exe", L"--console"}), 0);
     REQUIRE_EQ(actions.initializeCalls, 1);
+#if EGOTOUCH_SERVICE_ENABLE_IPC
     REQUIRE_EQ(actions.consoleCalls, 1);
     REQUIRE_EQ(actions.dispatcherCalls, 0);
+#else
+    REQUIRE_EQ(actions.consoleCalls, 0);
+    REQUIRE_EQ(actions.dispatcherCalls, 1);
+#endif
     return true;
 }
 
@@ -80,7 +84,11 @@ bool ScmControllerConnectFailureFallsBackToConsole() {
     REQUIRE_EQ(Invoke(actions, {L"EGoTouchService.exe"}), 0);
     REQUIRE_EQ(actions.initializeCalls, 1);
     REQUIRE_EQ(actions.dispatcherCalls, 1);
+#if EGOTOUCH_SERVICE_ENABLE_IPC
     REQUIRE_EQ(actions.consoleCalls, 1);
+#else
+    REQUIRE_EQ(actions.consoleCalls, 0);
+#endif
     return true;
 }
 
@@ -107,3 +115,9 @@ int main() {
     failures += RunTest(&OtherScmFailureDoesNotFallbackToConsole, "OtherScmFailureDoesNotFallbackToConsole");
     return failures == 0 ? 0 : 1;
 }
+#else
+} // namespace
+int main() {
+    return 0;
+}
+#endif

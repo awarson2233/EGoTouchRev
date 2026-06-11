@@ -70,13 +70,18 @@ public:
     uint32_t data_program_reload_compare;       // 0x04663000
     uint32_t data_program_reload_break;         // 0x15E75678
     uint32_t data_selftest_request;             // 0x00006AA6
+    uint32_t data_set_frame;                    // 0x0000000A
+    uint32_t addr_usb_detect;                   // 0x10007F38
+    uint32_t data_normal_mode;                  // 0x00000000  
+    uint32_t data_open_mode;                    // 0x00007777  
+    uint32_t data_short_mode;                   // 0x00001111
+    uint32_t data_sorting_mode;                 // 0x0000AAAA
     uint8_t data_criteria_aa_top;               // 0x64
     uint8_t data_criteria_aa_bot;               // 0x00
     uint8_t data_criteria_key_top;              // 0x64
     uint8_t data_criteria_key_bot;              // 0x00
     uint8_t data_criteria_avg_top;              // 0x64
     uint8_t data_criteria_avg_bot;              // 0x00
-    uint32_t data_set_frame;                    // 0x0000000A
     uint8_t data_selftest_ack_hb;               // 0xA6
     uint8_t data_selftest_ack_lb;               // 0x6A
     uint8_t data_selftest_pass;                 // 0xAA
@@ -94,17 +99,12 @@ public:
     uint8_t data_ahb_dis;                       // 0x00
     uint8_t data_ahb_en;                        // 0x01
     uint8_t addr_event_addr;                    // 0x30
-    uint32_t addr_usb_detect;                   // 0x10007F38
     uint8_t addr_ulpm_33;                       // 0x33
     uint8_t addr_ulpm_34;                       // 0x34
     uint8_t data_ulpm_11;                       // 0x11
     uint8_t data_ulpm_22;                       // 0x22
     uint8_t data_ulpm_33;                       // 0x33
     uint8_t data_ulpm_aa;                       // 0xAA
-    uint32_t data_normal_mode;                  // 0x00000000  
-    uint32_t data_open_mode;                    // 0x00007777  
-    uint32_t data_short_mode;                   // 0x00001111
-    uint32_t data_sorting_mode;                 // 0x0000AAAA
 };
 
 class flash_operation {
@@ -156,13 +156,13 @@ public:
     uint32_t addr_fw_define_rxnum_txnum;                // 0x100070F4
     uint32_t addr_fw_define_maxpt_xyrvs;                // 0x100070F8
     uint32_t addr_fw_define_x_y_res;                    // 0x100070FC
-    uint8_t data_df_rx;                                 // 60
-    uint8_t data_df_tx;                                 // 40
-    uint8_t data_df_pt;                                 // 10
     uint32_t data_fw_define_flash_reload_dis;           // 0x0000A55A
     uint32_t data_fw_define_flash_reload_en;            // 0x00000000
     uint32_t data_fw_define_rxnum_txnum_maxpt_sorting;  // 0x00000008
     uint32_t data_fw_define_rxnum_txnum_maxpt_normal;   // 0x00000014
+    uint8_t data_df_rx;                                 // 60
+    uint8_t data_df_tx;                                 // 40
+    uint8_t data_df_pt;                                 // 10
 };
 
 class zf_operation {
@@ -181,8 +181,8 @@ public:
     uint32_t data_adc_cfg_3;                    // 0x10007AF0
     uint32_t data_map_table;                    // 0x10007500
     uint32_t addr_sts_chk;                      // 0x900000A8
-    uint8_t data_activ_sts;                     // 0x05
     uint32_t addr_activ_relod;                  // 0x90000048
+    uint8_t data_activ_sts;                     // 0x05
     uint8_t data_activ_in;                      // 0xEC
 };
 

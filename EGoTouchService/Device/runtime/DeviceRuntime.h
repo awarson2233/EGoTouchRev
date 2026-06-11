@@ -180,9 +180,11 @@ public:
                             PenButtonMode penButtonMode = PenButtonMode::OemCustom,
                             PenButtonRoute penButtonRoute = PenButtonRoute::VhfOnly,
                             bool penButtonRouteExplicit = false);
+#if EGOTOUCH_SERVICE_ENABLE_IPC
     Config::ValidationResult ValidateConfigStore(const Config::ConfigStore& store) const;
     void ApplyConfigStore(const Config::ConfigStore& store);
     void ApplyPipelineConfig(const Config::ConfigStore& store);
+#endif
 
     void SetPenButtonMode(PenButtonMode m) { m_penButtonMode.store(m, std::memory_order_release); }
     PenButtonMode GetPenButtonMode() const { return m_penButtonMode.load(std::memory_order_acquire); }

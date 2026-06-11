@@ -1,8 +1,8 @@
 #pragma once
-// GuiLogSink: spdlog sink that buffers log entries for display.
+// GuiLogSink: Thread-safe buffer for log entries.
 // Shared by both EGoTouchApp and EGoTouchService.
+// Decoupled from spdlog to minimize binary footprint.
 
-#include <spdlog/sinks/base_sink.h>
 #include <mutex>
 #include <string>
 #include <deque>
@@ -13,7 +13,7 @@
 
 namespace Common {
 
-class GuiLogSink : public spdlog::sinks::base_sink<std::mutex> {
+class GuiLogSink {
 public:
     static constexpr int kDebugMaxLines = 2000;
     static constexpr int kReleaseMaxLines = 500;
@@ -49,7 +49,6 @@ public:
     }
 
     // Directly insert a pre-formatted string (e.g. forwarded Service logs)
-    // without running it through the spdlog formatter.
     void PushRaw(const std::string& line) {
         std::lock_guard<std::mutex> lk(mutex_);
         lines_.push_back(line);
@@ -66,24 +65,6 @@ public:
         lines_.clear();
         pendingLines_.clear();
     }
-
-protected:
-    void sink_it_(const spdlog::details::log_msg& msg) override {
-        spdlog::memory_buf_t formatted;
-        formatter_->format(msg, formatted);
-        std::lock_guard<std::mutex> lk(mutex_);
-        std::string line = fmt::to_string(formatted);
-        if (!line.empty() && line.back() == '\n') line.pop_back();
-        lines_.push_back(line);
-        pendingLines_.push_back(line);
-        while (static_cast<int>(lines_.size()) > kMaxLines)
-            lines_.pop_front();
-        while (static_cast<int>(pendingLines_.size()) > kMaxLines)
-            pendingLines_.pop_front();
-        if (m_notifyEvent) SetEvent(m_notifyEvent);
-    }
-
-    void flush_() override {}
 
 private:
     mutable std::mutex mutex_;

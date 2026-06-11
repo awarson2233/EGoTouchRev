@@ -186,11 +186,11 @@ void MarkLegacyConfigCommandUnsupported(Ipc::IpcCommand command, Ipc::IpcRespons
 }
 #endif
 
-constexpr std::array<std::pair<std::string_view, std::string_view>, 4> kStylusIirCoefficientPathPairs{
-    std::pair{"stylus.sp.iir_coef_low_hover", "stylus.sp.iir_coef_low_in_band"},
-    std::pair{"stylus.sp.iir_coef_high_hover", "stylus.sp.iir_coef_high_in_band"},
-    std::pair{"stylus.sp.iir_coef_low_writing", "stylus.sp.iir_coef_low_edge"},
-    std::pair{"stylus.sp.iir_coef_high_writing", "stylus.sp.iir_coef_high_edge"},
+constexpr std::array<std::string_view, 4> kStylusIirCoefficientPaths{
+    "stylus.sp.iir_coef_low_hover",
+    "stylus.sp.iir_coef_high_hover",
+    "stylus.sp.iir_coef_low_writing",
+    "stylus.sp.iir_coef_high_writing",
 };
 
 bool StylusIirCoefficientsWithinMax(const Config::ConfigStore& store) {
@@ -199,8 +199,7 @@ bool StylusIirCoefficientsWithinMax(const Config::ConfigStore& store) {
         return false;
     }
 
-    for (const auto [canonicalPath, legacyPath] : kStylusIirCoefficientPathPairs) {
-        const auto path = store.has(canonicalPath) ? canonicalPath : legacyPath;
+    for (const auto path : kStylusIirCoefficientPaths) {
         const int32_t coef = store.getOr<int32_t>(path, 0);
         if (coef < 0 || coef > maxCoef) {
             return false;
@@ -212,8 +211,7 @@ bool StylusIirCoefficientsWithinMax(const Config::ConfigStore& store) {
 void ClampStylusIirCoefficients(Config::ConfigStore& store) {
     const int32_t maxCoef = std::clamp(store.getOr<int32_t>("stylus.sp.iir_max_coef", 32), int32_t{1}, int32_t{255});
     store.set<int32_t>("stylus.sp.iir_max_coef", maxCoef);
-    for (const auto [canonicalPath, legacyPath] : kStylusIirCoefficientPathPairs) {
-        const auto path = store.has(canonicalPath) ? canonicalPath : legacyPath;
+    for (const auto path : kStylusIirCoefficientPaths) {
         if (store.has(path)) {
             store.set<int32_t>(path, std::clamp(store.get<int32_t>(path), int32_t{0}, maxCoef));
         }
@@ -336,15 +334,18 @@ ServiceHost::~ServiceHost() {
     Stop();
 }
 
-bool ServiceHost::InitializeConfigStores(const std::string& configPath) {
+bool ServiceHost::InitializeConfigStores() {
+#if EGOTOUCH_SERVICE_ENABLE_IPC
     const bool ok = m_configRuntime.Initialize(
-        configPath,
         [this](const Config::ConfigStore& store) { return ValidateStartupConfig(store); });
     if (!ok) {
         return false;
     }
     m_configState = m_configRuntime.ServiceState();
     m_configRuntime.WriteServiceState(m_configState);
+#else
+    m_configState = ServiceConfigState{};
+#endif
     return true;
 }
 // ── 模式解析 ──────────────────────────────────────────
@@ -357,6 +358,7 @@ void ServiceHost::ApplyServiceConfigToRuntime(const ServiceConfigState& config) 
         config.penButtonRouteExplicit);
 }
 
+#if EGOTOUCH_SERVICE_ENABLE_IPC
 bool ServiceHost::ValidateStartupConfig(const Config::ConfigStore& store) const {
     ServiceConfigState schemaState{};
     Config::ConfigBinder serviceBinder;
@@ -451,11 +453,13 @@ ReloadServiceConfigResult ServiceHost::HandleReloadServiceConfig(
     m_configState = activeConfig;
     return result;
 }
+#endif
 
 bool ServiceHost::StartRuntimeAndPipeline() {
     m_deviceRuntime = std::make_unique<DeviceRuntime>(
         kDevicePathMaster, kDevicePathSlave, kDevicePathInterrupt);
 
+#if EGOTOUCH_SERVICE_ENABLE_IPC
     Config::ConfigStore startupConfig = m_configRuntime.SnapshotStore();
     // Phase 2 runs after DeviceRuntime is constructed: validate pipeline keys against
     // the runtime-owned binder before applying the config store.
@@ -465,6 +469,7 @@ bool ServiceHost::StartRuntimeAndPipeline() {
         return false;
     }
     m_deviceRuntime->ApplyConfigStore(startupConfig);
+#endif
 
     ApplyServiceConfigToRuntime(m_configState);
 #if EGOTOUCH_SERVICE_ENABLE_IPC
@@ -581,7 +586,7 @@ void ServiceHost::StartPenSubsystem() {
 }
 
 bool ServiceHost::Start() {
-    if (!InitializeConfigStores({})) {
+    if (!InitializeConfigStores()) {
         LOG_ERROR("Service", __func__, "Boot", "Startup config load/validation failed; service start blocked.");
         return false;
     }

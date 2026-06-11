@@ -130,18 +130,7 @@ SystemStateMonitor::~SystemStateMonitor() {
 
 namespace {
 
-constexpr std::size_t kInvalidBatchPosition = static_cast<std::size_t>(-1);
 
-const char* ToString(SystemStateTransportRole role) noexcept {
-    switch (role) {
-    case SystemStateTransportRole::Canonical:
-        return "canonical";
-    case SystemStateTransportRole::LegacyAlias:
-        return "legacy_alias";
-    default:
-        return "unknown";
-    }
-}
 
 bool IsDisplayStateEvent(SystemStateEventType type) noexcept {
     return type == SystemStateEventType::DisplayOn ||
@@ -202,17 +191,13 @@ SystemStateEvent BuildEvent(std::size_t index, const wchar_t* rawName) {
     return event;
 }
 
+constexpr std::size_t kInvalidBatchPosition = static_cast<std::size_t>(-1);
+
 struct NormalizedBatchEntry {
     bool present = false;
     std::size_t firstPosition = kInvalidBatchPosition;
     SystemStateEvent event{};
-    SystemStateTransportRole transportRole = SystemStateTransportRole::Canonical;
 };
-
-bool ShouldPreferTransportRole(SystemStateTransportRole current, SystemStateTransportRole candidate) noexcept {
-    return current != SystemStateTransportRole::Canonical &&
-           candidate == SystemStateTransportRole::Canonical;
-}
 
 template <typename ImplT>
 void ResetNamedEvent(ImplT& impl, std::size_t index) noexcept {
@@ -266,7 +251,6 @@ void DispatchNormalizedBatch(
 
     for (std::size_t position = 0; position < batchCount; ++position) {
         const std::size_t eventIndex = batchIndices[position];
-        const SystemStateNamedEventSpec* spec = TryGetNamedEventSpec(eventIndex);
         SystemStateEvent event = BuildEvent(eventIndex, impl.eventNames[eventIndex].c_str());
         NormalizedBatchEntry& entry = entries[ToIndex(event.type)];
 
@@ -274,17 +258,6 @@ void DispatchNormalizedBatch(
             entry.present = true;
             entry.firstPosition = position;
             entry.event = event;
-            if (spec != nullptr) {
-                entry.transportRole = spec->transportRole;
-            }
-            continue;
-        }
-
-        if (spec != nullptr && ShouldPreferTransportRole(entry.transportRole, spec->transportRole)) {
-            const auto firstTimestamp = entry.event.timestamp;
-            entry.event = event;
-            entry.event.timestamp = firstTimestamp;
-            entry.transportRole = spec->transportRole;
         }
     }
 
@@ -331,10 +304,9 @@ void DispatchNormalizedBatch(
                 "Host",
                 __func__,
                 "Normalize",
-                "Suppressing normalized duplicate type={} from named event[{}] (role={}).",
+                "Suppressing normalized duplicate type={} from named event[{}].",
                 ToString(entry.event.type),
-                entry.event.raw_index,
-                ToString(entry.transportRole));
+                entry.event.raw_index);
             continue;
         }
 
@@ -342,10 +314,9 @@ void DispatchNormalizedBatch(
             "Host",
             __func__,
             "Signal",
-            "Named event[{}] normalized -> type={} (role={}).",
+            "Named event[{}] normalized -> type={}.",
             entry.event.raw_index,
-            ToString(entry.event.type),
-            ToString(entry.transportRole));
+            ToString(entry.event.type));
 
         RememberNormalizedEvent(impl, entry.event.type);
 

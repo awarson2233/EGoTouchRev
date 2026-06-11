@@ -149,14 +149,7 @@ const std::pair<ConfigKeyId, std::string_view> kStaticKeyMap[] = {
     {ConfigKeyId::StylusSpLockBypass, "stylus.sp.lock_bypass"},
 };
 
-const std::pair<std::string_view, ConfigKeyId> kStaticPathAliases[] = {
-    {"stylus.sp.iir_coef_low_in_band", ConfigKeyId::StylusSpIirCoefLowHover},
-    {"stylus.sp.iir_coef_high_in_band", ConfigKeyId::StylusSpIirCoefHighHover},
-    {"stylus.sp.iir_speed_thold_in_band", ConfigKeyId::StylusSpIirSpeedTholdHover},
-    {"stylus.sp.iir_coef_low_edge", ConfigKeyId::StylusSpIirCoefLowWriting},
-    {"stylus.sp.iir_coef_high_edge", ConfigKeyId::StylusSpIirCoefHighWriting},
-    {"stylus.sp.iir_speed_thold_edge", ConfigKeyId::StylusSpIirSpeedTholdWriting},
-};
+
 
 std::unordered_map<ConfigKeyId, std::string>& mutableKeyIdToPath()
 {
@@ -180,9 +173,7 @@ void ensureStaticMapsInitialized()
             idToPath.try_emplace(id, path);
             pathToId.try_emplace(std::move(path), id);
         }
-        for (const auto& [pathView, id] : kStaticPathAliases) {
-            pathToId.try_emplace(std::string{pathView}, id);
-        }
+
         return true;
     }();
     (void)initialized;
