@@ -2,10 +2,37 @@
 #include "TouchSolver/ZoneExpander.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
+#include <cstdlib>
 #include <iostream>
+#include <new>
 #include <stdexcept>
 #include <vector>
+
+std::atomic<bool> g_countAllocations{false};
+std::atomic<size_t> g_allocationCount{0};
+
+void* operator new(std::size_t size) {
+    if (g_countAllocations.load(std::memory_order_relaxed)) {
+        g_allocationCount.fetch_add(1, std::memory_order_relaxed);
+    }
+    if (void* ptr = std::malloc(size)) return ptr;
+    throw std::bad_alloc();
+}
+
+void* operator new[](std::size_t size) {
+    if (g_countAllocations.load(std::memory_order_relaxed)) {
+        g_allocationCount.fetch_add(1, std::memory_order_relaxed);
+    }
+    if (void* ptr = std::malloc(size)) return ptr;
+    throw std::bad_alloc();
+}
+
+void operator delete(void* ptr) noexcept { std::free(ptr); }
+void operator delete[](void* ptr) noexcept { std::free(ptr); }
+void operator delete(void* ptr, std::size_t) noexcept { std::free(ptr); }
+void operator delete[](void* ptr, std::size_t) noexcept { std::free(ptr); }
 
 namespace {
 
@@ -148,7 +175,14 @@ void TestZoneExpanderKeepsTopSignalCandidatesPastContactCapacity() {
     Solvers::Touch::ZoneExpander expander;
     expander.m_dilateErode = false;
     expander.m_maxTouches = static_cast<int>(Solvers::kMaxTouchContacts);
+
+    g_allocationCount.store(0, std::memory_order_relaxed);
+    g_countAllocations.store(true, std::memory_order_relaxed);
     expander.Process(frame, peaks, 10, {});
+    g_countAllocations.store(false, std::memory_order_relaxed);
+
+    Require(g_allocationCount.load(std::memory_order_relaxed) == 0,
+            "zone expander over-capacity hot path should not allocate");
 
     Require(frame.touch.output.contacts.size() == Solvers::kMaxTouchContacts,
             "zone expander should cap output to max touch contacts");

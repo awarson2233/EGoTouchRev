@@ -158,7 +158,7 @@ public:
     }
 
     const std::array<uint8_t, MicroZoneSegmenter::kGridSize>& GetPeakZones() const { return m_microZoneSeg.GetPeakZones(); }
-    const std::vector<ZoneEdgeInfo>& GetEdgeInfos() const { return m_zoneExp.GetEdgeInfos(); }
+    std::span<const ZoneEdgeInfo> GetEdgeInfos() const { return m_zoneExp.GetEdgeInfos(); }
     const std::array<uint8_t, ZoneExpander::kGridSize>& GetZoneEdge() const { return m_zoneExp.GetZoneEdge(); }
     const EdgeBounds& GetEdgeBounds() const { return m_zoneExp.m_edgeBounds; }
     int GetZoneCount() const { return m_zoneExp.GetZoneCount(); }

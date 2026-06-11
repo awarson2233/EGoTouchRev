@@ -283,7 +283,7 @@ public:
     };
 
     inline void Process(std::span<TouchContact> contacts,
-                        const std::vector<ZoneEdgeInfo>& edgeInfos,
+                        std::span<const ZoneEdgeInfo> edgeInfos,
                         const EdgeBounds& bounds) {
         if (!m_enabled) return;
         for (int i = 0; i < static_cast<int>(contacts.size()); ++i) {
@@ -407,7 +407,7 @@ public:
     int  m_edgeMargin = 2;
 
     inline void Process(std::span<TouchContact> contacts,
-                        const std::vector<ZoneEdgeInfo>& edgeInfos,
+                        std::span<const ZoneEdgeInfo> edgeInfos,
                         const EdgeBounds& bounds) {
         if (!m_enabled) return;
 

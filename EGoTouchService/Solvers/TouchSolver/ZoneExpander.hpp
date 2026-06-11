@@ -103,7 +103,7 @@ public:
 
     }
 
-    const std::vector<ZoneEdgeInfo>& GetEdgeInfos() const { return m_contactEdgeInfos; }
+    std::span<const ZoneEdgeInfo> GetEdgeInfos() const { return m_contactEdgeInfos.span(); }
     int GetZoneCount() const { return m_zoneCount; }
     const std::array<uint8_t, kGridSize>& GetTouchZones() const { return m_touchZones; }
     const std::array<uint8_t, kGridSize>& GetZoneEdge() const { return m_zoneEdge; }
@@ -152,9 +152,9 @@ private:
 
     std::array<uint8_t, kGridSize> m_touchZones{};
     std::array<uint8_t, kGridSize> m_zoneEdge{};
-    std::vector<ZoneUnit> m_units;
-    std::vector<ZoneEdgeInfo> m_edgeInfos;
-    std::vector<ZoneEdgeInfo> m_contactEdgeInfos;
+    FixedVector<ZoneUnit, kGridSize> m_units;
+    FixedVector<ZoneEdgeInfo, kGridSize> m_edgeInfos;
+    FixedVector<ZoneEdgeInfo, kMaxTouchContacts> m_contactEdgeInfos;
     FixedVector<TouchContact, kMaxTouchContacts>* m_currentOutputContacts = nullptr;
     int m_zoneCount = 0;
     std::array<int, kGridSize> m_activeZoneCells{};
@@ -613,11 +613,6 @@ private:
         frame.touch.output.contacts.clear();
         m_contactEdgeInfos.clear();
         m_currentOutputContacts = &frame.touch.output.contacts;
-        const size_t desiredCapacity = static_cast<size_t>(
-            std::max(m_maxTouches, static_cast<int>(peaks.size())));
-        if (m_contactEdgeInfos.capacity() < desiredCapacity) {
-            m_contactEdgeInfos.reserve(desiredCapacity);
-        }
         for (int pi = 0; pi < static_cast<int>(m_units.size()); ++pi) {
             auto& u = m_units[pi];
             if (u.area == 0 || u.weightTotal == 0) continue;
