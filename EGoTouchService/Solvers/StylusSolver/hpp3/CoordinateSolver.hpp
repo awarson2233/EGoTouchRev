@@ -103,8 +103,8 @@ private:
     static constexpr uint8_t kFactoryCoordCompFlags = 0x0E;
     static constexpr bool kFactoryUseTriangle = (kFactoryCoordCompFlags & 0x01) == 0;
     static constexpr bool kFactoryTriEdgeSecondaryBlend = (kFactoryCoordCompFlags & 0x08) != 0;
-    static constexpr TriangleEdgeParams kFactoryTriEdgeDim1 = {50, 5000, 5000};
-    static constexpr TriangleEdgeParams kFactoryTriEdgeDim2 = {50, 4500, 3700};
+    static constexpr TriangleEdgeParams kFactoryTriEdgeDim1 = {93, 4000, 4000};
+    static constexpr TriangleEdgeParams kFactoryTriEdgeDim2 = {93, 3800, 3000};
     static constexpr PitchCompensation kFactoryPitchCompDim1 = {
         {0.0, -1.7109151490662926, 0.005959771652221362, -5.113555667385272e-06}, true};
     static constexpr PitchCompensation kFactoryPitchCompDim2 = {

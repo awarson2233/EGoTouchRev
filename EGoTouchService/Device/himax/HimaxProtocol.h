@@ -44,6 +44,7 @@ namespace Himax {
         bool DrainInterruptOverlapped(DWORD waitMs);
 
         HANDLE m_handle;
+        HANDLE m_syncEvent = nullptr;
         DWORD m_lastError;
         DeviceType m_type;
         

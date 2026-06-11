@@ -92,10 +92,10 @@ const char* ToString(RuntimePolicyEvent::Type type) noexcept;
 struct HistoryEntry {
     std::chrono::system_clock::time_point timestamp{};
     uint64_t command_id = 0;
-    std::string command_name;
+    std::array<char, 32> command_name{};
     CommandSource source = CommandSource::External;
     bool success = false;
-    std::string detail;
+    std::array<char, 32> detail{};
 };
 
 struct RuntimeSnapshot {
@@ -247,7 +247,7 @@ private:
         command cmd{};
         CommandSource source = CommandSource::External;
         std::chrono::steady_clock::time_point enqueued_at{};
-        std::string reason;
+        std::array<char, 32> reason{};
     };
 
     bool DrainCommands();
@@ -280,14 +280,18 @@ private:
     int m_consecutiveFrameErrors = 0;
 
     mutable std::mutex m_mu;
-    std::deque<QueuedCommand> m_cmdQueue;
+    std::array<QueuedCommand, 16> m_cmdQueue{};
+    size_t m_cmdQueueHead = 0;
+    size_t m_cmdQueueTail = 0;
+    size_t m_cmdQueueCount = 0;
     bool m_displayOffSuspendPending = false;
     std::chrono::steady_clock::time_point m_displayOffSuspendDeadline{};
     std::atomic<bool> m_systemSuspendObserved{false};
 
-    std::vector<HistoryEntry> m_history;
-    std::unordered_map<int, std::chrono::steady_clock::time_point>
-        m_lastEventByType;
+    std::array<HistoryEntry, 128> m_history{};
+    size_t m_historyWriteIdx = 0;
+    size_t m_historyCount = 0;
+    std::array<std::chrono::steady_clock::time_point, 16> m_lastEventByType{};
     uint64_t m_lastCmdId = 0;
     std::string m_lastNote;
     std::atomic<uint64_t> m_nextCmdId{1};

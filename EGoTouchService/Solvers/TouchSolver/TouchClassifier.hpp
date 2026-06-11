@@ -12,6 +12,11 @@ namespace Solvers { namespace Touch {
 
 class TouchClassifier {
 public:
+    TouchClassifier() {
+        m_zoneFeatures.reserve(20);
+        m_peakEvaluations.reserve(100);
+    }
+
     bool  m_enabled = true;
     int   m_areaThreshold = 50;
     int   m_signalSumThreshold = 80000;
@@ -58,7 +63,6 @@ public:
         m_lastRejectedCount = 0;
         if (!m_enabled || !m_analyzerEnabled) return 0;
 
-        m_zoneFeatures.reserve(macroZones.size());
         for (int zi = 0; zi < static_cast<int>(macroZones.size()); ++zi) {
             m_zoneFeatures.push_back(BuildFeature(frame, macroZones[static_cast<size_t>(zi)], zi));
         }

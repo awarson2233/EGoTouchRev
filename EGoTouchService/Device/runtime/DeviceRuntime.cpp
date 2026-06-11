@@ -1,6 +1,8 @@
 #include "runtime/DeviceRuntime.h"
 #include "Logger.h"
 #include "SolverTypes.h"
+#include "config/ConfigBinder.h"
+#include "config/SchemaValidator.h"
 
 
 #include <chrono>
@@ -458,10 +460,18 @@ uint64_t DeviceRuntime::SubmitCommand(command cmd, CommandSource src,
   qc.cmd = cmd;
   qc.source = src;
   qc.enqueued_at = std::chrono::steady_clock::now();
-  qc.reason = reason ? reason : "";
+  if (reason) {
+    std::strncpy(qc.reason.data(), reason, qc.reason.size() - 1);
+  }
   {
     std::lock_guard<std::mutex> lk(m_mu);
-    m_cmdQueue.push_back(std::move(qc));
+    if (m_cmdQueueCount < 16) {
+      m_cmdQueue[m_cmdQueueTail] = std::move(qc);
+      m_cmdQueueTail = (m_cmdQueueTail + 1) % 16;
+      m_cmdQueueCount++;
+    } else {
+      LOG_ERROR("Runtime", __func__, "Queue", "Command queue overflow! Command dropped.");
+    }
   }
   return qc.id;
 }
@@ -475,13 +485,16 @@ void DeviceRuntime::IngestPolicyEvent(const RuntimePolicyEvent &ev) {
                            ev.type == EventType::ResumeAutomatic;
   {
     std::lock_guard<std::mutex> lk(m_mu);
-    const int key = static_cast<int>(ev.type);
-    auto it = m_lastEventByType.find(key);
-    if (it != m_lastEventByType.end() && now - it->second < kEventDebounce &&
-        !(isWakeEvent && m_displayOffSuspendPending)) {
-      return;
+    const size_t key = static_cast<size_t>(ev.type);
+    if (key < m_lastEventByType.size()) {
+      auto lastTime = m_lastEventByType[key];
+      if (lastTime != std::chrono::steady_clock::time_point{} &&
+          now - lastTime < kEventDebounce &&
+          !(isWakeEvent && m_displayOffSuspendPending)) {
+        return;
+      }
+      m_lastEventByType[key] = now;
     }
-    m_lastEventByType[key] = now;
   }
 
   switch (ev.type) {
@@ -581,7 +594,7 @@ RuntimeSnapshot DeviceRuntime::GetSnapshot() const {
   s.state = m_state.load();
   s.stylus_connected = m_chip.IsStylusConnected();
   s.recover_count = m_recoverCount;
-  s.queue_depth = m_cmdQueue.size();
+  s.queue_depth = m_cmdQueueCount;
   s.last_command_id = m_lastCmdId;
   s.last_note = m_lastNote;
   return s;
@@ -594,14 +607,25 @@ RuntimePenState DeviceRuntime::GetPenStateSnapshot() const {
 
 std::vector<HistoryEntry> DeviceRuntime::GetHistory(std::size_t n) const {
   std::lock_guard<std::mutex> lk(m_mu);
-  if (n >= m_history.size())
-    return m_history;
-  return {m_history.end() - static_cast<ptrdiff_t>(n), m_history.end()};
+  std::vector<HistoryEntry> result;
+  if (m_historyCount == 0) {
+    return result;
+  }
+  const size_t count = std::min(n, m_historyCount);
+  result.reserve(count);
+
+  size_t startIdx = (m_historyWriteIdx + 128 - count) % 128;
+  for (size_t i = 0; i < count; ++i) {
+    result.push_back(m_history[(startIdx + i) % 128]);
+  }
+  return result;
 }
 
 void DeviceRuntime::ClearHistory() {
   std::lock_guard<std::mutex> lk(m_mu);
-  m_history.clear();
+  m_historyWriteIdx = 0;
+  m_historyCount = 0;
+  m_history.fill(HistoryEntry{});
 }
 
 // --------------- 审计日志 ---------------
@@ -614,13 +638,14 @@ void DeviceRuntime::RecordHistory(const QueuedCommand &qc, bool ok,
   e.command_name = qc.reason;
   e.source = qc.source;
   e.success = ok;
-  e.detail = det;
-  m_history.push_back(std::move(e));
-  if (m_history.size() > kMaxHistoryItems)
-    m_history.erase(
-        m_history.begin(),
-        m_history.begin() +
-            static_cast<ptrdiff_t>(m_history.size() - kMaxHistoryItems));
+  std::memset(e.detail.data(), 0, e.detail.size());
+  std::strncpy(e.detail.data(), det.c_str(), e.detail.size() - 1);
+
+  m_history[m_historyWriteIdx] = std::move(e);
+  m_historyWriteIdx = (m_historyWriteIdx + 1) % 128;
+  if (m_historyCount < 128) {
+    m_historyCount++;
+  }
 }
 
 // --------------- 命令执行 ---------------
@@ -630,11 +655,12 @@ bool DeviceRuntime::DrainCommands() {
     QueuedCommand qc{};
     {
       std::lock_guard<std::mutex> lk(m_mu);
-      if (m_cmdQueue.empty()) {
+      if (m_cmdQueueCount == 0) {
         return true;
       }
-      qc = m_cmdQueue.front();
-      m_cmdQueue.pop_front();
+      qc = std::move(m_cmdQueue[m_cmdQueueHead]);
+      m_cmdQueueHead = (m_cmdQueueHead + 1) % 16;
+      m_cmdQueueCount--;
       m_lastCmdId = qc.id;
     }
 
@@ -646,7 +672,7 @@ bool DeviceRuntime::DrainCommands() {
     if (!ok) {
       LOG_WARN("Runtime", __func__, "CmdExec",
                "Command '{}' (type={}) failed — skipping (non-fatal).",
-               qc.reason, static_cast<int>(qc.cmd.type));
+               qc.reason.data(), static_cast<int>(qc.cmd.type));
       // 不再触发 recover: AFE 命令失败不代表 bus 挂了
       continue;
     }
@@ -672,7 +698,9 @@ ThreadResult DeviceRuntime::WorkerMain() {
         m_displayOffSuspendPending = false;
         SetState(workerState::suspend);
         m_needSuspendDeinit.store(true, std::memory_order_release);
-        m_cmdQueue.clear();
+        m_cmdQueueHead = 0;
+        m_cmdQueueTail = 0;
+        m_cmdQueueCount = 0;
         displayOffSuspendDue = true;
       }
     }
@@ -698,7 +726,9 @@ ThreadResult DeviceRuntime::WorkerMain() {
         SetState(workerState::quit);
       }
       std::lock_guard<std::mutex> lk(m_mu);
-      m_cmdQueue.clear();
+      m_cmdQueueHead = 0;
+      m_cmdQueueTail = 0;
+      m_cmdQueueCount = 0;
     }
 
     DrainCommands();

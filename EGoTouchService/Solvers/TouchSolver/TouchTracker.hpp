@@ -24,7 +24,7 @@ public:
     int   m_gapRelinkWindowFrames = 4;
     int   m_touchDownDebounceFrames = 1;
     bool  m_dynamicDebounceEnabled = true;
-    int   m_touchDownDebounceMaxExtra = 4;
+    int   m_touchDownDebounceMaxExtra = 2;
     int   m_touchDownWeakSignalThreshold = 180;
     float m_touchDownSmallSizeThresholdMm = 1.3f;
     bool  m_touchDownRejectEnabled = true;

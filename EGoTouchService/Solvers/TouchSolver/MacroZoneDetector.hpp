@@ -7,6 +7,7 @@
 #include "SolverTypes.h"
 #include <array>
 #include <vector>
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 
@@ -17,6 +18,10 @@ public:
     static constexpr int kRows = 40;
     static constexpr int kCols = 60;
     static constexpr int kGridSize = kRows * kCols; // 2400
+
+    MacroZoneDetector() {
+        m_macroZones.reserve(20);
+    }
 
     inline void Process(const HeatmapFrame& frame, int threshold) {
         const uint32_t visitEpoch = NextVisitEpoch();
@@ -95,8 +100,12 @@ public:
                 }
             }
         }
-        // Trim excess zones (keeps capacity for future frames)
-        m_macroZones.resize(zoneIdx);
+        // Sort by signalSum descending and keep the top 20
+        std::sort(m_macroZones.begin(), m_macroZones.begin() + zoneIdx,
+                  [](const MacroZone& a, const MacroZone& b) {
+                      return a.signalSum > b.signalSum;
+                  });
+        m_macroZones.resize(std::min(zoneIdx, 20));
     }
 
     const std::vector<MacroZone>& GetMacroZones() const { return m_macroZones; }

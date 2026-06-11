@@ -50,17 +50,18 @@ namespace {
      * @return bool 是否成功
      */
     template<typename Func>
-    ChipResult<> PerformSyncIo(HANDLE handle, DWORD& lastError, Func ioFunc, ChipError errType, DWORD expectedLen = 0, bool checkLen = false, DWORD* outBytes = NULL) {
+    ChipResult<> PerformSyncIo(HANDLE handle, HANDLE hEvent, DWORD& lastError, Func ioFunc, ChipError errType, DWORD expectedLen = 0, bool checkLen = false, DWORD* outBytes = NULL) {
         if (handle == INVALID_HANDLE_VALUE) {
             lastError = ERROR_INVALID_HANDLE;
             return std::unexpected(ChipError::CommunicationError);
         }
-        OVERLAPPED ov = {0};
-        ov.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-        if (!ov.hEvent) {
-            lastError = GetLastError();
+        if (hEvent == NULL) {
+            lastError = ERROR_INVALID_PARAMETER;
             return std::unexpected(ChipError::InternalError);
         }
+        ResetEvent(hEvent);
+        OVERLAPPED ov = {0};
+        ov.hEvent = hEvent;
 
         DWORD bytesTransferred = 0;
         BOOL res = ioFunc(&ov, &bytesTransferred);
@@ -78,7 +79,6 @@ namespace {
                 lastError = err;
             }
         }
-        CloseHandle(ov.hEvent);
 
         if (!res) return std::unexpected(errType);
         if (checkLen && bytesTransferred != expectedLen) {
@@ -124,6 +124,21 @@ namespace Himax {
             }
             return;
         }
+
+        m_syncEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+        if (m_syncEvent == nullptr) {
+            m_lastError = GetLastError();
+            if (m_ov.hEvent != nullptr) {
+                CloseHandle(m_ov.hEvent);
+                m_ov.hEvent = nullptr;
+            }
+            if (m_handle != INVALID_HANDLE_VALUE) {
+                CloseHandle(m_handle);
+                m_handle = INVALID_HANDLE_VALUE;
+            }
+            return;
+        }
+
         if (type == DeviceType::Slave) {
             m_readOp = OP_READ_SLAVE;
             m_writeOp = OP_WRITE_SLAVE;
@@ -144,6 +159,10 @@ namespace Himax {
         if (m_ov.hEvent) {
             CloseHandle(m_ov.hEvent);
             m_ov.hEvent = nullptr;
+        }
+        if (m_syncEvent) {
+            CloseHandle(m_syncEvent);
+            m_syncEvent = nullptr;
         }
 
         if (IsValid()) {
@@ -171,7 +190,7 @@ namespace Himax {
     ChipResult<> HalDevice::Ioctl(DWORD code, const void* in, uint32_t inLen, void* out, uint32_t outLen, uint32_t* retLen) {
         ChipResult<> result = std::unexpected(ChipError::InternalError);
         for (int cnt = 0; cnt < 10; cnt++) {
-            result = PerformSyncIo(m_handle, m_lastError, [&](OVERLAPPED* pov, LPDWORD pBytes) {
+            result = PerformSyncIo(m_handle, m_syncEvent, m_lastError, [&](OVERLAPPED* pov, LPDWORD pBytes) {
                 return DeviceIoControl(m_handle, code, (LPVOID)in, inLen, out, outLen, pBytes, pov);
             }, ChipError::CommunicationError, 0, false, (DWORD*)retLen);
             if (result) break;
@@ -189,7 +208,7 @@ namespace Himax {
      * @return bool 是否成功
      */
     ChipResult<> HalDevice::Read(void* buffer, uint32_t len) {
-        return PerformSyncIo(m_handle, m_lastError, [&](OVERLAPPED* pov, LPDWORD pBytes){
+        return PerformSyncIo(m_handle, m_syncEvent, m_lastError, [&](OVERLAPPED* pov, LPDWORD pBytes){
             return ReadFile(m_handle, buffer, len, pBytes, pov);
         }, ChipError::CommunicationError);
     }
@@ -324,7 +343,7 @@ namespace Himax {
         }
 
 
-        return PerformSyncIo(m_handle, m_lastError, [&](OVERLAPPED* pov, LPDWORD pBytes){
+        return PerformSyncIo(m_handle, m_syncEvent, m_lastError, [&](OVERLAPPED* pov, LPDWORD pBytes){
             return WriteFile(m_handle, m_xfer_buffer.data(), (DWORD)m_xfer_buffer.size(), NULL, pov);
         }, ChipError::CommunicationError);
     }

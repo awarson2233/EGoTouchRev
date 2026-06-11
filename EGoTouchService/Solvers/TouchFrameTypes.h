@@ -155,7 +155,7 @@ private:
     size_t m_size = 0;
 };
 
-inline constexpr size_t kMaxTouchContacts = 64;
+inline constexpr size_t kMaxTouchContacts = 20;
 
 struct TouchPacket {
     bool valid = false;

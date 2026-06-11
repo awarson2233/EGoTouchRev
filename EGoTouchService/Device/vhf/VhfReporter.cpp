@@ -386,9 +386,15 @@ bool VhfReporter::EnsureDeviceOpenLocked() {
             continue;
         }
 
-        std::vector<uint8_t> buf(reqSize, 0);
-        auto* detail = reinterpret_cast<SP_DEVICE_INTERFACE_DETAIL_DATA_W*>(
-            buf.data());
+        alignas(SP_DEVICE_INTERFACE_DETAIL_DATA_W) std::array<uint8_t, 512> stackBuf{};
+        std::vector<uint8_t> heapBuf;
+        uint8_t* pBuf = stackBuf.data();
+        if (reqSize > stackBuf.size()) {
+            heapBuf.resize(reqSize, 0);
+            pBuf = heapBuf.data();
+        }
+
+        auto* detail = reinterpret_cast<SP_DEVICE_INTERFACE_DETAIL_DATA_W*>(pBuf);
         detail->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W);
         if (!SetupDiGetDeviceInterfaceDetailW(
                 devInfo.Get(), &ifData, detail, reqSize,

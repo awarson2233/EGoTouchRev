@@ -13,9 +13,9 @@ public:
 
     // ── IIR coefficient selection (GetIIRCoef equivalent) ──
     // Hover mode params (no pressure)
-    int32_t m_coefLowHover = 12;     // asa[0xA5E]
+    int32_t m_coefLowHover = 10;     // asa[0xA5E]
     int32_t m_coefHighHover = 6;     // asa[0xA5F]
-    int32_t m_speedTholdHover = 20;  // 0x14
+    int32_t m_speedTholdHover = 10;  // 0x14
 
     // Writing mode params (has pressure)
     int32_t m_coefLowWriting = 18;        // asa[0xA5C]
