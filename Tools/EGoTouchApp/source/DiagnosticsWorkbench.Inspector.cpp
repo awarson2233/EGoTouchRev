@@ -443,20 +443,18 @@ void DiagnosticsWorkbench::DrawTouchPipelineConfigPanel() {
         ImGui::TextColored(InfoColor(), "%s", activeModule.c_str());
         ImGui::Separator();
 
-        if (masterParserOnly || !configAdjustmentAllowed) {
-            ImGui::BeginDisabled();
-        }
-        std::vector<std::string> changedPaths;
+        const bool editable = configAdjustmentAllowed && !masterParserOnly;
         Config::ConfigStore& draftView = m_proxy->GetMutableConfigDraftStoreForUi();
+        std::vector<std::string> changedPaths;
         ConfigUIRenderer::RenderConfigStoreByModule(
             schema,
             draftView,
             activeModule,
-            &changedPaths,
-            MakeConfigPathStateProvider(m_proxy));
-        m_proxy->CommitConfigDraftEdits(changedPaths);
-        if (masterParserOnly || !configAdjustmentAllowed) {
-            ImGui::EndDisabled();
+            editable ? &changedPaths : nullptr,
+            MakeConfigPathStateProvider(m_proxy),
+            editable);
+        if (editable) {
+            m_proxy->CommitConfigDraftEdits(changedPaths);
         }
 
         if (!configAdjustmentAllowed) {
@@ -826,20 +824,18 @@ void DiagnosticsWorkbench::DrawStylusPipelineConfigPanel() {
         ImGui::TextColored(InfoColor(), "%s", activeModule.c_str());
         ImGui::Separator();
 
-        if (masterParserOnly || !configAdjustmentAllowed) {
-            ImGui::BeginDisabled();
-        }
-        std::vector<std::string> changedPaths;
+        const bool editable = configAdjustmentAllowed && !masterParserOnly;
         Config::ConfigStore& draftView = m_proxy->GetMutableConfigDraftStoreForUi();
+        std::vector<std::string> changedPaths;
         ConfigUIRenderer::RenderConfigStoreByModule(
             schema,
             draftView,
             activeModule,
-            &changedPaths,
-            MakeConfigPathStateProvider(m_proxy));
-        m_proxy->CommitConfigDraftEdits(changedPaths);
-        if (masterParserOnly || !configAdjustmentAllowed) {
-            ImGui::EndDisabled();
+            editable ? &changedPaths : nullptr,
+            MakeConfigPathStateProvider(m_proxy),
+            editable);
+        if (editable) {
+            m_proxy->CommitConfigDraftEdits(changedPaths);
         }
 
         if (!configAdjustmentAllowed) {

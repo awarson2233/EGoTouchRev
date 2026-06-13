@@ -102,14 +102,16 @@ public:
         Config::ConfigStore& values,
         const std::string& sectionName,
         std::vector<std::string>* changedPaths = nullptr,
-        ConfigPathStateProvider pathStateProvider = {});
+        ConfigPathStateProvider pathStateProvider = {},
+        bool editable = true);
 
     static void RenderConfigStoreByModule(
         const Config::ConfigSchemaSnapshot& schema,
         Config::ConfigStore& values,
         const std::string& moduleTag,
         std::vector<std::string>* changedPaths = nullptr,
-        ConfigPathStateProvider pathStateProvider = {});
+        ConfigPathStateProvider pathStateProvider = {},
+        bool editable = true);
 
     static std::vector<std::string> CollectModuleTags(
         const Config::ConfigSchemaSnapshot& schema);

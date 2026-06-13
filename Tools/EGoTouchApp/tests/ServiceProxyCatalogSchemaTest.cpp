@@ -645,6 +645,149 @@ void TestInvalidV3PayloadDoesNotClearSchemaOrStore() {
             "failed v3 snapshot should not change recorded snapshotVersion");
 }
 
+void TestPublicSettersNoOpUntilConfigSyncReady() {
+    App::ServiceProxy proxy;
+
+    proxy.SetSrvStylusVhfEnabled(false);
+    proxy.SetSrvAutoMode(false);
+    proxy.SetPenButtonMode(PenButtonMode::NativeBarrel);
+    proxy.SetPenButtonRoute(PenButtonRoute::Win32Only);
+    proxy.SetConfigDraftValue("service.mode", std::string("touch_only"));
+
+    Require(!proxy.IsConfigAdjustmentAllowed(), "public setters should not enable editing before config sync");
+    Require(proxy.IsSrvStylusVhfEnabled(), "stylus VHF setter should be ignored before config sync");
+    Require(proxy.IsSrvAutoMode(), "auto mode setter should be ignored before config sync");
+    Require(proxy.GetPenButtonMode() == PenButtonMode::OemCustom,
+            "pen button mode setter should be ignored before config sync");
+    Require(proxy.GetPenButtonRoute() == PenButtonRoute::VhfOnly,
+            "pen button route setter should be ignored before config sync");
+    Require(proxy.GetConfigDraftStore().getOr<std::string>("service.mode", "") == "full",
+            "raw draft setter should be ignored before config sync");
+    RequireDraftState(proxy,
+                      "service.mode",
+                      App::ConfigDraftApplyState::Clean,
+                      App::ConfigDraftPersistState::NotAttempted,
+                      false);
+}
+
+void TestCatalogAndSnapshotReadyUsesServiceSnapshotDraft() {
+    App::ServiceProxy proxy;
+    ApplyCatalog(proxy);
+
+    Config::ConfigV3SnapshotPayload snapshot{};
+    snapshot.schemaVersion = 10;
+    snapshot.snapshotVersion = 61;
+    snapshot.entries.push_back({Config::ConfigKeyId::SvcMode, std::string("touch_only")});
+    snapshot.entries.push_back({Config::ConfigKeyId::SvcAutoMode, false});
+    snapshot.entries.push_back({Config::ConfigKeyId::SvcPenButtonRoute, std::string("win32_only")});
+    const auto bytes = Config::serializeConfigV3Snapshot(snapshot);
+
+    Require(proxy.ApplyConfigV3SnapshotBytesForTest(bytes.data(), bytes.size(), true),
+            "catalog and snapshot should complete config sync");
+    Require(proxy.GetConfigServiceSyncState() == App::ConfigServiceSyncState::Ready,
+            "test sync helper should mark Ready only after snapshot success");
+    Require(proxy.GetConfigDraftStore().getOr<std::string>("service.mode", "") == "touch_only",
+            "editable draft should come from Service snapshot");
+    Require(proxy.GetConfigDraftStore().getOr<bool>("service.auto_mode", true) == false,
+            "editable draft bool should come from Service snapshot");
+    Require(proxy.GetConfigDraftStore().getOr<std::string>("service.pen_button_route", "") == "win32_only",
+            "editable draft enum should come from Service snapshot");
+}
+
+void TestSnapshotSchemaMismatchBlocksReadyAndPreservesDraft() {
+    App::ServiceProxy proxy;
+    ApplyCatalog(proxy);
+    const auto beforeMode = proxy.GetConfigDraftStore().getOr<std::string>("service.mode", "");
+    const auto beforeVersions = proxy.GetConfigV3BaselineVersionsForTest();
+
+    Config::ConfigV3SnapshotPayload snapshot{};
+    snapshot.schemaVersion = 999;
+    snapshot.snapshotVersion = 62;
+    snapshot.entries.push_back({Config::ConfigKeyId::SvcMode, std::string("touch_only")});
+    const auto bytes = Config::serializeConfigV3Snapshot(snapshot);
+
+    Require(!proxy.ApplyConfigV3SnapshotBytesForTest(bytes.data(), bytes.size(), true),
+            "schema-mismatched snapshot should fail");
+    Require(proxy.GetConfigServiceSyncState() != App::ConfigServiceSyncState::Ready,
+            "schema-mismatched snapshot should not mark config sync Ready");
+    Require(!proxy.IsConfigAdjustmentAllowed(),
+            "schema-mismatched snapshot should keep editing disabled");
+    Require(proxy.GetConfigDraftStore().getOr<std::string>("service.mode", "") == beforeMode,
+            "schema-mismatched snapshot should not overwrite editable draft");
+    const auto afterVersions = proxy.GetConfigV3BaselineVersionsForTest();
+    Require(afterVersions.snapshotSchemaVersion == beforeVersions.snapshotSchemaVersion,
+            "schema-mismatched snapshot should not update snapshot schemaVersion");
+    Require(afterVersions.snapshotVersion == beforeVersions.snapshotVersion,
+            "schema-mismatched snapshot should not update snapshotVersion");
+}
+
+void TestForcedSnapshotOverwriteClearsDirtyBaselinePathAndApplyState() {
+    App::ServiceProxy proxy;
+    ApplyCatalog(proxy);
+    Config::ConfigV3SnapshotPayload baseline{};
+    baseline.schemaVersion = 10;
+    baseline.snapshotVersion = 63;
+    baseline.entries.push_back({Config::ConfigKeyId::SvcMode, std::string("touch_only")});
+    const auto baselineBytes = Config::serializeConfigV3Snapshot(baseline);
+    Require(proxy.ApplyConfigV3SnapshotBytesForTest(baselineBytes.data(), baselineBytes.size()),
+            "baseline v3 snapshot should apply");
+    proxy.SetConfigDraftValue("service.mode", std::string("full"));
+    const auto beforeState = proxy.GetConfigDraftPathState("service.mode");
+    Require(beforeState.dirty, "precondition dirty edit should exist before forced sync");
+    Require(beforeState.hasDirtyBaseline, "precondition dirty edit should keep a dirty baseline");
+    Require(beforeState.applyState == App::ConfigDraftApplyState::Pending,
+            "precondition dirty edit should be pending before forced sync");
+
+    Config::ConfigV3SnapshotPayload snapshot{};
+    snapshot.schemaVersion = 10;
+    snapshot.snapshotVersion = 64;
+    snapshot.entries.push_back({Config::ConfigKeyId::SvcMode, std::string("touch_only")});
+    const auto bytes = Config::serializeConfigV3Snapshot(snapshot);
+
+    Require(proxy.ApplyConfigV3SnapshotBytesForTest(bytes.data(), bytes.size(), true),
+            "forced snapshot overwrite should succeed");
+    Require(proxy.GetConfigDraftStore().getOr<std::string>("service.mode", "") == "touch_only",
+            "forced snapshot should replace draft with Service value");
+    RequireDraftState(proxy,
+                      "service.mode",
+                      App::ConfigDraftApplyState::Clean,
+                      App::ConfigDraftPersistState::NotAttempted,
+                      false);
+    const auto afterState = proxy.GetConfigDraftPathState("service.mode");
+    Require(!afterState.hasDirtyBaseline,
+            "forced snapshot should clear path dirty baseline state");
+    const auto result = proxy.GetLastApplyConfigResult();
+    Require(result.status == App::ApplyConfigStatus::NotAttempted,
+            "forced snapshot should clear last apply status");
+    Require(!proxy.HasUnpersistedLiveConfigChanges(),
+            "forced snapshot should clear unpersisted live config flag");
+}
+
+void TestNoChangeApplyClearsPendingDirtyAndReturnsNoChanges() {
+    App::ServiceProxy proxy;
+    ApplyCatalog(proxy);
+    ApplySnapshotWithBaseline(proxy, 10, 65);
+
+    proxy.SetConfigDraftValue("service.auto_mode", false);
+    Require(proxy.GetConfigDraftPathState("service.auto_mode").dirty,
+            "precondition dirty edit should be pending");
+    proxy.SetConfigDraftValue("service.auto_mode", true);
+    Require(proxy.GetConfigDraftPathState("service.auto_mode").dirty == false,
+            "returning to Service snapshot should clear dirty immediately");
+
+    Require(proxy.ApplyConfigStoreGlobally(), "no-change apply should succeed");
+    const auto result = proxy.GetLastApplyConfigResult();
+    Require(result.status == App::ApplyConfigStatus::NoChanges,
+            "no-change apply should return NoChanges status");
+    Require(proxy.GetConfigV3ApplyRequestCountForTest() == 0,
+            "no-change apply should not send v3 patch");
+    RequireDraftState(proxy,
+                      "service.auto_mode",
+                      App::ConfigDraftApplyState::Clean,
+                      App::ConfigDraftPersistState::NotAttempted,
+                      false);
+}
+
 } // namespace
 
 int main() {
@@ -665,6 +808,11 @@ int main() {
         TestV3SnapshotSkipsUnknownKeyId();
         TestV3SnapshotSkipsUnmappedNumericEnum();
         TestInvalidV3PayloadDoesNotClearSchemaOrStore();
+        TestPublicSettersNoOpUntilConfigSyncReady();
+        TestCatalogAndSnapshotReadyUsesServiceSnapshotDraft();
+        TestSnapshotSchemaMismatchBlocksReadyAndPreservesDraft();
+        TestForcedSnapshotOverwriteClearsDirtyBaselinePathAndApplyState();
+        TestNoChangeApplyClearsPendingDirtyAndReturnsNoChanges();
         TestConnectedApplyUsesConfigPatchV3();
         TestConnectedRestartRequiredApplyUsesConfigPatchV3();
         TestConnectedRejectedApplyResultIsPropagated();

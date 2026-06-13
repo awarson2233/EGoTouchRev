@@ -1087,17 +1087,18 @@ bool ServiceProxy::ApplyConfigV3CatalogBytes(const uint8_t* data, size_t size) {
     try {
         const auto payload = Config::deserializeConfigV3Catalog(data, size);
         Config::ConfigCatalog catalog(payload.entries);
-        m_configSchema = Config::BuildSchemaSnapshot(catalog);
-        m_configDraft.catalogSchemaVersion = payload.schemaVersion;
-        m_configDraft.catalogSnapshotVersion = payload.snapshotVersion;
+        Config::ConfigSchemaSnapshot nextSchema = Config::BuildSchemaSnapshot(catalog);
+        Config::ConfigStore nextCatalogDefaults;
         for (const auto& entry : payload.entries) {
             if (!entry.path.empty()) {
-                m_configDraft.catalogDefaults.set<Config::ConfigValue>(entry.path, entry.defaultValue);
-                if (!m_configDraft.editableDraft.has(entry.path)) {
-                    m_configDraft.editableDraft.set<Config::ConfigValue>(entry.path, entry.defaultValue);
-                }
+                nextCatalogDefaults.set<Config::ConfigValue>(entry.path, entry.defaultValue);
             }
         }
+
+        m_configSchema = std::move(nextSchema);
+        m_configDraft.catalogDefaults = std::move(nextCatalogDefaults);
+        m_configDraft.catalogSchemaVersion = payload.schemaVersion;
+        m_configDraft.catalogSnapshotVersion = payload.snapshotVersion;
         m_configV3CatalogReady = true;
         LOG_INFO("App", __func__, "Config", "Applied config v3 catalog entries={} schemaVersion={} snapshotVersion={}",
                  payload.entries.size(), payload.schemaVersion, payload.snapshotVersion);
@@ -1118,26 +1119,29 @@ bool ServiceProxy::ApplyConfigV3SnapshotBytes(const uint8_t* data, size_t size, 
 
     try {
         const auto payload = Config::deserializeConfigV3Snapshot(data, size);
-        if (overwriteDirtyDraft) {
-            m_configDraft.serviceSnapshot = Config::ConfigStore{};
-            m_configDraft.editableDraft = Config::ConfigStore{};
-            m_configDraft.editableDraft.mergeFrom(m_configDraft.catalogDefaults);
-            m_configDraft.dirtyBaseline.clear();
-            m_configDraft.pathStates.clear();
-            m_hasUnpersistedLiveConfigChanges.store(false, std::memory_order_relaxed);
-            m_lastApplyConfigStatus.store(ApplyConfigStatus::NotAttempted, std::memory_order_relaxed);
-            m_lastApplyConfigLiveApplied.store(false, std::memory_order_relaxed);
-            m_lastApplyConfigRestartRequired.store(false, std::memory_order_relaxed);
-            m_lastApplyConfigPersistAttempted.store(false, std::memory_order_relaxed);
-            m_lastApplyConfigPersisted.store(false, std::memory_order_relaxed);
-            m_lastApplyConfigPersistStatus.store(static_cast<uint8_t>(Ipc::IpcStatusCode::InternalError), std::memory_order_relaxed);
+        if (payload.schemaVersion != m_configDraft.catalogSchemaVersion) {
+            SetConfigServiceSyncState(ConfigServiceSyncState::Failed, "Config snapshot schemaVersion does not match the Service catalog; config adjustment is disabled.");
+            LOG_WARN("App", __func__, "Config", "Config v3 snapshot schema mismatch catalogSchemaVersion={} snapshotSchemaVersion={}",
+                     m_configDraft.catalogSchemaVersion, payload.schemaVersion);
+            return false;
         }
+
         std::unordered_map<Config::ConfigKeyId, const Config::ConfigSchemaEntry*> entryByKey;
         for (const auto& entry : m_configSchema.entries) {
             if (entry.keyId != Config::ConfigKeyId::MaxKeyId && !entry.yamlPath.empty()) {
                 entryByKey.emplace(entry.keyId, &entry);
             }
         }
+
+        ConfigDraft nextDraft = m_configDraft;
+        if (overwriteDirtyDraft) {
+            nextDraft.serviceSnapshot = Config::ConfigStore{};
+            nextDraft.editableDraft = Config::ConfigStore{};
+            nextDraft.editableDraft.mergeFrom(nextDraft.catalogDefaults);
+            nextDraft.dirtyBaseline.clear();
+            nextDraft.pathStates.clear();
+        }
+
         size_t applied = 0;
         size_t dirtySkipped = 0;
         size_t unknownSkipped = 0;
@@ -1153,22 +1157,33 @@ bool ServiceProxy::ApplyConfigV3SnapshotBytes(const uint8_t* data, size_t size, 
             if (!normalizedValue.has_value()) {
                 continue;
             }
-            m_configDraft.serviceSnapshot.set<Config::ConfigValue>(schemaEntry.yamlPath, *normalizedValue);
-            const auto stateIt = m_configDraft.pathStates.find(schemaEntry.yamlPath);
-            if (stateIt != m_configDraft.pathStates.end()) {
+            nextDraft.serviceSnapshot.set<Config::ConfigValue>(schemaEntry.yamlPath, *normalizedValue);
+            const auto stateIt = nextDraft.pathStates.find(schemaEntry.yamlPath);
+            if (stateIt != nextDraft.pathStates.end()) {
                 auto& state = stateIt->second;
                 state.hasServiceSnapshot = true;
-                state.hasDirtyBaseline = m_configDraft.dirtyBaseline.contains(schemaEntry.yamlPath);
+                state.hasDirtyBaseline = nextDraft.dirtyBaseline.contains(schemaEntry.yamlPath);
                 if (state.dirty && !overwriteDirtyDraft) {
                     ++dirtySkipped;
                     continue;
                 }
             }
-            m_configDraft.editableDraft.set<Config::ConfigValue>(schemaEntry.yamlPath, *normalizedValue);
+            nextDraft.editableDraft.set<Config::ConfigValue>(schemaEntry.yamlPath, *normalizedValue);
             ++applied;
         }
-        m_configDraft.snapshotSchemaVersion = payload.schemaVersion;
-        m_configDraft.snapshotVersion = payload.snapshotVersion;
+        nextDraft.snapshotSchemaVersion = payload.schemaVersion;
+        nextDraft.snapshotVersion = payload.snapshotVersion;
+
+        m_configDraft = std::move(nextDraft);
+        if (overwriteDirtyDraft) {
+            m_hasUnpersistedLiveConfigChanges.store(false, std::memory_order_relaxed);
+            m_lastApplyConfigStatus.store(ApplyConfigStatus::NotAttempted, std::memory_order_relaxed);
+            m_lastApplyConfigLiveApplied.store(false, std::memory_order_relaxed);
+            m_lastApplyConfigRestartRequired.store(false, std::memory_order_relaxed);
+            m_lastApplyConfigPersistAttempted.store(false, std::memory_order_relaxed);
+            m_lastApplyConfigPersisted.store(false, std::memory_order_relaxed);
+            m_lastApplyConfigPersistStatus.store(static_cast<uint8_t>(Ipc::IpcStatusCode::InternalError), std::memory_order_relaxed);
+        }
         SyncServiceActiveMirrorFromSnapshot(
             m_configDraft.serviceSnapshot,
             m_srvActiveModeFull);
@@ -1184,6 +1199,7 @@ bool ServiceProxy::ApplyConfigV3SnapshotBytes(const uint8_t* data, size_t size, 
                  payload.entries.size(), applied, dirtySkipped, unknownSkipped);
         return true;
     } catch (const std::exception& ex) {
+        SetConfigServiceSyncState(ConfigServiceSyncState::Failed, std::string("Failed to decode or apply config snapshot from Service; config adjustment is disabled: ") + ex.what());
         LOG_WARN("App", __func__, "Config", "Failed to apply config v3 snapshot: {}", ex.what());
         return false;
     }

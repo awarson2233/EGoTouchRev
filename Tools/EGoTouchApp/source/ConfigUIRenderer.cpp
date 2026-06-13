@@ -117,12 +117,13 @@ void ConfigUIRenderer::RenderConfigStore(
     Config::ConfigStore& values,
     const std::string& sectionName,
     std::vector<std::string>* changedPaths,
-    ConfigPathStateProvider pathStateProvider) {
+    ConfigPathStateProvider pathStateProvider,
+    bool editable) {
 
     (void)sectionName;
 
-    auto recordChange = [changedPaths](const std::string& path) {
-        if (changedPaths) {
+    auto recordChange = [changedPaths, editable](const std::string& path) {
+        if (editable && changedPaths) {
             changedPaths->push_back(path);
         }
     };
@@ -139,7 +140,7 @@ void ConfigUIRenderer::RenderConfigStore(
 
         const std::string label = entry.displayName + "##" + entry.yamlPath;
         const bool hasRange = entry.range.has_value();
-        const bool liveEditable = IsLiveEditableEntry(entry);
+        const bool liveEditable = editable && IsLiveEditableEntry(entry);
         const std::optional<ConfigUIPathState> pathState =
             pathStateProvider ? pathStateProvider(entry.yamlPath) : std::nullopt;
         if (!liveEditable) {
@@ -149,7 +150,8 @@ void ConfigUIRenderer::RenderConfigStore(
         switch (entry.uiType) {
             case Config::ConfigUiType::Bool: {
                 bool val = Config::tryGetValue<bool>(currentValue).value_or(false);
-                if (ImGui::Checkbox(label.c_str(), &val)) {
+                const bool changed = ImGui::Checkbox(label.c_str(), &val);
+                if (editable && changed) {
                     values.set<bool>(entry.yamlPath, val);
                     recordChange(entry.yamlPath);
                 }
@@ -161,13 +163,17 @@ void ConfigUIRenderer::RenderConfigStore(
                 const int minV = hasRange ? static_cast<int>(entry.range->min) : 0;
                 const int maxV = hasRange ? static_cast<int>(entry.range->max) : 100;
                 if (hasRange) {
-                    if (ImGui::SliderInt(label.c_str(), &val, minV, maxV)) {
+                    const bool changed = ImGui::SliderInt(label.c_str(), &val, minV, maxV);
+                    if (editable && changed) {
                         values.set<int32_t>(entry.yamlPath, static_cast<int32_t>(val));
                         recordChange(entry.yamlPath);
                     }
-                } else if (ImGui::InputInt(label.c_str(), &val)) {
-                    values.set<int32_t>(entry.yamlPath, static_cast<int32_t>(val));
-                    recordChange(entry.yamlPath);
+                } else {
+                    const bool changed = ImGui::InputInt(label.c_str(), &val);
+                    if (editable && changed) {
+                        values.set<int32_t>(entry.yamlPath, static_cast<int32_t>(val));
+                        recordChange(entry.yamlPath);
+                    }
                 }
                 break;
             }
@@ -177,13 +183,17 @@ void ConfigUIRenderer::RenderConfigStore(
                 const float minF = hasRange ? static_cast<float>(entry.range->min) : 0.0f;
                 const float maxF = hasRange ? static_cast<float>(entry.range->max) : 1.0f;
                 if (hasRange) {
-                    if (ImGui::SliderFloat(label.c_str(), &val, minF, maxF)) {
+                    const bool changed = ImGui::SliderFloat(label.c_str(), &val, minF, maxF);
+                    if (editable && changed) {
                         values.set<float>(entry.yamlPath, val);
                         recordChange(entry.yamlPath);
                     }
-                } else if (ImGui::InputFloat(label.c_str(), &val)) {
-                    values.set<float>(entry.yamlPath, val);
-                    recordChange(entry.yamlPath);
+                } else {
+                    const bool changed = ImGui::InputFloat(label.c_str(), &val);
+                    if (editable && changed) {
+                        values.set<float>(entry.yamlPath, val);
+                        recordChange(entry.yamlPath);
+                    }
                 }
                 break;
             }
@@ -197,7 +207,8 @@ void ConfigUIRenderer::RenderConfigStore(
                     items.push_back(entry.enumMapping[i].second.c_str());
                     if (entry.enumMapping[i].second == strVal) selectedIdx = static_cast<int>(i);
                 }
-                if (!items.empty() && ImGui::Combo(label.c_str(), &selectedIdx, items.data(), static_cast<int>(items.size()))) {
+                const bool changed = !items.empty() && ImGui::Combo(label.c_str(), &selectedIdx, items.data(), static_cast<int>(items.size()));
+                if (editable && changed) {
                     if (selectedIdx >= 0 && selectedIdx < static_cast<int>(entry.enumMapping.size())) {
                         values.set<std::string>(entry.yamlPath, entry.enumMapping[selectedIdx].second);
                         recordChange(entry.yamlPath);
@@ -211,7 +222,8 @@ void ConfigUIRenderer::RenderConfigStore(
                 char buf[256]{};
                 const size_t copyLen = std::min(strVal.size(), sizeof(buf) - 1);
                 std::memcpy(buf, strVal.data(), copyLen);
-                if (ImGui::InputText(label.c_str(), buf, sizeof(buf))) {
+                const bool changed = ImGui::InputText(label.c_str(), buf, sizeof(buf));
+                if (editable && changed) {
                     values.set<std::string>(entry.yamlPath, std::string(buf));
                     recordChange(entry.yamlPath);
                 }
@@ -236,7 +248,8 @@ void ConfigUIRenderer::RenderConfigStoreByModule(
     Config::ConfigStore& values,
     const std::string& moduleTag,
     std::vector<std::string>* changedPaths,
-    ConfigPathStateProvider pathStateProvider) {
+    ConfigPathStateProvider pathStateProvider,
+    bool editable) {
 
     Config::ConfigSchemaSnapshot filtered;
     for (const auto& entry : schema.entries) {
@@ -245,7 +258,7 @@ void ConfigUIRenderer::RenderConfigStoreByModule(
         }
     }
 
-    RenderConfigStore(filtered, values, moduleTag, changedPaths, std::move(pathStateProvider));
+    RenderConfigStore(filtered, values, moduleTag, changedPaths, std::move(pathStateProvider), editable);
 }
 
 std::vector<std::string> ConfigUIRenderer::CollectModuleTags(
