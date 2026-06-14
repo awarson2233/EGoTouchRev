@@ -90,7 +90,7 @@ void TestExpandedPalmBoxSuppressesTouchingZone() {
     };
 
     Solvers::Touch::PalmBoxSuppressor suppressor;
-    suppressor.m_expandCols = 2;
+    suppressor.m_expandCols = 9;
     suppressor.Process(fixture.zones, features, peaks, evals);
     const auto adjusted = suppressor.GetEvaluations();
 
@@ -276,7 +276,7 @@ void TestMultiplePalmBoxesRemainIndependent() {
     };
 
     Solvers::Touch::PalmBoxSuppressor suppressor;
-    suppressor.m_expandCols = 2;
+    suppressor.m_expandCols = 9;
     suppressor.Process(fixture.zones, features, peaks, evals);
 
     Require(suppressor.GetPalmBoxes().size() == 2, "far palm observations should create two boxes");

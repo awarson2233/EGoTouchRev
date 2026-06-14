@@ -35,8 +35,8 @@ public:
     static constexpr int kMaxPalmBoxes = 20;
 
     bool  m_enabled = true;
-    int   m_expandRows = 1;
-    int   m_expandCols = 1;
+    int   m_expandRows = 9;
+    int   m_expandCols = 10;
     float m_matchCenterDistance = 6.0f;
     float m_matchIoUThreshold = 0.10f;
     bool  m_palmLikelyOnly = true;

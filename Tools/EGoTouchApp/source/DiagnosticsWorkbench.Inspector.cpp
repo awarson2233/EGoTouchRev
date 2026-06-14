@@ -1114,7 +1114,35 @@ void DiagnosticsWorkbench::DrawBtMcuPanel() {
         ImGui::TextDisabled("Unknown");
 
     ImGui::Separator();
+    ImGui::Text("Manual Command Queries (Direct)");
+#ifdef _DEBUG
+    const bool mcuQueryAllowed = m_proxy && m_proxy->IsLiveControlAllowed();
+#else
+    const bool mcuQueryAllowed = false;
+#endif
+
+    if (!mcuQueryAllowed) {
+        ImGui::BeginDisabled();
+    }
+    if (ImGui::Button("Query Hardware Version (0x0201)", ImVec2(-1, 24))) {
+        m_proxy->TriggerQueryHardwareVersion();
+    }
+    if (ImGui::Button("Query Pen Status (0x7101)", ImVec2(-1, 24))) {
+        m_proxy->TriggerQueryPenStatus();
+    }
+    if (ImGui::Button("Query MCU Status (0x7701)", ImVec2(-1, 24))) {
+        m_proxy->TriggerQueryPenInfo();
+    }
+    if (!mcuQueryAllowed) {
+        ImGui::EndDisabled();
+    }
+    if (!mcuQueryAllowed) {
+        ImGui::TextDisabled("Manual queries are available in live-control debug mode only.");
+    }
+
+    ImGui::Separator();
     ImGui::Text("Pressure Range Mode");
+
     int pressureMode = ps.pressureMode == 0 ? 0 : 1;
     const char* pressureModes[] = {"4096 raw12", "16382 raw14 / 4"};
 #ifdef _DEBUG

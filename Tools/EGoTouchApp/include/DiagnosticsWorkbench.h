@@ -3,7 +3,6 @@
 #include "SolverTypes.h"
 #include <filesystem>
 #include <string>
-#include <vector>
 
 namespace App {
 

@@ -36,7 +36,6 @@
 #include <mutex>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 namespace Service {
@@ -1462,6 +1461,34 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(const Ipc::IpcRequest& req) {
     case Ipc::IpcCommand::GetPenIdentityStatus:
         HandleIpcGetPenIdentityStatus(resp);
         break;
+
+    case Ipc::IpcCommand::TriggerQueryHardwareVersion:
+        if (m_impl->m_penEventBridge && m_impl->m_penEventBridge->IsRunning() &&
+            m_impl->m_penEventBridge->SendQueryHardwareVersion()) {
+            Ipc::MarkSuccess(resp);
+        } else {
+            Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidState);
+        }
+        break;
+
+    case Ipc::IpcCommand::TriggerQueryPenStatus:
+        if (m_impl->m_penEventBridge && m_impl->m_penEventBridge->IsRunning() &&
+            m_impl->m_penEventBridge->SendQueryPenStatus()) {
+            Ipc::MarkSuccess(resp);
+        } else {
+            Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidState);
+        }
+        break;
+
+    case Ipc::IpcCommand::TriggerQueryPenInfo:
+        if (m_impl->m_penEventBridge && m_impl->m_penEventBridge->IsRunning() &&
+            m_impl->m_penEventBridge->SendFirstMcuStatusQuery()) {
+            Ipc::MarkSuccess(resp);
+        } else {
+            Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidState);
+        }
+        break;
+
 
     case Ipc::IpcCommand::SetMasterParserOnly:
         if (req.paramLen >= 1 && m_deviceRuntime) {

@@ -346,11 +346,11 @@ void TouchPipeline::registerBindings(Config::ConfigBinder& binder) {
                 true, {}, "Enable palm bounding-box suppression");
     binder.bind("touch.palm_box.expand_rows",
                 &Touch::PalmBoxSuppressor::m_expandRows, m_palmBoxSuppressor,
-                static_cast<int32_t>(1), ConfigRange{0, 10},
+                static_cast<int32_t>(9), ConfigRange{0, 10},
                 "Palm box row expansion margin");
     binder.bind("touch.palm_box.expand_cols",
                 &Touch::PalmBoxSuppressor::m_expandCols, m_palmBoxSuppressor,
-                static_cast<int32_t>(1), ConfigRange{0, 10},
+                static_cast<int32_t>(10), ConfigRange{0, 10},
                 "Palm box column expansion margin");
     binder.bind("touch.palm_box.match_center_distance",
                 &Touch::PalmBoxSuppressor::m_matchCenterDistance, m_palmBoxSuppressor,

@@ -43,6 +43,11 @@ public:
     /// 手动触发握手（0x7101 + 0x7701 + 0x7701），通常无需手动调用。
     void RunHandshake();
 
+    bool SendQueryHardwareVersion();
+    bool SendQueryPenStatus();
+    bool SendFirstMcuStatusQuery();
+    bool SendSecondMcuStatusQuery();
+
 protected:
     std::optional<std::wstring> FindDevicePath() override;
     void OnConnected() override;
@@ -57,10 +62,6 @@ private:
     void ExecuteInitAction(PenUsbInitAction action);
     void AdvanceSessionFromEvent(uint8_t eventCode);
 
-    bool SendQueryHardwareVersion();
-    bool SendQueryPenStatus();
-    bool SendFirstMcuStatusQuery();
-    bool SendSecondMcuStatusQuery();
     bool SendInitProtocolParams();
 
     mutable std::mutex m_cbMutex;

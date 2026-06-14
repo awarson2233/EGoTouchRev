@@ -184,4 +184,32 @@ bool ServiceProxy::SetVhfTranspose(bool enabled) {
     return ok;
 }
 
+bool ServiceProxy::TriggerQueryHardwareVersion() {
+    if (!IsLiveControlAllowed()) return false;
+    Ipc::IpcRequest req{};
+    req.command = Ipc::IpcCommand::TriggerQueryHardwareVersion;
+    req.paramLen = 0;
+    const auto resp = m_client.Send(req);
+    return resp.success;
+}
+
+bool ServiceProxy::TriggerQueryPenStatus() {
+    if (!IsLiveControlAllowed()) return false;
+    Ipc::IpcRequest req{};
+    req.command = Ipc::IpcCommand::TriggerQueryPenStatus;
+    req.paramLen = 0;
+    const auto resp = m_client.Send(req);
+    return resp.success;
+}
+
+bool ServiceProxy::TriggerQueryPenInfo() {
+    if (!IsLiveControlAllowed()) return false;
+    Ipc::IpcRequest req{};
+    req.command = Ipc::IpcCommand::TriggerQueryPenInfo;
+    req.paramLen = 0;
+    const auto resp = m_client.Send(req);
+    return resp.success;
+}
+
 } // namespace App
+

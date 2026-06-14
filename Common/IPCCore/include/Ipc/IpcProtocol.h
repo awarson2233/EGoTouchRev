@@ -52,6 +52,9 @@ enum class IpcCommand : uint8_t {
     SetPenPressureMode = 63,  // param[0]: 0=4096 raw12, 1=16382 raw14 divided by 4
     SetMasterParserOnly = 64,  // param[0]: 0=normal, 1=service-side master parser only
     GetPenIdentityStatus = 65, // App queries current stylus identity + UTF-8 HW version
+    TriggerQueryHardwareVersion = 66,
+    TriggerQueryPenStatus = 67,
+    TriggerQueryPenInfo = 68,
 };
 
 constexpr bool IsLegacyConfigTombstoneCommand(IpcCommand command) noexcept {
@@ -85,11 +88,15 @@ constexpr bool IsSupportedIpcCommand(IpcCommand command) noexcept {
     case IpcCommand::GetLogs:
     case IpcCommand::GetPenBridgeStatus:
     case IpcCommand::GetPenIdentityStatus:
+    case IpcCommand::TriggerQueryHardwareVersion:
+    case IpcCommand::TriggerQueryPenStatus:
+    case IpcCommand::TriggerQueryPenInfo:
     case IpcCommand::GetDebugSchema:
     case IpcCommand::GetDebugSnapshot:
     case IpcCommand::SetPenPressureMode:
     case IpcCommand::SetMasterParserOnly:
         return true;
+
     default:
         return false;
     }
