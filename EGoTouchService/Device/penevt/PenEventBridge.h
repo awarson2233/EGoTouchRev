@@ -10,7 +10,6 @@
 #include <optional>
 #include <span>
 #include <string>
-#include <vector>
 
 namespace Himax::Pen {
 

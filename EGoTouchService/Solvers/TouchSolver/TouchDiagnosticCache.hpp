@@ -3,6 +3,8 @@
 // TouchDiagnosticCache.hpp — 诊断数据线程安全缓存
 // ══════════════════════════════════════════════════════════════════════
 
+#if EGOTOUCH_DIAG
+
 #include "SolverTypes.h"
 #include "PalmBoxSuppressor.hpp"
 #include "ContactExtractor.hpp"
@@ -130,3 +132,6 @@ private:
 };
 
 }} // namespace Solvers::Touch
+
+#endif // EGOTOUCH_DIAG
+

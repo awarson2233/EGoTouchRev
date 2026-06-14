@@ -1,6 +1,5 @@
-#include "ServiceProxyInternal.h"
+#include "ServiceProxy.h"
 #include "Logger.h"
-#include <chrono>
 
 namespace App {
 
