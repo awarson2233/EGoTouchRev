@@ -8,6 +8,7 @@ namespace Himax::Pen {
 
 enum class PenModuleModel : uint8_t {
     Unknown = 0,
+    Cd52,
     Cd54,
     Cd54R,
     Cd54S,
@@ -26,6 +27,7 @@ struct PenModuleModelInfo {
     const char* name = "Unknown";
 };
 
+constexpr uint32_t kPenModuleModelIdCd52 = 0x00011Au;
 constexpr uint32_t kPenModuleModelIdCd54 = 0x00011Bu;
 constexpr uint32_t kPenModuleModelIdCd54R = 0x01011Bu;
 constexpr uint32_t kPenModuleModelIdCd54S = 0x443002u;
@@ -46,9 +48,12 @@ inline std::optional<uint32_t> TryParsePenModuleModelId(
 
 constexpr PenModuleModelInfo ResolvePenModuleModel(uint32_t modelId) noexcept {
     switch (modelId) {
+    case kPenModuleModelIdCd52:
+        return PenModuleModelInfo{modelId, PenModuleModel::Cd52,
+                                  PenModuleProtocolHint::Hpp2, "CD52"};
     case kPenModuleModelIdCd54:
         return PenModuleModelInfo{modelId, PenModuleModel::Cd54,
-                                  PenModuleProtocolHint::Hpp2, "CD54"};
+                                  PenModuleProtocolHint::Hpp3, "CD54"};
     case kPenModuleModelIdCd54R:
         return PenModuleModelInfo{modelId, PenModuleModel::Cd54R,
                                   PenModuleProtocolHint::Hpp3, "CD54R"};
@@ -57,12 +62,13 @@ constexpr PenModuleModelInfo ResolvePenModuleModel(uint32_t modelId) noexcept {
                                   PenModuleProtocolHint::Hpp3, "CD54S"};
     default:
         return PenModuleModelInfo{modelId, PenModuleModel::Unknown,
-                                  PenModuleProtocolHint::Auto, "Unknown"};
+                                  PenModuleProtocolHint::Hpp3, "Unknown"};
     }
 }
 
 constexpr const char* ToString(PenModuleModel model) noexcept {
     switch (model) {
+    case PenModuleModel::Cd52: return "CD52";
     case PenModuleModel::Cd54: return "CD54";
     case PenModuleModel::Cd54R: return "CD54R";
     case PenModuleModel::Cd54S: return "CD54S";

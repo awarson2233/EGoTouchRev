@@ -66,14 +66,10 @@ const char *FactoryStatusEventName(Himax::Pen::PenUsbEventCode code) noexcept {
   return Himax::Pen::ToString(code);
 }
 
-Solvers::StylusProtocolHint ResolveProtocolHintFromStylusId(uint8_t stylusId) noexcept {
-  if (stylusId == 1) {
-    return Solvers::StylusProtocolHint::Hpp2;
-  }
-
-  // Pen type values are not a verified protocol discriminator.  Preserve the
-  // known id=1 -> HPP2 semantic, and leave id=0 or unknown ids to Auto so the
-  // stylus pipeline can resolve the protocol from actual packet shape.
+Solvers::StylusProtocolHint ResolveProtocolHintFromStylusId(uint8_t) noexcept {
+  // PenTypeInfo is not a reliable HPP2/HPP3 discriminator.  Protocol selection
+  // is driven by PenModule ModelId when available; otherwise the stylus pipeline
+  // stays in Auto and resolves from packet shape.
   return Solvers::StylusProtocolHint::Auto;
 }
 

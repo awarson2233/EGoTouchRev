@@ -150,6 +150,7 @@ const char* YesNo(bool value) {
 
 const char* PenModuleModelName(uint32_t modelId) {
     switch (modelId) {
+    case 0x00011A: return "CD52";
     case 0x00011B: return "CD54";
     case 0x01011B: return "CD54R";
     case 0x443002: return "CD54S";
