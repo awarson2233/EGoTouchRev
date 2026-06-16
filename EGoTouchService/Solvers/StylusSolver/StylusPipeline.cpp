@@ -61,14 +61,14 @@ void StylusPipeline::registerBindings(Config::ConfigBinder& binder) {
                 m_commonPost.m_coorSpeedProcess, true, {}, "Coordinate speed process enable");
     binder.bind("stylus.sp.iir_filter_enabled", &Stylus::CoorIIRProcess::m_enabled,
                 m_commonPost.m_coorIIRProcess, true, {}, "IIR coordinate filter enable");
-    binder.bindSchema("stylus.sp.iir_coef_low_hover", Config::ConfigValue(static_cast<int32_t>(2)), "int", ConfigRange{0.0, 255.0}, "IIR low coefficient while hovering", Config::ConfigRuntimeBinding::ManualLiveApply);
-    binder.bindSchema("stylus.sp.iir_coef_high_hover", Config::ConfigValue(static_cast<int32_t>(16)), "int", ConfigRange{0.0, 255.0}, "IIR high coefficient while hovering", Config::ConfigRuntimeBinding::ManualLiveApply);
-    binder.bindSchema("stylus.sp.iir_speed_thold_hover", Config::ConfigValue(static_cast<int32_t>(20)), "int", ConfigRange{0.0, 255.0}, "IIR speed threshold while hovering", Config::ConfigRuntimeBinding::ManualLiveApply);
-    binder.bindSchema("stylus.sp.iir_coef_low_writing", Config::ConfigValue(static_cast<int32_t>(6)), "int", ConfigRange{0.0, 255.0}, "IIR low coefficient while writing", Config::ConfigRuntimeBinding::ManualLiveApply);
-    binder.bindSchema("stylus.sp.iir_coef_high_writing", Config::ConfigValue(static_cast<int32_t>(18)), "int", ConfigRange{0.0, 255.0}, "IIR high coefficient while writing", Config::ConfigRuntimeBinding::ManualLiveApply);
+    binder.bindSchema("stylus.sp.iir_coef_low_hover", Config::ConfigValue(static_cast<int32_t>(10)), "int", ConfigRange{0.0, 255.0}, "IIR low coefficient while hovering", Config::ConfigRuntimeBinding::ManualLiveApply);
+    binder.bindSchema("stylus.sp.iir_coef_high_hover", Config::ConfigValue(static_cast<int32_t>(6)), "int", ConfigRange{0.0, 255.0}, "IIR high coefficient while hovering", Config::ConfigRuntimeBinding::ManualLiveApply);
+    binder.bindSchema("stylus.sp.iir_speed_thold_hover", Config::ConfigValue(static_cast<int32_t>(10)), "int", ConfigRange{0.0, 255.0}, "IIR speed threshold while hovering", Config::ConfigRuntimeBinding::ManualLiveApply);
+    binder.bindSchema("stylus.sp.iir_coef_low_writing", Config::ConfigValue(static_cast<int32_t>(18)), "int", ConfigRange{0.0, 255.0}, "IIR low coefficient while writing", Config::ConfigRuntimeBinding::ManualLiveApply);
+    binder.bindSchema("stylus.sp.iir_coef_high_writing", Config::ConfigValue(static_cast<int32_t>(26)), "int", ConfigRange{0.0, 255.0}, "IIR high coefficient while writing", Config::ConfigRuntimeBinding::ManualLiveApply);
     binder.bindSchema("stylus.sp.iir_speed_thold_writing", Config::ConfigValue(static_cast<int32_t>(10)), "int", ConfigRange{0.0, 255.0}, "IIR speed threshold while writing", Config::ConfigRuntimeBinding::ManualLiveApply);
     binder.bind("stylus.sp.iir_speed_max", &Stylus::CoorIIRProcess::m_speedMax,
-                m_commonPost.m_coorIIRProcess, static_cast<int32_t>(205), ConfigRange{0.0, 1000.0}, "IIR speed max");
+                m_commonPost.m_coorIIRProcess, static_cast<int32_t>(60), ConfigRange{0.0, 1000.0}, "IIR speed max");
     binder.bindSchema("stylus.sp.iir_max_coef", Config::ConfigValue(static_cast<int32_t>(32)), "int", ConfigRange{1.0, 255.0}, "IIR maximum coefficient denominator", Config::ConfigRuntimeBinding::ManualLiveApply);
 
     // ── AFT Coor ──
@@ -137,13 +137,13 @@ void StylusPipeline::applyConfig(const Config::ConfigStore& store) {
 
     const bool iirFilterEnabled = store.getOr<bool>("stylus.sp.iir_filter_enabled", true);
     m_commonPost.m_coorIIRProcess.m_enabled = iirFilterEnabled;
-    m_commonPost.m_coorIIRProcess.m_coefLowHover = store.getOr<int32_t>("stylus.sp.iir_coef_low_hover", 2);
-    m_commonPost.m_coorIIRProcess.m_coefHighHover = store.getOr<int32_t>("stylus.sp.iir_coef_high_hover", 16);
-    m_commonPost.m_coorIIRProcess.m_speedTholdHover = store.getOr<int32_t>("stylus.sp.iir_speed_thold_hover", 20);
-    m_commonPost.m_coorIIRProcess.m_coefLowWriting = store.getOr<int32_t>("stylus.sp.iir_coef_low_writing", 6);
-    m_commonPost.m_coorIIRProcess.m_coefHighWriting = store.getOr<int32_t>("stylus.sp.iir_coef_high_writing", 18);
+    m_commonPost.m_coorIIRProcess.m_coefLowHover = store.getOr<int32_t>("stylus.sp.iir_coef_low_hover", 10);
+    m_commonPost.m_coorIIRProcess.m_coefHighHover = store.getOr<int32_t>("stylus.sp.iir_coef_high_hover", 6);
+    m_commonPost.m_coorIIRProcess.m_speedTholdHover = store.getOr<int32_t>("stylus.sp.iir_speed_thold_hover", 10);
+    m_commonPost.m_coorIIRProcess.m_coefLowWriting = store.getOr<int32_t>("stylus.sp.iir_coef_low_writing", 18);
+    m_commonPost.m_coorIIRProcess.m_coefHighWriting = store.getOr<int32_t>("stylus.sp.iir_coef_high_writing", 26);
     m_commonPost.m_coorIIRProcess.m_speedTholdWriting = store.getOr<int32_t>("stylus.sp.iir_speed_thold_writing", 10);
-    m_commonPost.m_coorIIRProcess.m_speedMax = store.getOr<int32_t>("stylus.sp.iir_speed_max", 205);
+    m_commonPost.m_coorIIRProcess.m_speedMax = store.getOr<int32_t>("stylus.sp.iir_speed_max", 60);
     m_commonPost.m_coorIIRProcess.m_maxCoef = store.getOr<int32_t>("stylus.sp.iir_max_coef", 32);
     if (!iirFilterEnabled) { m_commonPost.m_coorIIRProcess.Reset(); }
 

@@ -130,6 +130,18 @@ Ipc::ConfigV3MutationStatus ToIpcMutationStatus(ConfigV3MutationStatus status) n
     return static_cast<Ipc::ConfigV3MutationStatus>(static_cast<uint8_t>(status));
 }
 
+Ipc::PenIdentityProtocolHint ToIpcPenIdentityProtocolHint(
+    Solvers::StylusProtocolHint hint) noexcept {
+    switch (hint) {
+    case Solvers::StylusProtocolHint::Hpp2:
+        return Ipc::PenIdentityProtocolHint::Hpp2;
+    case Solvers::StylusProtocolHint::Hpp3:
+        return Ipc::PenIdentityProtocolHint::Hpp3;
+    default:
+        return Ipc::PenIdentityProtocolHint::Auto;
+    }
+}
+
 bool BuildConfigV3PageResponse(Ipc::IpcCommand command,
                                const Ipc::IpcRequest& req,
                                const ConfigRuntime::ConfigV3Blob& blob,
@@ -1214,9 +1226,18 @@ void ServiceHost::HandleIpcGetPenIdentityStatus(Ipc::IpcResponse& resp) {
 
     const auto state = m_deviceRuntime->GetPenStateSnapshot();
     Ipc::PenIdentityStatusWire wire{};
-    if (state.hasConnection && state.connected) {
-        wire.flags |= Ipc::kPenIdentityConnected;
+    if (state.hasConnection) {
+        wire.flags |= Ipc::kPenIdentityHasConnectionState;
+        if (state.connected) {
+            wire.flags |= Ipc::kPenIdentityConnected;
+        }
     }
+    wire.flags |= Ipc::kPenIdentityHasProtocolHint;
+    wire.protocolHint = static_cast<uint8_t>(ToIpcPenIdentityProtocolHint(state.protocolHint));
+    if (state.protocolHintFromPenModule) {
+        wire.protocolFlags |= Ipc::kPenIdentityProtocolFromPenModule;
+    }
+    wire.factoryStatusFlags = state.factoryStatusFlags;
     if (state.hasStylusId) {
         wire.flags |= Ipc::kPenIdentityHasStylusId;
         wire.stylusId = state.stylusId;

@@ -21,12 +21,23 @@ struct PenBridgeStatus {
     uint16_t pressureMax  = 4095;
 };
 
+enum class PenProtocolHint : uint8_t {
+    Auto = 0,
+    Hpp2,
+    Hpp3,
+};
+
 struct PenIdentityStatus {
+    bool hasConnectionState = false;
     bool connected = false;
     bool hasStylusId = false;
     uint8_t stylusId = 0;
     bool hasPenModuleModelId = false;
     uint32_t penModuleModelId = 0;
+    bool hasProtocolHint = false;
+    PenProtocolHint protocolHint = PenProtocolHint::Auto;
+    bool protocolHintFromPenModule = false;
+    uint16_t factoryStatusFlags = 0;
     bool hasSerialNumber = false;
     std::string serialNumber;
     bool hasHardwareVersion = false;

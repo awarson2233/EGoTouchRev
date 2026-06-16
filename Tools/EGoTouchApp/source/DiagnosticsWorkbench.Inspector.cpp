@@ -148,6 +148,39 @@ const char* YesNo(bool value) {
     return value ? "Y" : "N";
 }
 
+const char* PenProtocolHintName(PenProtocolHint hint) {
+    switch (hint) {
+    case PenProtocolHint::Hpp2: return "HPP2";
+    case PenProtocolHint::Hpp3: return "HPP3";
+    default: return "Auto";
+    }
+}
+
+const char* StylusRuntimeProtocolName(Solvers::StylusRuntime::Protocol protocol) {
+    switch (protocol) {
+    case Solvers::StylusRuntime::Protocol::Hpp2: return "HPP2";
+    case Solvers::StylusRuntime::Protocol::Hpp3: return "HPP3";
+    default: return "None";
+    }
+}
+
+ImVec4 ProtocolColor(PenProtocolHint hint) {
+    switch (hint) {
+    case PenProtocolHint::Hpp2:
+    case PenProtocolHint::Hpp3:
+        return GoodColor();
+    default:
+        return WarnColor();
+    }
+}
+
+const char* PenConnectionText(const PenIdentityStatus& pen) {
+    if (!pen.hasConnectionState) {
+        return "Unknown";
+    }
+    return pen.connected ? "Connected" : "Disconnected";
+}
+
 const char* PenModuleModelName(uint32_t modelId) {
     switch (modelId) {
     case 0x00011A: return "CD52";
@@ -174,11 +207,18 @@ std::string PenModuleModelText(const PenIdentityStatus& pen) {
 }
 
 std::string PenIdentitySummary(const PenIdentityStatus& pen) {
-    std::string summary = pen.connected ? "connected" : "disconnected/unknown";
+    std::string summary = PenConnectionText(pen);
+    summary += " | protocol=";
+    summary += pen.hasProtocolHint ? PenProtocolHintName(pen.protocolHint) : "Unknown";
+    summary += pen.protocolHintFromPenModule ? "(PenModule)" : "(derived/auto)";
     summary += " | stylusId=";
     summary += pen.hasStylusId ? std::to_string(static_cast<unsigned int>(pen.stylusId)) : "Unknown";
     summary += " | modelId=";
     summary += PenModuleModelText(pen);
+    summary += " | flags=0x";
+    char flagsText[8]{};
+    std::snprintf(flagsText, sizeof(flagsText), "%04X", static_cast<unsigned int>(pen.factoryStatusFlags));
+    summary += flagsText;
     summary += " | serial=";
     summary += (pen.hasSerialNumber && !pen.serialNumber.empty()) ? pen.serialNumber : "Unknown";
     summary += " | hardwareVersion=";
@@ -664,6 +704,22 @@ void DiagnosticsWorkbench::DrawStylusOverviewPanel() {
             drawRow("Stylus VHF", [&] { ImGui::TextColored(StatusColor(m_proxy->IsSrvStylusVhfEnabled()), "%s", m_proxy->IsSrvStylusVhfEnabled() ? "Enabled" : "Disabled"); });
             drawRow("Pen Button Mode", [&] { ImGui::TextUnformatted(ToString(m_proxy->GetPenButtonMode())); });
             drawRow("Injection Route", [&] { ImGui::TextUnformatted(ToString(m_proxy->GetPenButtonRoute())); });
+            drawRow("Pen Connection", [&] {
+                ImGui::TextColored(
+                    pen.hasConnectionState ? StatusColor(pen.connected) : WarnColor(),
+                    "%s",
+                    PenConnectionText(pen));
+            });
+            drawRow("Protocol Hint", [&] {
+                const char* protocolText = pen.hasProtocolHint
+                    ? PenProtocolHintName(pen.protocolHint)
+                    : "Unknown";
+                ImGui::TextColored(
+                    pen.hasProtocolHint ? ProtocolColor(pen.protocolHint) : WarnColor(),
+                    "%s  source=%s",
+                    protocolText,
+                    pen.protocolHintFromPenModule ? "PenModule/FW" : "Auto/packet");
+            });
             drawRow("Pen Identity", [&] {
                 const std::string summary = PenIdentitySummary(pen);
                 ImGui::TextWrapped("%s", summary.c_str());
@@ -691,6 +747,14 @@ void DiagnosticsWorkbench::DrawStylusOverviewPanel() {
             drawRow("Raw Length", [&] { ImGui::Text("%llu bytes", static_cast<unsigned long long>(m_currentFrame.rawLen)); });
             drawRow("Master Suffix", [&] { ImGui::TextColored(StatusColor(m_currentFrame.masterSuffixValid), "%s", m_currentFrame.masterSuffixValid ? "Valid" : "Invalid"); });
             drawRow("Slave Suffix", [&] { ImGui::TextColored(StatusColor(m_currentFrame.slaveSuffixValid), "%s", m_currentFrame.slaveSuffixValid ? "Valid" : "Invalid"); });
+            drawRow("Active Protocol", [&] {
+                const auto activeProtocol = stylus.runtime.activeProtocol;
+                const bool protocolKnown = activeProtocol != Solvers::StylusRuntime::Protocol::None;
+                ImGui::TextColored(
+                    protocolKnown ? GoodColor() : WarnColor(),
+                    "%s",
+                    StylusRuntimeProtocolName(activeProtocol));
+            });
             drawRow("Stylus Output", [&] {
                 ImGui::TextColored(StatusColor(output.valid), "%s", output.valid ? "Valid" : "Invalid");
                 ImGui::SameLine();
@@ -1094,21 +1158,21 @@ void DiagnosticsWorkbench::DrawBtMcuPanel() {
     ImGui::Text("Current Pen Identity");
     ImGui::Text("Pen Connection:");
     ImGui::SameLine();
-    if (pen.connected)
-        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "CONNECTED");
+    if (pen.hasConnectionState)
+        ImGui::TextColored(StatusColor(pen.connected), "%s", pen.connected ? "CONNECTED" : "DISCONNECTED");
     else
-        ImGui::TextDisabled("DISCONNECTED / UNKNOWN");
+        ImGui::TextDisabled("UNKNOWN");
 
     if (pen.hasStylusId)
-        ImGui::Text("Current Stylus ID (via 0x73 PenTypeInfo): %u (0x%02X)", pen.stylusId, pen.stylusId);
+        ImGui::Text("Current Stylus ID (0x73 PenTypeInfo or model-derived): %u (0x%02X)", pen.stylusId, pen.stylusId);
     else
-        ImGui::TextDisabled("Current Stylus ID (via 0x73 PenTypeInfo): Unknown");
+        ImGui::TextDisabled("Current Stylus ID (0x73 PenTypeInfo or model-derived): Unknown");
 
     if (pen.hasPenModuleModelId) {
         const std::string modelText = PenModuleModelText(pen);
-        ImGui::Text("Pen Module Model ID (via 0x00 PenModule): %s", modelText.c_str());
+        ImGui::Text("Pen Module Model ID (0x00 PenModule or FW-derived): %s", modelText.c_str());
     } else {
-        ImGui::TextDisabled("Pen Module Model ID (via 0x00 PenModule): Unknown");
+        ImGui::TextDisabled("Pen Module Model ID (0x00 PenModule or FW-derived): Unknown");
     }
 
     ImGui::TextUnformatted("Serial Number (via 0x01 PenSerialNo):");
@@ -1146,7 +1210,7 @@ void DiagnosticsWorkbench::DrawBtMcuPanel() {
     if (ImGui::Button("Query Hardware Version (0x0201)", ImVec2(-1, 24))) {
         m_proxy->TriggerQueryHardwareVersion();
     }
-    if (ImGui::Button("Query Pen Status (0x7101) [触发 0x73/0x00 获取]", ImVec2(-1, 24))) {
+    if (ImGui::Button("Query Pen Status (0x7101)", ImVec2(-1, 24))) {
         m_proxy->TriggerQueryPenStatus();
     }
     if (ImGui::Button("Query MCU Status (0x7701)", ImVec2(-1, 24))) {

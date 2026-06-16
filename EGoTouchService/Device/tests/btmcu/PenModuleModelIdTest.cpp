@@ -60,6 +60,28 @@ void TestKnownCd54Mappings() {
             "CD54S should route to HPP3");
 }
 
+void TestFirmwareTextCanResolveModel() {
+    auto cd54sInfo = Himax::Pen::TryResolvePenModuleModelFromText("CD54S 1.0.0.122");
+    Require(cd54sInfo.has_value(), "CD54S firmware string should resolve to a model");
+    Require(cd54sInfo->model == PenModuleModel::Cd54S,
+            "CD54S firmware string should resolve to CD54S, not CD54");
+    Require(cd54sInfo->modelId == Himax::Pen::kPenModuleModelIdCd54S,
+            "CD54S firmware string should resolve to 0x443002");
+    Require(cd54sInfo->protocolHint == PenModuleProtocolHint::Hpp3,
+            "CD54S firmware string should route to HPP3");
+
+    auto cd52StylusId = Himax::Pen::TryResolveStylusIdFromPenModule(PenModuleModel::Cd52);
+    Require(cd52StylusId.has_value() && *cd52StylusId == 1,
+            "CD52 should derive stylus id 1");
+
+    auto cd54sStylusId = Himax::Pen::TryResolveStylusIdFromPenModule(PenModuleModel::Cd54S);
+    Require(cd54sStylusId.has_value() && *cd54sStylusId == 2,
+            "CD54S should derive stylus id 2");
+
+    Require(!Himax::Pen::TryResolvePenModuleModelFromText("1.0.0.122").has_value(),
+            "firmware string without a known model token should stay unresolved");
+}
+
 void TestInvalidLengthsAreRejected() {
     const std::array<uint8_t, 4> payload{0x1B, 0x01, 0x00, 0x00};
     Require(!Himax::Pen::TryParsePenModuleModelId(payload, 0).has_value(),
@@ -94,6 +116,7 @@ void TestPayloadLengthControlsTrailingBytes() {
 int main() {
     try {
         TestKnownCd54Mappings();
+        TestFirmwareTextCanResolveModel();
         TestInvalidLengthsAreRejected();
         TestUnknownIdsStayAuto();
         TestPayloadLengthControlsTrailingBytes();

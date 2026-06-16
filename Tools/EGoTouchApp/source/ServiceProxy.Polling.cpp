@@ -243,11 +243,27 @@ void ServiceProxy::PollLoop() {
                 std::memcpy(&wire, identityResp.data, sizeof(wire));
                 if (wire.wireVersion == Ipc::kIpcProtocolVersion) {
                     PenIdentityStatus identity{};
+                    identity.hasConnectionState = (wire.flags & Ipc::kPenIdentityHasConnectionState) != 0;
                     identity.connected = (wire.flags & Ipc::kPenIdentityConnected) != 0;
                     identity.hasStylusId = (wire.flags & Ipc::kPenIdentityHasStylusId) != 0;
                     identity.stylusId = wire.stylusId;
                     identity.hasPenModuleModelId = (wire.flags & Ipc::kPenIdentityHasPenModuleModelId) != 0;
                     identity.penModuleModelId = wire.penModuleModelId;
+                    identity.hasProtocolHint = (wire.flags & Ipc::kPenIdentityHasProtocolHint) != 0;
+                    switch (static_cast<Ipc::PenIdentityProtocolHint>(wire.protocolHint)) {
+                    case Ipc::PenIdentityProtocolHint::Hpp2:
+                        identity.protocolHint = PenProtocolHint::Hpp2;
+                        break;
+                    case Ipc::PenIdentityProtocolHint::Hpp3:
+                        identity.protocolHint = PenProtocolHint::Hpp3;
+                        break;
+                    default:
+                        identity.protocolHint = PenProtocolHint::Auto;
+                        break;
+                    }
+                    identity.protocolHintFromPenModule =
+                        (wire.protocolFlags & Ipc::kPenIdentityProtocolFromPenModule) != 0;
+                    identity.factoryStatusFlags = wire.factoryStatusFlags;
                     auto assignUtf8Field = [](bool& present,
                                                std::string& target,
                                                uint16_t textLenWire,

@@ -560,6 +560,7 @@ inline void PopulateSharedFrameDataFromSolverFrame(SharedFrameData& dst,
     dst.stylusNoPressInk = false;
     dst.stylusPipelineStage = stylus.output.pipelineStage;
 
+#if EGOTOUCH_DIAG
     auto& diag = dst.diag;
     const auto& srcDiag = stylus.debug.coord;
     diag.anchorRow = srcDiag.anchorRow;
@@ -635,6 +636,7 @@ inline void PopulateSharedFrameDataFromSolverFrame(SharedFrameData& dst,
     diag.lfCos1000 = srcDiag.lfCos1000;
     diag.lfStraightBufCount = srcDiag.lfStraightBufCount;
     diag.lfDragApplied = srcDiag.lfDragApplied;
+#endif
 
     dst.masterSuffix = src.masterSuffix;
     dst.masterSuffixValid = src.masterSuffixValid;
@@ -782,6 +784,7 @@ inline void PopulateSolverFrameFromSharedFrameData(HeatmapFrame& out,
     stylus.interop.maxRawPeak = src.stylusMaxRawPeak;
     stylus.output.pipelineStage = src.stylusPipelineStage;
 
+#if EGOTOUCH_DIAG
     auto& diag = stylus.debug.coord;
     diag.anchorRow = src.diag.anchorRow;
     diag.anchorCol = src.diag.anchorCol;
@@ -856,6 +859,7 @@ inline void PopulateSolverFrameFromSharedFrameData(HeatmapFrame& out,
     diag.lfCos1000 = src.diag.lfCos1000;
     diag.lfStraightBufCount = src.diag.lfStraightBufCount;
     diag.lfDragApplied = src.diag.lfDragApplied;
+#endif
 
     out.masterSuffix = src.masterSuffix;
     out.masterSuffixValid = src.masterSuffixValid;

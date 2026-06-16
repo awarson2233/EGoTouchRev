@@ -150,12 +150,15 @@ int main() {
             "PersistConfigV3ResponseWire counters default zero");
 
     PenIdentityStatusWire penIdentity{};
-    Require(sizeof(PenIdentityStatusWire) == 400, "PenIdentityStatusWire layout remains fixed");
+    Require(sizeof(PenIdentityStatusWire) == 404, "PenIdentityStatusWire layout remains fixed");
     Require(penIdentity.wireVersion == kIpcProtocolVersion, "PenIdentityStatusWire version defaults to protocol version");
     Require(penIdentity.flags == 0, "PenIdentityStatusWire flags default empty");
     Require(penIdentity.stylusId == 0, "PenIdentityStatusWire stylus id defaults zero");
     Require(penIdentity.penModuleModelId == 0, "PenIdentityStatusWire model id defaults zero");
     Require(penIdentity.hardwareVersionUtf8Len == 0, "PenIdentityStatusWire hardware UTF-8 length defaults zero");
+    Require(penIdentity.protocolHint == U(PenIdentityProtocolHint::Auto), "PenIdentityStatusWire protocol hint defaults Auto");
+    Require(penIdentity.protocolFlags == 0, "PenIdentityStatusWire protocol flags default empty");
+    Require(penIdentity.factoryStatusFlags == 0, "PenIdentityStatusWire factory status flags default zero");
     Require(penIdentity.serialNumberUtf8Len == 0, "PenIdentityStatusWire serial UTF-8 length defaults zero");
     Require(penIdentity.firmwareVersionUtf8Len == 0, "PenIdentityStatusWire firmware UTF-8 length defaults zero");
     Require(sizeof(penIdentity.hardwareVersionUtf8) == 128, "PenIdentityStatusWire hardware UTF-8 buffer capacity remains 128 bytes");

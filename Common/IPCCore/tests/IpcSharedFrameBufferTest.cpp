@@ -118,6 +118,7 @@ void VerifyPreserveMasterTouchVisualization() {
             "preserve helper copies cached palm boxes");
 }
 
+#if EGOTOUCH_DIAG
 void VerifySolverDebugBoxesRoundTrip() {
     Solvers::HeatmapFrame solverIn{};
 
@@ -162,6 +163,7 @@ void VerifySolverDebugBoxesRoundTrip() {
     Require(!solverOut.touch.debug.palmBoxes[0].matchedPalmThisFrame,
             "solver palm box matched state round-trips through shared conversion");
 }
+#endif
 
 } // namespace
 
@@ -169,7 +171,9 @@ int main() {
     using namespace Ipc;
 
     VerifyPreserveMasterTouchVisualization();
+#if EGOTOUCH_DIAG
     VerifySolverDebugBoxesRoundTrip();
+#endif
 
     SharedFrameWriter writer;
     if (!writer.Create(L"Global\\EGoTouchIpccoreSharedFrameBufferTest")) {

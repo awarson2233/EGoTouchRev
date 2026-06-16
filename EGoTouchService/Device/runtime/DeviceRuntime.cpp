@@ -111,6 +111,68 @@ Solvers::StylusProtocolHint ResolveProtocolHintFromPenModule(
   }
 }
 
+struct PenModuleIdentityUpdate {
+  bool changed = false;
+  bool derivedStylusIdChanged = false;
+  bool inferredConnectionChanged = false;
+  uint8_t derivedStylusId = 0;
+};
+
+bool MarkPenConnectedFromIdentityLocked(RuntimePenState &state) noexcept {
+  if (state.hasConnection && state.connected) {
+    return false;
+  }
+
+  state.hasConnection = true;
+  state.connected = true;
+  state.factoryStatusFlags = Himax::Pen::ApplyFactoryStatusFlagUpdate(
+      state.factoryStatusFlags, Himax::Pen::PenUsbEventCode::PenConnStatus, 1);
+  return true;
+}
+
+PenModuleIdentityUpdate ApplyResolvedPenModuleIdentityLocked(
+    RuntimePenState &state,
+    const Himax::Pen::PenModuleModelInfo &modelInfo) noexcept {
+  PenModuleIdentityUpdate update{};
+  update.inferredConnectionChanged = MarkPenConnectedFromIdentityLocked(state);
+
+  const bool hasModuleHint =
+      modelInfo.protocolHint != Himax::Pen::PenModuleProtocolHint::Auto;
+  Solvers::StylusProtocolHint nextProtocolHint = hasModuleHint
+      ? ResolveProtocolHintFromPenModule(modelInfo.protocolHint)
+      : Solvers::StylusProtocolHint::Auto;
+  if (!hasModuleHint && state.hasStylusId) {
+    nextProtocolHint = ResolveProtocolHintFromStylusId(state.stylusId);
+  }
+
+  update.changed = !state.hasPenModuleModelId ||
+                   state.penModuleModelId != modelInfo.modelId ||
+                   state.penModuleModel != modelInfo.model ||
+                   state.protocolHintFromPenModule != hasModuleHint ||
+                   state.protocolHint != nextProtocolHint;
+
+  if (const auto derivedStylusId =
+          Himax::Pen::TryResolveStylusIdFromPenModule(modelInfo.model);
+      derivedStylusId && !state.hasStylusId) {
+    state.hasStylusId = true;
+    state.stylusId = *derivedStylusId;
+    update.derivedStylusIdChanged = true;
+    update.derivedStylusId = *derivedStylusId;
+  }
+
+  if (update.changed || update.derivedStylusIdChanged ||
+      update.inferredConnectionChanged) {
+    ++state.penRevision;
+  }
+
+  state.hasPenModuleModelId = true;
+  state.penModuleModelId = modelInfo.modelId;
+  state.penModuleModel = modelInfo.model;
+  state.protocolHintFromPenModule = hasModuleHint;
+  state.protocolHint = nextProtocolHint;
+  return update;
+}
+
 const char *ToString(Solvers::StylusProtocolHint hint) noexcept {
   switch (hint) {
   case Solvers::StylusProtocolHint::Auto:
@@ -948,40 +1010,36 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
       break;
     }
 
-    const uint32_t modelId = ev.semantic.penModuleModelId;
-    const auto moduleModel = ev.semantic.penModuleModel;
-    const bool hasModuleHint = ev.semantic.hasPenModuleProtocolHint;
-    const auto moduleProtocolHint = hasModuleHint
-                                        ? ResolveProtocolHintFromPenModule(
-                                              ev.semantic.penModuleProtocolHint)
-                                        : Solvers::StylusProtocolHint::Auto;
+    const Himax::Pen::PenModuleModelInfo modelInfo{
+        ev.semantic.penModuleModelId,
+        ev.semantic.penModuleModel,
+        ev.semantic.hasPenModuleProtocolHint
+            ? ev.semantic.penModuleProtocolHint
+            : Himax::Pen::PenModuleProtocolHint::Auto,
+        Himax::Pen::ToString(ev.semantic.penModuleModel)};
 
-    Solvers::StylusProtocolHint nextProtocolHint = moduleProtocolHint;
+    PenModuleIdentityUpdate identityUpdate{};
     {
       std::lock_guard<std::mutex> lk(m_penStateMu);
-
-      const bool nextFromPenModule = hasModuleHint;
-      if (!hasModuleHint && m_penState.hasStylusId) {
-        nextProtocolHint = ResolveProtocolHintFromStylusId(m_penState.stylusId);
-      }
-
-      const bool changed = !m_penState.hasPenModuleModelId ||
-                           m_penState.penModuleModelId != modelId ||
-                           m_penState.penModuleModel != moduleModel ||
-                           m_penState.protocolHintFromPenModule != nextFromPenModule ||
-                           m_penState.protocolHint != nextProtocolHint;
-      if (changed) {
-        ++m_penState.penRevision;
-      }
-
-      m_penState.hasPenModuleModelId = true;
-      m_penState.penModuleModelId = modelId;
-      m_penState.penModuleModel = moduleModel;
-      m_penState.protocolHintFromPenModule = nextFromPenModule;
-      m_penState.protocolHint = nextProtocolHint;
+      identityUpdate = ApplyResolvedPenModuleIdentityLocked(m_penState, modelInfo);
     }
 
     ApplyPenStateToStylusPipeline();
+
+    if (identityUpdate.inferredConnectionChanged) {
+      command cmd{};
+      cmd.type = AFE_Command::InitStylus;
+      cmd.param = 0;
+      SubmitCommand(cmd, CommandSource::SystemPolicy,
+                    "PenModuleModel->InitStylus");
+    }
+    if (identityUpdate.derivedStylusIdChanged) {
+      command cmd{};
+      cmd.type = AFE_Command::SetStylusId;
+      cmd.param = identityUpdate.derivedStylusId;
+      SubmitCommand(cmd, CommandSource::SystemPolicy,
+                    "PenModuleModel->SetStylusId");
+    }
     break;
   }
 
@@ -992,10 +1050,24 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
       break;
     }
 
+    bool inferredConnectionChanged = false;
     {
       std::lock_guard<std::mutex> lk(m_penStateMu);
+      inferredConnectionChanged = MarkPenConnectedFromIdentityLocked(m_penState);
+      if (inferredConnectionChanged) {
+        ++m_penState.penRevision;
+      }
       m_penState.hasSerialNumber = true;
       m_penState.serialNumber = ev.semantic.serialNumber;
+    }
+
+    if (inferredConnectionChanged) {
+      ApplyPenStateToStylusPipeline();
+      command cmd{};
+      cmd.type = AFE_Command::InitStylus;
+      cmd.param = 0;
+      SubmitCommand(cmd, CommandSource::SystemPolicy,
+                    "PenSerialNumber->InitStylus");
     }
 
     break;
@@ -1008,10 +1080,24 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
       break;
     }
 
+    bool inferredConnectionChanged = false;
     {
       std::lock_guard<std::mutex> lk(m_penStateMu);
+      inferredConnectionChanged = MarkPenConnectedFromIdentityLocked(m_penState);
+      if (inferredConnectionChanged) {
+        ++m_penState.penRevision;
+      }
       m_penState.hasHardwareVersion = true;
       m_penState.hardwareVersion = ev.semantic.hardwareVersion;
+    }
+
+    if (inferredConnectionChanged) {
+      ApplyPenStateToStylusPipeline();
+      command cmd{};
+      cmd.type = AFE_Command::InitStylus;
+      cmd.param = 0;
+      SubmitCommand(cmd, CommandSource::SystemPolicy,
+                    "PenHardwareVersion->InitStylus");
     }
 
     break;
@@ -1024,10 +1110,54 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
       break;
     }
 
+    const auto modelInfoFromFirmware =
+        Himax::Pen::TryResolvePenModuleModelFromText(ev.semantic.firmwareVersion);
+    PenModuleIdentityUpdate identityUpdate{};
+    bool appliedFirmwareModel = false;
+    bool inferredConnectionChanged = false;
     {
       std::lock_guard<std::mutex> lk(m_penStateMu);
       m_penState.hasFirmwareVersion = true;
       m_penState.firmwareVersion = ev.semantic.firmwareVersion;
+
+      if (modelInfoFromFirmware && !m_penState.hasPenModuleModelId) {
+        identityUpdate = ApplyResolvedPenModuleIdentityLocked(
+            m_penState, *modelInfoFromFirmware);
+        appliedFirmwareModel = true;
+        inferredConnectionChanged = identityUpdate.inferredConnectionChanged;
+      } else {
+        inferredConnectionChanged = MarkPenConnectedFromIdentityLocked(m_penState);
+        if (inferredConnectionChanged) {
+          ++m_penState.penRevision;
+        }
+      }
+    }
+
+    if (appliedFirmwareModel) {
+      LOG_INFO("Runtime", __func__, "MCU",
+               "Derived PenModule ModelId from USBD_SW_VERSION: model={} id=0x{:06X} protocol={}",
+               modelInfoFromFirmware->name,
+               static_cast<unsigned int>(modelInfoFromFirmware->modelId),
+               Himax::Pen::ToString(modelInfoFromFirmware->protocolHint));
+      ApplyPenStateToStylusPipeline();
+    } else if (inferredConnectionChanged) {
+      ApplyPenStateToStylusPipeline();
+    }
+
+    if (inferredConnectionChanged) {
+      command cmd{};
+      cmd.type = AFE_Command::InitStylus;
+      cmd.param = 0;
+      SubmitCommand(cmd, CommandSource::SystemPolicy,
+                    "UsbdSwVersion->InitStylus");
+    }
+
+    if (identityUpdate.derivedStylusIdChanged) {
+      command cmd{};
+      cmd.type = AFE_Command::SetStylusId;
+      cmd.param = identityUpdate.derivedStylusId;
+      SubmitCommand(cmd, CommandSource::SystemPolicy,
+                    "FirmwareModel->SetStylusId");
     }
 
     break;
@@ -1085,15 +1215,17 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
     const auto fallbackProtocolHint = ResolveProtocolHintFromStylusId(stateStylusId);
 
     bool protocolFromPenModule = false;
+    bool inferredConnectionChanged = false;
     {
       std::lock_guard<std::mutex> lk(m_penStateMu);
+      inferredConnectionChanged = MarkPenConnectedFromIdentityLocked(m_penState);
       protocolFromPenModule = m_penState.protocolHintFromPenModule;
       const bool changed =
           m_penState.hasStylusId != hasStylusId ||
           m_penState.stylusId != stateStylusId ||
           (!protocolFromPenModule && m_penState.protocolHint != fallbackProtocolHint);
 
-      if (changed) {
+      if (changed || inferredConnectionChanged) {
         ++m_penState.penRevision;
       }
       m_penState.hasStylusId = hasStylusId;
@@ -1104,6 +1236,14 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
     }
 
     ApplyPenStateToStylusPipeline();
+
+    if (inferredConnectionChanged) {
+      command cmd{};
+      cmd.type = AFE_Command::InitStylus;
+      cmd.param = 0;
+      SubmitCommand(cmd, CommandSource::SystemPolicy,
+                    "PenTypeInfo->InitStylus");
+    }
 
     command cmd{};
     cmd.type = AFE_Command::SetStylusId;

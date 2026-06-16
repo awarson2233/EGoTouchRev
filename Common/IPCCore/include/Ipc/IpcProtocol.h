@@ -355,6 +355,16 @@ constexpr uint8_t kPenIdentityHasHardwareVersion = 1u << 2;
 constexpr uint8_t kPenIdentityConnected = 1u << 3;
 constexpr uint8_t kPenIdentityHasSerialNumber = 1u << 4;
 constexpr uint8_t kPenIdentityHasFirmwareVersion = 1u << 5;
+constexpr uint8_t kPenIdentityHasProtocolHint = 1u << 6;
+constexpr uint8_t kPenIdentityHasConnectionState = 1u << 7;
+
+constexpr uint8_t kPenIdentityProtocolFromPenModule = 1u << 0;
+
+enum class PenIdentityProtocolHint : uint8_t {
+    Auto = 0,
+    Hpp2 = 1,
+    Hpp3 = 2,
+};
 
 struct PenIdentityStatusWire {
     uint16_t wireVersion = kIpcProtocolVersion;
@@ -362,10 +372,13 @@ struct PenIdentityStatusWire {
     uint8_t stylusId = 0;
     uint32_t penModuleModelId = 0;
     uint16_t hardwareVersionUtf8Len = 0;
-    uint16_t _reserved0 = 0;
+    uint8_t protocolHint = static_cast<uint8_t>(PenIdentityProtocolHint::Auto);
+    uint8_t protocolFlags = 0;
     char hardwareVersionUtf8[128]{};
     uint16_t serialNumberUtf8Len = 0;
     uint16_t firmwareVersionUtf8Len = 0;
+    uint16_t factoryStatusFlags = 0;
+    uint16_t _reserved0 = 0;
     char serialNumberUtf8[128]{};
     char firmwareVersionUtf8[128]{};
 };

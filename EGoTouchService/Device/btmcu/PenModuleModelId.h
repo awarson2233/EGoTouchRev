@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <string_view>
 
 namespace Himax::Pen {
 
@@ -63,6 +64,37 @@ constexpr PenModuleModelInfo ResolvePenModuleModel(uint32_t modelId) noexcept {
     default:
         return PenModuleModelInfo{modelId, PenModuleModel::Unknown,
                                   PenModuleProtocolHint::Hpp3, "Unknown"};
+    }
+}
+
+inline std::optional<PenModuleModelInfo> TryResolvePenModuleModelFromText(
+        std::string_view text) noexcept {
+    if (text.find("CD54S") != std::string_view::npos) {
+        return ResolvePenModuleModel(kPenModuleModelIdCd54S);
+    }
+    if (text.find("CD54R") != std::string_view::npos) {
+        return ResolvePenModuleModel(kPenModuleModelIdCd54R);
+    }
+    if (text.find("CD54") != std::string_view::npos) {
+        return ResolvePenModuleModel(kPenModuleModelIdCd54);
+    }
+    if (text.find("CD52") != std::string_view::npos) {
+        return ResolvePenModuleModel(kPenModuleModelIdCd52);
+    }
+    return std::nullopt;
+}
+
+constexpr std::optional<uint8_t> TryResolveStylusIdFromPenModule(
+        PenModuleModel model) noexcept {
+    switch (model) {
+    case PenModuleModel::Cd52:
+        return 1;
+    case PenModuleModel::Cd54:
+    case PenModuleModel::Cd54R:
+    case PenModuleModel::Cd54S:
+        return 2;
+    default:
+        return std::nullopt;
     }
 }
 
