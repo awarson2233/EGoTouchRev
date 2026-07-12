@@ -49,6 +49,7 @@ private:
 
     // Tool panels
     void DrawBtMcuPanel();
+    void DrawServiceInspectorPanel();
     void DrawSystemEventsPanel();
     void DrawDvrPanel();
     void DrawApplyConfigResultStatus() const;

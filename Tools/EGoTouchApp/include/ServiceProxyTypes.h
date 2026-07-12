@@ -2,11 +2,46 @@
 
 #include "DvrTypes.h"
 #include "SolverTypes.h"
+#include <chrono>
 #include <cstdint>
 #include <string>
 #include <vector>
 
 namespace App {
+
+enum class ServiceWorkerState : int8_t {
+    Suspend = -2,
+    Quit = -1,
+    Ready = 0,
+    Streaming = 1,
+    Recover = 2,
+    Unknown = 127,
+};
+
+struct ServiceRuntimeStatus {
+    bool connected = false;
+    bool hasFrame = false;
+    ServiceWorkerState workerState = ServiceWorkerState::Unknown;
+    bool streaming = false;
+    bool vhfEnabled = false;
+    bool vhfDeviceOpen = false;
+    bool vhfTranspose = false;
+    uint8_t recoverCount = 0;
+    uint16_t queueDepth = 0;
+    uint64_t lastCommandId = 0;
+    uint64_t frameId = 0;
+    uint64_t serviceTimestamp = 0;
+    uint64_t appReceiveEpochUs = 0;
+    std::string lastNote;
+};
+
+struct ServiceRuntimeTransition {
+    ServiceWorkerState from = ServiceWorkerState::Unknown;
+    ServiceWorkerState to = ServiceWorkerState::Unknown;
+    uint64_t frameId = 0;
+    uint64_t serviceTimestamp = 0;
+    uint64_t appReceiveEpochUs = 0;
+};
 
 // Lightweight mirror of Service-side Pen channel status (no PenBridge.h dependency)
 struct PenBridgeStatus {

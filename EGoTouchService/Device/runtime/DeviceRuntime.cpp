@@ -12,13 +12,6 @@
 #include <utility>
 
 namespace {
-constexpr std::size_t kDebugMaxHistoryItems = 512;
-constexpr std::size_t kReleaseMaxHistoryItems = 128;
-#if defined(NDEBUG)
-constexpr std::size_t kMaxHistoryItems = kReleaseMaxHistoryItems;
-#else
-constexpr std::size_t kMaxHistoryItems = kDebugMaxHistoryItems;
-#endif
 constexpr std::chrono::milliseconds kEventDebounce{400};
 constexpr std::chrono::milliseconds kDisplayOffSuspendDelay{2000};
 
@@ -60,10 +53,6 @@ PenButtonRoutePlan ResolvePenButtonRoute(PenButtonMode mode,
   default:
     return DefaultPenButtonRouteForMode(mode);
   }
-}
-
-const char *FactoryStatusEventName(Himax::Pen::PenUsbEventCode code) noexcept {
-  return Himax::Pen::ToString(code);
 }
 
 Solvers::StylusProtocolHint ResolveProtocolHintFromStylusId(uint8_t) noexcept {
@@ -428,9 +417,6 @@ void DeviceRuntime::ApplyConfigStore(const Config::ConfigStore& store) {
   LOG_INFO("Runtime", __func__, "Config", "Applied ConfigStore to touch/stylus pipelines.");
 }
 
-void DeviceRuntime::ApplyPipelineConfig(const Config::ConfigStore& store) {
-  ApplyConfigStore(store);
-}
 #endif
 
 bool DeviceRuntime::IsShutdownRequested() const {
@@ -501,6 +487,84 @@ void DeviceRuntime::ApplyPenStateToStylusPipeline() {
   m_stylusPipeline.ApplyPenSession(session);
 }
 
+void DeviceRuntime::UpdatePenState(std::function<void(RuntimePenState&, PenStateUpdateResult&)> updateFn) {
+  PenStateUpdateResult result{};
+  {
+    std::lock_guard<std::mutex> lk(m_penStateMu);
+    updateFn(m_penState, result);
+
+    if (result.stateChanged || result.inferredConnChanged || result.stylusIdChanged) {
+      ++m_penState.penRevision;
+    }
+  }
+
+  ApplyPenStateToStylusPipeline();
+
+  if (result.inferredConnChanged) {
+    command cmd{};
+    cmd.type = AFE_Command::InitStylus;
+    cmd.param = 0;
+    SubmitCommand(cmd, CommandSource::SystemPolicy, "PenIdentityChange->InitStylus");
+  }
+  if (result.stylusIdChanged) {
+    command cmd{};
+    cmd.type = AFE_Command::SetStylusId;
+    cmd.param = result.nextStylusId;
+    SubmitCommand(cmd, CommandSource::SystemPolicy, "PenIdentityChange->SetStylusId");
+  }
+}
+
+void DeviceRuntime::DispatchPenButtonAction(const PenButtonAction& action, const char* source) {
+  const auto mode = GetPenButtonMode();
+  const auto route = GetPenButtonRoute();
+  const auto plan = ResolvePenButtonRoute(
+      mode, route, m_penButtonRouteExplicit.load(std::memory_order_acquire));
+
+  bool vhfQueued = false;
+  bool win32Attempted = false;
+  bool win32Ok = false;
+
+  // 1. VHF route
+  if (plan.vhf) {
+    if (action.type == PenButtonAction::Type::Barrel) {
+      if (mode == PenButtonMode::OemCustom || mode == PenButtonMode::NativeBarrel) {
+        m_vhfReporter.SetBarrelButtonState(action.pressed);
+        vhfQueued = true;
+      }
+    } else if (action.type == PenButtonAction::Type::Eraser) {
+      if (mode == PenButtonMode::OemCustom || mode == PenButtonMode::NativeEraser) {
+        m_vhfReporter.SetEraserState(action.pressed ? 1 : 0);
+        vhfQueued = true;
+      }
+    }
+  }
+
+  // 2. Win32 route
+  if (plan.win32) {
+    win32Attempted = true;
+    if (action.type == PenButtonAction::Type::Barrel) {
+      if (action.pressed && (mode == PenButtonMode::OemCustom || mode == PenButtonMode::NativeBarrel)) {
+        win32Ok = m_synthPenButton.InjectWinF22Shortcut();
+      }
+    } else if (action.type == PenButtonAction::Type::Eraser) {
+      if (mode == PenButtonMode::NativeEraser) {
+        POINT pt{};
+        GetCursorPos(&pt);
+        if (action.pressed) {
+          win32Ok = m_synthPenButton.InjectEraserPulse(pt);
+        }
+      }
+    }
+  }
+
+  LOG_INFO("Runtime", __func__, "MCU",
+           "{}: action={} pressed={} mode={} route={} vhf={} win32={} win32_ok={}",
+           source,
+           action.type == PenButtonAction::Type::Barrel ? "Barrel" : "Eraser",
+           action.pressed, ToString(mode), ToString(route),
+           vhfQueued ? 1 : 0, win32Attempted ? 1 : 0, win32Ok ? 1 : 0);
+}
+
 // --------------- 命令注入 ---------------
 
 bool DeviceRuntime::SubmitExternalAfeCommand(AFE_Command type, uint8_t param) {
@@ -527,10 +591,8 @@ uint64_t DeviceRuntime::SubmitCommand(command cmd, CommandSource src,
   }
   {
     std::lock_guard<std::mutex> lk(m_mu);
-    if (m_cmdQueueCount < 16) {
-      m_cmdQueue[m_cmdQueueTail] = std::move(qc);
-      m_cmdQueueTail = (m_cmdQueueTail + 1) % 16;
-      m_cmdQueueCount++;
+    if (m_cmdQueue.push(std::move(qc))) {
+      // Pushed successfully
     } else {
       LOG_ERROR("Runtime", __func__, "Queue", "Command queue overflow! Command dropped.");
     }
@@ -656,7 +718,7 @@ RuntimeSnapshot DeviceRuntime::GetSnapshot() const {
   s.state = m_state.load();
   s.stylus_connected = m_chip.IsStylusConnected();
   s.recover_count = m_recoverCount;
-  s.queue_depth = m_cmdQueueCount;
+  s.queue_depth = m_cmdQueue.size();
   s.last_command_id = m_lastCmdId;
   s.last_note = m_lastNote;
   return s;
@@ -676,9 +738,9 @@ std::vector<HistoryEntry> DeviceRuntime::GetHistory(std::size_t n) const {
   const size_t count = std::min(n, m_historyCount);
   result.reserve(count);
 
-  size_t startIdx = (m_historyWriteIdx + 128 - count) % 128;
+  size_t startIdx = (m_historyWriteIdx + kMaxHistoryItems - count) % kMaxHistoryItems;
   for (size_t i = 0; i < count; ++i) {
-    result.push_back(m_history[(startIdx + i) % 128]);
+    result.push_back(m_history[(startIdx + i) % kMaxHistoryItems]);
   }
   return result;
 }
@@ -704,8 +766,8 @@ void DeviceRuntime::RecordHistory(const QueuedCommand &qc, bool ok,
   std::strncpy(e.detail.data(), det.c_str(), e.detail.size() - 1);
 
   m_history[m_historyWriteIdx] = std::move(e);
-  m_historyWriteIdx = (m_historyWriteIdx + 1) % 128;
-  if (m_historyCount < 128) {
+  m_historyWriteIdx = (m_historyWriteIdx + 1) % kMaxHistoryItems;
+  if (m_historyCount < kMaxHistoryItems) {
     m_historyCount++;
   }
 }
@@ -717,12 +779,9 @@ bool DeviceRuntime::DrainCommands() {
     QueuedCommand qc{};
     {
       std::lock_guard<std::mutex> lk(m_mu);
-      if (m_cmdQueueCount == 0) {
+      if (!m_cmdQueue.pop(qc)) {
         return true;
       }
-      qc = std::move(m_cmdQueue[m_cmdQueueHead]);
-      m_cmdQueueHead = (m_cmdQueueHead + 1) % 16;
-      m_cmdQueueCount--;
       m_lastCmdId = qc.id;
     }
 
@@ -760,9 +819,7 @@ ThreadResult DeviceRuntime::WorkerMain() {
         m_displayOffSuspendPending = false;
         SetState(workerState::suspend);
         m_needSuspendDeinit.store(true, std::memory_order_release);
-        m_cmdQueueHead = 0;
-        m_cmdQueueTail = 0;
-        m_cmdQueueCount = 0;
+        m_cmdQueue.clear();
         displayOffSuspendDue = true;
       }
     }
@@ -788,9 +845,7 @@ ThreadResult DeviceRuntime::WorkerMain() {
         SetState(workerState::quit);
       }
       std::lock_guard<std::mutex> lk(m_mu);
-      m_cmdQueueHead = 0;
-      m_cmdQueueTail = 0;
-      m_cmdQueueCount = 0;
+      m_cmdQueue.clear();
     }
 
     DrainCommands();
@@ -944,51 +999,9 @@ void DeviceRuntime::OnStreaming() {
 void DeviceRuntime::HandlePenButtonStatusCode(uint8_t statusCode,
                                               uint8_t rawEventPayload,
                                               const char *source) {
-  const auto mode = GetPenButtonMode();
-  const auto route = GetPenButtonRoute();
-  const auto plan = ResolvePenButtonRoute(
-      mode, route, m_penButtonRouteExplicit.load(std::memory_order_acquire));
-
-  bool vhfQueued = false;
-  bool win32Ok = false;
-  bool win32Attempted = false;
-
-  if (plan.vhf) {
-    switch (mode) {
-    case PenButtonMode::OemCustom:
-    case PenButtonMode::NativeBarrel:
-      m_vhfReporter.SetBarrelButtonState(true);
-      vhfQueued = true;
-      break;
-    case PenButtonMode::NativeEraser:
-      // Status-code events are edge-like button gestures, not an eraser state
-      // lifetime. Avoid latching VHF inverted/eraser bits; persistent VHF eraser
-      // state is driven only by explicit EraserToggle events.
-      break;
-    }
-  }
-
-  if (plan.win32) {
-    win32Attempted = true;
-    switch (mode) {
-    case PenButtonMode::OemCustom:
-    case PenButtonMode::NativeBarrel:
-      win32Ok = m_synthPenButton.InjectWinF22Shortcut();
-      break;
-    case PenButtonMode::NativeEraser: {
-      POINT pt{};
-      GetCursorPos(&pt);
-      win32Ok = m_synthPenButton.InjectEraserPulse(pt);
-      break;
-    }
-    }
-  }
-
-  LOG_INFO("Runtime", __func__, "MCU",
-           "{}: statusCode={} raw={} mode={} route={} vhf={} win32={} win32_ok={}",
-           source, statusCode, rawEventPayload, ToString(mode), ToString(route),
-           vhfQueued ? 1 : 0, win32Attempted ? 1 : 0,
-           win32Ok ? 1 : 0);
+  // statusCode 3 and 4 represent a barrel button action in this context
+  PenButtonAction action{PenButtonAction::Type::Barrel, true, rawEventPayload};
+  DispatchPenButtonAction(action, source);
 }
 
 void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
@@ -1010,36 +1023,47 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
       break;
     }
 
-    const Himax::Pen::PenModuleModelInfo modelInfo{
-        ev.semantic.penModuleModelId,
-        ev.semantic.penModuleModel,
-        ev.semantic.hasPenModuleProtocolHint
-            ? ev.semantic.penModuleProtocolHint
-            : Himax::Pen::PenModuleProtocolHint::Auto,
-        Himax::Pen::ToString(ev.semantic.penModuleModel)};
+    UpdatePenState([&](RuntimePenState& state, PenStateUpdateResult& res) {
+      const Himax::Pen::PenModuleModelInfo modelInfo{
+          ev.semantic.penModuleModelId,
+          ev.semantic.penModuleModel,
+          ev.semantic.hasPenModuleProtocolHint
+              ? ev.semantic.penModuleProtocolHint
+              : Himax::Pen::PenModuleProtocolHint::Auto,
+          Himax::Pen::ToString(ev.semantic.penModuleModel)};
 
-    PenModuleIdentityUpdate identityUpdate{};
-    {
-      std::lock_guard<std::mutex> lk(m_penStateMu);
-      identityUpdate = ApplyResolvedPenModuleIdentityLocked(m_penState, modelInfo);
-    }
+      res.inferredConnChanged = MarkPenConnectedFromIdentityLocked(state);
 
-    ApplyPenStateToStylusPipeline();
+      const bool hasModuleHint =
+          modelInfo.protocolHint != Himax::Pen::PenModuleProtocolHint::Auto;
+      Solvers::StylusProtocolHint nextProtocolHint = hasModuleHint
+          ? ResolveProtocolHintFromPenModule(modelInfo.protocolHint)
+          : Solvers::StylusProtocolHint::Auto;
+      if (!hasModuleHint && state.hasStylusId) {
+        nextProtocolHint = ResolveProtocolHintFromStylusId(state.stylusId);
+      }
 
-    if (identityUpdate.inferredConnectionChanged) {
-      command cmd{};
-      cmd.type = AFE_Command::InitStylus;
-      cmd.param = 0;
-      SubmitCommand(cmd, CommandSource::SystemPolicy,
-                    "PenModuleModel->InitStylus");
-    }
-    if (identityUpdate.derivedStylusIdChanged) {
-      command cmd{};
-      cmd.type = AFE_Command::SetStylusId;
-      cmd.param = identityUpdate.derivedStylusId;
-      SubmitCommand(cmd, CommandSource::SystemPolicy,
-                    "PenModuleModel->SetStylusId");
-    }
+      res.stateChanged = !state.hasPenModuleModelId ||
+                       state.penModuleModelId != modelInfo.modelId ||
+                       state.penModuleModel != modelInfo.model ||
+                       state.protocolHintFromPenModule != hasModuleHint ||
+                       state.protocolHint != nextProtocolHint;
+
+      if (const auto derivedStylusId =
+              Himax::Pen::TryResolveStylusIdFromPenModule(modelInfo.model);
+          derivedStylusId && !state.hasStylusId) {
+        state.hasStylusId = true;
+        state.stylusId = *derivedStylusId;
+        res.stylusIdChanged = true;
+        res.nextStylusId = *derivedStylusId;
+      }
+
+      state.hasPenModuleModelId = true;
+      state.penModuleModelId = modelInfo.modelId;
+      state.penModuleModel = modelInfo.model;
+      state.protocolHintFromPenModule = hasModuleHint;
+      state.protocolHint = nextProtocolHint;
+    });
     break;
   }
 
@@ -1050,26 +1074,11 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
       break;
     }
 
-    bool inferredConnectionChanged = false;
-    {
-      std::lock_guard<std::mutex> lk(m_penStateMu);
-      inferredConnectionChanged = MarkPenConnectedFromIdentityLocked(m_penState);
-      if (inferredConnectionChanged) {
-        ++m_penState.penRevision;
-      }
-      m_penState.hasSerialNumber = true;
-      m_penState.serialNumber = ev.semantic.serialNumber;
-    }
-
-    if (inferredConnectionChanged) {
-      ApplyPenStateToStylusPipeline();
-      command cmd{};
-      cmd.type = AFE_Command::InitStylus;
-      cmd.param = 0;
-      SubmitCommand(cmd, CommandSource::SystemPolicy,
-                    "PenSerialNumber->InitStylus");
-    }
-
+    UpdatePenState([&](RuntimePenState& state, PenStateUpdateResult& res) {
+      res.inferredConnChanged = MarkPenConnectedFromIdentityLocked(state);
+      state.hasSerialNumber = true;
+      state.serialNumber = ev.semantic.serialNumber;
+    });
     break;
   }
 
@@ -1080,26 +1089,11 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
       break;
     }
 
-    bool inferredConnectionChanged = false;
-    {
-      std::lock_guard<std::mutex> lk(m_penStateMu);
-      inferredConnectionChanged = MarkPenConnectedFromIdentityLocked(m_penState);
-      if (inferredConnectionChanged) {
-        ++m_penState.penRevision;
-      }
-      m_penState.hasHardwareVersion = true;
-      m_penState.hardwareVersion = ev.semantic.hardwareVersion;
-    }
-
-    if (inferredConnectionChanged) {
-      ApplyPenStateToStylusPipeline();
-      command cmd{};
-      cmd.type = AFE_Command::InitStylus;
-      cmd.param = 0;
-      SubmitCommand(cmd, CommandSource::SystemPolicy,
-                    "PenHardwareVersion->InitStylus");
-    }
-
+    UpdatePenState([&](RuntimePenState& state, PenStateUpdateResult& res) {
+      res.inferredConnChanged = MarkPenConnectedFromIdentityLocked(state);
+      state.hasHardwareVersion = true;
+      state.hardwareVersion = ev.semantic.hardwareVersion;
+    });
     break;
   }
 
@@ -1110,85 +1104,81 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
       break;
     }
 
-    const auto modelInfoFromFirmware =
-        Himax::Pen::TryResolvePenModuleModelFromText(ev.semantic.firmwareVersion);
-    PenModuleIdentityUpdate identityUpdate{};
-    bool appliedFirmwareModel = false;
-    bool inferredConnectionChanged = false;
-    {
-      std::lock_guard<std::mutex> lk(m_penStateMu);
-      m_penState.hasFirmwareVersion = true;
-      m_penState.firmwareVersion = ev.semantic.firmwareVersion;
+    UpdatePenState([&](RuntimePenState& state, PenStateUpdateResult& res) {
+      state.hasFirmwareVersion = true;
+      state.firmwareVersion = ev.semantic.firmwareVersion;
 
-      if (modelInfoFromFirmware && !m_penState.hasPenModuleModelId) {
-        identityUpdate = ApplyResolvedPenModuleIdentityLocked(
-            m_penState, *modelInfoFromFirmware);
-        appliedFirmwareModel = true;
-        inferredConnectionChanged = identityUpdate.inferredConnectionChanged;
-      } else {
-        inferredConnectionChanged = MarkPenConnectedFromIdentityLocked(m_penState);
-        if (inferredConnectionChanged) {
-          ++m_penState.penRevision;
+      const auto modelInfoFromFirmware =
+          Himax::Pen::TryResolvePenModuleModelFromText(state.firmwareVersion);
+
+      if (modelInfoFromFirmware && !state.hasPenModuleModelId) {
+        const Himax::Pen::PenModuleModelInfo &modelInfo = *modelInfoFromFirmware;
+        res.inferredConnChanged = MarkPenConnectedFromIdentityLocked(state);
+
+        const bool hasModuleHint =
+            modelInfo.protocolHint != Himax::Pen::PenModuleProtocolHint::Auto;
+        Solvers::StylusProtocolHint nextProtocolHint = hasModuleHint
+            ? ResolveProtocolHintFromPenModule(modelInfo.protocolHint)
+            : Solvers::StylusProtocolHint::Auto;
+        if (!hasModuleHint && state.hasStylusId) {
+          nextProtocolHint = ResolveProtocolHintFromStylusId(state.stylusId);
         }
+
+        res.stateChanged = !state.hasPenModuleModelId ||
+                         state.penModuleModelId != modelInfo.modelId ||
+                         state.penModuleModel != modelInfo.model ||
+                         state.protocolHintFromPenModule != hasModuleHint ||
+                         state.protocolHint != nextProtocolHint;
+
+        if (const auto derivedStylusId =
+                Himax::Pen::TryResolveStylusIdFromPenModule(modelInfo.model);
+            derivedStylusId && !state.hasStylusId) {
+          state.hasStylusId = true;
+          state.stylusId = *derivedStylusId;
+          res.stylusIdChanged = true;
+          res.nextStylusId = *derivedStylusId;
+        }
+
+        state.hasPenModuleModelId = true;
+        state.penModuleModelId = modelInfo.modelId;
+        state.penModuleModel = modelInfo.model;
+        state.protocolHintFromPenModule = hasModuleHint;
+        state.protocolHint = nextProtocolHint;
+
+        LOG_INFO("Runtime", __func__, "MCU",
+                 "Derived PenModule ModelId from USBD_SW_VERSION: model={} id=0x{:06X} protocol={}",
+                 modelInfoFromFirmware->name,
+                 static_cast<unsigned int>(modelInfoFromFirmware->modelId),
+                 Himax::Pen::ToString(modelInfoFromFirmware->protocolHint));
+      } else {
+        res.inferredConnChanged = MarkPenConnectedFromIdentityLocked(state);
       }
-    }
-
-    if (appliedFirmwareModel) {
-      LOG_INFO("Runtime", __func__, "MCU",
-               "Derived PenModule ModelId from USBD_SW_VERSION: model={} id=0x{:06X} protocol={}",
-               modelInfoFromFirmware->name,
-               static_cast<unsigned int>(modelInfoFromFirmware->modelId),
-               Himax::Pen::ToString(modelInfoFromFirmware->protocolHint));
-      ApplyPenStateToStylusPipeline();
-    } else if (inferredConnectionChanged) {
-      ApplyPenStateToStylusPipeline();
-    }
-
-    if (inferredConnectionChanged) {
-      command cmd{};
-      cmd.type = AFE_Command::InitStylus;
-      cmd.param = 0;
-      SubmitCommand(cmd, CommandSource::SystemPolicy,
-                    "UsbdSwVersion->InitStylus");
-    }
-
-    if (identityUpdate.derivedStylusIdChanged) {
-      command cmd{};
-      cmd.type = AFE_Command::SetStylusId;
-      cmd.param = identityUpdate.derivedStylusId;
-      SubmitCommand(cmd, CommandSource::SystemPolicy,
-                    "FirmwareModel->SetStylusId");
-    }
-
+    });
     break;
   }
 
   case EC::PenConnStatus: {
     bool connected = false;
-    {
-      std::lock_guard<std::mutex> lk(m_penStateMu);
-      const bool hadConnection = m_penState.hasConnection;
-      const bool oldConnected = m_penState.connected;
+    UpdatePenState([&](RuntimePenState& state, PenStateUpdateResult& res) {
+      const bool hadConnection = state.hasConnection;
+      const bool oldConnected = state.connected;
 
-      m_penState.hasConnection = ev.semantic.hasConnection;
-      m_penState.connected =
+      state.hasConnection = ev.semantic.hasConnection;
+      state.connected =
           ev.semantic.hasConnection ? ev.semantic.connected : false;
-      connected = m_penState.hasConnection && m_penState.connected;
+      connected = state.hasConnection && state.connected;
 
-      const bool stateChanged = !hadConnection || oldConnected != m_penState.connected;
-      if (stateChanged) {
-        ++m_penState.penRevision;
-        ResetPenTransientState(m_penState);
+      res.stateChanged = !hadConnection || oldConnected != state.connected;
+      if (res.stateChanged) {
+        ResetPenTransientState(state);
       }
 
       if (!connected) {
-        ClearPenIdentityState(m_penState);
-      } else if (!m_penState.protocolHintFromPenModule && m_penState.hasStylusId) {
-        m_penState.protocolHint = ResolveProtocolHintFromStylusId(m_penState.stylusId);
+        ClearPenIdentityState(state);
+      } else if (!state.protocolHintFromPenModule && state.hasStylusId) {
+        state.protocolHint = ResolveProtocolHintFromStylusId(state.stylusId);
       }
-    }
-
-    ApplyPenStateToStylusPipeline();
+    });
 
     command cmd{};
     if (connected) {
@@ -1214,36 +1204,20 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
     const uint8_t stateStylusId = hasStylusId ? commandPenType : 0;
     const auto fallbackProtocolHint = ResolveProtocolHintFromStylusId(stateStylusId);
 
-    bool protocolFromPenModule = false;
-    bool inferredConnectionChanged = false;
-    {
-      std::lock_guard<std::mutex> lk(m_penStateMu);
-      inferredConnectionChanged = MarkPenConnectedFromIdentityLocked(m_penState);
-      protocolFromPenModule = m_penState.protocolHintFromPenModule;
-      const bool changed =
-          m_penState.hasStylusId != hasStylusId ||
-          m_penState.stylusId != stateStylusId ||
-          (!protocolFromPenModule && m_penState.protocolHint != fallbackProtocolHint);
+    UpdatePenState([&](RuntimePenState& state, PenStateUpdateResult& res) {
+      res.inferredConnChanged = MarkPenConnectedFromIdentityLocked(state);
+      const bool protocolFromPenModule = state.protocolHintFromPenModule;
+      res.stateChanged =
+          state.hasStylusId != hasStylusId ||
+          state.stylusId != stateStylusId ||
+          (!protocolFromPenModule && state.protocolHint != fallbackProtocolHint);
 
-      if (changed || inferredConnectionChanged) {
-        ++m_penState.penRevision;
-      }
-      m_penState.hasStylusId = hasStylusId;
-      m_penState.stylusId = stateStylusId;
+      state.hasStylusId = hasStylusId;
+      state.stylusId = stateStylusId;
       if (!protocolFromPenModule) {
-        m_penState.protocolHint = fallbackProtocolHint;
+        state.protocolHint = fallbackProtocolHint;
       }
-    }
-
-    ApplyPenStateToStylusPipeline();
-
-    if (inferredConnectionChanged) {
-      command cmd{};
-      cmd.type = AFE_Command::InitStylus;
-      cmd.param = 0;
-      SubmitCommand(cmd, CommandSource::SystemPolicy,
-                    "PenTypeInfo->InitStylus");
-    }
+    });
 
     command cmd{};
     cmd.type = AFE_Command::SetStylusId;
@@ -1253,30 +1227,28 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
   }
 
   case EC::PenCurStatus: {
-    {
-      std::lock_guard<std::mutex> lk(m_penStateMu);
-      m_penState.hasCurrentMode = ev.semantic.hasCurrentMode;
-      m_penState.currentModeRaw =
+    UpdatePenState([&](RuntimePenState& state, PenStateUpdateResult& res) {
+      state.hasCurrentMode = ev.semantic.hasCurrentMode;
+      state.currentModeRaw =
           ev.semantic.hasCurrentMode ? ev.semantic.currentModeRaw : 0;
-      m_penState.currentMode = ev.semantic.hasCurrentMode
-                                   ? ev.semantic.currentMode
-                                   : Himax::Pen::PenCurrentMode::Unknown;
-    }
+      state.currentMode = ev.semantic.hasCurrentMode
+                               ? ev.semantic.currentMode
+                               : Himax::Pen::PenCurrentMode::Unknown;
+    });
     break;
   }
 
   case EC::PenCurrentFunc: {
     uint8_t func = 0;
-    {
-      std::lock_guard<std::mutex> lk(m_penStateMu);
-      m_penState.hasCurrentFunc = ev.semantic.hasCurrentFunc;
-      m_penState.currentFunc =
+    UpdatePenState([&](RuntimePenState& state, PenStateUpdateResult& res) {
+      state.hasCurrentFunc = ev.semantic.hasCurrentFunc;
+      state.currentFunc =
           ev.semantic.hasCurrentFunc ? ev.semantic.currentFunc : payload0;
-      func = m_penState.currentFunc;
-    }
+      func = state.currentFunc;
+    });
 
     if (func == 1) {
-      HandlePenButtonStatusCode(3, func, "PenCurrentFunc");
+      DispatchPenButtonAction({PenButtonAction::Type::Barrel, true, func}, "PenCurrentFunc");
     }
     break;
   }
@@ -1289,34 +1261,19 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
     break;
 
   case EC::PenGlobalAnnotation:
-    HandlePenButtonStatusCode(4, payload0, "PenGlobalAnnotation");
+    DispatchPenButtonAction({PenButtonAction::Type::Barrel, true, payload0}, "PenGlobalAnnotation");
     break;
 
   case EC::EraserToggle: {
     uint8_t eraserState = 0;
-    {
-      std::lock_guard<std::mutex> lk(m_penStateMu);
-      m_penState.hasEraserToggle = ev.semantic.hasEraserToggle;
-      m_penState.eraserToggle =
+    UpdatePenState([&](RuntimePenState& state, PenStateUpdateResult& res) {
+      state.hasEraserToggle = ev.semantic.hasEraserToggle;
+      state.eraserToggle =
           ev.semantic.hasEraserToggle ? ev.semantic.eraserToggle : 0;
-      eraserState = m_penState.eraserToggle;
-    }
+      eraserState = state.eraserToggle;
+    });
 
-    const auto mode = GetPenButtonMode();
-    const auto plan = ResolvePenButtonRoute(
-        mode, GetPenButtonRoute(),
-        m_penButtonRouteExplicit.load(std::memory_order_acquire));
-
-    if (plan.vhf && (mode == PenButtonMode::OemCustom ||
-                     mode == PenButtonMode::NativeEraser)) {
-      m_vhfReporter.SetEraserState(eraserState);
-    }
-
-    if (plan.win32 && eraserState != 0 && mode == PenButtonMode::NativeEraser) {
-      POINT pt{};
-      GetCursorPos(&pt);
-      (void)m_synthPenButton.InjectEraserPulse(pt);
-    }
+    DispatchPenButtonAction({PenButtonAction::Type::Eraser, eraserState != 0, eraserState}, "EraserToggle");
     break;
   }
 

@@ -247,6 +247,8 @@ public:
     // Local performance stats
     int  GetAcquisitionFps() const { return m_fps.load(); }
     int  GetSlaveAcquisitionFps() const { return m_slaveFps.load(); }
+    ServiceRuntimeStatus GetServiceRuntimeStatus() const;
+    std::vector<ServiceRuntimeTransition> GetServiceRuntimeTransitions() const;
 
     // Dynamic debug schema/value access
     uint16_t GetDynamicDebugSchemaVersion() const { return m_dynamicSchemaVersion.load(); }
@@ -263,6 +265,12 @@ private:
     bool RefreshDynamicDebugSnapshot(uint64_t* outFrameTimestamp = nullptr);
     void ClearDynamicDebugState();
     DvrRuntimeConfigSnapshot CaptureRuntimeConfigSnapshot() const;
+    void UpdateServiceRuntimeStatusFromSharedFrame(const Ipc::SharedFrameData& frame,
+                                                   uint64_t frameId,
+                                                   uint64_t appReceiveEpochUs);
+    void UpdateServiceRuntimeStatusFromWire(const Ipc::RuntimeStatusWire& wire,
+                                            uint64_t appReceiveEpochUs);
+    void ResetServiceRuntimeStatus();
     void InitConfigSchema();
     void SetConfigServiceSyncState(ConfigServiceSyncState state, std::string message);
     bool RefreshConfigCatalogV3();
@@ -278,6 +286,7 @@ private:
         L"Global\\EGoTouchSharedFrame";
     static constexpr int kDvrCapacity = 960;
     static constexpr size_t kDvrPreTriggerFrames = 480;
+    static constexpr size_t kServiceRuntimeTransitionCapacity = 64;
 
     Ipc::IpcPipeClient    m_client;
     Ipc::SharedFrameReader m_frameReader;
@@ -381,6 +390,11 @@ private:
     // FPS measurement
     std::atomic<int> m_fps{0};
     std::atomic<int> m_slaveFps{0};
+
+    // Service runtime status mirror
+    mutable std::mutex m_serviceRuntimeMutex;
+    ServiceRuntimeStatus m_serviceRuntimeStatus;
+    std::vector<ServiceRuntimeTransition> m_serviceRuntimeTransitions;
 
     // Global Service config mirrors
     std::atomic<bool> m_srvDesiredModeFull{true};

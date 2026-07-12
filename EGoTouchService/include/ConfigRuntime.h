@@ -4,7 +4,6 @@
 #include "ServiceConfigCore.h"
 #include "config/ConfigStore.h"
 #include "config/ConfigTlv.h"
-#include "config/ConfigValue.h"
 #include "config/ConfigSchemaSnapshot.h"
 
 #include <cstddef>
@@ -12,7 +11,6 @@
 #include <functional>
 #include <memory>
 #include <mutex>
-#include <string>
 #include <vector>
 
 namespace Service {

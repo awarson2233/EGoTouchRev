@@ -29,9 +29,59 @@ struct ValidationResult;
 #include "vhf/VhfReporter.h"
 #include "StylusSolver/StylusPipeline.h"
 
-namespace Config {
-class ConfigStore;
-}
+// --------------- 静态队列（零内存分配） ---------------
+template <typename T, std::size_t N>
+class StaticQueue {
+public:
+    bool push(T&& item) noexcept {
+        if (m_count >= N) return false;
+        m_data[m_tail] = std::move(item);
+        m_tail = (m_tail + 1) % N;
+        ++m_count;
+        return true;
+    }
+
+    bool pop(T& outItem) noexcept {
+        if (m_count == 0) return false;
+        outItem = std::move(m_data[m_head]);
+        m_head = (m_head + 1) % N;
+        --m_count;
+        return true;
+    }
+
+    void clear() noexcept {
+        m_head = 0;
+        m_tail = 0;
+        m_count = 0;
+    }
+
+    std::size_t size() const noexcept { return m_count; }
+    bool empty() const noexcept { return m_count == 0; }
+
+private:
+    std::array<T, N> m_data{};
+    std::size_t m_head = 0;
+    std::size_t m_tail = 0;
+    std::size_t m_count = 0;
+};
+
+// --------------- 按键与状态动作辅助类型 ---------------
+struct PenStateUpdateResult {
+    bool stateChanged = false;
+    bool inferredConnChanged = false;
+    bool stylusIdChanged = false;
+    uint8_t nextStylusId = 0;
+};
+
+struct PenButtonAction {
+    enum class Type {
+        Barrel,
+        Eraser
+    };
+    Type type;
+    bool pressed = false;
+    uint8_t rawPayload = 0;
+};
 
 // --------------- 基础类型 ---------------
 
@@ -88,6 +138,12 @@ public:
 const char* ToString(RuntimePolicyEvent::Type type) noexcept;
 
 // --------------- 审计日志 ---------------
+
+#if defined(NDEBUG)
+inline constexpr std::size_t kMaxHistoryItems = 128;
+#else
+inline constexpr std::size_t kMaxHistoryItems = 512;
+#endif
 
 struct HistoryEntry {
     std::chrono::system_clock::time_point timestamp{};
@@ -189,7 +245,9 @@ public:
 #if EGOTOUCH_SERVICE_ENABLE_IPC
     Config::ValidationResult ValidateConfigStore(const Config::ConfigStore& store) const;
     void ApplyConfigStore(const Config::ConfigStore& store);
-    void ApplyPipelineConfig(const Config::ConfigStore& store);
+    void ApplyPipelineConfig(const Config::ConfigStore& store) {
+        ApplyConfigStore(store);
+    }
 #endif
 
     void SetPenButtonMode(PenButtonMode m) { m_penButtonMode.store(m, std::memory_order_release); }
@@ -240,6 +298,8 @@ private:
                                    uint8_t rawEventPayload,
                                    const char* source);
     void ApplyPenStateToStylusPipeline();
+    void UpdatePenState(std::function<void(RuntimePenState&, PenStateUpdateResult&)> updateFn);
+    void DispatchPenButtonAction(const PenButtonAction& action, const char* source);
 
     // ── Worker 状态处理（每个状态一个入口，Worker 只做调度） ──
     void OnReady();              // ready → 尝试 auto init
@@ -286,15 +346,12 @@ private:
     int m_consecutiveFrameErrors = 0;
 
     mutable std::mutex m_mu;
-    std::array<QueuedCommand, 16> m_cmdQueue{};
-    size_t m_cmdQueueHead = 0;
-    size_t m_cmdQueueTail = 0;
-    size_t m_cmdQueueCount = 0;
+    StaticQueue<QueuedCommand, 16> m_cmdQueue{};
     bool m_displayOffSuspendPending = false;
     std::chrono::steady_clock::time_point m_displayOffSuspendDeadline{};
     std::atomic<bool> m_systemSuspendObserved{false};
 
-    std::array<HistoryEntry, 128> m_history{};
+    std::array<HistoryEntry, kMaxHistoryItems> m_history{};
     size_t m_historyWriteIdx = 0;
     size_t m_historyCount = 0;
     std::array<std::chrono::steady_clock::time_point, 16> m_lastEventByType{};

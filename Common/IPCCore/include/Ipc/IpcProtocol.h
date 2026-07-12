@@ -57,6 +57,7 @@ enum class IpcCommand : uint8_t {
     TriggerQueryPenInfo = 68,
     TriggerSendScanMode = 69,
     TriggerSendPairInfoSet = 70,
+    GetRuntimeStatus = 71,
 };
 
 constexpr bool IsLegacyConfigTombstoneCommand(IpcCommand command) noexcept {
@@ -95,6 +96,7 @@ constexpr bool IsSupportedIpcCommand(IpcCommand command) noexcept {
     case IpcCommand::TriggerQueryPenInfo:
     case IpcCommand::TriggerSendScanMode:
     case IpcCommand::TriggerSendPairInfoSet:
+    case IpcCommand::GetRuntimeStatus:
     case IpcCommand::GetDebugSchema:
     case IpcCommand::GetDebugSnapshot:
     case IpcCommand::SetPenPressureMode:
@@ -381,6 +383,23 @@ struct PenIdentityStatusWire {
     uint16_t _reserved0 = 0;
     char serialNumberUtf8[128]{};
     char firmwareVersionUtf8[128]{};
+};
+
+constexpr uint8_t kRuntimeStatusStreaming = 1u << 0;
+constexpr uint8_t kRuntimeStatusVhfEnabled = 1u << 1;
+constexpr uint8_t kRuntimeStatusVhfDeviceOpen = 1u << 2;
+constexpr uint8_t kRuntimeStatusVhfTranspose = 1u << 3;
+
+struct RuntimeStatusWire {
+    uint16_t wireVersion = kIpcProtocolVersion;
+    int8_t workerState = 127;
+    uint8_t flags = 0;
+    uint8_t recoverCount = 0;
+    uint8_t _reserved0 = 0;
+    uint16_t queueDepth = 0;
+    uint16_t lastNoteUtf8Len = 0;
+    uint64_t lastCommandId = 0;
+    char lastNoteUtf8[64]{};
 };
 
 struct IpcRequest {

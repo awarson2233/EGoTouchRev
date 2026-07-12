@@ -3,6 +3,21 @@
 
 namespace App {
 
+namespace {
+
+ServiceWorkerState DecodeServiceWorkerState(int8_t value) noexcept {
+    switch (value) {
+    case -2: return ServiceWorkerState::Suspend;
+    case -1: return ServiceWorkerState::Quit;
+    case 0: return ServiceWorkerState::Ready;
+    case 1: return ServiceWorkerState::Streaming;
+    case 2: return ServiceWorkerState::Recover;
+    default: return ServiceWorkerState::Unknown;
+    }
+}
+
+} // namespace
+
 ServiceProxy::ServiceProxy()
     : m_dvrBuffer(std::make_unique<RingBuffer<Dvr::DvrFrameSlot, kDvrCapacity>>()),
       m_dvrDynamicDebugBuffer(std::make_unique<RingBuffer<Dvr::DvrDynamicDebugFrameSlot, kDvrCapacity>>()) {
@@ -15,6 +30,98 @@ ServiceProxy::~ServiceProxy() {
     // Join any in-flight DVR export before tearing down resources
     if (m_dvrThread.joinable()) m_dvrThread.join();
     Disconnect();
+}
+
+ServiceRuntimeStatus ServiceProxy::GetServiceRuntimeStatus() const {
+    std::lock_guard<std::mutex> lk(m_serviceRuntimeMutex);
+    return m_serviceRuntimeStatus;
+}
+
+std::vector<ServiceRuntimeTransition> ServiceProxy::GetServiceRuntimeTransitions() const {
+    std::lock_guard<std::mutex> lk(m_serviceRuntimeMutex);
+    return m_serviceRuntimeTransitions;
+}
+
+void ServiceProxy::UpdateServiceRuntimeStatusFromSharedFrame(
+    const Ipc::SharedFrameData& frame,
+    uint64_t frameId,
+    uint64_t appReceiveEpochUs) {
+    const ServiceWorkerState nextState = DecodeServiceWorkerState(frame.workerState);
+
+    std::lock_guard<std::mutex> lk(m_serviceRuntimeMutex);
+    const ServiceWorkerState prevState = m_serviceRuntimeStatus.workerState;
+    const bool hadPrevious = m_serviceRuntimeStatus.hasFrame;
+
+    m_serviceRuntimeStatus.connected = true;
+    m_serviceRuntimeStatus.hasFrame = true;
+    m_serviceRuntimeStatus.workerState = nextState;
+    m_serviceRuntimeStatus.streaming = frame.streaming;
+    m_serviceRuntimeStatus.vhfEnabled = frame.vhfEnabled;
+    m_serviceRuntimeStatus.vhfDeviceOpen = frame.vhfDeviceOpen;
+    m_serviceRuntimeStatus.vhfTranspose = frame.vhfTranspose;
+    m_serviceRuntimeStatus.frameId = frameId;
+    m_serviceRuntimeStatus.serviceTimestamp = frame.timestamp;
+    m_serviceRuntimeStatus.appReceiveEpochUs = appReceiveEpochUs;
+
+    if (hadPrevious && prevState != nextState) {
+        if (m_serviceRuntimeTransitions.size() >= kServiceRuntimeTransitionCapacity) {
+            m_serviceRuntimeTransitions.erase(m_serviceRuntimeTransitions.begin());
+        }
+        m_serviceRuntimeTransitions.push_back(ServiceRuntimeTransition{
+            .from = prevState,
+            .to = nextState,
+            .frameId = frameId,
+            .serviceTimestamp = frame.timestamp,
+            .appReceiveEpochUs = appReceiveEpochUs,
+        });
+    }
+}
+
+void ServiceProxy::UpdateServiceRuntimeStatusFromWire(
+    const Ipc::RuntimeStatusWire& wire,
+    uint64_t appReceiveEpochUs) {
+    const ServiceWorkerState nextState = DecodeServiceWorkerState(wire.workerState);
+
+    std::lock_guard<std::mutex> lk(m_serviceRuntimeMutex);
+    const ServiceWorkerState prevState = m_serviceRuntimeStatus.workerState;
+    const bool hadPrevious = m_serviceRuntimeStatus.hasFrame;
+
+    m_serviceRuntimeStatus.connected = true;
+    m_serviceRuntimeStatus.hasFrame = true;
+    m_serviceRuntimeStatus.workerState = nextState;
+    m_serviceRuntimeStatus.streaming = (wire.flags & Ipc::kRuntimeStatusStreaming) != 0;
+    m_serviceRuntimeStatus.vhfEnabled = (wire.flags & Ipc::kRuntimeStatusVhfEnabled) != 0;
+    m_serviceRuntimeStatus.vhfDeviceOpen = (wire.flags & Ipc::kRuntimeStatusVhfDeviceOpen) != 0;
+    m_serviceRuntimeStatus.vhfTranspose = (wire.flags & Ipc::kRuntimeStatusVhfTranspose) != 0;
+    m_serviceRuntimeStatus.recoverCount = wire.recoverCount;
+    m_serviceRuntimeStatus.queueDepth = wire.queueDepth;
+    m_serviceRuntimeStatus.lastCommandId = wire.lastCommandId;
+    m_serviceRuntimeStatus.appReceiveEpochUs = appReceiveEpochUs;
+
+    size_t noteLen = wire.lastNoteUtf8Len;
+    if (noteLen > sizeof(wire.lastNoteUtf8)) {
+        noteLen = sizeof(wire.lastNoteUtf8);
+    }
+    m_serviceRuntimeStatus.lastNote.assign(wire.lastNoteUtf8, wire.lastNoteUtf8 + noteLen);
+
+    if (hadPrevious && prevState != nextState) {
+        if (m_serviceRuntimeTransitions.size() >= kServiceRuntimeTransitionCapacity) {
+            m_serviceRuntimeTransitions.erase(m_serviceRuntimeTransitions.begin());
+        }
+        m_serviceRuntimeTransitions.push_back(ServiceRuntimeTransition{
+            .from = prevState,
+            .to = nextState,
+            .frameId = m_serviceRuntimeStatus.frameId,
+            .serviceTimestamp = m_serviceRuntimeStatus.serviceTimestamp,
+            .appReceiveEpochUs = appReceiveEpochUs,
+        });
+    }
+}
+
+void ServiceProxy::ResetServiceRuntimeStatus() {
+    std::lock_guard<std::mutex> lk(m_serviceRuntimeMutex);
+    m_serviceRuntimeStatus = ServiceRuntimeStatus{};
+    m_serviceRuntimeTransitions.clear();
 }
 
 bool ServiceProxy::Connect() {
@@ -98,6 +205,7 @@ void ServiceProxy::DisconnectLocked() {
     }
     m_frameReader.Close();
     ClearDynamicDebugState();
+    ResetServiceRuntimeStatus();
     {
         std::lock_guard<std::mutex> lk(m_penMutex);
         m_penStatus = PenBridgeStatus{};

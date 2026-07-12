@@ -1509,6 +1509,37 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(const Ipc::IpcRequest& req) {
         HandleIpcGetPenIdentityStatus(resp);
         break;
 
+    case Ipc::IpcCommand::GetRuntimeStatus:
+        if (!m_deviceRuntime) {
+            Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidState);
+            break;
+        } else {
+            const RuntimeSnapshot runtime = m_deviceRuntime->GetSnapshot();
+            Ipc::RuntimeStatusWire wire{};
+            wire.workerState = static_cast<int8_t>(runtime.state);
+            if (runtime.state == workerState::streaming) {
+                wire.flags |= Ipc::kRuntimeStatusStreaming;
+            }
+            if (m_deviceRuntime->IsVhfEnabled()) {
+                wire.flags |= Ipc::kRuntimeStatusVhfEnabled;
+            }
+            if (m_deviceRuntime->IsVhfDeviceOpen()) {
+                wire.flags |= Ipc::kRuntimeStatusVhfDeviceOpen;
+            }
+            if (m_deviceRuntime->IsVhfTransposeEnabled()) {
+                wire.flags |= Ipc::kRuntimeStatusVhfTranspose;
+            }
+            wire.recoverCount = runtime.recover_count;
+            wire.queueDepth = static_cast<uint16_t>(std::min<std::size_t>(runtime.queue_depth, UINT16_MAX));
+            wire.lastCommandId = runtime.last_command_id;
+            CopyCString(wire.lastNoteUtf8, sizeof(wire.lastNoteUtf8), runtime.last_note);
+            wire.lastNoteUtf8Len = static_cast<uint16_t>(std::min<std::size_t>(runtime.last_note.size(), sizeof(wire.lastNoteUtf8) - 1));
+            std::memcpy(resp.data, &wire, sizeof(wire));
+            resp.dataLen = static_cast<uint16_t>(sizeof(wire));
+            Ipc::MarkSuccess(resp);
+            break;
+        }
+
     case Ipc::IpcCommand::TriggerQueryHardwareVersion:
         if (m_impl->m_penEventBridge && m_impl->m_penEventBridge->IsRunning() &&
             m_impl->m_penEventBridge->SendQueryHardwareVersion()) {

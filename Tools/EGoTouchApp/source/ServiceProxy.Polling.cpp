@@ -57,6 +57,7 @@ void ServiceProxy::PollLoop() {
     auto lastFpsTick = std::chrono::steady_clock::now();
     auto lastLogPoll = std::chrono::steady_clock::now();
     auto lastPenPoll = std::chrono::steady_clock::now();
+    auto lastRuntimeStatusPoll = std::chrono::steady_clock::now() - std::chrono::milliseconds(500);
     auto lastDynamicDebugPoll = std::chrono::steady_clock::now() - std::chrono::milliseconds(250);
     uint64_t latestDvrSeq = 0;
     uint64_t latestDvrTimestamp = 0;
@@ -66,8 +67,9 @@ void ServiceProxy::PollLoop() {
         auto now = std::chrono::steady_clock::now();
         auto nextLogDue = lastLogPoll + std::chrono::milliseconds(1000);
         auto nextPenDue = lastPenPoll + std::chrono::milliseconds(500);
+        auto nextRuntimeStatusDue = lastRuntimeStatusPoll + std::chrono::milliseconds(500);
         auto nextDynamicDebugDue = lastDynamicDebugPoll + std::chrono::milliseconds(250);
-        auto nextDue = std::min(nextLogDue, std::min(nextPenDue, nextDynamicDebugDue));
+        auto nextDue = std::min(std::min(nextLogDue, nextPenDue), std::min(nextRuntimeStatusDue, nextDynamicDebugDue));
         DWORD timeoutMs = 1000;
         if (nextDue <= now) {
             timeoutMs = 0;
@@ -117,11 +119,17 @@ void ServiceProxy::PollLoop() {
                 bool gotFrame = false;
                 {
                     std::lock_guard<std::mutex> lk(m_frameMutex);
-                    if (m_frameReader.Read(m_latestFrame)) {
+                    Ipc::SharedFrameData sharedFrame{};
+                    if (m_frameReader.Read(sharedFrame)) {
+                        Ipc::PopulateSolverFrameFromSharedFrameData(m_latestFrame, sharedFrame);
                         if (m_masterParserOnly.load(std::memory_order_relaxed)) {
                             PopulateRawHeatmapFromFrameData(m_latestFrame);
                         }
                         m_latestFrame.receiveSystemEpochUs = CaptureSystemEpochUs();
+                        UpdateServiceRuntimeStatusFromSharedFrame(
+                            sharedFrame,
+                            m_frameReader.LastFrameId(),
+                            m_latestFrame.receiveSystemEpochUs);
                         m_hasNewFrame.store(true, std::memory_order_release);
                         gotFrame = true;
                     }
@@ -203,6 +211,22 @@ void ServiceProxy::PollLoop() {
                 }
             }
             lastLogPoll = now;
+        }
+        // Runtime status polling (~every 500ms) continues even when no frame is published.
+        auto runtimeStatusElapsed = std::chrono::duration_cast<
+            std::chrono::milliseconds>(now - lastRuntimeStatusPoll);
+        if (runtimeStatusElapsed.count() >= 500 && m_client.IsConnected()) {
+            Ipc::IpcRequest runtimeReq{};
+            runtimeReq.command = Ipc::IpcCommand::GetRuntimeStatus;
+            const auto runtimeResp = m_client.Send(runtimeReq);
+            if (runtimeResp.success && runtimeResp.dataLen >= sizeof(Ipc::RuntimeStatusWire)) {
+                Ipc::RuntimeStatusWire wire{};
+                std::memcpy(&wire, runtimeResp.data, sizeof(wire));
+                if (wire.wireVersion == Ipc::kIpcProtocolVersion) {
+                    UpdateServiceRuntimeStatusFromWire(wire, CaptureSystemEpochUs());
+                }
+            }
+            lastRuntimeStatusPoll = now;
         }
         // PenBridge status polling (~every 500ms for responsive pressure bars)
         auto penElapsed = std::chrono::duration_cast<

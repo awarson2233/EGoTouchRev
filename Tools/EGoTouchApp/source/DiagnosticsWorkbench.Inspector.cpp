@@ -13,6 +13,8 @@
 #endif
 #include <windows.h>
 #include <algorithm>
+#include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <optional>
@@ -228,6 +230,123 @@ std::string PenIdentitySummary(const PenIdentityStatus& pen) {
     return summary;
 }
 
+const char* ServiceWorkerStateName(ServiceWorkerState state) {
+    switch (state) {
+    case ServiceWorkerState::Suspend: return "suspend";
+    case ServiceWorkerState::Quit: return "quit";
+    case ServiceWorkerState::Ready: return "ready";
+    case ServiceWorkerState::Streaming: return "streaming";
+    case ServiceWorkerState::Recover: return "recover";
+    default: return "unknown";
+    }
+}
+
+ImVec4 ServiceWorkerStateColor(ServiceWorkerState state) {
+    switch (state) {
+    case ServiceWorkerState::Streaming: return GoodColor();
+    case ServiceWorkerState::Ready: return InfoColor();
+    case ServiceWorkerState::Recover: return WarnColor();
+    case ServiceWorkerState::Suspend: return WarnColor();
+    case ServiceWorkerState::Quit: return BadColor();
+    default: return ImVec4(0.55f, 0.55f, 0.55f, 1.0f);
+    }
+}
+
+uint64_t CurrentSystemEpochUs() {
+    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count());
+}
+
+struct ServiceStateNode {
+    ServiceWorkerState state;
+    const char* label;
+    ImVec2 pos;
+};
+
+ImVec2 NodeCenter(const ServiceStateNode& node, ImVec2 origin, ImVec2 size) {
+    return ImVec2(origin.x + node.pos.x + size.x * 0.5f,
+                  origin.y + node.pos.y + size.y * 0.5f);
+}
+
+void DrawArrow(ImDrawList* drawList, ImVec2 from, ImVec2 to, ImU32 color) {
+    const float dx = to.x - from.x;
+    const float dy = to.y - from.y;
+    const float len = std::sqrt(dx * dx + dy * dy);
+    if (len < 1.0f) {
+        return;
+    }
+    const ImVec2 dir(dx / len, dy / len);
+    const ImVec2 end(to.x - dir.x * 8.0f, to.y - dir.y * 8.0f);
+    drawList->AddLine(from, end, color, 2.0f);
+    const ImVec2 side(-dir.y, dir.x);
+    const ImVec2 tip = to;
+    const ImVec2 p1(end.x - dir.x * 6.0f + side.x * 4.0f,
+                    end.y - dir.y * 6.0f + side.y * 4.0f);
+    const ImVec2 p2(end.x - dir.x * 6.0f - side.x * 4.0f,
+                    end.y - dir.y * 6.0f - side.y * 4.0f);
+    drawList->AddTriangleFilled(tip, p1, p2, color);
+}
+
+void DrawServiceRuntimeGraph(ServiceWorkerState activeState) {
+    const float canvasWidth = std::max(420.0f, ImGui::GetContentRegionAvail().x);
+    const float canvasHeight = 245.0f;
+    ImGui::InvisibleButton("ServiceRuntimeGraphCanvas", ImVec2(canvasWidth, canvasHeight));
+    const ImVec2 origin = ImGui::GetItemRectMin();
+    const ImVec2 end = ImGui::GetItemRectMax();
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    drawList->AddRectFilled(origin, end, IM_COL32(22, 25, 30, 255), 6.0f);
+    drawList->AddRect(origin, end, IM_COL32(70, 75, 85, 255), 6.0f);
+
+    const ImVec2 nodeSize(108.0f, 42.0f);
+    const float x0 = 22.0f;
+    const float x1 = std::max(150.0f, canvasWidth * 0.30f);
+    const float x2 = std::max(278.0f, canvasWidth * 0.58f);
+    const float x3 = std::max(150.0f, canvasWidth * 0.30f);
+    const float yTop = 34.0f;
+    const float yBottom = 154.0f;
+
+    std::array<ServiceStateNode, 5> nodes{{
+        {ServiceWorkerState::Quit, "quit", ImVec2(x0, yTop)},
+        {ServiceWorkerState::Ready, "ready", ImVec2(x1, yTop)},
+        {ServiceWorkerState::Streaming, "streaming", ImVec2(x2, yTop)},
+        {ServiceWorkerState::Recover, "recover", ImVec2(x2, yBottom)},
+        {ServiceWorkerState::Suspend, "suspend", ImVec2(x3, yBottom)},
+    }};
+
+    auto center = [&](ServiceWorkerState state) {
+        for (const auto& node : nodes) {
+            if (node.state == state) {
+                return NodeCenter(node, origin, nodeSize);
+            }
+        }
+        return origin;
+    };
+
+    const ImU32 edgeColor = IM_COL32(115, 125, 140, 255);
+    DrawArrow(drawList, center(ServiceWorkerState::Quit), center(ServiceWorkerState::Ready), edgeColor);
+    DrawArrow(drawList, center(ServiceWorkerState::Ready), center(ServiceWorkerState::Streaming), edgeColor);
+    DrawArrow(drawList, center(ServiceWorkerState::Streaming), center(ServiceWorkerState::Recover), edgeColor);
+    DrawArrow(drawList, center(ServiceWorkerState::Recover), center(ServiceWorkerState::Streaming), edgeColor);
+    DrawArrow(drawList, center(ServiceWorkerState::Streaming), center(ServiceWorkerState::Suspend), edgeColor);
+    DrawArrow(drawList, center(ServiceWorkerState::Suspend), center(ServiceWorkerState::Ready), edgeColor);
+    DrawArrow(drawList, center(ServiceWorkerState::Streaming), center(ServiceWorkerState::Quit), IM_COL32(160, 95, 95, 255));
+    DrawArrow(drawList, center(ServiceWorkerState::Suspend), center(ServiceWorkerState::Quit), IM_COL32(160, 95, 95, 255));
+
+    for (const auto& node : nodes) {
+        const ImVec2 p0(origin.x + node.pos.x, origin.y + node.pos.y);
+        const ImVec2 p1(p0.x + nodeSize.x, p0.y + nodeSize.y);
+        const bool active = node.state == activeState;
+        const ImVec4 color = active ? ServiceWorkerStateColor(node.state) : ImVec4(0.19f, 0.21f, 0.25f, 1.0f);
+        drawList->AddRectFilled(p0, p1, ImGui::ColorConvertFloat4ToU32(color), 8.0f);
+        drawList->AddRect(p0, p1, active ? IM_COL32(255, 255, 255, 230) : IM_COL32(95, 100, 110, 255), 8.0f, 0, active ? 2.5f : 1.0f);
+        const ImVec2 textSize = ImGui::CalcTextSize(node.label);
+        drawList->AddText(ImVec2(p0.x + (nodeSize.x - textSize.x) * 0.5f,
+                                 p0.y + (nodeSize.y - textSize.y) * 0.5f),
+                          active ? IM_COL32(0, 0, 0, 255) : IM_COL32(220, 225, 235, 255),
+                          node.label);
+    }
+}
+
 std::string StylusPacketBytes(const Solvers::StylusPacket& packet) {
     const auto displayLength = std::min<std::size_t>(packet.length, packet.bytes.size());
 
@@ -287,6 +406,10 @@ void DiagnosticsWorkbench::DrawInspectorPanel() {
         }
         if (ImGui::BeginTabItem("BT MCU")) {
             DrawBtMcuPanel();
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Service")) {
+            DrawServiceInspectorPanel();
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();
@@ -1127,6 +1250,100 @@ void DiagnosticsWorkbench::DrawStylusPacketDetails() {
     ImGui::EndChild();
 }
 
+
+void DiagnosticsWorkbench::DrawServiceInspectorPanel() {
+    if (!m_proxy) {
+        ImGui::TextUnformatted("ServiceProxy unavailable.");
+        return;
+    }
+
+    const ServiceRuntimeStatus status = m_proxy->GetServiceRuntimeStatus();
+    const auto transitions = m_proxy->GetServiceRuntimeTransitions();
+    const bool connected = m_proxy->IsConnected();
+    const bool freshFrame = status.hasFrame && status.appReceiveEpochUs != 0;
+    uint64_t ageMs = 0;
+    if (freshFrame) {
+        const uint64_t nowUs = CurrentSystemEpochUs();
+        if (nowUs >= status.appReceiveEpochUs) {
+            ageMs = (nowUs - status.appReceiveEpochUs) / 1000ull;
+        }
+    }
+
+    ImGui::TextWrapped("Service runtime state flow mirrors DeviceRuntime::workerState from shared memory. It is App-side diagnostic state and does not mutate Service.");
+    ImGui::Separator();
+
+    if (ImGui::BeginTable("ServiceRuntimeStatusStrip", 4, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchSame)) {
+        ImGui::TableNextRow();
+
+        ImGui::TableSetColumnIndex(0);
+        ImGui::TextDisabled("Connection");
+        ImGui::TextColored(StatusColor(connected), "%s", connected ? "● Connected" : "● Disconnected");
+        ImGui::TextDisabled("%s", FrameSourceModeLabel(m_proxy->GetFrameSourceMode()));
+
+        ImGui::TableSetColumnIndex(1);
+        ImGui::TextDisabled("Worker State");
+        ImGui::TextColored(ServiceWorkerStateColor(status.workerState), "%s", ServiceWorkerStateName(status.workerState));
+        ImGui::TextDisabled("streaming flag: %s", status.streaming ? "true" : "false");
+
+        ImGui::TableSetColumnIndex(2);
+        ImGui::TextDisabled("VHF");
+        ImGui::TextColored(StatusColor(status.vhfEnabled), "Enabled: %s", status.vhfEnabled ? "Y" : "N");
+        ImGui::TextColored(StatusColor(status.vhfDeviceOpen), "DeviceOpen: %s", status.vhfDeviceOpen ? "Y" : "N");
+        ImGui::TextDisabled("Transpose: %s", status.vhfTranspose ? "Y" : "N");
+
+        ImGui::TableSetColumnIndex(3);
+        ImGui::TextDisabled("Last Runtime Sample");
+        if (freshFrame) {
+            ImGui::Text("FrameId: %llu", static_cast<unsigned long long>(status.frameId));
+            ImGui::Text("Service ts: %llu", static_cast<unsigned long long>(status.serviceTimestamp));
+            ImGui::TextColored(ageMs < 2000 ? GoodColor() : WarnColor(), "Age: %llums", static_cast<unsigned long long>(ageMs));
+        } else {
+            ImGui::TextDisabled("No shared-memory frame yet.");
+        }
+        ImGui::EndTable();
+    }
+
+    if (connected && !status.hasFrame) {
+        ImGui::TextColored(WarnColor(), "Connected to Service, but no shared-memory frame has been published yet.");
+    }
+    if (!connected) {
+        ImGui::TextColored(WarnColor(), "Disconnected. Connect to Service to receive live workerState updates.");
+    }
+
+    ImGui::Separator();
+    ImGui::TextColored(InfoColor(), "Runtime State Flow");
+    DrawServiceRuntimeGraph(status.workerState);
+
+    ImGui::Separator();
+    ImGui::TextColored(InfoColor(), "Recent State Transitions");
+    if (transitions.empty()) {
+        ImGui::TextDisabled("No workerState transition observed in this App session.");
+        return;
+    }
+
+    if (ImGui::BeginTable("ServiceRuntimeTransitionTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable)) {
+        ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, 36.0f);
+        ImGui::TableSetupColumn("From", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+        ImGui::TableSetupColumn("To", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+        ImGui::TableSetupColumn("FrameId", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+        ImGui::TableSetupColumn("Service Timestamp", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableHeadersRow();
+
+        const size_t count = transitions.size();
+        const size_t maxRows = std::min<size_t>(count, 16);
+        for (size_t row = 0; row < maxRows; ++row) {
+            const size_t index = count - 1 - row;
+            const auto& tr = transitions[index];
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0); ImGui::Text("%zu", index + 1);
+            ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted(ServiceWorkerStateName(tr.from));
+            ImGui::TableSetColumnIndex(2); ImGui::TextColored(ServiceWorkerStateColor(tr.to), "%s", ServiceWorkerStateName(tr.to));
+            ImGui::TableSetColumnIndex(3); ImGui::Text("%llu", static_cast<unsigned long long>(tr.frameId));
+            ImGui::TableSetColumnIndex(4); ImGui::Text("%llu", static_cast<unsigned long long>(tr.serviceTimestamp));
+        }
+        ImGui::EndTable();
+    }
+}
 
 // ── BT MCU Panel (PenBridge Status — via IPC) ──
 void DiagnosticsWorkbench::DrawBtMcuPanel() {
