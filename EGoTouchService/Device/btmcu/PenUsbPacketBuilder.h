@@ -112,10 +112,6 @@ inline std::string DecodePenUsbUtf8Payload(std::span<const uint8_t> payload) {
     return std::string(reinterpret_cast<const char*>(bytes.data()), bytes.size());
 }
 
-inline std::string FormatPenUsbAsciiPayload(std::span<const uint8_t> payload) {
-    return DecodePenUsbUtf8Payload(payload);
-}
-
 inline std::array<uint8_t, 0x20> BuildScanModePayload(uint8_t freq1,
                                                        uint8_t freq2,
                                                        uint8_t mode) noexcept;
@@ -132,12 +128,6 @@ inline PenUsbPacketBuffer BuildPenUsbCommandBuffer(PenUsbCommandId commandId) no
     packet.bytes[6] = 0x11;
     packet.bytes[7] = 0x00;
     packet.size = kPenUsbHeaderSize;
-    return packet;
-}
-
-inline PenUsbPacketBuffer BuildPenUsbFixedSizeCommandBuffer(PenUsbCommandId commandId) noexcept {
-    auto packet = BuildPenUsbCommandBuffer(commandId);
-    packet.size = kPenUsbPacketCapacity;
     return packet;
 }
 
@@ -191,11 +181,6 @@ inline PenUsbPacketBuffer BuildFactoryInitProtocolParamsCommandBuffer() noexcept
 
 inline std::vector<uint8_t> BuildPenUsbCommand(PenUsbCommandId commandId) {
     const auto packet = BuildPenUsbCommandBuffer(commandId);
-    return std::vector<uint8_t>(packet.view().begin(), packet.view().end());
-}
-
-inline std::vector<uint8_t> BuildPenUsbFixedSizeCommand(PenUsbCommandId commandId) {
-    const auto packet = BuildPenUsbFixedSizeCommandBuffer(commandId);
     return std::vector<uint8_t>(packet.view().begin(), packet.view().end());
 }
 

@@ -9,7 +9,6 @@
 #include <optional>
 #include <span>
 #include <string>
-#include <vector>
 
 #include "PenModuleModelId.h"
 
@@ -66,6 +65,41 @@ struct ParsedPenUsbEventFrame {
     std::span<const uint8_t> payload{};
 };
 
+constexpr std::size_t GetPenUsbEventMinimumPayloadLength(uint8_t eventCode) noexcept {
+    switch (eventCode) {
+    case 0x00: // PenModule
+    case 0x01: // PenSerialNumber
+    case 0x02: // PenHardwareVersion
+    case 0x03: // UsbdSwVersion
+    case 0x08: // BatteryStatus
+    case 0x09: // ChargingStatus
+    case 0x10: // DevConnect
+    case 0x12: // DevPairStatus
+    case 0x21: // PenDockStatus
+    case 0x23: // PenUpdateStatus
+    case 0x27: // PenKeyFuncGet
+    case 0x2C: // PenBatteryAfterConn
+    case 0x2E: // PenPairDetectAck
+    case 0x2F: // PenCurrentFunc
+    case 0x70: // PenAcStatus
+    case 0x71: // PenConnStatus
+    case 0x72: // PenCurStatus
+    case 0x73: // PenTypeInfo
+    case 0x74: // PenRotateAngle
+    case 0x75: // PenTouchMode
+    case 0x76: // PenGlobalPreventMode
+    case 0x77: // PenScreenStatus
+    case 0x78: // PenHolster
+    case 0x79: // PenFreqJump
+    case 0x7B: // PenRepParam
+    case 0x7C: // PenGlobalAnnotation
+    case 0x7F: // EraserToggle
+        return 1;
+    default:
+        return 0;
+    }
+}
+
 inline std::optional<ParsedPenUsbEventFrame> TryParsePenUsbEventFrame(
         std::span<const uint8_t> packet) noexcept {
     if (packet.size() < kPenUsbHeaderSize) {
@@ -77,7 +111,8 @@ inline std::optional<ParsedPenUsbEventFrame> TryParsePenUsbEventFrame(
 
     const std::size_t payloadLength = packet[7];
     if (payloadLength > kPenUsbPayloadCapacity ||
-        packet.size() < kPenUsbHeaderSize + payloadLength) {
+        packet.size() < kPenUsbHeaderSize + payloadLength ||
+        payloadLength < GetPenUsbEventMinimumPayloadLength(packet[5])) {
         return std::nullopt;
     }
 
@@ -138,13 +173,6 @@ enum class PenUsbEventCode : uint8_t {
     PenGlobalAnnotation = 0x7C,
     EraserToggle = 0x7F,
     Unknown = 0xFF,
-};
-
-enum class PenSessionState : uint8_t {
-    Stopped = 0,
-    Starting,
-    Running,
-    Error,
 };
 
 enum class PenCurrentMode : uint8_t {
@@ -347,21 +375,6 @@ struct PenSemanticState {
 
     bool hasCurrentFunc = false;
     uint8_t currentFunc = 0;
-};
-
-struct PenUsbHeader {
-    uint8_t reportId     = 0x07;  // byte[0]: HID report type (always 0x07)
-    uint8_t hasPayload   = 0x00;  // byte[1]: 0x00=no payload, 0x01=has payload
-    uint8_t protocol     = 0x02;  // byte[2]: sub-protocol (always 0x02)
-    uint8_t reserved0    = 0x00;  // byte[3]: reserved
-    uint16_t commandId   = 0x0000;// byte[4,5]: command ID (little-endian)
-    uint8_t transportTag = 0x11;  // byte[6]: MCU transport marker (forced by SendPacket)
-    uint8_t payloadTag   = 0x00;  // byte[7]: 0x00=no payload, 0x20=has payload
-};
-
-struct PenUsbPacket {
-    PenUsbHeader header{};
-    std::vector<uint8_t> payload{};
 };
 
 struct PenEvent {

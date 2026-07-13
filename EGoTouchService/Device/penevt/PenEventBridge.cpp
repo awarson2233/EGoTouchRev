@@ -105,14 +105,17 @@ std::optional<std::wstring> PenEventBridge::FindDevicePath() {
 //
 // Payload: 32-byte binary，由 type-3 解码器从 ASCII 十进制字符串转换而来
 
-bool PenEventBridge::SendScanMode(uint8_t, uint8_t, uint8_t) {
+bool PenEventBridge::SendScanMode(uint8_t freq1, uint8_t freq2, uint8_t mode) {
     if (!IsTransportOpen()) {
         LOG_WARN("PenEvent", __func__, "MCU", "Transport not open, cannot send SetScanMode.");
         return false;
     }
 
-    LOG_INFO("PenEvent", __func__, "MCU", "Sending factory 0x7D01 scan mode payload.");
-    return SendInitProtocolParams();
+    const auto packet = BuildScanModeCommandBuffer(freq1, freq2, mode);
+    LOG_INFO("PenEvent", __func__, "MCU",
+             "Sending 0x7D01 scan mode payload: freq1={} freq2={} mode={}.",
+             freq1, freq2, mode);
+    return SendRawPacket(packet.view());
 }
 
 // ── 协议辅助 ───────────────────────────────────────────────────────────────

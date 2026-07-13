@@ -96,6 +96,31 @@ void TestInvalidFactoryEventFramesAreRejected() {
             "factory parser should require signature bytes at packet[2] and packet[4]");
 }
 
+void TestMalformedKnownEventsAreRejectedBeforeDispatch() {
+    constexpr std::array<uint8_t, 27> eventsRequiringPayload{
+        0x00, 0x01, 0x02, 0x03, 0x08, 0x09, 0x10,
+        0x12, 0x21, 0x23, 0x27, 0x2C, 0x2E, 0x2F,
+        0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76,
+        0x77, 0x78, 0x79, 0x7B, 0x7C, 0x7F,
+    };
+
+    for (const uint8_t eventCode : eventsRequiringPayload) {
+        const std::array<uint8_t, 8> packet{
+            0x00, 0x00, 0x07, 0x00,
+            0x01, eventCode, 0x00, 0x00,
+        };
+        Require(!Himax::Pen::TryParsePenUsbEventFrame(packet).has_value(),
+                "known event with empty payload must be rejected before ACK/session/callback processing");
+    }
+
+    const std::array<uint8_t, 8> unknownEventWithoutPayload{
+        0x00, 0x00, 0x07, 0x00,
+        0x01, 0x55, 0x00, 0x00,
+    };
+    Require(Himax::Pen::TryParsePenUsbEventFrame(unknownEventWithoutPayload).has_value(),
+            "unknown events should not inherit a fabricated payload requirement");
+}
+
 void TestFactoryAckTable() {
     using Himax::Pen::GetFactoryBtMcuAckCode;
 
@@ -237,6 +262,15 @@ void TestType3Encoding() {
             "scan freq2 decimal token should preserve current type-3 behavior");
     Require(payload[4] == 0x03, "non-zero scan mode should encode as mode 3");
 
+    const auto packet = Himax::Pen::BuildScanModeCommandBuffer(51, 68, 1);
+    Require(packet.size == 40, "scan mode command should include the 8-byte header and 32-byte payload");
+    Require(packet.bytes[4] == 0x01 && packet.bytes[5] == 0x7D,
+            "scan mode command should target 0x7D01");
+    Require(packet.bytes[8] == 0x01 && packet.bytes[9] == 0x05 &&
+                packet.bytes[10] == 0x08 && packet.bytes[11] == 0x06 &&
+                packet.bytes[12] == 0x03,
+            "scan mode command payload prefix should be 01 05 08 06 03");
+
     const auto offPayload = Himax::Pen::BuildScanModePayload(51, 68, 0);
     Require(offPayload[4] == 0x00, "zero scan mode should encode as mode 0");
 }
@@ -261,6 +295,7 @@ int main() {
         TestMinimumFactoryEventFrameParses();
         TestHardwareVersionEventFrameParses();
         TestInvalidFactoryEventFramesAreRejected();
+        TestMalformedKnownEventsAreRejectedBeforeDispatch();
         TestFactoryAckTable();
         TestEventCodeNames();
         TestCommandPacketBuilders();
