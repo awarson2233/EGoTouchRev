@@ -221,6 +221,10 @@ std::string PenIdentitySummary(const PenIdentityStatus& pen) {
     char flagsText[8]{};
     std::snprintf(flagsText, sizeof(flagsText), "%04X", static_cast<unsigned int>(pen.factoryStatusFlags));
     summary += flagsText;
+    summary += " | pairStatus=";
+    summary += pen.hasPairStatus
+        ? std::to_string(static_cast<unsigned int>(pen.pairStatus))
+        : "Unknown";
     summary += " | serial=";
     summary += (pen.hasSerialNumber && !pen.serialNumber.empty()) ? pen.serialNumber : "Unknown";
     summary += " | hardwareVersion=";
@@ -1384,6 +1388,11 @@ void DiagnosticsWorkbench::DrawBtMcuPanel() {
         ImGui::Text("Current Stylus ID (0x73 PenTypeInfo or model-derived): %u (0x%02X)", pen.stylusId, pen.stylusId);
     else
         ImGui::TextDisabled("Current Stylus ID (0x73 PenTypeInfo or model-derived): Unknown");
+
+    if (pen.hasPairStatus)
+        ImGui::Text("Pair Status (0x12 DEV_PAIR_STATUS): %u (0x%02X)", pen.pairStatus, pen.pairStatus);
+    else
+        ImGui::TextDisabled("Pair Status (0x12 DEV_PAIR_STATUS): Unknown");
 
     if (pen.hasPenModuleModelId) {
         const std::string modelText = PenModuleModelText(pen);

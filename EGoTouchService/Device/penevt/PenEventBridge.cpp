@@ -364,6 +364,10 @@ void PenEventBridge::OnPacketReceived(std::span<const uint8_t> packet) {
                 }
                 break;
             }
+            case PenUsbEventCode::DevPairStatus:
+                ev.semantic.hasPairStatus = true;
+                ev.semantic.pairStatus = ev.payload[0];
+                break;
             case PenUsbEventCode::PenConnStatus:
                 ev.semantic.hasConnection = true;
                 ev.semantic.connected = (ev.payload[0] != 0);

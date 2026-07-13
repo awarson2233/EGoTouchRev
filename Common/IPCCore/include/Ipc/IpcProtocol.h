@@ -361,6 +361,7 @@ constexpr uint8_t kPenIdentityHasProtocolHint = 1u << 6;
 constexpr uint8_t kPenIdentityHasConnectionState = 1u << 7;
 
 constexpr uint8_t kPenIdentityProtocolFromPenModule = 1u << 0;
+constexpr uint8_t kPenIdentityHasPairStatus = 1u << 1;
 
 enum class PenIdentityProtocolHint : uint8_t {
     Auto = 0,
@@ -380,7 +381,8 @@ struct PenIdentityStatusWire {
     uint16_t serialNumberUtf8Len = 0;
     uint16_t firmwareVersionUtf8Len = 0;
     uint16_t factoryStatusFlags = 0;
-    uint16_t _reserved0 = 0;
+    uint8_t pairStatus = 0;
+    uint8_t _reserved0 = 0;
     char serialNumberUtf8[128]{};
     char firmwareVersionUtf8[128]{};
 };

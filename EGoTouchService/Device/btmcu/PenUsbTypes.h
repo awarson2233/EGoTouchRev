@@ -317,6 +317,9 @@ struct PenSemanticState {
     bool hasConnection = false;
     bool connected = false;
 
+    bool hasPairStatus = false;
+    uint8_t pairStatus = 0;
+
     bool hasStylusId = false;
     uint8_t stylusId = 0;
 

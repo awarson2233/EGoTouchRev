@@ -73,6 +73,8 @@ struct PenIdentityStatus {
     PenProtocolHint protocolHint = PenProtocolHint::Auto;
     bool protocolHintFromPenModule = false;
     uint16_t factoryStatusFlags = 0;
+    bool hasPairStatus = false;
+    uint8_t pairStatus = 0;
     bool hasSerialNumber = false;
     std::string serialNumber;
     bool hasHardwareVersion = false;

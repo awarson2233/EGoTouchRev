@@ -100,68 +100,6 @@ Solvers::StylusProtocolHint ResolveProtocolHintFromPenModule(
   }
 }
 
-struct PenModuleIdentityUpdate {
-  bool changed = false;
-  bool derivedStylusIdChanged = false;
-  bool inferredConnectionChanged = false;
-  uint8_t derivedStylusId = 0;
-};
-
-bool MarkPenConnectedFromIdentityLocked(RuntimePenState &state) noexcept {
-  if (state.hasConnection && state.connected) {
-    return false;
-  }
-
-  state.hasConnection = true;
-  state.connected = true;
-  state.factoryStatusFlags = Himax::Pen::ApplyFactoryStatusFlagUpdate(
-      state.factoryStatusFlags, Himax::Pen::PenUsbEventCode::PenConnStatus, 1);
-  return true;
-}
-
-PenModuleIdentityUpdate ApplyResolvedPenModuleIdentityLocked(
-    RuntimePenState &state,
-    const Himax::Pen::PenModuleModelInfo &modelInfo) noexcept {
-  PenModuleIdentityUpdate update{};
-  update.inferredConnectionChanged = MarkPenConnectedFromIdentityLocked(state);
-
-  const bool hasModuleHint =
-      modelInfo.protocolHint != Himax::Pen::PenModuleProtocolHint::Auto;
-  Solvers::StylusProtocolHint nextProtocolHint = hasModuleHint
-      ? ResolveProtocolHintFromPenModule(modelInfo.protocolHint)
-      : Solvers::StylusProtocolHint::Auto;
-  if (!hasModuleHint && state.hasStylusId) {
-    nextProtocolHint = ResolveProtocolHintFromStylusId(state.stylusId);
-  }
-
-  update.changed = !state.hasPenModuleModelId ||
-                   state.penModuleModelId != modelInfo.modelId ||
-                   state.penModuleModel != modelInfo.model ||
-                   state.protocolHintFromPenModule != hasModuleHint ||
-                   state.protocolHint != nextProtocolHint;
-
-  if (const auto derivedStylusId =
-          Himax::Pen::TryResolveStylusIdFromPenModule(modelInfo.model);
-      derivedStylusId && !state.hasStylusId) {
-    state.hasStylusId = true;
-    state.stylusId = *derivedStylusId;
-    update.derivedStylusIdChanged = true;
-    update.derivedStylusId = *derivedStylusId;
-  }
-
-  if (update.changed || update.derivedStylusIdChanged ||
-      update.inferredConnectionChanged) {
-    ++state.penRevision;
-  }
-
-  state.hasPenModuleModelId = true;
-  state.penModuleModelId = modelInfo.modelId;
-  state.penModuleModel = modelInfo.model;
-  state.protocolHintFromPenModule = hasModuleHint;
-  state.protocolHint = nextProtocolHint;
-  return update;
-}
-
 const char *ToString(Solvers::StylusProtocolHint hint) noexcept {
   switch (hint) {
   case Solvers::StylusProtocolHint::Auto:
@@ -569,19 +507,13 @@ void DeviceRuntime::UpdatePenState(std::function<void(RuntimePenState&, PenState
     std::lock_guard<std::mutex> lk(m_penStateMu);
     updateFn(m_penState, result);
 
-    if (result.stateChanged || result.inferredConnChanged || result.stylusIdChanged) {
+    if (result.stateChanged || result.stylusIdChanged) {
       ++m_penState.penRevision;
     }
   }
 
   ApplyPenStateToStylusPipeline();
 
-  if (result.inferredConnChanged) {
-    command cmd{};
-    cmd.type = AFE_Command::InitStylus;
-    cmd.param = 0;
-    SubmitPenAfeCommandLocked(cmd, "PenIdentityChange->InitStylus");
-  }
   if (result.stylusIdChanged) {
     command cmd{};
     cmd.type = AFE_Command::SetStylusId;
@@ -1252,6 +1184,22 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
 
   switch (ev.code) {
 
+  case EC::DevPairStatus: {
+    if (!ev.semantic.hasPairStatus) {
+      LOG_WARN("Runtime", __func__, "MCU",
+               "DevPairStatus ignored because no valid pair status semantic was present.");
+      break;
+    }
+
+    UpdatePenState([&](RuntimePenState& state, PenStateUpdateResult& res) {
+      res.stateChanged = !state.hasPairStatus ||
+                         state.pairStatus != ev.semantic.pairStatus;
+      state.hasPairStatus = true;
+      state.pairStatus = ev.semantic.pairStatus;
+    });
+    break;
+  }
+
   case EC::PenModule: {
     if (!ev.semantic.hasPenModuleModelId) {
       LOG_WARN("Runtime", __func__, "MCU",
@@ -1267,8 +1215,6 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
               ? ev.semantic.penModuleProtocolHint
               : Himax::Pen::PenModuleProtocolHint::Auto,
           Himax::Pen::ToString(ev.semantic.penModuleModel)};
-
-      res.inferredConnChanged = MarkPenConnectedFromIdentityLocked(state);
 
       const bool hasModuleHint =
           modelInfo.protocolHint != Himax::Pen::PenModuleProtocolHint::Auto;
@@ -1311,7 +1257,8 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
     }
 
     UpdatePenState([&](RuntimePenState& state, PenStateUpdateResult& res) {
-      res.inferredConnChanged = MarkPenConnectedFromIdentityLocked(state);
+      res.stateChanged = !state.hasSerialNumber ||
+                         state.serialNumber != ev.semantic.serialNumber;
       state.hasSerialNumber = true;
       state.serialNumber = ev.semantic.serialNumber;
     });
@@ -1326,7 +1273,8 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
     }
 
     UpdatePenState([&](RuntimePenState& state, PenStateUpdateResult& res) {
-      res.inferredConnChanged = MarkPenConnectedFromIdentityLocked(state);
+      res.stateChanged = !state.hasHardwareVersion ||
+                         state.hardwareVersion != ev.semantic.hardwareVersion;
       state.hasHardwareVersion = true;
       state.hardwareVersion = ev.semantic.hardwareVersion;
     });
@@ -1341,6 +1289,8 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
     }
 
     UpdatePenState([&](RuntimePenState& state, PenStateUpdateResult& res) {
+      res.stateChanged = !state.hasFirmwareVersion ||
+                         state.firmwareVersion != ev.semantic.firmwareVersion;
       state.hasFirmwareVersion = true;
       state.firmwareVersion = ev.semantic.firmwareVersion;
 
@@ -1349,7 +1299,6 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
 
       if (modelInfoFromFirmware && !state.hasPenModuleModelId) {
         const Himax::Pen::PenModuleModelInfo &modelInfo = *modelInfoFromFirmware;
-        res.inferredConnChanged = MarkPenConnectedFromIdentityLocked(state);
 
         const bool hasModuleHint =
             modelInfo.protocolHint != Himax::Pen::PenModuleProtocolHint::Auto;
@@ -1360,11 +1309,12 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
           nextProtocolHint = ResolveProtocolHintFromStylusId(state.stylusId);
         }
 
-        res.stateChanged = !state.hasPenModuleModelId ||
-                         state.penModuleModelId != modelInfo.modelId ||
-                         state.penModuleModel != modelInfo.model ||
-                         state.protocolHintFromPenModule != hasModuleHint ||
-                         state.protocolHint != nextProtocolHint;
+        res.stateChanged = res.stateChanged ||
+                           !state.hasPenModuleModelId ||
+                           state.penModuleModelId != modelInfo.modelId ||
+                           state.penModuleModel != modelInfo.model ||
+                           state.protocolHintFromPenModule != hasModuleHint ||
+                           state.protocolHint != nextProtocolHint;
 
         if (const auto derivedStylusId =
                 Himax::Pen::TryResolveStylusIdFromPenModule(modelInfo.model);
@@ -1386,8 +1336,6 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
                  modelInfoFromFirmware->name,
                  static_cast<unsigned int>(modelInfoFromFirmware->modelId),
                  Himax::Pen::ToString(modelInfoFromFirmware->protocolHint));
-      } else {
-        res.inferredConnChanged = MarkPenConnectedFromIdentityLocked(state);
       }
     });
     break;
@@ -1438,7 +1386,6 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
     const auto fallbackProtocolHint = ResolveProtocolHintFromStylusId(stateStylusId);
 
     UpdatePenState([&](RuntimePenState& state, PenStateUpdateResult& res) {
-      res.inferredConnChanged = MarkPenConnectedFromIdentityLocked(state);
       const bool protocolFromPenModule = state.protocolHintFromPenModule;
       res.stateChanged =
           state.hasStylusId != hasStylusId ||

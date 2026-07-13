@@ -69,7 +69,6 @@ private:
 // --------------- 按键与状态动作辅助类型 ---------------
 struct PenStateUpdateResult {
     bool stateChanged = false;
-    bool inferredConnChanged = false;
     bool stylusIdChanged = false;
     uint8_t nextStylusId = 0;
 };
@@ -169,6 +168,9 @@ struct RuntimePenState {
 
     bool hasConnection = false;
     bool connected = false;
+
+    bool hasPairStatus = false;
+    uint8_t pairStatus = 0;
 
     bool hasStylusId = false;
     uint8_t stylusId = 0;

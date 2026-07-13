@@ -159,6 +159,8 @@ int main() {
     Require(penIdentity.protocolHint == U(PenIdentityProtocolHint::Auto), "PenIdentityStatusWire protocol hint defaults Auto");
     Require(penIdentity.protocolFlags == 0, "PenIdentityStatusWire protocol flags default empty");
     Require(penIdentity.factoryStatusFlags == 0, "PenIdentityStatusWire factory status flags default zero");
+    Require(penIdentity.pairStatus == 0, "PenIdentityStatusWire pair status defaults zero");
+    Require(kPenIdentityHasPairStatus == (1u << 1), "PenIdentityStatusWire pair status presence bit remains fixed");
     Require(penIdentity.serialNumberUtf8Len == 0, "PenIdentityStatusWire serial UTF-8 length defaults zero");
     Require(penIdentity.firmwareVersionUtf8Len == 0, "PenIdentityStatusWire firmware UTF-8 length defaults zero");
     Require(sizeof(penIdentity.hardwareVersionUtf8) == 128, "PenIdentityStatusWire hardware UTF-8 buffer capacity remains 128 bytes");

@@ -516,7 +516,29 @@ void ServiceHost::StartSystemStateMonitor() {
     const bool monitorOk = m_impl->m_sysMonitor->Start(
         [this](const Host::SystemStateEvent& ev) {
             LOG_INFO("Service", __func__, "Event", "System event: type={}", Host::ToString(ev.type));
-            m_deviceRuntime->IngestPolicyEvent(TranslateSystemStateEvent(ev));
+            if (m_deviceRuntime) {
+                m_deviceRuntime->IngestPolicyEvent(TranslateSystemStateEvent(ev));
+            }
+
+            const bool wakeEvent =
+                ev.type == Host::SystemStateEventType::DisplayOn ||
+                ev.type == Host::SystemStateEventType::LidOn ||
+                ev.type == Host::SystemStateEventType::ResumeAutomatic;
+            if (!wakeEvent || m_runtimeMode != ServiceMode::Full) {
+                return;
+            }
+
+            auto* penEventBridge = m_impl->m_penEventBridge.get();
+            if (!penEventBridge || !penEventBridge->IsRunning()) {
+                LOG_INFO("Service", __func__, "MCU",
+                         "Wake status query skipped because PenEventBridge is not running.");
+                return;
+            }
+
+            if (!penEventBridge->SendQueryPenStatus()) {
+                LOG_WARN("Service", __func__, "MCU",
+                         "Wake status query failed for event {}.", Host::ToString(ev.type));
+            }
         });
 
     if (!monitorOk) {
@@ -723,13 +745,14 @@ void ServiceHost::StopRuntimeSubsystem() {
 }
 
 void ServiceHost::Stop() {
+    // The monitor callback accesses the pen bridge, so quiesce it first.
+    StopSystemStateMonitor();
+    StopPenSubsystem();
 #if EGOTOUCH_SERVICE_ENABLE_IPC
     // Stop() joins the IPC server thread, so all handlers finish before any
     // pen object they may inspect is destroyed.
     StopIpcSubsystem();
 #endif
-    StopPenSubsystem();
-    StopSystemStateMonitor();
     StopRuntimeSubsystem();
 
     LOG_INFO("Service", __func__, "Shutdown", "All modules stopped.");
@@ -1253,6 +1276,10 @@ void ServiceHost::HandleIpcGetPenIdentityStatus(Ipc::IpcResponse& resp) {
     wire.protocolHint = static_cast<uint8_t>(ToIpcPenIdentityProtocolHint(state.protocolHint));
     if (state.protocolHintFromPenModule) {
         wire.protocolFlags |= Ipc::kPenIdentityProtocolFromPenModule;
+    }
+    if (state.hasPairStatus) {
+        wire.protocolFlags |= Ipc::kPenIdentityHasPairStatus;
+        wire.pairStatus = state.pairStatus;
     }
     wire.factoryStatusFlags = state.factoryStatusFlags;
     if (state.hasStylusId) {
