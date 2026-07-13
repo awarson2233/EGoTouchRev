@@ -4,6 +4,7 @@
 #include "IpcProtocol.h"
 #endif
 
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
@@ -161,6 +162,23 @@ int main() {
     Require(penIdentity.factoryStatusFlags == 0, "PenIdentityStatusWire factory status flags default zero");
     Require(penIdentity.pairStatus == 0, "PenIdentityStatusWire pair status defaults zero");
     Require(kPenIdentityHasPairStatus == (1u << 1), "PenIdentityStatusWire pair status presence bit remains fixed");
+    Require(offsetof(PenIdentityStatusWire, factoryStatusFlags) == 144, "PenIdentityStatusWire factory status flags offset remains fixed");
+    Require(offsetof(PenIdentityStatusWire, pairStatus) == 146, "PenIdentityStatusWire pair status occupies the first legacy reserved byte");
+    Require(offsetof(PenIdentityStatusWire, _reserved0) == 147, "PenIdentityStatusWire remaining reserved byte offset remains fixed");
+    Require(offsetof(PenIdentityStatusWire, serialNumberUtf8) == 148, "PenIdentityStatusWire serial buffer offset remains fixed");
+    Require(offsetof(PenIdentityStatusWire, firmwareVersionUtf8) == 276, "PenIdentityStatusWire firmware buffer offset remains fixed");
+
+    uint8_t decodedPairStatus = 0xFF;
+    penIdentity.pairStatus = 0xA5;
+    Require(!TryGetPenIdentityPairStatus(penIdentity, decodedPairStatus),
+            "legacy wire without pair presence bit should ignore reserved byte contents");
+    Require(decodedPairStatus == 0,
+            "legacy wire without pair presence bit should decode pair status as zero");
+    SetPenIdentityPairStatus(penIdentity, 0x5A);
+    Require(TryGetPenIdentityPairStatus(penIdentity, decodedPairStatus),
+            "server pair status encoding should be visible to proxy decoding");
+    Require(decodedPairStatus == 0x5A,
+            "pair status should round-trip through the shared wire helpers");
     Require(penIdentity.serialNumberUtf8Len == 0, "PenIdentityStatusWire serial UTF-8 length defaults zero");
     Require(penIdentity.firmwareVersionUtf8Len == 0, "PenIdentityStatusWire firmware UTF-8 length defaults zero");
     Require(sizeof(penIdentity.hardwareVersionUtf8) == 128, "PenIdentityStatusWire hardware UTF-8 buffer capacity remains 128 bytes");

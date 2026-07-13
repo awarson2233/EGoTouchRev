@@ -42,6 +42,8 @@ namespace Service {
 
 struct ServiceHost::Impl {
     std::unique_ptr<Host::SystemStateMonitor> m_sysMonitor;
+    // Serializes startup-time IPC access with Pen object publication.
+    std::mutex m_penSubsystemMutex;
     // BT MCU 事件通道 (col00)：设备发现 + 握手 + ACK + 0x7D01 回显 —— 仅 Full 模式
     std::unique_ptr<Himax::Pen::PenEventBridge> m_penEventBridge;
     // BT MCU 压力通道 (col01)：'U' 报文读取 + 频率 / 压感数据 —— 仅 Full 模式
@@ -520,14 +522,12 @@ void ServiceHost::StartSystemStateMonitor() {
                 m_deviceRuntime->IngestPolicyEvent(TranslateSystemStateEvent(ev));
             }
 
-            const bool wakeEvent =
-                ev.type == Host::SystemStateEventType::DisplayOn ||
-                ev.type == Host::SystemStateEventType::LidOn ||
-                ev.type == Host::SystemStateEventType::ResumeAutomatic;
-            if (!wakeEvent || m_runtimeMode != ServiceMode::Full) {
+            if (!Host::IsPenStatusWakeEvent(ev.type) ||
+                m_runtimeMode != ServiceMode::Full) {
                 return;
             }
 
+            std::lock_guard<std::mutex> penLock(m_impl->m_penSubsystemMutex);
             auto* penEventBridge = m_impl->m_penEventBridge.get();
             if (!penEventBridge || !penEventBridge->IsRunning()) {
                 LOG_INFO("Service", __func__, "MCU",
@@ -598,6 +598,7 @@ void ServiceHost::StartPenSubsystem() {
         return;
     }
 
+    std::lock_guard<std::mutex> penLock(m_impl->m_penSubsystemMutex);
     m_impl->m_penEventBridge = std::make_unique<Himax::Pen::PenEventBridge>();
 #if EGOTOUCH_SERVICE_ENABLE_IPC
     if (m_impl->m_penEvent) {
@@ -647,19 +648,24 @@ bool ServiceHost::Start() {
         return false;
     }
 
-    StartSystemStateMonitor();
 #if EGOTOUCH_SERVICE_ENABLE_IPC
     StartIpcSubsystem();
 #endif
     StartPenSubsystem();
+    StartSystemStateMonitor();
 
     LOG_INFO("Service", __func__, "Boot", "All modules started.");
     return true;
 }
 
 #if EGOTOUCH_SERVICE_ENABLE_IPC
-void ServiceHost::StopIpcSubsystem() {
+void ServiceHost::StopIpcServer() {
+    // IpcPipeServer::Stop() closes the listener and joins all handler activity.
+    // Pen objects remain alive until this gate has completed.
     m_impl->m_ipcServer.Stop();
+}
+
+void ServiceHost::CloseIpcResources() {
 #ifdef _DEBUG
     if (m_deviceRuntime) {
         m_deviceRuntime->SetFramePushCallback(nullptr);
@@ -702,6 +708,7 @@ void ServiceHost::StopIpcSubsystem() {
 #endif
 
 void ServiceHost::StopPenSubsystem() {
+    std::lock_guard<std::mutex> penLock(m_impl->m_penSubsystemMutex);
     if (m_impl->m_penPressureReader) {
         m_impl->m_penPressureReader->SetNotifyEvent(nullptr);
         m_impl->m_penPressureReader->Stop();
@@ -745,13 +752,14 @@ void ServiceHost::StopRuntimeSubsystem() {
 }
 
 void ServiceHost::Stop() {
-    // The monitor callback accesses the pen bridge, so quiesce it first.
+    // Quiesce every callback producer before destroying its downstream objects.
     StopSystemStateMonitor();
+#if EGOTOUCH_SERVICE_ENABLE_IPC
+    StopIpcServer();
+#endif
     StopPenSubsystem();
 #if EGOTOUCH_SERVICE_ENABLE_IPC
-    // Stop() joins the IPC server thread, so all handlers finish before any
-    // pen object they may inspect is destroyed.
-    StopIpcSubsystem();
+    CloseIpcResources();
 #endif
     StopRuntimeSubsystem();
 
@@ -1233,6 +1241,7 @@ void ServiceHost::HandleIpcGetPenBridgeStatus(Ipc::IpcResponse& resp) {
     //       [p0..p3 u16 scaled][mode:1][max u16][raw0..raw3 u16]
     // Total: 24 bytes
     uint8_t buf[24] = {};
+    std::lock_guard<std::mutex> penLock(m_impl->m_penSubsystemMutex);
     buf[0] = (m_impl->m_penEventBridge && m_impl->m_penEventBridge->IsRunning()) ? 1 : 0;
     buf[1] = (m_impl->m_penPressureReader && m_impl->m_penPressureReader->IsRunning()) ? 1 : 0;
     if (m_impl->m_penPressureReader) {
@@ -1278,8 +1287,7 @@ void ServiceHost::HandleIpcGetPenIdentityStatus(Ipc::IpcResponse& resp) {
         wire.protocolFlags |= Ipc::kPenIdentityProtocolFromPenModule;
     }
     if (state.hasPairStatus) {
-        wire.protocolFlags |= Ipc::kPenIdentityHasPairStatus;
-        wire.pairStatus = state.pairStatus;
+        Ipc::SetPenIdentityPairStatus(wire, state.pairStatus);
     }
     wire.factoryStatusFlags = state.factoryStatusFlags;
     if (state.hasStylusId) {
@@ -1376,11 +1384,16 @@ void ServiceHost::HandleIpcGetDebugSnapshot(Ipc::IpcResponse& resp) {
         }
     }
 
-    const bool evtRunning = (m_impl->m_penEventBridge && m_impl->m_penEventBridge->IsRunning());
-    const bool pressRunning = (m_impl->m_penPressureReader && m_impl->m_penPressureReader->IsRunning());
+    bool evtRunning = false;
+    bool pressRunning = false;
     Himax::Pen::PenPressureStats penStats{};
-    if (m_impl->m_penPressureReader) {
-        penStats = m_impl->m_penPressureReader->GetPressureStats();
+    {
+        std::lock_guard<std::mutex> penLock(m_impl->m_penSubsystemMutex);
+        evtRunning = m_impl->m_penEventBridge && m_impl->m_penEventBridge->IsRunning();
+        pressRunning = m_impl->m_penPressureReader && m_impl->m_penPressureReader->IsRunning();
+        if (m_impl->m_penPressureReader) {
+            penStats = m_impl->m_penPressureReader->GetPressureStats();
+        }
     }
 
     const uint16_t take = static_cast<uint16_t>(std::min<size_t>(
@@ -1432,6 +1445,11 @@ void ServiceHost::HandleIpcGetDebugSnapshot(Ipc::IpcResponse& resp) {
 // ── IPC Command Handler ──────────────────────────────
 Ipc::IpcResponse ServiceHost::HandleIpcCommand(const Ipc::IpcRequest& req) {
     Ipc::IpcResponse resp{};
+    const auto withRunningPenEventBridge = [this](const auto& operation) {
+        std::lock_guard<std::mutex> penLock(m_impl->m_penSubsystemMutex);
+        auto* bridge = m_impl->m_penEventBridge.get();
+        return bridge && bridge->IsRunning() && operation(*bridge);
+    };
 
     if (Ipc::IsLegacyConfigTombstoneCommand(req.command)) {
         MarkLegacyConfigCommandUnsupported(req.command, resp);
@@ -1585,8 +1603,9 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(const Ipc::IpcRequest& req) {
         }
 
     case Ipc::IpcCommand::TriggerQueryHardwareVersion:
-        if (m_impl->m_penEventBridge && m_impl->m_penEventBridge->IsRunning() &&
-            m_impl->m_penEventBridge->SendQueryHardwareVersion()) {
+        if (withRunningPenEventBridge([](auto& bridge) {
+                return bridge.SendQueryHardwareVersion();
+            })) {
             Ipc::MarkSuccess(resp);
         } else {
             Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidState);
@@ -1594,8 +1613,9 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(const Ipc::IpcRequest& req) {
         break;
 
     case Ipc::IpcCommand::TriggerQueryPenStatus:
-        if (m_impl->m_penEventBridge && m_impl->m_penEventBridge->IsRunning() &&
-            m_impl->m_penEventBridge->SendQueryPenStatus()) {
+        if (withRunningPenEventBridge([](auto& bridge) {
+                return bridge.SendQueryPenStatus();
+            })) {
             Ipc::MarkSuccess(resp);
         } else {
             Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidState);
@@ -1603,8 +1623,9 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(const Ipc::IpcRequest& req) {
         break;
 
     case Ipc::IpcCommand::TriggerQueryPenInfo:
-        if (m_impl->m_penEventBridge && m_impl->m_penEventBridge->IsRunning() &&
-            m_impl->m_penEventBridge->SendFirstMcuStatusQuery()) {
+        if (withRunningPenEventBridge([](auto& bridge) {
+                return bridge.SendFirstMcuStatusQuery();
+            })) {
             Ipc::MarkSuccess(resp);
         } else {
             Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidState);
@@ -1612,8 +1633,10 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(const Ipc::IpcRequest& req) {
         break;
 
     case Ipc::IpcCommand::TriggerSendScanMode:
-        if (req.paramLen >= 3 && m_impl->m_penEventBridge && m_impl->m_penEventBridge->IsRunning() &&
-            m_impl->m_penEventBridge->SendScanMode(req.param[0], req.param[1], req.param[2])) {
+        if (req.paramLen >= 3 &&
+            withRunningPenEventBridge([&](auto& bridge) {
+                return bridge.SendScanMode(req.param[0], req.param[1], req.param[2]);
+            })) {
             Ipc::MarkSuccess(resp);
         } else {
             Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidState);
@@ -1621,8 +1644,10 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(const Ipc::IpcRequest& req) {
         break;
 
     case Ipc::IpcCommand::TriggerSendPairInfoSet:
-        if (req.paramLen >= 1 && m_impl->m_penEventBridge && m_impl->m_penEventBridge->IsRunning() &&
-            m_impl->m_penEventBridge->SendPairInfoSet(req.param[0])) {
+        if (req.paramLen >= 1 &&
+            withRunningPenEventBridge([&](auto& bridge) {
+                return bridge.SendPairInfoSet(req.param[0]);
+            })) {
             Ipc::MarkSuccess(resp);
         } else {
             Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidState);
@@ -1640,7 +1665,8 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(const Ipc::IpcRequest& req) {
         }
         break;
 
-    case Ipc::IpcCommand::SetPenPressureMode:
+    case Ipc::IpcCommand::SetPenPressureMode: {
+        std::lock_guard<std::mutex> penLock(m_impl->m_penSubsystemMutex);
         if (req.paramLen >= 1 && m_impl->m_penPressureReader) {
             const auto mode = req.param[0] == 0
                 ? Himax::Pen::PenPressureRangeMode::Raw12Bit4096
@@ -1652,6 +1678,7 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(const Ipc::IpcRequest& req) {
             Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidState);
         }
         break;
+    }
 
     case Ipc::IpcCommand::GetDebugSchema:
         HandleIpcGetDebugSchema(req, resp);

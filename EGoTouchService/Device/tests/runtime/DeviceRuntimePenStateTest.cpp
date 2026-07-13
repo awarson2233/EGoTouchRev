@@ -100,6 +100,40 @@ void TestIdentityEventsDoNotInferConnection() {
             "connected PenConnStatus should enqueue InitStylus");
 }
 
+void TestDuplicateDisconnectClearsIdentityObservably() {
+    auto runtime = MakeRuntime();
+
+    auto disconnected = MakePayloadEvent(PenUsbEventCode::PenConnStatus, 0);
+    disconnected.semantic.hasConnection = true;
+    disconnected.semantic.connected = false;
+    runtime.IngestPenEvent(disconnected);
+
+    auto serial = MakePayloadEvent(PenUsbEventCode::PenSerialNumber, 0);
+    serial.semantic.hasSerialNumber = true;
+    serial.semantic.serialNumber = "STALE-SERIAL";
+    runtime.IngestPenEvent(serial);
+
+    auto pairStatus = MakePayloadEvent(PenUsbEventCode::DevPairStatus, 7);
+    pairStatus.semantic.hasPairStatus = true;
+    pairStatus.semantic.pairStatus = 7;
+    runtime.IngestPenEvent(pairStatus);
+
+    auto state = runtime.GetPenStateSnapshot();
+    Require(state.penRevision == 3 && state.hasSerialNumber,
+            "disconnected identity update should remain observable until status refresh");
+
+    runtime.IngestPenEvent(disconnected);
+    state = runtime.GetPenStateSnapshot();
+    Require(state.hasConnection && !state.connected,
+            "duplicate disconnected status should preserve explicit connection state");
+    Require(!state.hasSerialNumber && state.serialNumber.empty(),
+            "duplicate disconnected status should clear stale identity");
+    Require(state.hasPairStatus && state.pairStatus == 7,
+            "disconnect identity cleanup should preserve independent pair status");
+    Require(state.penRevision == 4,
+            "identity cleanup on duplicate disconnect should advance revision");
+}
+
 void TestPairStatusIsIndependentFromConnection() {
     auto runtime = MakeRuntime();
 
@@ -165,6 +199,7 @@ void TestPairStatusFrameProducesSemanticState() {
 int main() {
     try {
         TestIdentityEventsDoNotInferConnection();
+        TestDuplicateDisconnectClearsIdentityObservably();
         TestPairStatusIsIndependentFromConnection();
         TestPairStatusFrameProducesSemanticState();
         std::cout << "[TEST] DeviceRuntime pen state tests passed.\n";

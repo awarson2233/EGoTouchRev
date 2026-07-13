@@ -90,7 +90,8 @@ private:
     void StartPenSubsystem();
 
 #if EGOTOUCH_SERVICE_ENABLE_IPC
-    void StopIpcSubsystem();
+    void StopIpcServer();
+    void CloseIpcResources();
 #endif
     void StopPenSubsystem();
     void StopSystemStateMonitor();

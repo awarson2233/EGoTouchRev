@@ -72,7 +72,17 @@ void ResetPenTransientState(RuntimePenState &state) noexcept {
   state.currentFunc = 0;
 }
 
-void ClearPenIdentityState(RuntimePenState &state) noexcept {
+bool ClearPenIdentityState(RuntimePenState &state) noexcept {
+  const bool changed =
+      state.hasStylusId || state.stylusId != 0 ||
+      state.protocolHint != Solvers::StylusProtocolHint::Auto ||
+      state.protocolHintFromPenModule || state.hasPenModuleModelId ||
+      state.penModuleModelId != 0 ||
+      state.penModuleModel != Himax::Pen::PenModuleModel::Unknown ||
+      state.hasSerialNumber || !state.serialNumber.empty() ||
+      state.hasHardwareVersion || !state.hardwareVersion.empty() ||
+      state.hasFirmwareVersion || !state.firmwareVersion.empty();
+
   state.hasStylusId = false;
   state.stylusId = 0;
   state.protocolHint = Solvers::StylusProtocolHint::Auto;
@@ -86,6 +96,7 @@ void ClearPenIdentityState(RuntimePenState &state) noexcept {
   state.hardwareVersion.clear();
   state.hasFirmwareVersion = false;
   state.firmwareVersion.clear();
+  return changed;
 }
 
 Solvers::StylusProtocolHint ResolveProtocolHintFromPenModule(
@@ -1360,7 +1371,7 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
       }
 
       if (!connected) {
-        ClearPenIdentityState(state);
+        res.stateChanged = ClearPenIdentityState(state) || res.stateChanged;
       } else if (!state.protocolHintFromPenModule && state.hasStylusId) {
         state.protocolHint = ResolveProtocolHintFromStylusId(state.stylusId);
       }

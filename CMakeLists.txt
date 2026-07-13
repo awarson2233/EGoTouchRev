@@ -640,7 +640,10 @@ if (EGO_BUILD_TESTS)
     add_executable(ServiceHostLifecycleFakeIntegrationTest
         "${SERVICE_TEST_ROOT}/integration/ServiceHostLifecycleFakeIntegrationTest.cpp"
     )
-    target_include_directories(ServiceHostLifecycleFakeIntegrationTest PRIVATE "${SERVICE_TEST_ROOT}/support")
+    target_include_directories(ServiceHostLifecycleFakeIntegrationTest PRIVATE
+        "${SERVICE_TEST_ROOT}/support"
+        "${HOST_ROOT}"
+    )
     target_link_libraries(ServiceHostLifecycleFakeIntegrationTest PRIVATE EGoTouchServiceCore)
 
     if (EGO_BUILD_TOOLS)

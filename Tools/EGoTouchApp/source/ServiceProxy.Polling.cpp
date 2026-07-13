@@ -288,9 +288,8 @@ void ServiceProxy::PollLoop() {
                     identity.protocolHintFromPenModule =
                         (wire.protocolFlags & Ipc::kPenIdentityProtocolFromPenModule) != 0;
                     identity.factoryStatusFlags = wire.factoryStatusFlags;
-                    identity.hasPairStatus =
-                        (wire.protocolFlags & Ipc::kPenIdentityHasPairStatus) != 0;
-                    identity.pairStatus = identity.hasPairStatus ? wire.pairStatus : 0;
+                    identity.hasPairStatus = Ipc::TryGetPenIdentityPairStatus(
+                        wire, identity.pairStatus);
                     auto assignUtf8Field = [](bool& present,
                                                std::string& target,
                                                uint16_t textLenWire,

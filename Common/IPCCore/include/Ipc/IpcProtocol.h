@@ -387,6 +387,22 @@ struct PenIdentityStatusWire {
     char firmwareVersionUtf8[128]{};
 };
 
+inline void SetPenIdentityPairStatus(PenIdentityStatusWire& wire,
+                                     uint8_t pairStatus) noexcept {
+    wire.protocolFlags |= kPenIdentityHasPairStatus;
+    wire.pairStatus = pairStatus;
+}
+
+inline bool TryGetPenIdentityPairStatus(const PenIdentityStatusWire& wire,
+                                        uint8_t& pairStatus) noexcept {
+    if ((wire.protocolFlags & kPenIdentityHasPairStatus) == 0) {
+        pairStatus = 0;
+        return false;
+    }
+    pairStatus = wire.pairStatus;
+    return true;
+}
+
 constexpr uint8_t kRuntimeStatusStreaming = 1u << 0;
 constexpr uint8_t kRuntimeStatusVhfEnabled = 1u << 1;
 constexpr uint8_t kRuntimeStatusVhfDeviceOpen = 1u << 2;

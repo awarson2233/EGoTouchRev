@@ -22,6 +22,12 @@ enum class SystemStateEventType : uint8_t {
 inline constexpr std::size_t kSystemStateEventTypeCount =
     static_cast<std::size_t>(SystemStateEventType::ResumeAutomatic) + 1;
 
+inline constexpr bool IsPenStatusWakeEvent(SystemStateEventType type) noexcept {
+    return type == SystemStateEventType::DisplayOn ||
+           type == SystemStateEventType::LidOn ||
+           type == SystemStateEventType::ResumeAutomatic;
+}
+
 // Named events are a transport compatibility surface.
 // Multiple named events may map to the same normalized SystemStateEventType.
 enum class SystemStateNamedEventId : uint8_t {
