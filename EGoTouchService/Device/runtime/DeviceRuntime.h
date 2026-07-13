@@ -69,6 +69,7 @@ private:
 // --------------- 按键与状态动作辅助类型 ---------------
 struct PenStateUpdateResult {
     bool stateChanged = false;
+    bool applyToPipeline = true;
     bool stylusIdChanged = false;
     uint8_t nextStylusId = 0;
 };
@@ -178,6 +179,7 @@ struct RuntimePenState {
     Solvers::StylusProtocolHint protocolHint = Solvers::StylusProtocolHint::Auto;
     bool protocolHintFromPenModule = false;
     uint32_t penRevision = 0;
+    uint32_t pipelineRevision = 0;
 
     bool hasPenModuleModelId = false;
     uint32_t penModuleModelId = 0;
@@ -236,6 +238,8 @@ struct PenAfeReplayState {
 };
 
 // --------------- DeviceRuntime ---------------
+
+struct DeviceRuntimePenStateTestAccess;
 
 class DeviceRuntime {
 public:
@@ -333,6 +337,7 @@ public:
     void IngestPenEvent(const Himax::Pen::PenEvent& ev);
 
 private:
+    friend struct DeviceRuntimePenStateTestAccess;
     StartRequestResult StartStateMachine();
     ThreadResult WorkerMain();
     void HandlePenButtonStatusCode(uint8_t statusCode,

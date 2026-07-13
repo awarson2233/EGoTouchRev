@@ -18,6 +18,8 @@ class ConfigBinder;
 class ConfigStore;
 }
 
+struct DeviceRuntimePenStateTestAccess;
+
 namespace Solvers {
 
 enum class StylusProtocolHint : uint8_t {
@@ -67,6 +69,7 @@ public:
     Stylus::Hpp3::Pipeline             m_hpp3;             // hpp3/
 
 private:
+    friend struct ::DeviceRuntimePenStateTestAccess;
     void FinalizeTerminalFrame(HeatmapFrame& frame);
     void ResetStatefulStages();
     void ClearBtSample();

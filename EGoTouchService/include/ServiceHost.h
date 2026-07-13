@@ -31,6 +31,8 @@ struct HeatmapFrame;
 
 namespace Service {
 
+class ServiceLifecycleCoordinator;
+
 /// 模块加载器：负责创建、连接、启停所有子模块。
 /// 不知道 SCM 的存在，可以独立测试。
 class ServiceHost {
@@ -50,6 +52,7 @@ public:
     ServiceMode GetMode() const { return m_runtimeMode; }
 
 private:
+    friend class ServiceLifecycleCoordinator;
     struct Impl;
 
     ServiceConfigState m_configState{};
@@ -84,15 +87,11 @@ private:
 #endif
     bool StartRuntimeAndPipeline();
     void StartSystemStateMonitor();
-#if EGOTOUCH_SERVICE_ENABLE_IPC
     void StartIpcSubsystem();
-#endif
     void StartPenSubsystem();
 
-#if EGOTOUCH_SERVICE_ENABLE_IPC
     void StopIpcServer();
     void CloseIpcResources();
-#endif
     void StopPenSubsystem();
     void StopSystemStateMonitor();
     void StopRuntimeSubsystem();

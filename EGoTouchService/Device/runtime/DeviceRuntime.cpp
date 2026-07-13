@@ -505,7 +505,7 @@ void DeviceRuntime::ApplyPenStateToStylusPipeline() {
     session.hasStylusId = m_penState.hasStylusId;
     session.stylusId = m_penState.stylusId;
     session.protocolHint = m_penState.protocolHint;
-    session.revision = m_penState.penRevision;
+    session.revision = m_penState.pipelineRevision;
   }
 
   std::lock_guard<std::mutex> lk(m_pipelineMu);
@@ -514,16 +514,24 @@ void DeviceRuntime::ApplyPenStateToStylusPipeline() {
 
 void DeviceRuntime::UpdatePenState(std::function<void(RuntimePenState&, PenStateUpdateResult&)> updateFn) {
   PenStateUpdateResult result{};
+  bool applyToPipeline = false;
   {
     std::lock_guard<std::mutex> lk(m_penStateMu);
     updateFn(m_penState, result);
 
-    if (result.stateChanged || result.stylusIdChanged) {
+    const bool changed = result.stateChanged || result.stylusIdChanged;
+    if (changed) {
       ++m_penState.penRevision;
+      if (result.applyToPipeline) {
+        ++m_penState.pipelineRevision;
+        applyToPipeline = true;
+      }
     }
   }
 
-  ApplyPenStateToStylusPipeline();
+  if (applyToPipeline) {
+    ApplyPenStateToStylusPipeline();
+  }
 
   if (result.stylusIdChanged) {
     command cmd{};
@@ -1203,6 +1211,7 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
     }
 
     UpdatePenState([&](RuntimePenState& state, PenStateUpdateResult& res) {
+      res.applyToPipeline = false;
       res.stateChanged = !state.hasPairStatus ||
                          state.pairStatus != ev.semantic.pairStatus;
       state.hasPairStatus = true;
@@ -1219,6 +1228,9 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
     }
 
     UpdatePenState([&](RuntimePenState& state, PenStateUpdateResult& res) {
+      const bool oldHasStylusId = state.hasStylusId;
+      const uint8_t oldStylusId = state.stylusId;
+      const auto oldProtocolHint = state.protocolHint;
       const Himax::Pen::PenModuleModelInfo modelInfo{
           ev.semantic.penModuleModelId,
           ev.semantic.penModuleModel,
@@ -1256,6 +1268,9 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
       state.penModuleModel = modelInfo.model;
       state.protocolHintFromPenModule = hasModuleHint;
       state.protocolHint = nextProtocolHint;
+      res.applyToPipeline = oldHasStylusId != state.hasStylusId ||
+                            oldStylusId != state.stylusId ||
+                            oldProtocolHint != state.protocolHint;
     });
     break;
   }
@@ -1268,6 +1283,7 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
     }
 
     UpdatePenState([&](RuntimePenState& state, PenStateUpdateResult& res) {
+      res.applyToPipeline = false;
       res.stateChanged = !state.hasSerialNumber ||
                          state.serialNumber != ev.semantic.serialNumber;
       state.hasSerialNumber = true;
@@ -1284,6 +1300,7 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
     }
 
     UpdatePenState([&](RuntimePenState& state, PenStateUpdateResult& res) {
+      res.applyToPipeline = false;
       res.stateChanged = !state.hasHardwareVersion ||
                          state.hardwareVersion != ev.semantic.hardwareVersion;
       state.hasHardwareVersion = true;
@@ -1300,6 +1317,10 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
     }
 
     UpdatePenState([&](RuntimePenState& state, PenStateUpdateResult& res) {
+      const bool oldHasStylusId = state.hasStylusId;
+      const uint8_t oldStylusId = state.stylusId;
+      const auto oldProtocolHint = state.protocolHint;
+      res.applyToPipeline = false;
       res.stateChanged = !state.hasFirmwareVersion ||
                          state.firmwareVersion != ev.semantic.firmwareVersion;
       state.hasFirmwareVersion = true;
@@ -1348,6 +1369,9 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
                  static_cast<unsigned int>(modelInfoFromFirmware->modelId),
                  Himax::Pen::ToString(modelInfoFromFirmware->protocolHint));
       }
+      res.applyToPipeline = oldHasStylusId != state.hasStylusId ||
+                            oldStylusId != state.stylusId ||
+                            oldProtocolHint != state.protocolHint;
     });
     break;
   }
@@ -1364,14 +1388,19 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
           ev.semantic.hasConnection ? ev.semantic.connected : false;
       connected = state.hasConnection && state.connected;
 
-      res.stateChanged = !hadConnection || oldConnected != state.connected;
-      connectionChanged = res.stateChanged;
-      if (res.stateChanged) {
+      connectionChanged =
+          hadConnection != state.hasConnection || oldConnected != state.connected;
+      res.stateChanged = connectionChanged;
+      if (connectionChanged) {
         ResetPenTransientState(state);
       }
 
       if (!connected) {
+        const bool pipelineIdentityChanged =
+            state.hasStylusId ||
+            state.protocolHint != Solvers::StylusProtocolHint::Auto;
         res.stateChanged = ClearPenIdentityState(state) || res.stateChanged;
+        res.applyToPipeline = connectionChanged || pipelineIdentityChanged;
       } else if (!state.protocolHintFromPenModule && state.hasStylusId) {
         state.protocolHint = ResolveProtocolHintFromStylusId(state.stylusId);
       }

@@ -6,6 +6,29 @@
 #include <cstdint>
 #include <iostream>
 
+struct DeviceRuntimePenStateTestAccess {
+    struct PipelineState {
+        Solvers::StylusPenSession session{};
+        Asa::BtInputSnapshot btSample{};
+        bool lastFrameWasTerminal = true;
+    };
+
+    static bool Process(DeviceRuntime& runtime, Solvers::HeatmapFrame& frame) {
+        std::lock_guard<std::mutex> lock(runtime.m_pipelineMu);
+        return runtime.m_stylusPipeline.Process(frame);
+    }
+
+    static PipelineState Snapshot(DeviceRuntime& runtime) {
+        std::lock_guard<std::mutex> pipelineLock(runtime.m_pipelineMu);
+        std::lock_guard<std::mutex> btLock(runtime.m_stylusPipeline.m_btMutex);
+        return {
+            runtime.m_stylusPipeline.m_penSession,
+            runtime.m_stylusPipeline.m_btSample,
+            runtime.m_stylusPipeline.m_lastFrameWasTerminal,
+        };
+    }
+};
+
 namespace {
 
 using DeviceTests::Require;
@@ -25,6 +48,20 @@ PenEvent MakePayloadEvent(PenUsbEventCode code, uint8_t payload) {
     const std::array<uint8_t, 1> bytes{payload};
     (void)event.payload.assign(bytes);
     return event;
+}
+
+Solvers::HeatmapFrame MakeWritingHpp2Frame() {
+    Solvers::HeatmapFrame frame{};
+    auto& input = frame.stylus.input;
+    input.auxStatusFlags = 0x1;
+    input.mainFreq = 0x00b0;
+    input.auxFreq = 0x00fc;
+    input.framePressure = 512;
+    input.hpp2LineValid = true;
+    input.hpp2LineData.fill(10);
+    input.hpp2LineData[12] = 2600;
+    input.hpp2LineData[60 + 7] = 2400;
+    return frame;
 }
 
 void TestIdentityEventsDoNotInferConnection() {
@@ -162,6 +199,61 @@ void TestPairStatusIsIndependentFromConnection() {
     state = runtime.GetPenStateSnapshot();
     Require(state.hasPairStatus && state.pairStatus == 3 && state.penRevision == 2,
             "changed pair status should update state and revision");
+    Require(state.pipelineRevision == 0,
+            "pair-only updates should not advance stylus pipeline generation");
+}
+
+void TestPairStatusDuringWritingPreservesPipelineAndBtSample() {
+    auto runtime = MakeRuntime();
+
+    auto connected = MakePayloadEvent(PenUsbEventCode::PenConnStatus, 1);
+    connected.semantic.hasConnection = true;
+    connected.semantic.connected = true;
+    runtime.IngestPenEvent(connected);
+
+    auto module = MakePayloadEvent(PenUsbEventCode::PenModule, 0);
+    module.semantic.hasPenModuleModelId = true;
+    module.semantic.penModuleModelId = Himax::Pen::kPenModuleModelIdCd52;
+    module.semantic.penModuleModel = Himax::Pen::PenModuleModel::Cd52;
+    module.semantic.hasPenModuleProtocolHint = true;
+    module.semantic.penModuleProtocolHint = Himax::Pen::PenModuleProtocolHint::Hpp2;
+    runtime.IngestPenEvent(module);
+
+    auto writingFrame = MakeWritingHpp2Frame();
+    Require(DeviceRuntimePenStateTestAccess::Process(runtime, writingFrame),
+            "connected HPP2 writing frame should process");
+    Require(writingFrame.stylus.output.valid && writingFrame.stylus.output.tipDown,
+            "test precondition should establish active writing state");
+
+    const std::array<uint16_t, 4> pressure{100, 200, 300, 400};
+    const std::array<uint16_t, 4> rawPressure{1000, 2000, 3000, 4000};
+    runtime.IngestBtMcuPressurePacket(pressure, rawPressure, 0x12, 0x34);
+
+    const auto penBefore = runtime.GetPenStateSnapshot();
+    const auto pipelineBefore = DeviceRuntimePenStateTestAccess::Snapshot(runtime);
+    Require(!pipelineBefore.lastFrameWasTerminal && pipelineBefore.btSample.hasSample,
+            "test precondition should retain writing state and BT sample");
+
+    auto pairStatus = MakePayloadEvent(PenUsbEventCode::DevPairStatus, 9);
+    pairStatus.semantic.hasPairStatus = true;
+    pairStatus.semantic.pairStatus = 9;
+    runtime.IngestPenEvent(pairStatus);
+
+    const auto penAfter = runtime.GetPenStateSnapshot();
+    const auto pipelineAfter = DeviceRuntimePenStateTestAccess::Snapshot(runtime);
+    Require(penAfter.penRevision == penBefore.penRevision + 1,
+            "pair status should remain visible through diagnostic revision");
+    Require(penAfter.pipelineRevision == penBefore.pipelineRevision,
+            "pair status should not advance stylus pipeline generation");
+    Require(pipelineAfter.session.revision == pipelineBefore.session.revision,
+            "pair status should not publish a new stylus session");
+    Require(!pipelineAfter.lastFrameWasTerminal,
+            "pair status should not reset active writing stages");
+    Require(pipelineAfter.btSample.hasSample &&
+                pipelineAfter.btSample.seq == pipelineBefore.btSample.seq &&
+                pipelineAfter.btSample.pressure == pipelineBefore.btSample.pressure &&
+                pipelineAfter.btSample.rawPressure == pipelineBefore.btSample.rawPressure,
+            "pair status should not clear the current BT pressure sample");
 }
 
 class TestPenEventBridge final : public Himax::Pen::PenEventBridge {
@@ -201,6 +293,7 @@ int main() {
         TestIdentityEventsDoNotInferConnection();
         TestDuplicateDisconnectClearsIdentityObservably();
         TestPairStatusIsIndependentFromConnection();
+        TestPairStatusDuringWritingPreservesPipelineAndBtSample();
         TestPairStatusFrameProducesSemanticState();
         std::cout << "[TEST] DeviceRuntime pen state tests passed.\n";
         return 0;

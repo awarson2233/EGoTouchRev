@@ -1,5 +1,6 @@
 #include "ServiceHost.h"
 
+#include "ServiceLifecycleCoordinator.h"
 #include "ConfigRuntime.h"
 #include "SystemStateMonitor.h"
 #include "runtime/DeviceRuntime.h"
@@ -550,8 +551,8 @@ void ServiceHost::StartSystemStateMonitor() {
     LOG_INFO("Service", __func__, "Monitor", "SystemStateMonitor started.");
 }
 
-#if EGOTOUCH_SERVICE_ENABLE_IPC
 void ServiceHost::StartIpcSubsystem() {
+#if EGOTOUCH_SERVICE_ENABLE_IPC
 #ifdef _DEBUG
     // Service creates Global\\ mapping in debug builds.
     if (!m_impl->m_frameWriter.Create(Ipc::kSharedFrameName)) {
@@ -588,9 +589,8 @@ void ServiceHost::StartIpcSubsystem() {
         });
     m_impl->m_ipcServer.Start();
     LOG_INFO("Service", __func__, "Boot", "IPC pipe server started.");
-}
-
 #endif
+}
 
 void ServiceHost::StartPenSubsystem() {
     if (m_runtimeMode != ServiceMode::Full) {
@@ -644,28 +644,24 @@ bool ServiceHost::Start() {
     LOG_INFO("Service", __func__, "Boot", "Service mode: {}, AutoMode: {}",
              ServiceModeToConfig(m_configState.mode), m_configState.autoMode);
 
-    if (!StartRuntimeAndPipeline()) {
+    if (!ServiceLifecycleCoordinator::Start(*this)) {
         return false;
     }
-
-#if EGOTOUCH_SERVICE_ENABLE_IPC
-    StartIpcSubsystem();
-#endif
-    StartPenSubsystem();
-    StartSystemStateMonitor();
 
     LOG_INFO("Service", __func__, "Boot", "All modules started.");
     return true;
 }
 
-#if EGOTOUCH_SERVICE_ENABLE_IPC
 void ServiceHost::StopIpcServer() {
+#if EGOTOUCH_SERVICE_ENABLE_IPC
     // IpcPipeServer::Stop() closes the listener and joins all handler activity.
     // Pen objects remain alive until this gate has completed.
     m_impl->m_ipcServer.Stop();
+#endif
 }
 
 void ServiceHost::CloseIpcResources() {
+#if EGOTOUCH_SERVICE_ENABLE_IPC
 #ifdef _DEBUG
     if (m_deviceRuntime) {
         m_deviceRuntime->SetFramePushCallback(nullptr);
@@ -703,9 +699,8 @@ void ServiceHost::CloseIpcResources() {
         // Keep the handle valid until StopPenSubsystem() joins both producer
         // threads; a producer may already have loaded the previous atomic value.
     }
-}
-
 #endif
+}
 
 void ServiceHost::StopPenSubsystem() {
     std::lock_guard<std::mutex> penLock(m_impl->m_penSubsystemMutex);
@@ -753,15 +748,7 @@ void ServiceHost::StopRuntimeSubsystem() {
 
 void ServiceHost::Stop() {
     // Quiesce every callback producer before destroying its downstream objects.
-    StopSystemStateMonitor();
-#if EGOTOUCH_SERVICE_ENABLE_IPC
-    StopIpcServer();
-#endif
-    StopPenSubsystem();
-#if EGOTOUCH_SERVICE_ENABLE_IPC
-    CloseIpcResources();
-#endif
-    StopRuntimeSubsystem();
+    ServiceLifecycleCoordinator::Stop(*this);
 
     LOG_INFO("Service", __func__, "Shutdown", "All modules stopped.");
 }

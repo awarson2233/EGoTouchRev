@@ -1,4 +1,5 @@
 #include "ServiceConfigCore.h"
+#include "ServiceLifecycleCoordinator.h"
 #include "SystemStateEvent.h"
 #include "TestAssert.h"
 
@@ -87,15 +88,23 @@ public:
     }
 
     void BeginInFlightCallback(Host::SystemStateEventType event) {
+        {
+            std::lock_guard<std::mutex> lock(m_callbackMutex);
+            m_blockInsideCallback = true;
+            m_releaseCallback = false;
+        }
         m_callbackThread = std::thread([this, event] {
-            m_calls->Add("monitor.callback.enter");
             if (m_callback) m_callback(event);
-            {
-                std::unique_lock<std::mutex> lock(m_callbackMutex);
-                m_callbackCv.wait(lock, [&] { return m_releaseCallback; });
-            }
-            m_calls->Add("monitor.callback.exit");
         });
+    }
+
+    void WaitInsideCallbackIfRequested() {
+        std::unique_lock<std::mutex> lock(m_callbackMutex);
+        if (!m_blockInsideCallback) return;
+        m_calls->Add("monitor.callback.enter");
+        m_callbackCv.wait(lock, [&] { return m_releaseCallback; });
+        m_calls->Add("monitor.callback.exit");
+        m_blockInsideCallback = false;
     }
 
     void ReleaseCallback() {
@@ -121,6 +130,7 @@ private:
     std::thread m_callbackThread;
     std::mutex m_callbackMutex;
     std::condition_variable m_callbackCv;
+    bool m_blockInsideCallback = false;
     bool m_releaseCallback = false;
 };
 
@@ -224,30 +234,37 @@ struct FakeServiceHostHarness {
     FakePen pen{&calls};
     bool started = false;
 
-    bool Start() {
+    bool StartRuntimeAndPipeline() {
         runtime.ApplyPolicy(config);
         runtime.BuildPipeline();
-        if (!runtime.Start()) return false;
-        ipc.Start();
-        pen.Start(config.mode);
-        monitor.Start([this](Host::SystemStateEventType event) {
-            runtime.HandlePolicyEvent();
-            if (config.mode == Service::ServiceMode::Full && Host::IsPenStatusWakeEvent(event)) {
-                pen.SendQueryPenStatus();
-            }
-        });
-        started = true;
-        return true;
+        started = runtime.Start();
+        return started;
     }
 
-    void Stop() {
-        monitor.Stop();
-        ipc.StopServer();
-        pen.Stop();
-        ipc.CloseResources();
+    void StartIpcSubsystem() { ipc.Start(); }
+    void StartPenSubsystem() { pen.Start(config.mode); }
+    void StartSystemStateMonitor() {
+        monitor.Start([this](Host::SystemStateEventType event) {
+            runtime.HandlePolicyEvent();
+            if (config.mode == Service::ServiceMode::Full &&
+                Host::IsPenStatusWakeEvent(event)) {
+                pen.SendQueryPenStatus();
+            }
+            monitor.WaitInsideCallbackIfRequested();
+        });
+    }
+
+    void StopSystemStateMonitor() { monitor.Stop(); }
+    void StopIpcServer() { ipc.StopServer(); }
+    void StopPenSubsystem() { pen.Stop(); }
+    void CloseIpcResources() { ipc.CloseResources(); }
+    void StopRuntimeSubsystem() {
         if (started) runtime.Stop();
         started = false;
     }
+
+    bool Start() { return Service::ServiceLifecycleCoordinator::Start(*this); }
+    void Stop() { Service::ServiceLifecycleCoordinator::Stop(*this); }
 };
 
 bool FullModeStartsAndStopsInRaceFreeOrder() {
