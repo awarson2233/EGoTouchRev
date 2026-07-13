@@ -233,6 +233,7 @@ public:
     bool TriggerQueryPenStatus();
     bool TriggerQueryPenInfo();
     bool TriggerSendScanMode(uint8_t freq1, uint8_t freq2, uint8_t mode);
+    bool TriggerSendFactoryInitParams();
     bool TriggerSendPairInfoSet(uint8_t value);
     PenBridgeStatus GetPenBridgeStatus() const {
 

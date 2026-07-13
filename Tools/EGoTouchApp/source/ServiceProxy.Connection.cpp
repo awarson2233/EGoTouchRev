@@ -320,12 +320,14 @@ bool ServiceProxy::TriggerQueryPenInfo() {
 
 bool ServiceProxy::TriggerSendScanMode(uint8_t freq1, uint8_t freq2, uint8_t mode) {
     if (!IsLiveControlAllowed()) return false;
-    Ipc::IpcRequest req{};
-    req.command = Ipc::IpcCommand::TriggerSendScanMode;
-    req.param[0] = freq1;
-    req.param[1] = freq2;
-    req.param[2] = mode;
-    req.paramLen = 3;
+    const auto req = Ipc::MakeTriggerSendScanModeRequest(freq1, freq2, mode);
+    const auto resp = m_client.Send(req);
+    return resp.success;
+}
+
+bool ServiceProxy::TriggerSendFactoryInitParams() {
+    if (!IsLiveControlAllowed()) return false;
+    const auto req = Ipc::MakeTriggerSendFactoryInitParamsRequest();
     const auto resp = m_client.Send(req);
     return resp.success;
 }

@@ -1444,7 +1444,7 @@ void DiagnosticsWorkbench::DrawBtMcuPanel() {
     }
 
     if (ImGui::Button("Send Factory Init Params (0x7D01)", ImVec2(-1, 24))) {
-        m_proxy->TriggerSendScanMode(0, 0, 0);
+        m_proxy->TriggerSendFactoryInitParams();
     }
 
     static int pairVal = 0;

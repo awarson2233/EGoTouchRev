@@ -285,6 +285,8 @@ void TestFactoryInitParamsPacket() {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     };
     Require(packet == expected, "factory init params packet should remain exact capture");
+    Require(packet != Himax::Pen::BuildScanModeCommand(0, 0, 0),
+            "factory init packet must remain distinct from an all-zero scan-mode command");
 }
 
 } // namespace

@@ -35,6 +35,9 @@ public:
     /// @return true if packet was sent successfully
     bool SendScanMode(uint8_t freq1, uint8_t freq2, uint8_t mode = 0);
 
+    /// 发送原厂固定的 0x7D01 初始化参数，不使用动态扫描模式参数。
+    bool SendFactoryInitProtocolParams();
+
     /// 设置 MCU 事件回调（线程安全）。回调从事件读取线程发起，不得长时间阻塞。
     void SetEventCallback(PenEventCallback cb);
     /// 设置状态事件句柄（用于通知 App 侧刷新状态）
@@ -67,8 +70,6 @@ private:
     void SendAck(uint8_t eventCode, uint8_t ackCode);
     void ExecuteInitAction(PenUsbInitAction action);
     void AdvanceSessionFromEvent(uint8_t eventCode);
-
-    bool SendInitProtocolParams();
 
     mutable std::mutex m_cbMutex;
     mutable std::mutex m_sessionMutex;

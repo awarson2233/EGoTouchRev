@@ -58,6 +58,7 @@ enum class IpcCommand : uint8_t {
     TriggerSendScanMode = 69,
     TriggerSendPairInfoSet = 70,
     GetRuntimeStatus = 71,
+    TriggerSendFactoryInitParams = 72,
 };
 
 constexpr bool IsLegacyConfigTombstoneCommand(IpcCommand command) noexcept {
@@ -97,6 +98,7 @@ constexpr bool IsSupportedIpcCommand(IpcCommand command) noexcept {
     case IpcCommand::TriggerSendScanMode:
     case IpcCommand::TriggerSendPairInfoSet:
     case IpcCommand::GetRuntimeStatus:
+    case IpcCommand::TriggerSendFactoryInitParams:
     case IpcCommand::GetDebugSchema:
     case IpcCommand::GetDebugSnapshot:
     case IpcCommand::SetPenPressureMode:
@@ -425,6 +427,24 @@ struct IpcRequest {
     uint16_t   paramLen = 0;
     uint8_t    param[256]{};
 };
+
+constexpr IpcRequest MakeTriggerSendScanModeRequest(uint8_t freq1,
+                                                    uint8_t freq2,
+                                                    uint8_t mode) noexcept {
+    IpcRequest request{};
+    request.command = IpcCommand::TriggerSendScanMode;
+    request.paramLen = 3;
+    request.param[0] = freq1;
+    request.param[1] = freq2;
+    request.param[2] = mode;
+    return request;
+}
+
+constexpr IpcRequest MakeTriggerSendFactoryInitParamsRequest() noexcept {
+    IpcRequest request{};
+    request.command = IpcCommand::TriggerSendFactoryInitParams;
+    return request;
+}
 
 struct IpcResponse {
     IpcStatusCode status = IpcStatusCode::InternalError;

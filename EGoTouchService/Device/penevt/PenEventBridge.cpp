@@ -157,8 +157,8 @@ void PenEventBridge::ExecuteInitAction(PenUsbInitAction action) {
     case PenUsbInitAction::SendSecondMcuStatusQuery:
         (void)SendSecondMcuStatusQuery();
         return;
-    case PenUsbInitAction::SendInitProtocolParams:
-        (void)SendInitProtocolParams();
+    case PenUsbInitAction::SendFactoryInitProtocolParams:
+        (void)SendFactoryInitProtocolParams();
         return;
     }
 }
@@ -448,8 +448,8 @@ void PenEventBridge::RunHandshake() {
 // 这些参数通过 BtPen_GetReportInfo(event_class=2) → HandleInitParamEvent
 // 被编码为 0x7D01 二进制包发送给 MCU。
 //
-// 我们这里直接用 Type-3 编码器处理这些 hex token。
-bool PenEventBridge::SendInitProtocolParams() {
+// 该路径发送抓包确认的固定 factory payload；动态扫描模式使用 SendScanMode。
+bool PenEventBridge::SendFactoryInitProtocolParams() {
     if (!IsTransportOpen()) {
         LOG_WARN("PenEvent", __func__, "MCU", "Transport not open, cannot send 0x7D01 InitProtocolParams.");
         return false;

@@ -1655,6 +1655,15 @@ Ipc::IpcResponse ServiceHost::HandleIpcCommand(const Ipc::IpcRequest& req) {
         }
         break;
 
+    case Ipc::IpcCommand::TriggerSendFactoryInitParams:
+        if (req.paramLen == 0 && m_impl->m_penEventBridge && m_impl->m_penEventBridge->IsRunning() &&
+            m_impl->m_penEventBridge->SendFactoryInitProtocolParams()) {
+            Ipc::MarkSuccess(resp);
+        } else {
+            Ipc::MarkFailure(resp, Ipc::IpcStatusCode::InvalidState);
+        }
+        break;
+
     case Ipc::IpcCommand::TriggerSendPairInfoSet:
         if (req.paramLen >= 1 &&
             withRunningPenEventBridge([&](auto& bridge) {

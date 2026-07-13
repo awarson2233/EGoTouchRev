@@ -26,7 +26,7 @@ void TestFactoryInitAdvancesOnScreenStatusResponse() {
             "0x77 response to first 0x7701 should request second 0x7701 query");
 
     auto afterParamRequest = session.OnEvent(EC::PenRepParam);
-    Require(afterParamRequest == Action::SendInitProtocolParams,
+    Require(afterParamRequest == Action::SendFactoryInitProtocolParams,
             "0x7B after second 0x7701 should send 0x7D01 init params");
 
     auto duplicateParamRequest = session.OnEvent(EC::PenRepParam);
@@ -58,7 +58,7 @@ void TestRunningStateIgnoresFurtherEvents() {
     Himax::Pen::PenUsbInitSession session;
     session.OnConnected();
     session.OnEvent(EC::PenScreenStatus);
-    Require(session.OnEvent(EC::PenRepParam) == Action::SendInitProtocolParams,
+    Require(session.OnEvent(EC::PenRepParam) == Action::SendFactoryInitProtocolParams,
             "0x7B should transition session to running");
     Require(session.OnEvent(EC::PenScreenStatus) == Action::None,
             "running state should ignore 0x77");
@@ -76,7 +76,7 @@ void TestReconnectResetsSession() {
             "reconnect should restart init query sequence");
     Require(session.OnEvent(EC::PenScreenStatus) == Action::SendSecondMcuStatusQuery,
             "reconnected session should accept first 0x77 again");
-    Require(session.OnEvent(EC::PenRepParam) == Action::SendInitProtocolParams,
+    Require(session.OnEvent(EC::PenRepParam) == Action::SendFactoryInitProtocolParams,
             "reconnected session should send init params again");
 }
 

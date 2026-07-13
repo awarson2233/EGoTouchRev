@@ -65,10 +65,16 @@ int main() {
     Require(U(IpcCommand::GetDebugSchema) == 61, "GetDebugSchema command value remains stable");
     Require(U(IpcCommand::SetMasterParserOnly) == 64, "SetMasterParserOnly command value remains stable");
     Require(U(IpcCommand::GetPenIdentityStatus) == 65, "GetPenIdentityStatus command value remains stable");
+    Require(U(IpcCommand::TriggerSendScanMode) == 69, "TriggerSendScanMode command value remains stable");
+    Require(U(IpcCommand::TriggerSendFactoryInitParams) == 72,
+            "TriggerSendFactoryInitParams command value is assigned");
     Require(IsSupportedIpcCommand(IpcCommand::Ping), "Ping remains supported");
     Require(IsSupportedIpcCommand(IpcCommand::SetVhfEnabled), "SetVhfEnabled remains supported");
     Require(IsSupportedIpcCommand(IpcCommand::GetDebugSchema), "GetDebugSchema remains supported");
     Require(IsSupportedIpcCommand(IpcCommand::GetPenIdentityStatus), "GetPenIdentityStatus remains supported");
+    Require(IsSupportedIpcCommand(IpcCommand::TriggerSendScanMode), "TriggerSendScanMode remains supported");
+    Require(IsSupportedIpcCommand(IpcCommand::TriggerSendFactoryInitParams),
+            "TriggerSendFactoryInitParams is supported");
 
     Require(U(IpcStatusCode::Ok) == 0, "Ok status value remains stable");
     Require(U(IpcStatusCode::UnsupportedCommand) == 1, "UnsupportedCommand status value remains stable");
@@ -202,6 +208,19 @@ int main() {
     for (uint8_t value : request.param) {
         Require(value == 0, "IpcRequest param buffer is zero-initialized");
     }
+
+    const auto scanModeRequest = MakeTriggerSendScanModeRequest(51, 68, 1);
+    Require(scanModeRequest.command == IpcCommand::TriggerSendScanMode,
+            "scan mode request uses the parameterized scan-mode command");
+    Require(scanModeRequest.paramLen == 3 && scanModeRequest.param[0] == 51 &&
+                scanModeRequest.param[1] == 68 && scanModeRequest.param[2] == 1,
+            "scan mode request preserves freq1, freq2, and mode");
+
+    const auto factoryInitRequest = MakeTriggerSendFactoryInitParamsRequest();
+    Require(factoryInitRequest.command == IpcCommand::TriggerSendFactoryInitParams,
+            "factory init request uses the dedicated factory command");
+    Require(factoryInitRequest.paramLen == 0,
+            "factory init request does not masquerade as an all-zero scan mode request");
 
     IpcResponse response{};
     Require(response.status == IpcStatusCode::InternalError, "IpcResponse status defaults to InternalError");

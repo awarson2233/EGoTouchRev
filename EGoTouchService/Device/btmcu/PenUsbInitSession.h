@@ -8,7 +8,7 @@ enum class PenUsbInitAction : uint8_t {
     None = 0,
     SendInitialQueries,
     SendSecondMcuStatusQuery,
-    SendInitProtocolParams,
+    SendFactoryInitProtocolParams,
 };
 
 class PenUsbInitSession {
@@ -35,7 +35,7 @@ public:
             if (code == PenUsbEventCode::PenRepParam && !m_initParamSent) {
                 m_initParamSent = true;
                 m_phase = Phase::Running;
-                return PenUsbInitAction::SendInitProtocolParams;
+                return PenUsbInitAction::SendFactoryInitProtocolParams;
             }
             return PenUsbInitAction::None;
 
