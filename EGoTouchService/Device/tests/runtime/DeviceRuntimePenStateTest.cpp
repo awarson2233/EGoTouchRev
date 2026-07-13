@@ -86,8 +86,8 @@ void TestIdentityEventsDoNotInferConnection() {
     Require(state.protocolHintFromPenModule &&
                 state.protocolHint == Solvers::StylusProtocolHint::Hpp3,
             "PenModule should update the protocol hint");
-    Require(runtime.GetSnapshot().queue_depth == 1,
-            "PenModule should enqueue SetStylusId only, not InitStylus");
+    Require(runtime.GetSnapshot().queue_depth == 0,
+            "PenModule must not submit AFE work before the runtime command gate opens");
 
     auto serial = MakePayloadEvent(PenUsbEventCode::PenSerialNumber, 0);
     serial.semantic.hasSerialNumber = true;
@@ -122,8 +122,8 @@ void TestIdentityEventsDoNotInferConnection() {
             "PenTypeInfo should update stylus ID");
     Require(state.penRevision == 5,
             "each distinct identity update should advance pen revision once");
-    Require(runtime.GetSnapshot().queue_depth == 2,
-            "identity updates should enqueue only the two SetStylusId commands");
+    Require(runtime.GetSnapshot().queue_depth == 0,
+            "identity updates must not bypass the closed runtime command gate");
 
     auto connected = MakePayloadEvent(PenUsbEventCode::PenConnStatus, 1);
     connected.semantic.hasConnection = true;
@@ -133,8 +133,8 @@ void TestIdentityEventsDoNotInferConnection() {
     state = runtime.GetPenStateSnapshot();
     Require(state.hasConnection && state.connected,
             "PenConnStatus should be the event that establishes connection");
-    Require(runtime.GetSnapshot().queue_depth == 3,
-            "connected PenConnStatus should enqueue InitStylus");
+    Require(runtime.GetSnapshot().queue_depth == 0,
+            "connected PenConnStatus must not bypass the closed runtime command gate");
 }
 
 void TestDuplicateDisconnectClearsIdentityObservably() {
