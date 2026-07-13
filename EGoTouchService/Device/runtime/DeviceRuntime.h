@@ -9,6 +9,7 @@
 #include <deque>
 #include <expected>
 #include <mutex>
+#include <optional>
 
 #include <string>
 #include <thread>
@@ -208,6 +209,8 @@ struct PenAfeCommandPlan {
 /// Build the AFE state reconstruction required after a full runtime restart.
 /// Commands are ordered by hardware dependency: InitStylus before SetStylusId.
 PenAfeCommandPlan BuildPenAfeCommandPlan(const RuntimePenState& state) noexcept;
+std::optional<command> BuildPenConnectionAfeCommand(
+    bool connectionChanged, bool connected) noexcept;
 
 struct PenAfeReplayState {
     uint64_t generation = 0;
@@ -324,6 +327,7 @@ public:
     void IngestPenEvent(const Himax::Pen::PenEvent& ev);
 
 private:
+    StartRequestResult StartStateMachine();
     ThreadResult WorkerMain();
     void HandlePenButtonStatusCode(uint8_t statusCode,
                                    uint8_t rawEventPayload,
@@ -359,6 +363,7 @@ private:
     bool ShouldExecuteCommand(const QueuedCommand& qc);
     bool ExecuteCommand(const QueuedCommand& qc);
     bool DrainCommands();
+    void CancelQueuedCommandsLocked(const char* detail);
     void RecordHistory(const QueuedCommand& qc,
                        bool ok, const std::string& det);
 
@@ -392,6 +397,7 @@ private:
 
     mutable std::mutex m_mu;
     StaticQueue<QueuedCommand, 16> m_cmdQueue{};
+    bool m_acceptExternalAfeCommands = false;
     bool m_displayOffSuspendPending = false;
     std::chrono::steady_clock::time_point m_displayOffSuspendDeadline{};
     std::atomic<bool> m_systemSuspendObserved{false};

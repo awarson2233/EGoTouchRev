@@ -166,16 +166,11 @@ bool RunRestartAfterWorkerSelfExitTest() {
     }
 
     runtime.IngestPolicyEvent(MakePolicyEvent(RuntimePolicyEvent::Type::Shutdown));
-    if (!WaitForState(runtime, workerState::quit, 2s)) {
-        const auto snapshot = runtime.GetSnapshot();
+    const auto restartResult = runtime.RequestStart();
+    if (restartResult != DeviceRuntime::StartRequestResult::Started) {
         runtime.Stop();
-        std::cerr << "[TEST] Runtime did not self-exit after Shutdown event; state="
-                  << ToString(snapshot.state) << " running=" << runtime.IsRunning() << "\n";
-        return false;
-    }
-
-    if (!runtime.Start()) {
-        std::cerr << "[TEST] Restart failed after worker self-exit left joinable thread.\n";
+        std::cerr << "[TEST] RequestStart did not restart across worker self-stop; result="
+                  << static_cast<int>(restartResult) << "\n";
         return false;
     }
 
@@ -188,6 +183,48 @@ bool RunRestartAfterWorkerSelfExitTest() {
     }
 
     runtime.Stop();
+    return true;
+}
+
+bool RunRequestStartLinearizesWithExplicitStopTest() {
+    using namespace std::chrono_literals;
+
+    auto runtime = std::make_unique<DeviceRuntime>(
+        L"\\\\?\\EGoTouchMissingMaster",
+        L"\\\\?\\EGoTouchMissingSlave",
+        L"\\\\?\\EGoTouchMissingInterrupt");
+    runtime->SetAutoMode(true);
+    if (!runtime->Start() || !WaitForState(*runtime, workerState::recover, 2s)) {
+        runtime->Stop();
+        std::cerr << "[TEST] Failed to prepare runtime for concurrent Stop/RequestStart.\n";
+        return false;
+    }
+
+    std::barrier startBarrier(2);
+    std::thread stopper([&]() {
+        startBarrier.arrive_and_wait();
+        (void)runtime->RequestStop();
+    });
+    startBarrier.arrive_and_wait();
+
+    const auto deadline = std::chrono::steady_clock::now() + 2s;
+    while (std::chrono::steady_clock::now() < deadline &&
+           runtime->GetSnapshot().state != workerState::quit &&
+           runtime->IsRunning()) {
+        std::this_thread::yield();
+    }
+
+    const auto startResult = runtime->RequestStart();
+    stopper.join();
+    const bool restarted =
+        startResult == DeviceRuntime::StartRequestResult::Started &&
+        WaitForState(*runtime, workerState::recover, 2s);
+    runtime->Stop();
+    if (!restarted) {
+        std::cerr << "[TEST] RequestStart did not linearize after concurrent Stop; result="
+                  << static_cast<int>(startResult) << "\n";
+        return false;
+    }
     return true;
 }
 
@@ -302,6 +339,28 @@ bool RunAfeStylusSnapshotSynchronizationTest() {
     return true;
 }
 
+bool RunRepeatedConnectedEventPreservesReplayedStylusIdTest() {
+    auto chip = std::make_unique<Himax::Chip>(
+        L"\\\\?\\EGoTouchMissingMaster",
+        L"\\\\?\\EGoTouchMissingSlave",
+        L"\\\\?\\EGoTouchMissingInterrupt");
+    chip->m_connState.store(Himax::ConnectionState::Connected, std::memory_order_release);
+
+    (void)chip->SendAfeCommand(command{AFE_Command::InitStylus, 0});
+    (void)chip->SendAfeCommand(command{AFE_Command::SetStylusId, 7});
+    if (const auto duplicateConnected = BuildPenConnectionAfeCommand(false, true)) {
+        (void)chip->SendAfeCommand(*duplicateConnected);
+    }
+
+    const auto snapshot = chip->m_afe.GetStylusStateSnapshot();
+    chip->m_connState.store(Himax::ConnectionState::Unconnected, std::memory_order_release);
+    if (!snapshot.connected || snapshot.pen_id != 7) {
+        std::cerr << "[TEST] Duplicate connected event reset replayed stylus ID.\n";
+        return false;
+    }
+    return true;
+}
+
 bool RunConcurrentStartAndSubmitLinearizationTest() {
     using namespace std::chrono_literals;
     constexpr int kIterations = 12;
@@ -369,6 +428,131 @@ bool RunConcurrentStartAndSubmitLinearizationTest() {
     if (totalAccepted == 0) {
         std::cerr << "[TEST] Start/submit concurrency test did not exercise accepted commands.\n";
         return false;
+    }
+    return true;
+}
+
+bool RunAcceptedCommandsObservedAcrossShutdownAndStopTest() {
+    using namespace std::chrono_literals;
+    constexpr int kSubmitters = 8;
+
+    for (const bool policyShutdown : {false, true}) {
+        auto runtime = std::make_unique<DeviceRuntime>(
+            L"\\\\?\\EGoTouchMissingMaster",
+            L"\\\\?\\EGoTouchMissingSlave",
+            L"\\\\?\\EGoTouchMissingInterrupt");
+        runtime->SetAutoMode(false);
+        if (!runtime->Start()) {
+            std::cerr << "[TEST] Failed to start command cancellation runtime.\n";
+            return false;
+        }
+        runtime->ClearHistory();
+
+        std::atomic<int> accepted{
+            runtime->SubmitExternalAfeCommand(AFE_Command::ClearStatus, 0) ? 1 : 0};
+        std::barrier stopBarrier(kSubmitters + 2);
+        std::vector<std::thread> submitters;
+        submitters.reserve(kSubmitters);
+        for (int i = 0; i < kSubmitters; ++i) {
+            submitters.emplace_back([&]() {
+                stopBarrier.arrive_and_wait();
+                if (runtime->SubmitExternalAfeCommand(AFE_Command::ClearStatus, 0)) {
+                    accepted.fetch_add(1, std::memory_order_relaxed);
+                }
+            });
+        }
+        std::thread stopper([&]() {
+            stopBarrier.arrive_and_wait();
+            if (policyShutdown) {
+                runtime->IngestPolicyEvent(
+                    MakePolicyEvent(RuntimePolicyEvent::Type::Shutdown));
+            } else {
+                (void)runtime->RequestStop();
+            }
+        });
+
+        stopBarrier.arrive_and_wait();
+        for (auto& submitter : submitters) {
+            submitter.join();
+        }
+        stopper.join();
+
+        if (policyShutdown) {
+            const auto deadline = std::chrono::steady_clock::now() + 2s;
+            while (std::chrono::steady_clock::now() < deadline && runtime->IsRunning()) {
+                std::this_thread::sleep_for(5ms);
+            }
+            runtime->Stop();
+        }
+
+        const auto history = runtime->GetHistory(100);
+        const auto acceptedCount = static_cast<std::size_t>(
+            accepted.load(std::memory_order_acquire));
+        const bool gateClosed =
+            !runtime->SubmitExternalAfeCommand(AFE_Command::ClearStatus, 0);
+        if (!gateClosed || history.size() != acceptedCount) {
+            std::cerr << "[TEST] Accepted command was silently lost across "
+                      << (policyShutdown ? "Shutdown" : "Stop")
+                      << ": accepted=" << acceptedCount
+                      << " observed=" << history.size() << "\n";
+            return false;
+        }
+    }
+    return true;
+}
+
+bool RunPublishedShutdownIsNotLostByStartTest() {
+    using namespace std::chrono_literals;
+    constexpr int kIterations = 12;
+
+    auto runtime = std::make_unique<DeviceRuntime>(
+        L"\\\\?\\EGoTouchMissingMaster",
+        L"\\\\?\\EGoTouchMissingSlave",
+        L"\\\\?\\EGoTouchMissingInterrupt");
+    runtime->SetAutoMode(false);
+
+    for (int iteration = 0; iteration < kIterations; ++iteration) {
+        runtime->Stop();
+        std::barrier startBarrier(3);
+        std::atomic<bool> startDone{false};
+        std::atomic<bool> startOk{false};
+
+        std::thread starter([&]() {
+            startBarrier.arrive_and_wait();
+            startOk.store(runtime->Start(), std::memory_order_release);
+            startDone.store(true, std::memory_order_release);
+        });
+        std::thread shutdownPublisher([&]() {
+            startBarrier.arrive_and_wait();
+            while (!runtime->IsRunning() &&
+                   !startDone.load(std::memory_order_acquire)) {
+                std::this_thread::yield();
+            }
+            if (runtime->IsRunning()) {
+                runtime->IngestPolicyEvent(
+                    MakePolicyEvent(RuntimePolicyEvent::Type::Shutdown));
+            }
+        });
+
+        startBarrier.arrive_and_wait();
+        starter.join();
+        shutdownPublisher.join();
+        if (!startOk.load(std::memory_order_acquire)) {
+            std::cerr << "[TEST] Concurrent Start failed before Shutdown publication.\n";
+            return false;
+        }
+
+        const auto deadline = std::chrono::steady_clock::now() + 2s;
+        while (std::chrono::steady_clock::now() < deadline && runtime->IsRunning()) {
+            std::this_thread::sleep_for(5ms);
+        }
+        const bool shutdownObserved = !runtime->IsRunning() &&
+            runtime->GetSnapshot().state == workerState::quit;
+        runtime->Stop();
+        if (!shutdownObserved) {
+            std::cerr << "[TEST] Shutdown published after running was lost during Start.\n";
+            return false;
+        }
     }
     return true;
 }
@@ -447,24 +631,40 @@ int main() {
         return 4;
     }
 
-    if (!RunPenAfeRestartPlanOrderingTest()) {
+    if (!RunRequestStartLinearizesWithExplicitStopTest()) {
         return 5;
     }
 
-    if (!RunPenReplayCoversResumeAndRecoverInitCyclesTest()) {
+    if (!RunPenAfeRestartPlanOrderingTest()) {
         return 6;
     }
 
-    if (!RunAfeStylusSnapshotSynchronizationTest()) {
+    if (!RunPenReplayCoversResumeAndRecoverInitCyclesTest()) {
         return 7;
     }
 
-    if (!RunConcurrentStartAndSubmitLinearizationTest()) {
+    if (!RunAfeStylusSnapshotSynchronizationTest()) {
         return 8;
     }
 
-    if (!RunStoppedPenIngressDoesNotQueueAfeCommandsTest()) {
+    if (!RunRepeatedConnectedEventPreservesReplayedStylusIdTest()) {
         return 9;
+    }
+
+    if (!RunConcurrentStartAndSubmitLinearizationTest()) {
+        return 10;
+    }
+
+    if (!RunAcceptedCommandsObservedAcrossShutdownAndStopTest()) {
+        return 11;
+    }
+
+    if (!RunPublishedShutdownIsNotLostByStartTest()) {
+        return 12;
+    }
+
+    if (!RunStoppedPenIngressDoesNotQueueAfeCommandsTest()) {
+        return 13;
     }
 
     std::cout << "[TEST] DeviceRuntime system power policy tests passed.\n";

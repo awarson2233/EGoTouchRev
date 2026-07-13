@@ -241,6 +241,16 @@ PenAfeCommandPlan BuildPenAfeCommandPlan(const RuntimePenState& state) noexcept 
   return plan;
 }
 
+std::optional<command> BuildPenConnectionAfeCommand(
+    bool connectionChanged, bool connected) noexcept {
+  if (!connectionChanged) {
+    return std::nullopt;
+  }
+  return command{
+      connected ? AFE_Command::InitStylus : AFE_Command::DisconnectStylus,
+      0};
+}
+
 // --------------- Lifecycle ---------------
 
 DeviceRuntime::DeviceRuntime(const std::wstring &master,
@@ -258,17 +268,31 @@ DeviceRuntime::DeviceRuntime(const std::wstring &master,
 DeviceRuntime::~DeviceRuntime() { Stop(); }
 
 bool DeviceRuntime::Start() {
+  return StartStateMachine() == StartRequestResult::Started;
+}
+
+DeviceRuntime::StartRequestResult DeviceRuntime::StartStateMachine() {
   std::unique_lock<std::mutex> lifecycleLock(m_lifecycleMu);
   m_lifecycleCv.wait(lifecycleLock, [this]() {
     return !m_stopInProgress && !m_selfStopDetached;
   });
 
   if (m_running.load(std::memory_order_acquire)) {
+    bool lifecycleAccepting = false;
+    {
+      std::lock_guard<std::mutex> lk(m_mu);
+      lifecycleAccepting = m_acceptExternalAfeCommands;
+    }
     const bool workerIsQuitting =
-        m_state.load(std::memory_order_acquire) == workerState::quit;
-    if (!workerIsQuitting || !m_thread.joinable() ||
+        !lifecycleAccepting ||
+        m_state.load(std::memory_order_acquire) == workerState::quit ||
+        m_stopReason.load(std::memory_order_acquire) == StopReason::Shutdown;
+    if (!workerIsQuitting) {
+      return StartRequestResult::AlreadyRunning;
+    }
+    if (!m_thread.joinable() ||
         m_thread.get_id() == std::this_thread::get_id()) {
-      return false;
+      return StartRequestResult::Failed;
     }
 
     m_lifecycleCv.wait(lifecycleLock, [this]() {
@@ -281,23 +305,22 @@ bool DeviceRuntime::Start() {
     if (m_thread.get_id() == std::this_thread::get_id()) {
       LOG_WARN("Runtime", __func__, "Thread",
                "Start() called from worker thread while previous worker is joinable.");
-      return false;
+      return StartRequestResult::Failed;
     }
     m_thread.join();
   }
 
+  // Initialize every new-generation state before publishing running/accepting.
+  // IngestPolicyEvent uses m_lifecycleMu, so events linearized after publication
+  // cannot be overwritten by startup resets.
+  m_stopReason.store(StopReason::None, std::memory_order_release);
+  SetState(workerState::ready);
+  m_needSuspendDeinit.store(false, std::memory_order_release);
+  m_systemSuspendObserved.store(false, std::memory_order_release);
+  m_consecutiveFrameErrors = 0;
+
   {
-    // Serialize the lifecycle boundary with pen ingress, then publish running
-    // under the same queue lock that submitters use. A successful submit can
-    // therefore only occur after stale commands have been cleared.
     std::lock_guard<std::mutex> penIngressLock(m_penIngressMu);
-    {
-      std::lock_guard<std::mutex> lk(m_mu);
-      m_cmdQueue.clear();
-      m_displayOffSuspendPending = false;
-      m_stopped.store(false, std::memory_order_release);
-      m_running.store(true, std::memory_order_release);
-    }
     m_acceptPenAfeCommands = true;
     if (m_autoMode.load(std::memory_order_acquire)) {
       m_penReplay.BeginInitCycle();
@@ -307,16 +330,21 @@ bool DeviceRuntime::Start() {
       }
       m_penReplay.CompleteInitCycle();
     }
+
+    std::lock_guard<std::mutex> lk(m_mu);
+    CancelQueuedCommandsLocked("cancelled: superseded by runtime start");
+    m_displayOffSuspendPending = false;
+    m_lastEventByType.fill(std::chrono::steady_clock::time_point{});
+    m_recoverCount = 0;
+    m_lastNote = "Runtime started";
+    m_acceptExternalAfeCommands = true;
+    m_stopped.store(false, std::memory_order_release);
+    m_running.store(true, std::memory_order_release);
   }
-  m_stopReason.store(StopReason::None, std::memory_order_release);
-  SetState(workerState::ready);
-  m_needSuspendDeinit.store(false, std::memory_order_release);
-  m_systemSuspendObserved.store(false, std::memory_order_release);
-  m_recoverCount = 0;
-  m_lastNote = "Runtime started";
+
   m_thread = std::thread(&DeviceRuntime::WorkerMain, this);
   LOG_INFO("Runtime", __func__, "ready", "Worker thread launched.");
-  return true;
+  return StartRequestResult::Started;
 }
 
 void DeviceRuntime::Stop() {
@@ -341,35 +369,30 @@ void DeviceRuntime::Stop() {
     }
 
     {
-      // Disable pen-generated AFE work while serialized against the complete
-      // event update/submit path. State snapshots continue to accept updates.
+      // Close both accepting gates before cancelling queued work. Pen state
+      // snapshots remain writable while stopped.
       std::lock_guard<std::mutex> penIngressLock(m_penIngressMu);
       m_acceptPenAfeCommands = false;
       m_penReplay.CompleteInitCycle();
+
+      std::lock_guard<std::mutex> lk(m_mu);
+      m_acceptExternalAfeCommands = false;
+      m_stopped.store(true, std::memory_order_release);
+      CancelQueuedCommandsLocked("cancelled: runtime stop");
     }
+    m_stopReason.store(StopReason::Shutdown, std::memory_order_release);
 
     if (!m_running.load(std::memory_order_acquire) && !m_thread.joinable() &&
         !m_selfStopDetached) {
-      {
-        std::lock_guard<std::mutex> lk(m_mu);
-        m_cmdQueue.clear();
-      }
-      m_stopped.store(true, std::memory_order_release);
-      m_stopReason.store(StopReason::Shutdown, std::memory_order_release);
       SetState(workerState::quit);
+      std::lock_guard<std::mutex> lk(m_mu);
       m_lastNote = "Runtime stopped";
       return;
     }
 
     m_stopInProgress = true;
-    m_stopped.store(true, std::memory_order_release);
-    m_stopReason.store(StopReason::Shutdown, std::memory_order_release);
   }
 
-  {
-    std::lock_guard<std::mutex> lk(m_mu);
-    m_cmdQueue.clear();
-  }
   m_chip.CancelPendingFrameRead();
 
   std::unique_lock<std::mutex> lifecycleLock(m_lifecycleMu);
@@ -402,17 +425,17 @@ void DeviceRuntime::Stop() {
   }
   m_running.store(false, std::memory_order_release);
   SetState(workerState::quit);
-  m_lastNote = "Runtime stopped";
+  {
+    std::lock_guard<std::mutex> lk(m_mu);
+    m_lastNote = "Runtime stopped";
+  }
   m_stopInProgress = false;
   lifecycleLock.unlock();
   m_lifecycleCv.notify_all();
 }
 
 DeviceRuntime::StartRequestResult DeviceRuntime::RequestStart() {
-  if (IsRunning()) {
-    return StartRequestResult::AlreadyRunning;
-  }
-  return Start() ? StartRequestResult::Started : StartRequestResult::Failed;
+  return StartStateMachine();
 }
 
 DeviceRuntime::StopRequestResult DeviceRuntime::RequestStop() {
@@ -659,7 +682,8 @@ bool DeviceRuntime::SubmitExternalAfeCommand(AFE_Command type, uint8_t param) {
   std::lock_guard<std::mutex> lk(m_mu);
   // Recheck while holding the queue lock used by Stop() to clear pending work.
   // This closes the check-then-enqueue race at the stopped boundary.
-  if (!m_running.load(std::memory_order_acquire) ||
+  if (!m_acceptExternalAfeCommands ||
+      !m_running.load(std::memory_order_acquire) ||
       m_stopped.load(std::memory_order_acquire)) {
     return false;
   }
@@ -705,6 +729,9 @@ uint64_t DeviceRuntime::SubmitCommand(command cmd, CommandSource src,
 }
 
 void DeviceRuntime::IngestPolicyEvent(const RuntimePolicyEvent &ev) {
+  // Establish a generation boundary with Start/Stop. Events that acquire this
+  // lock after running is published cannot be overwritten by startup resets.
+  std::unique_lock<std::mutex> lifecycleLock(m_lifecycleMu);
   using EventType = RuntimePolicyEvent::Type;
 
   const auto now = std::chrono::steady_clock::now();
@@ -804,11 +831,22 @@ void DeviceRuntime::IngestPolicyEvent(const RuntimePolicyEvent &ev) {
                "Wake event ignored because runtime is stopped.");
     }
   } break;
-  case EventType::Shutdown:
+  case EventType::Shutdown: {
     LOG_INFO("Runtime", __func__, "Policy",
              "Shutdown event, requesting termination.");
-    m_stopReason.store(StopReason::Shutdown);
+    {
+      std::lock_guard<std::mutex> penIngressLock(m_penIngressMu);
+      m_acceptPenAfeCommands = false;
+      m_penReplay.CompleteInitCycle();
+
+      std::lock_guard<std::mutex> lk(m_mu);
+      m_acceptExternalAfeCommands = false;
+      CancelQueuedCommandsLocked("cancelled: shutdown requested");
+    }
+    m_stopReason.store(StopReason::Shutdown, std::memory_order_release);
+    m_chip.CancelPendingFrameRead();
     break;
+  }
   default:
     break;
   }
@@ -862,6 +900,14 @@ void DeviceRuntime::ClearHistory() {
 }
 
 // --------------- 审计日志 ---------------
+
+void DeviceRuntime::CancelQueuedCommandsLocked(const char* detail) {
+  QueuedCommand qc{};
+  while (m_cmdQueue.pop(qc)) {
+    m_lastCmdId = qc.id;
+    RecordHistory(qc, false, detail ? detail : "cancelled");
+  }
+}
 
 void DeviceRuntime::RecordHistory(const QueuedCommand &qc, bool ok,
                                   const std::string &det) {
@@ -945,7 +991,7 @@ ThreadResult DeviceRuntime::WorkerMain() {
         m_displayOffSuspendPending = false;
         SetState(workerState::suspend);
         m_needSuspendDeinit.store(true, std::memory_order_release);
-        m_cmdQueue.clear();
+        CancelQueuedCommandsLocked("cancelled: display-off suspend");
         displayOffSuspendDue = true;
       }
     }
@@ -977,7 +1023,10 @@ ThreadResult DeviceRuntime::WorkerMain() {
         SetState(workerState::quit);
       }
       std::lock_guard<std::mutex> lk(m_mu);
-      m_cmdQueue.clear();
+      CancelQueuedCommandsLocked(
+          reason == StopReason::Shutdown
+              ? "cancelled: shutdown consumed"
+              : "cancelled: screen-off suspend");
     }
 
     DrainCommands();
@@ -1296,6 +1345,7 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
 
   case EC::PenConnStatus: {
     bool connected = false;
+    bool connectionChanged = false;
     UpdatePenState([&](RuntimePenState& state, PenStateUpdateResult& res) {
       const bool hadConnection = state.hasConnection;
       const bool oldConnected = state.connected;
@@ -1306,6 +1356,7 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
       connected = state.hasConnection && state.connected;
 
       res.stateChanged = !hadConnection || oldConnected != state.connected;
+      connectionChanged = res.stateChanged;
       if (res.stateChanged) {
         ResetPenTransientState(state);
       }
@@ -1317,15 +1368,11 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
       }
     });
 
-    command cmd{};
-    if (connected) {
-      cmd.type = AFE_Command::InitStylus;
-      cmd.param = 0;
-      SubmitPenAfeCommandLocked(cmd, "PenConnStatus->Init");
-    } else {
-      cmd.type = AFE_Command::DisconnectStylus;
-      cmd.param = 0;
-      SubmitPenAfeCommandLocked(cmd, "PenConnStatus->Disconnect");
+    if (const auto cmd = BuildPenConnectionAfeCommand(
+            connectionChanged, connected)) {
+      SubmitPenAfeCommandLocked(
+          *cmd,
+          connected ? "PenConnStatus->Init" : "PenConnStatus->Disconnect");
     }
     break;
   }
