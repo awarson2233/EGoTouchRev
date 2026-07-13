@@ -1,6 +1,7 @@
 #pragma once
 
 #include <condition_variable>
+#include <cstddef>
 #include <memory>
 #include <mutex>
 
@@ -24,7 +25,9 @@ public:
             }
             if (m_state == State::Starting || m_state == State::StartingStopPending) {
                 attempt = m_startAttempt;
+                ++m_startWaiters;
                 attempt->completed.wait(lock, [&] { return attempt->done; });
+                --m_startWaiters;
                 return attempt->succeeded;
             }
 
@@ -38,7 +41,7 @@ public:
             started = operation();
         } catch (...) {
             CompleteStart(attempt, false);
-            throw;
+            return false;
         }
         CompleteStart(attempt, started);
         return started;
@@ -82,6 +85,11 @@ public:
         return m_state == State::StartingStopPending;
     }
 
+    bool HasWaitingStart() const {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return m_startWaiters != 0;
+    }
+
 private:
     enum class State {
         Stopped,
@@ -111,6 +119,7 @@ private:
     mutable std::mutex m_mutex;
     std::condition_variable m_stateChanged;
     std::shared_ptr<StartAttempt> m_startAttempt;
+    std::size_t m_startWaiters = 0;
     State m_state = State::Stopped;
 };
 

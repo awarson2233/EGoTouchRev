@@ -34,6 +34,7 @@
 #include <array>
 #include <cstring>
 #include <cwchar>
+#include <exception>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -662,21 +663,34 @@ bool ServiceHost::StartPenSubsystem() {
 
 bool ServiceHost::Start() {
     return m_impl->m_lifecycle.RunStart([this] {
-        if (!InitializeConfigStores()) {
-            LOG_ERROR("Service", "Start", "Boot", "Startup config load/validation failed; service start blocked.");
+        try {
+            if (!InitializeConfigStores()) {
+                LOG_ERROR("Service", "Start", "Boot", "Startup config load/validation failed; service start blocked.");
+                return false;
+            }
+
+            m_runtimeMode = m_configState.mode;
+            LOG_INFO("Service", "Start", "Boot", "Service mode: {}, AutoMode: {}",
+                     ServiceModeToConfig(m_configState.mode), m_configState.autoMode);
+
+            if (!ServiceLifecycleCoordinator::Start(*this)) {
+                return false;
+            }
+
+            LOG_INFO("Service", "Start", "Boot", "All modules started.");
+            return true;
+        } catch (const std::exception& error) {
+            ServiceLifecycleCoordinator::Stop(*this);
+            LOG_ERROR("Service", "Start", "Boot",
+                      "Unhandled startup exception; service lifecycle rolled back: {}",
+                      error.what());
+            return false;
+        } catch (...) {
+            ServiceLifecycleCoordinator::Stop(*this);
+            LOG_ERROR("Service", "Start", "Boot",
+                      "Unhandled non-standard startup exception; service lifecycle rolled back.");
             return false;
         }
-
-        m_runtimeMode = m_configState.mode;
-        LOG_INFO("Service", "Start", "Boot", "Service mode: {}, AutoMode: {}",
-                 ServiceModeToConfig(m_configState.mode), m_configState.autoMode);
-
-        if (!ServiceLifecycleCoordinator::Start(*this)) {
-            return false;
-        }
-
-        LOG_INFO("Service", "Start", "Boot", "All modules started.");
-        return true;
     });
 }
 

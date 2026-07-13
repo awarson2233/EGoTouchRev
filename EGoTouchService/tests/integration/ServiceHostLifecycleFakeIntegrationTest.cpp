@@ -94,6 +94,17 @@ bool WaitForPendingStop(Service::ServiceLifecycleStateMachine& lifecycle) {
     return false;
 }
 
+bool WaitForWaitingStart(Service::ServiceLifecycleStateMachine& lifecycle) {
+    const auto deadline = std::chrono::steady_clock::now() + 2s;
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (lifecycle.HasWaitingStart()) {
+            return true;
+        }
+        std::this_thread::yield();
+    }
+    return false;
+}
+
 struct FakeRuntime {
     bool startResult = true;
     CallLog* calls = nullptr;
@@ -705,6 +716,50 @@ bool StopWaitsForIpcAndMonitorStartupStages() {
     return true;
 }
 
+bool ConcurrentStartExceptionReturnsFalseAndAllowsRetry() {
+    Service::ServiceLifecycleStateMachine lifecycle;
+    StageBarrier beforeThrow;
+    int operationCount = 0;
+    int rollbackCount = 0;
+
+    const auto throwingStart = [&]() -> bool {
+        ++operationCount;
+        beforeThrow.ArriveAndWait();
+        try {
+            throw std::runtime_error("injected shared start failure");
+        } catch (...) {
+            ++rollbackCount;
+            throw;
+        }
+    };
+
+    bool firstResult = true;
+    bool secondResult = true;
+    std::thread firstStart([&] { firstResult = lifecycle.RunStart(throwingStart); });
+    const bool reachedThrowBarrier = beforeThrow.WaitUntilArrived();
+    std::thread secondStart([&] { secondResult = lifecycle.RunStart(throwingStart); });
+    const bool secondStartWaiting = WaitForWaitingStart(lifecycle);
+
+    beforeThrow.Release();
+    firstStart.join();
+    secondStart.join();
+
+    REQUIRE_TRUE(reachedThrowBarrier);
+    REQUIRE_TRUE(secondStartWaiting);
+    REQUIRE_TRUE(!firstResult && !secondResult);
+    REQUIRE_TRUE(operationCount == 1);
+    REQUIRE_TRUE(rollbackCount == 1);
+
+    const bool retryResult = lifecycle.RunStart([&] {
+        ++operationCount;
+        return true;
+    });
+    REQUIRE_TRUE(retryResult);
+    REQUIRE_TRUE(operationCount == 2);
+    lifecycle.RunStop([] {});
+    return true;
+}
+
 bool ConcurrentStartsAndStopsAreIdempotent() {
     FakeServiceHostHarness host;
     StageBarrier beforePublish;
@@ -801,6 +856,7 @@ int main() {
     failures += RunTest(&WakeCallbacksIssuePenStatusQueryOnlyInFullMode, "WakeCallbacksIssuePenStatusQueryOnlyInFullMode");
     failures += RunTest(&StopWaitsForPenLocalProducersToPublish, "StopWaitsForPenLocalProducersToPublish");
     failures += RunTest(&StopWaitsForIpcAndMonitorStartupStages, "StopWaitsForIpcAndMonitorStartupStages");
+    failures += RunTest(&ConcurrentStartExceptionReturnsFalseAndAllowsRetry, "ConcurrentStartExceptionReturnsFalseAndAllowsRetry");
     failures += RunTest(&ConcurrentStartsAndStopsAreIdempotent, "ConcurrentStartsAndStopsAreIdempotent");
     failures += RunTest(&StopWaitsForMonitorAndIpcBeforePenTeardown, "StopWaitsForMonitorAndIpcBeforePenTeardown");
     return failures == 0 ? 0 : 1;
