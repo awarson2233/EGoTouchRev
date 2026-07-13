@@ -209,6 +209,27 @@ struct PenAfeCommandPlan {
 /// Commands are ordered by hardware dependency: InitStylus before SetStylusId.
 PenAfeCommandPlan BuildPenAfeCommandPlan(const RuntimePenState& state) noexcept;
 
+struct PenAfeReplayState {
+    uint64_t generation = 0;
+    bool pending = false;
+
+    void BeginInitCycle() noexcept {
+        ++generation;
+        if (generation == 0) {
+            ++generation;
+        }
+        pending = true;
+    }
+
+    void CompleteInitCycle() noexcept { pending = false; }
+
+    bool IsCurrent(uint64_t commandGeneration) const noexcept {
+        return commandGeneration != 0 &&
+               commandGeneration == generation &&
+               !pending;
+    }
+};
+
 // --------------- DeviceRuntime ---------------
 
 class DeviceRuntime {
@@ -295,6 +316,7 @@ public:
 
     RuntimeSnapshot GetSnapshot() const;
     RuntimePenState GetPenStateSnapshot() const;
+    PenAfeReplayState GetPenAfeReplayStateSnapshot() const;
     std::vector<HistoryEntry> GetHistory(std::size_t n = 200) const;
     void ClearHistory();
 
@@ -309,6 +331,7 @@ private:
     void ApplyPenStateToStylusPipeline();
     void UpdatePenState(std::function<void(RuntimePenState&, PenStateUpdateResult&)> updateFn);
     void SubmitPenAfeCommandLocked(command cmd, const char* reason);
+    void BeginPenReplayInitCycle();
     void ReplayPenStateAfterChipInit();
     void DispatchPenButtonAction(const PenButtonAction& action, const char* source);
 
@@ -321,6 +344,7 @@ private:
 
     struct QueuedCommand {
         uint64_t id = 0;
+        uint64_t penGeneration = 0;
         command cmd{};
         CommandSource source = CommandSource::External;
         std::chrono::steady_clock::time_point enqueued_at{};
@@ -328,7 +352,11 @@ private:
     };
 
     QueuedCommand MakeQueuedCommand(command cmd, CommandSource src,
-                                    const char* reason);
+                                    const char* reason,
+                                    uint64_t penGeneration = 0);
+    uint64_t EnqueueCommand(command cmd, CommandSource src,
+                            const char* reason, uint64_t penGeneration = 0);
+    bool ShouldExecuteCommand(const QueuedCommand& qc);
     bool ExecuteCommand(const QueuedCommand& qc);
     bool DrainCommands();
     void RecordHistory(const QueuedCommand& qc,
@@ -342,7 +370,7 @@ private:
     mutable std::mutex m_penStateMu;
     mutable std::mutex m_penIngressMu;
     bool m_acceptPenAfeCommands = false;
-    bool m_replayPenStateAfterInit = false;
+    PenAfeReplayState m_penReplay{};
     std::atomic<bool> m_autoMode{false};
     std::atomic<bool> m_stylusVhfEnabled{true};
     std::atomic<bool> m_masterParserOnly{false};

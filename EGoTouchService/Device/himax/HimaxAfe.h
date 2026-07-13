@@ -4,6 +4,7 @@
 #include "common/StylusState.h"
 #include "himax/AfeTypes.h"
 #include <cstdint>
+#include <mutex>
 
 namespace Himax {
 
@@ -36,14 +37,14 @@ public:
     ChipResult<> DisconnectStylus();
 
     // ── 状态访问 ───────────────────────────────────────────────
-    StylusState& GetStylusState() { return m_stylus; }
-    const StylusState& GetStylusState() const { return m_stylus; }
+    StylusState GetStylusStateSnapshot() const;
 
-    /// 重置手写笔状态（由 Chip::Init 调用）
-    void ResetStylusState() { m_stylus = StylusState{}; }
+    /// 重置手写笔状态（由 Chip::Init/Deinit/HoldReset 调用）
+    void ResetStylusState();
 
 private:
     Chip& m_chip;
+    mutable std::mutex m_stylusMutex;
     StylusState m_stylus;  // 从 Chip 移入 — 手写笔运行时状态
 };
 

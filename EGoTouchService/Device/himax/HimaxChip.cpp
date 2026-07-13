@@ -41,7 +41,7 @@ ChipResult<> Chip::SendAfeCommand(command cmd) {
 }
 
 bool Chip::IsStylusConnected() const {
-    return m_afe.GetStylusState().connected;
+    return m_afe.GetStylusStateSnapshot().connected;
 }
 
 uint16_t Chip::GetLastFrameTimestamp() const {

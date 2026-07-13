@@ -113,8 +113,11 @@ ChipResult<> AfeController::InitStylus(uint8_t pen_id) {
     if (m_chip.GetConnectionState() != ConnectionState::Connected)
         return std::unexpected(ChipError::InvalidOperation);
 
-    m_stylus.connected = true;
-    m_stylus.pen_id = pen_id;
+    {
+        std::lock_guard<std::mutex> lock(m_stylusMutex);
+        m_stylus.connected = true;
+        m_stylus.pen_id = pen_id;
+    }
 
     LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "Stylus connected, pen_id={}", static_cast<unsigned>(pen_id));
     return {};
@@ -124,7 +127,10 @@ ChipResult<> AfeController::SetStylusId(uint8_t pen_id) {
     if (m_chip.GetConnectionState() != ConnectionState::Connected)
         return std::unexpected(ChipError::InvalidOperation);
 
-    m_stylus.pen_id = pen_id;
+    {
+        std::lock_guard<std::mutex> lock(m_stylusMutex);
+        m_stylus.pen_id = pen_id;
+    }
 
     LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(),
              "pen_id={}", static_cast<unsigned>(pen_id));
@@ -136,8 +142,18 @@ ChipResult<> AfeController::DisconnectStylus() {
         return std::unexpected(ChipError::InvalidOperation);
 
     LOG_INFO("HimaxAFE", __func__, m_chip.GetStateStr(), "Reset StylusState");
-    m_stylus = StylusState{};
+    ResetStylusState();
     return {};
+}
+
+StylusState AfeController::GetStylusStateSnapshot() const {
+    std::lock_guard<std::mutex> lock(m_stylusMutex);
+    return m_stylus;
+}
+
+void AfeController::ResetStylusState() {
+    std::lock_guard<std::mutex> lock(m_stylusMutex);
+    m_stylus = StylusState{};
 }
 
 } // namespace Himax
