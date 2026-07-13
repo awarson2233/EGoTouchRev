@@ -1,6 +1,118 @@
 #pragma once
 
+#include <condition_variable>
+#include <memory>
+#include <mutex>
+
 namespace Service {
+
+// Linearizes public Start/Stop calls without holding the lifecycle mutex while
+// subsystem operations or callbacks run. Stop waits for an in-flight Start to
+// publish all stages, then performs one complete coordinator teardown.
+class ServiceLifecycleStateMachine {
+public:
+    template <typename StartOperation>
+    bool RunStart(StartOperation&& operation) {
+        std::shared_ptr<StartAttempt> attempt;
+        {
+            std::unique_lock<std::mutex> lock(m_mutex);
+            while (m_state == State::Stopping) {
+                m_stateChanged.wait(lock);
+            }
+            if (m_state == State::Running) {
+                return true;
+            }
+            if (m_state == State::Starting || m_state == State::StartingStopPending) {
+                attempt = m_startAttempt;
+                attempt->completed.wait(lock, [&] { return attempt->done; });
+                return attempt->succeeded;
+            }
+
+            attempt = std::make_shared<StartAttempt>();
+            m_startAttempt = attempt;
+            m_state = State::Starting;
+        }
+
+        bool started = false;
+        try {
+            started = operation();
+        } catch (...) {
+            CompleteStart(attempt, false);
+            throw;
+        }
+        CompleteStart(attempt, started);
+        return started;
+    }
+
+    template <typename StopOperation>
+    void RunStop(StopOperation&& operation) noexcept {
+        {
+            std::unique_lock<std::mutex> lock(m_mutex);
+            while (m_state == State::Starting || m_state == State::StartingStopPending) {
+                m_state = State::StartingStopPending;
+                const auto attempt = m_startAttempt;
+                attempt->completed.wait(lock, [&] { return attempt->done; });
+            }
+            if (m_state == State::Stopping) {
+                m_stateChanged.wait(lock, [&] { return m_state == State::Stopped; });
+                return;
+            }
+            if (m_state == State::Stopped) {
+                return;
+            }
+            m_state = State::Stopping;
+        }
+
+        try {
+            operation();
+        } catch (...) {
+            // The public lifecycle boundary remains stopped even if a host-like
+            // test double throws. Production rollback already isolates stages.
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            m_state = State::Stopped;
+        }
+        m_stateChanged.notify_all();
+    }
+
+    bool HasPendingStop() const {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return m_state == State::StartingStopPending;
+    }
+
+private:
+    enum class State {
+        Stopped,
+        Starting,
+        StartingStopPending,
+        Running,
+        Stopping,
+    };
+
+    struct StartAttempt {
+        std::condition_variable completed;
+        bool done = false;
+        bool succeeded = false;
+    };
+
+    void CompleteStart(const std::shared_ptr<StartAttempt>& attempt, bool succeeded) {
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            attempt->succeeded = succeeded;
+            attempt->done = true;
+            m_state = succeeded ? State::Running : State::Stopped;
+        }
+        attempt->completed.notify_all();
+        m_stateChanged.notify_all();
+    }
+
+    mutable std::mutex m_mutex;
+    std::condition_variable m_stateChanged;
+    std::shared_ptr<StartAttempt> m_startAttempt;
+    State m_state = State::Stopped;
+};
 
 // Defines the only supported subsystem publication and teardown order.
 // HostLike supplies idempotent lifecycle operations that return false when a

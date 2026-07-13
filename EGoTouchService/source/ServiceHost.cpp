@@ -42,6 +42,7 @@
 namespace Service {
 
 struct ServiceHost::Impl {
+    ServiceLifecycleStateMachine m_lifecycle;
     std::unique_ptr<Host::SystemStateMonitor> m_sysMonitor;
     // Serializes startup-time IPC access with Pen object publication.
     std::mutex m_penSubsystemMutex;
@@ -660,21 +661,23 @@ bool ServiceHost::StartPenSubsystem() {
 }
 
 bool ServiceHost::Start() {
-    if (!InitializeConfigStores()) {
-        LOG_ERROR("Service", __func__, "Boot", "Startup config load/validation failed; service start blocked.");
-        return false;
-    }
+    return m_impl->m_lifecycle.RunStart([this] {
+        if (!InitializeConfigStores()) {
+            LOG_ERROR("Service", "Start", "Boot", "Startup config load/validation failed; service start blocked.");
+            return false;
+        }
 
-    m_runtimeMode = m_configState.mode;
-    LOG_INFO("Service", __func__, "Boot", "Service mode: {}, AutoMode: {}",
-             ServiceModeToConfig(m_configState.mode), m_configState.autoMode);
+        m_runtimeMode = m_configState.mode;
+        LOG_INFO("Service", "Start", "Boot", "Service mode: {}, AutoMode: {}",
+                 ServiceModeToConfig(m_configState.mode), m_configState.autoMode);
 
-    if (!ServiceLifecycleCoordinator::Start(*this)) {
-        return false;
-    }
+        if (!ServiceLifecycleCoordinator::Start(*this)) {
+            return false;
+        }
 
-    LOG_INFO("Service", __func__, "Boot", "All modules started.");
-    return true;
+        LOG_INFO("Service", "Start", "Boot", "All modules started.");
+        return true;
+    });
 }
 
 void ServiceHost::StopIpcServer() {
@@ -772,10 +775,11 @@ void ServiceHost::StopRuntimeSubsystem() {
 }
 
 void ServiceHost::Stop() {
-    // Quiesce every callback producer before destroying its downstream objects.
-    ServiceLifecycleCoordinator::Stop(*this);
-
-    LOG_INFO("Service", __func__, "Shutdown", "All modules stopped.");
+    m_impl->m_lifecycle.RunStop([this] {
+        // Quiesce every callback producer before destroying its downstream objects.
+        ServiceLifecycleCoordinator::Stop(*this);
+        LOG_INFO("Service", "Stop", "Shutdown", "All modules stopped.");
+    });
 }
 
 #if EGOTOUCH_SERVICE_ENABLE_IPC

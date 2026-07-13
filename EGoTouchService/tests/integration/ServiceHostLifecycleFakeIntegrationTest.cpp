@@ -45,6 +45,35 @@ private:
     std::vector<std::string> m_calls;
 };
 
+class StageBarrier {
+public:
+    void ArriveAndWait() {
+        std::unique_lock<std::mutex> lock(m_mutex);
+        m_arrived = true;
+        m_cv.notify_all();
+        m_cv.wait(lock, [&] { return m_released; });
+    }
+
+    bool WaitUntilArrived() {
+        std::unique_lock<std::mutex> lock(m_mutex);
+        return m_cv.wait_for(lock, 2s, [&] { return m_arrived; });
+    }
+
+    void Release() {
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            m_released = true;
+        }
+        m_cv.notify_all();
+    }
+
+private:
+    std::mutex m_mutex;
+    std::condition_variable m_cv;
+    bool m_arrived = false;
+    bool m_released = false;
+};
+
 bool Contains(const std::vector<std::string>& calls, const std::string& call) {
     return std::find(calls.begin(), calls.end(), call) != calls.end();
 }
@@ -52,6 +81,17 @@ bool Contains(const std::vector<std::string>& calls, const std::string& call) {
 std::size_t IndexOf(const std::vector<std::string>& calls, const std::string& call) {
     const auto it = std::find(calls.begin(), calls.end(), call);
     return it == calls.end() ? calls.size() : static_cast<std::size_t>(it - calls.begin());
+}
+
+bool WaitForPendingStop(Service::ServiceLifecycleStateMachine& lifecycle) {
+    const auto deadline = std::chrono::steady_clock::now() + 2s;
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (lifecycle.HasPendingStop()) {
+            return true;
+        }
+        std::this_thread::yield();
+    }
+    return false;
 }
 
 struct FakeRuntime {
@@ -76,13 +116,22 @@ public:
     }
 
     bool startResult = true;
+    StageBarrier* readyBarrier = nullptr;
 
     bool Start(Callback callback) {
         m_calls->Add("monitor.start");
         m_callback = std::move(callback);
         m_started = startResult;
-        if (!startResult) m_calls->Add("monitor.reset");
-        return startResult;
+        if (!startResult) {
+            m_calls->Add("monitor.reset");
+            return false;
+        }
+        if (readyBarrier) {
+            m_calls->Add("monitor.ready.wait");
+            readyBarrier->ArriveAndWait();
+            m_calls->Add("monitor.ready");
+        }
+        return true;
     }
 
     void Emit(Host::SystemStateEventType event) {
@@ -148,6 +197,7 @@ public:
     bool resourcesStartResult = true;
     bool serverStartResult = true;
     bool throwAfterResources = false;
+    StageBarrier* readyBarrier = nullptr;
 
     bool Start() {
         m_calls->Add("ipc.resources.start");
@@ -168,6 +218,11 @@ public:
             return false;
         }
         m_serverStarted = true;
+        if (readyBarrier) {
+            m_calls->Add("ipc.ready.wait");
+            readyBarrier->ArriveAndWait();
+            m_calls->Add("ipc.ready");
+        }
         return true;
     }
 
@@ -223,6 +278,7 @@ struct FakePen {
     bool eventStarted = false;
     bool pressureStarted = false;
     bool notifyAttached = false;
+    StageBarrier* beforePublishBarrier = nullptr;
 
     bool Start(Service::ServiceMode mode) {
         if (mode != Service::ServiceMode::Full) {
@@ -239,6 +295,11 @@ struct FakePen {
             return false;
         }
         pressureStarted = true;
+        if (beforePublishBarrier) {
+            calls->Add("pen.publish.wait");
+            beforePublishBarrier->ArriveAndWait();
+            calls->Add("pen.publish");
+        }
         return true;
     }
 
@@ -257,6 +318,7 @@ struct FakePen {
 };
 
 struct FakeServiceHostHarness {
+    Service::ServiceLifecycleStateMachine lifecycle;
     Service::ServiceConfigState config{};
     CallLog calls;
     FakeRuntime runtime{true, &calls};
@@ -304,8 +366,16 @@ struct FakeServiceHostHarness {
         started = false;
     }
 
-    bool Start() { return Service::ServiceLifecycleCoordinator::Start(*this); }
-    void Stop() { Service::ServiceLifecycleCoordinator::Stop(*this); }
+    bool Start() {
+        return lifecycle.RunStart([this] {
+            return Service::ServiceLifecycleCoordinator::Start(*this);
+        });
+    }
+    void Stop() {
+        lifecycle.RunStop([this] {
+            Service::ServiceLifecycleCoordinator::Stop(*this);
+        });
+    }
 };
 
 bool FullModeStartsAndStopsInRaceFreeOrder() {
@@ -546,6 +616,140 @@ bool WakeCallbacksIssuePenStatusQueryOnlyInFullMode() {
     return true;
 }
 
+bool StopWaitsForPenLocalProducersToPublish() {
+    FakeServiceHostHarness host;
+    StageBarrier beforePublish;
+    host.pen.beforePublishBarrier = &beforePublish;
+
+    bool startResult = false;
+    std::thread startThread([&] { startResult = host.Start(); });
+    const bool reachedPublishBarrier = beforePublish.WaitUntilArrived();
+
+    std::thread stopThread([&] { host.Stop(); });
+    const bool stopPending = WaitForPendingStop(host.lifecycle);
+    const auto blockedCalls = host.calls.Snapshot();
+
+    beforePublish.Release();
+    startThread.join();
+    stopThread.join();
+
+    REQUIRE_TRUE(reachedPublishBarrier);
+    REQUIRE_TRUE(stopPending);
+    REQUIRE_TRUE(!Contains(blockedCalls, "monitor.start"));
+    REQUIRE_TRUE(!Contains(blockedCalls, "ipc.server.stop.begin"));
+    REQUIRE_TRUE(!Contains(blockedCalls, "pen.notify.detach"));
+    REQUIRE_TRUE(startResult);
+
+    const auto calls = host.calls.Snapshot();
+    REQUIRE_TRUE(IndexOf(calls, "pen.publish.wait") < IndexOf(calls, "pen.publish"));
+    REQUIRE_TRUE(IndexOf(calls, "pen.publish") < IndexOf(calls, "monitor.start"));
+    REQUIRE_TRUE(IndexOf(calls, "monitor.start") < IndexOf(calls, "monitor.stop.begin"));
+    REQUIRE_TRUE(IndexOf(calls, "penEvent.stop") < IndexOf(calls, "pen.notify.handle.close"));
+    REQUIRE_TRUE(!host.pen.eventStarted && !host.pen.pressureStarted);
+    REQUIRE_TRUE(!host.penNotifyHandleOpen && !host.ipc.HasOpenResources());
+    REQUIRE_TRUE(!host.started);
+    return true;
+}
+
+bool StopWaitsForIpcAndMonitorStartupStages() {
+    {
+        FakeServiceHostHarness host;
+        StageBarrier ipcReady;
+        host.ipc.readyBarrier = &ipcReady;
+
+        bool startResult = false;
+        std::thread startThread([&] { startResult = host.Start(); });
+        const bool reachedIpcBarrier = ipcReady.WaitUntilArrived();
+        std::thread stopThread([&] { host.Stop(); });
+        const bool stopPending = WaitForPendingStop(host.lifecycle);
+        const auto blockedCalls = host.calls.Snapshot();
+
+        ipcReady.Release();
+        startThread.join();
+        stopThread.join();
+
+        REQUIRE_TRUE(reachedIpcBarrier);
+        REQUIRE_TRUE(stopPending);
+        REQUIRE_TRUE(!Contains(blockedCalls, "pen.notify.attach"));
+        REQUIRE_TRUE(!Contains(blockedCalls, "ipc.server.stop.begin"));
+        REQUIRE_TRUE(startResult);
+        REQUIRE_TRUE(!host.penNotifyHandleOpen && !host.ipc.HasOpenResources());
+        REQUIRE_TRUE(!host.started);
+    }
+
+    {
+        FakeServiceHostHarness host;
+        StageBarrier monitorReady;
+        host.monitor.readyBarrier = &monitorReady;
+
+        bool startResult = false;
+        std::thread startThread([&] { startResult = host.Start(); });
+        const bool reachedMonitorBarrier = monitorReady.WaitUntilArrived();
+        std::thread stopThread([&] { host.Stop(); });
+        const bool stopPending = WaitForPendingStop(host.lifecycle);
+        const auto blockedCalls = host.calls.Snapshot();
+
+        monitorReady.Release();
+        startThread.join();
+        stopThread.join();
+
+        REQUIRE_TRUE(reachedMonitorBarrier);
+        REQUIRE_TRUE(stopPending);
+        REQUIRE_TRUE(Contains(blockedCalls, "penPressure.start"));
+        REQUIRE_TRUE(!Contains(blockedCalls, "monitor.stop.begin"));
+        REQUIRE_TRUE(!Contains(blockedCalls, "pen.notify.detach"));
+        REQUIRE_TRUE(startResult);
+        REQUIRE_TRUE(!host.penNotifyHandleOpen && !host.ipc.HasOpenResources());
+        REQUIRE_TRUE(!host.started);
+    }
+    return true;
+}
+
+bool ConcurrentStartsAndStopsAreIdempotent() {
+    FakeServiceHostHarness host;
+    StageBarrier beforePublish;
+    host.pen.beforePublishBarrier = &beforePublish;
+
+    bool firstStartResult = false;
+    bool secondStartResult = false;
+    std::thread firstStart([&] { firstStartResult = host.Start(); });
+    const bool reachedPublishBarrier = beforePublish.WaitUntilArrived();
+    std::thread secondStart([&] { secondStartResult = host.Start(); });
+
+    beforePublish.Release();
+    firstStart.join();
+    secondStart.join();
+
+    REQUIRE_TRUE(reachedPublishBarrier);
+    REQUIRE_TRUE(firstStartResult && secondStartResult);
+    auto calls = host.calls.Snapshot();
+    REQUIRE_TRUE(std::count(calls.begin(), calls.end(), "runtime.start") == 1);
+    REQUIRE_TRUE(std::count(calls.begin(), calls.end(), "ipc.server.start") == 1);
+    REQUIRE_TRUE(std::count(calls.begin(), calls.end(), "penEvent.start") == 1);
+    REQUIRE_TRUE(std::count(calls.begin(), calls.end(), "monitor.start") == 1);
+
+    host.monitor.BeginInFlightCallback(Host::SystemStateEventType::Unknown);
+    const bool callbackEntered = host.calls.WaitFor("monitor.callback.enter");
+    std::thread firstStop([&] { host.Stop(); });
+    const bool stopStarted = host.calls.WaitFor("monitor.stop.begin");
+    std::thread secondStop([&] { host.Stop(); });
+
+    host.monitor.ReleaseCallback();
+    firstStop.join();
+    secondStop.join();
+
+    REQUIRE_TRUE(callbackEntered);
+    REQUIRE_TRUE(stopStarted);
+    calls = host.calls.Snapshot();
+    REQUIRE_TRUE(std::count(calls.begin(), calls.end(), "monitor.stop.begin") == 1);
+    REQUIRE_TRUE(std::count(calls.begin(), calls.end(), "ipc.server.stop.begin") == 1);
+    REQUIRE_TRUE(std::count(calls.begin(), calls.end(), "penEvent.stop") == 1);
+    REQUIRE_TRUE(std::count(calls.begin(), calls.end(), "runtime.stop") == 1);
+    REQUIRE_TRUE(!host.penNotifyHandleOpen && !host.ipc.HasOpenResources());
+    REQUIRE_TRUE(!host.started);
+    return true;
+}
+
 bool StopWaitsForMonitorAndIpcBeforePenTeardown() {
     FakeServiceHostHarness host;
     REQUIRE_TRUE(host.Start());
@@ -595,6 +799,9 @@ int main() {
     failures += RunTest(&PenFailureGatesIpcThenRollsBackPartialPen, "PenFailureGatesIpcThenRollsBackPartialPen");
     failures += RunTest(&MonitorFailureRollsBackAllCompletedStages, "MonitorFailureRollsBackAllCompletedStages");
     failures += RunTest(&WakeCallbacksIssuePenStatusQueryOnlyInFullMode, "WakeCallbacksIssuePenStatusQueryOnlyInFullMode");
+    failures += RunTest(&StopWaitsForPenLocalProducersToPublish, "StopWaitsForPenLocalProducersToPublish");
+    failures += RunTest(&StopWaitsForIpcAndMonitorStartupStages, "StopWaitsForIpcAndMonitorStartupStages");
+    failures += RunTest(&ConcurrentStartsAndStopsAreIdempotent, "ConcurrentStartsAndStopsAreIdempotent");
     failures += RunTest(&StopWaitsForMonitorAndIpcBeforePenTeardown, "StopWaitsForMonitorAndIpcBeforePenTeardown");
     return failures == 0 ? 0 : 1;
 }
