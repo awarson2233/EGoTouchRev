@@ -138,7 +138,8 @@ private:
 
 class FakeIpc {
 public:
-    explicit FakeIpc(CallLog* calls) : m_calls(calls) {}
+    FakeIpc(CallLog* calls, bool* penNotifyHandleOpen)
+        : m_calls(calls), m_penNotifyHandleOpen(penNotifyHandleOpen) {}
     ~FakeIpc() {
         ReleaseHandler();
         if (m_handlerThread.joinable()) m_handlerThread.join();
@@ -155,6 +156,8 @@ public:
             return false;
         }
         m_resourcesOpen = true;
+        *m_penNotifyHandleOpen = true;
+        m_calls->Add("pen.notify.handle.create");
         if (throwAfterResources) {
             m_calls->Add("ipc.resources.start.throw");
             throw std::runtime_error("injected IPC startup failure");
@@ -201,8 +204,11 @@ public:
         m_calls->Add("ipc.resources.close");
     }
 
+    bool HasOpenResources() const { return m_resourcesOpen; }
+
 private:
     CallLog* m_calls;
+    bool* m_penNotifyHandleOpen;
     bool m_resourcesOpen = false;
     bool m_serverStarted = false;
     std::thread m_handlerThread;
@@ -255,7 +261,8 @@ struct FakeServiceHostHarness {
     CallLog calls;
     FakeRuntime runtime{true, &calls};
     FakeMonitor monitor{&calls};
-    FakeIpc ipc{&calls};
+    bool penNotifyHandleOpen = false;
+    FakeIpc ipc{&calls, &penNotifyHandleOpen};
     FakePen pen{&calls};
     bool started = false;
 
@@ -284,7 +291,13 @@ struct FakeServiceHostHarness {
 
     void StopSystemStateMonitor() { monitor.Stop(); }
     void StopIpcServer() { ipc.StopServer(); }
-    void StopPenSubsystem() { pen.Stop(); }
+    void StopPenSubsystem() {
+        pen.Stop();
+        if (penNotifyHandleOpen) {
+            penNotifyHandleOpen = false;
+            calls.Add("pen.notify.handle.close");
+        }
+    }
     void CloseIpcResources() { ipc.CloseResources(); }
     void StopRuntimeSubsystem() {
         if (started) runtime.Stop();
@@ -306,6 +319,7 @@ bool FullModeStartsAndStopsInRaceFreeOrder() {
         "runtime.buildPipeline",
         "runtime.start",
         "ipc.resources.start",
+        "pen.notify.handle.create",
         "ipc.server.start",
         "pen.notify.attach",
         "penEvent.start",
@@ -318,6 +332,7 @@ bool FullModeStartsAndStopsInRaceFreeOrder() {
         "pen.notify.detach",
         "penPressure.stop",
         "penEvent.stop",
+        "pen.notify.handle.close",
         "ipc.resources.close",
         "runtime.stop",
     };
@@ -336,6 +351,7 @@ bool TouchOnlySkipsPenButKeepsCoreSubsystems() {
         "runtime.buildPipeline",
         "runtime.start",
         "ipc.resources.start",
+        "pen.notify.handle.create",
         "ipc.server.start",
         "pen.skip",
         "monitor.start",
@@ -343,6 +359,7 @@ bool TouchOnlySkipsPenButKeepsCoreSubsystems() {
         "monitor.stop",
         "ipc.server.stop.begin",
         "ipc.server.stop",
+        "pen.notify.handle.close",
         "ipc.resources.close",
         "runtime.stop",
     };
@@ -392,8 +409,10 @@ bool IpcServerFailureClosesResourcesAndRuntime() {
         "runtime.buildPipeline",
         "runtime.start",
         "ipc.resources.start",
+        "pen.notify.handle.create",
         "ipc.server.start",
         "ipc.server.start.fail",
+        "pen.notify.handle.close",
         "ipc.resources.close",
         "runtime.stop",
     };
@@ -411,11 +430,41 @@ bool IpcStartupExceptionStillClosesResourcesAndRuntime() {
         "runtime.buildPipeline",
         "runtime.start",
         "ipc.resources.start",
+        "pen.notify.handle.create",
         "ipc.resources.start.throw",
+        "pen.notify.handle.close",
         "ipc.resources.close",
         "runtime.stop",
     };
     REQUIRE_TRUE(host.calls.Snapshot() == expected);
+    return true;
+}
+
+bool IpcReadinessFailureCanRetryWithoutLeakingResources() {
+    FakeServiceHostHarness host;
+    host.ipc.serverStartResult = false;
+
+    REQUIRE_TRUE(!host.Start());
+    REQUIRE_TRUE(!host.penNotifyHandleOpen);
+    REQUIRE_TRUE(!host.ipc.HasOpenResources());
+
+    REQUIRE_TRUE(!host.Start());
+    REQUIRE_TRUE(!host.penNotifyHandleOpen);
+    REQUIRE_TRUE(!host.ipc.HasOpenResources());
+
+    host.ipc.serverStartResult = true;
+    REQUIRE_TRUE(host.Start());
+    REQUIRE_TRUE(host.penNotifyHandleOpen);
+    REQUIRE_TRUE(host.ipc.HasOpenResources());
+    host.Stop();
+
+    REQUIRE_TRUE(!host.penNotifyHandleOpen);
+    REQUIRE_TRUE(!host.ipc.HasOpenResources());
+    const auto calls = host.calls.Snapshot();
+    REQUIRE_TRUE(std::count(calls.begin(), calls.end(), "pen.notify.handle.create") == 3);
+    REQUIRE_TRUE(std::count(calls.begin(), calls.end(), "pen.notify.handle.close") == 3);
+    REQUIRE_TRUE(std::count(calls.begin(), calls.end(), "ipc.resources.close") == 3);
+    REQUIRE_TRUE(std::count(calls.begin(), calls.end(), "ipc.server.start.fail") == 2);
     return true;
 }
 
@@ -429,6 +478,7 @@ bool PenFailureGatesIpcThenRollsBackPartialPen() {
         "runtime.buildPipeline",
         "runtime.start",
         "ipc.resources.start",
+        "pen.notify.handle.create",
         "ipc.server.start",
         "pen.notify.attach",
         "penEvent.start",
@@ -438,6 +488,7 @@ bool PenFailureGatesIpcThenRollsBackPartialPen() {
         "ipc.server.stop",
         "pen.notify.detach",
         "penEvent.stop",
+        "pen.notify.handle.close",
         "ipc.resources.close",
         "runtime.stop",
     };
@@ -455,6 +506,7 @@ bool MonitorFailureRollsBackAllCompletedStages() {
         "runtime.buildPipeline",
         "runtime.start",
         "ipc.resources.start",
+        "pen.notify.handle.create",
         "ipc.server.start",
         "pen.notify.attach",
         "penEvent.start",
@@ -466,6 +518,7 @@ bool MonitorFailureRollsBackAllCompletedStages() {
         "pen.notify.detach",
         "penPressure.stop",
         "penEvent.stop",
+        "pen.notify.handle.close",
         "ipc.resources.close",
         "runtime.stop",
     };
@@ -522,7 +575,8 @@ bool StopWaitsForMonitorAndIpcBeforePenTeardown() {
     REQUIRE_TRUE(IndexOf(calls, "monitor.stop") < IndexOf(calls, "ipc.server.stop.begin"));
     REQUIRE_TRUE(IndexOf(calls, "ipc.handler.exit") < IndexOf(calls, "ipc.server.stop"));
     REQUIRE_TRUE(IndexOf(calls, "ipc.server.stop") < IndexOf(calls, "pen.notify.detach"));
-    REQUIRE_TRUE(IndexOf(calls, "penEvent.stop") < IndexOf(calls, "ipc.resources.close"));
+    REQUIRE_TRUE(IndexOf(calls, "penEvent.stop") < IndexOf(calls, "pen.notify.handle.close"));
+    REQUIRE_TRUE(IndexOf(calls, "pen.notify.handle.close") < IndexOf(calls, "ipc.resources.close"));
     REQUIRE_TRUE(IndexOf(calls, "ipc.resources.close") < IndexOf(calls, "runtime.stop"));
     return true;
 }
@@ -537,6 +591,7 @@ int main() {
     failures += RunTest(&IpcResourceFailureRollsBackRuntime, "IpcResourceFailureRollsBackRuntime");
     failures += RunTest(&IpcServerFailureClosesResourcesAndRuntime, "IpcServerFailureClosesResourcesAndRuntime");
     failures += RunTest(&IpcStartupExceptionStillClosesResourcesAndRuntime, "IpcStartupExceptionStillClosesResourcesAndRuntime");
+    failures += RunTest(&IpcReadinessFailureCanRetryWithoutLeakingResources, "IpcReadinessFailureCanRetryWithoutLeakingResources");
     failures += RunTest(&PenFailureGatesIpcThenRollsBackPartialPen, "PenFailureGatesIpcThenRollsBackPartialPen");
     failures += RunTest(&MonitorFailureRollsBackAllCompletedStages, "MonitorFailureRollsBackAllCompletedStages");
     failures += RunTest(&WakeCallbacksIssuePenStatusQueryOnlyInFullMode, "WakeCallbacksIssuePenStatusQueryOnlyInFullMode");

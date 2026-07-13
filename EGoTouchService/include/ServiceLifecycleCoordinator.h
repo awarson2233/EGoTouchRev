@@ -72,7 +72,10 @@ private:
             // Gate and join handlers before any Pen object can be destroyed.
             InvokeNoexcept([&] { host.StopIpcServer(); });
         }
-        if (stages.pen) {
+        if (stages.pen || stages.ipc) {
+            // IPC setup owns the Pen notification handle before Pen objects are
+            // published. Always pass through the idempotent Pen teardown so an
+            // IPC readiness failure cannot strand that handle.
             InvokeNoexcept([&] { host.StopPenSubsystem(); });
         }
         if (stages.ipc) {
