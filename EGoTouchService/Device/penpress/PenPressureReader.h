@@ -2,6 +2,7 @@
 
 #include "btmcu/BtHidChannel.h"
 #include "btmcu/PenUsbTypes.h"
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -26,7 +27,9 @@ public:
     using PressureCallback = std::function<void(const PenPressureStats& stats)>;
     void SetPressureCallback(PressureCallback cb);
     /// 设置状态事件句柄（用于通知 App 侧刷新状态）
-    void SetNotifyEvent(NativeEventHandle h) { m_notifyEvent = h; }
+    void SetNotifyEvent(NativeEventHandle h) {
+        m_notifyEvent.store(h, std::memory_order_release);
+    }
 
     /// 获取最新压力统计（原子读，线程安全）
     PenPressureStats GetPressureStats() const;
@@ -48,7 +51,7 @@ private:
 
     mutable std::mutex m_statsMutex;
     PenPressureStats m_stats;
-    NativeEventHandle m_notifyEvent = nullptr;
+    std::atomic<NativeEventHandle> m_notifyEvent{nullptr};
 };
 
 } // namespace Himax::Pen

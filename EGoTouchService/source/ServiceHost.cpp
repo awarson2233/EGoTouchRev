@@ -664,8 +664,16 @@ void ServiceHost::StopIpcSubsystem() {
     }
 
     if (m_impl->m_penEvent) {
-        CloseHandle(m_impl->m_penEvent);
-        m_impl->m_penEvent = nullptr;
+        // The IPC thread is joined above, so no handler can race pen subsystem
+        // access. Detach both producers before closing their shared event handle.
+        if (m_impl->m_penEventBridge) {
+            m_impl->m_penEventBridge->SetNotifyEvent(nullptr);
+        }
+        if (m_impl->m_penPressureReader) {
+            m_impl->m_penPressureReader->SetNotifyEvent(nullptr);
+        }
+        // Keep the handle valid until StopPenSubsystem() joins both producer
+        // threads; a producer may already have loaded the previous atomic value.
     }
 }
 
@@ -685,6 +693,13 @@ void ServiceHost::StopPenSubsystem() {
         m_impl->m_penEventBridge.reset();
         LOG_INFO("Service", __func__, "MCU", "PenEventBridge stopped.");
     }
+
+#if EGOTOUCH_SERVICE_ENABLE_IPC
+    if (m_impl->m_penEvent) {
+        CloseHandle(m_impl->m_penEvent);
+        m_impl->m_penEvent = nullptr;
+    }
+#endif
 }
 
 void ServiceHost::StopSystemStateMonitor() {
@@ -708,10 +723,12 @@ void ServiceHost::StopRuntimeSubsystem() {
 }
 
 void ServiceHost::Stop() {
-    StopPenSubsystem();
 #if EGOTOUCH_SERVICE_ENABLE_IPC
+    // Stop() joins the IPC server thread, so all handlers finish before any
+    // pen object they may inspect is destroyed.
     StopIpcSubsystem();
 #endif
+    StopPenSubsystem();
     StopSystemStateMonitor();
     StopRuntimeSubsystem();
 

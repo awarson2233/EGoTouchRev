@@ -227,6 +227,20 @@ const char *ToString(RuntimePolicyEvent::Type type) noexcept {
   }
 }
 
+PenAfeCommandPlan BuildPenAfeCommandPlan(const RuntimePenState& state) noexcept {
+  PenAfeCommandPlan plan{};
+  if (!state.hasConnection || !state.connected) {
+    return plan;
+  }
+
+  plan.commands[plan.count++] = command{AFE_Command::InitStylus, 0};
+  if (state.hasStylusId) {
+    plan.commands[plan.count++] =
+        command{AFE_Command::SetStylusId, state.stylusId};
+  }
+  return plan;
+}
+
 // --------------- Lifecycle ---------------
 
 DeviceRuntime::DeviceRuntime(const std::wstring &master,
@@ -272,17 +286,24 @@ bool DeviceRuntime::Start() {
     m_thread.join();
   }
 
-  m_running.store(true, std::memory_order_release);
-  m_stopped.store(false, std::memory_order_release);
-  m_stopReason.store(
-      StopReason::None); // ← critical: clear stop reason for restart
-  SetState(workerState::ready);
-  m_needSuspendDeinit.store(false, std::memory_order_release);
-  m_systemSuspendObserved.store(false, std::memory_order_release);
-  m_recoverCount = 0;
   {
-    std::lock_guard<std::mutex> lk(m_mu);
-    m_displayOffSuspendPending = false;
+    // Serialize the lifecycle boundary with pen event ingress. An event that
+    // began while stopped cannot submit after this restart boundary.
+    std::lock_guard<std::mutex> penIngressLock(m_penIngressMu);
+    m_running.store(true, std::memory_order_release);
+    m_stopped.store(false, std::memory_order_release);
+    m_stopReason.store(StopReason::None, std::memory_order_release);
+    SetState(workerState::ready);
+    m_needSuspendDeinit.store(false, std::memory_order_release);
+    m_systemSuspendObserved.store(false, std::memory_order_release);
+    m_recoverCount = 0;
+    {
+      std::lock_guard<std::mutex> lk(m_mu);
+      m_cmdQueue.clear();
+      m_displayOffSuspendPending = false;
+    }
+    m_replayPenStateAfterInit = true;
+    m_acceptPenAfeCommands = true;
   }
   m_lastNote = "Runtime started";
   m_thread = std::thread(&DeviceRuntime::WorkerMain, this);
@@ -311,8 +332,20 @@ void DeviceRuntime::Stop() {
       }
     }
 
+    {
+      // Disable pen-generated AFE work while serialized against the complete
+      // event update/submit path. State snapshots continue to accept updates.
+      std::lock_guard<std::mutex> penIngressLock(m_penIngressMu);
+      m_acceptPenAfeCommands = false;
+      m_replayPenStateAfterInit = false;
+    }
+
     if (!m_running.load(std::memory_order_acquire) && !m_thread.joinable() &&
         !m_selfStopDetached) {
+      {
+        std::lock_guard<std::mutex> lk(m_mu);
+        m_cmdQueue.clear();
+      }
       m_stopped.store(true, std::memory_order_release);
       m_stopReason.store(StopReason::Shutdown, std::memory_order_release);
       SetState(workerState::quit);
@@ -325,6 +358,10 @@ void DeviceRuntime::Stop() {
     m_stopReason.store(StopReason::Shutdown, std::memory_order_release);
   }
 
+  {
+    std::lock_guard<std::mutex> lk(m_mu);
+    m_cmdQueue.clear();
+  }
   m_chip.CancelPendingFrameRead();
 
   std::unique_lock<std::mutex> lifecycleLock(m_lifecycleMu);
@@ -504,14 +541,44 @@ void DeviceRuntime::UpdatePenState(std::function<void(RuntimePenState&, PenState
     command cmd{};
     cmd.type = AFE_Command::InitStylus;
     cmd.param = 0;
-    SubmitCommand(cmd, CommandSource::SystemPolicy, "PenIdentityChange->InitStylus");
+    SubmitPenAfeCommandLocked(cmd, "PenIdentityChange->InitStylus");
   }
   if (result.stylusIdChanged) {
     command cmd{};
     cmd.type = AFE_Command::SetStylusId;
     cmd.param = result.nextStylusId;
-    SubmitCommand(cmd, CommandSource::SystemPolicy, "PenIdentityChange->SetStylusId");
+    SubmitPenAfeCommandLocked(cmd, "PenIdentityChange->SetStylusId");
   }
+}
+
+void DeviceRuntime::SubmitPenAfeCommandLocked(command cmd, const char* reason) {
+  if (!m_acceptPenAfeCommands || m_replayPenStateAfterInit) {
+    return;
+  }
+  SubmitCommand(cmd, CommandSource::SystemPolicy, reason);
+}
+
+void DeviceRuntime::ReplayPenStateAfterChipInit() {
+  std::lock_guard<std::mutex> penIngressLock(m_penIngressMu);
+  if (!m_acceptPenAfeCommands || !m_replayPenStateAfterInit) {
+    return;
+  }
+
+  RuntimePenState snapshot{};
+  {
+    std::lock_guard<std::mutex> penStateLock(m_penStateMu);
+    snapshot = m_penState;
+  }
+
+  const auto plan = BuildPenAfeCommandPlan(snapshot);
+  for (std::size_t i = 0; i < plan.count; ++i) {
+    const char* reason = plan.commands[i].type == AFE_Command::InitStylus
+        ? "RuntimeRestart->InitStylus"
+        : "RuntimeRestart->SetStylusId";
+    ExecuteCommand(MakeQueuedCommand(
+        plan.commands[i], CommandSource::SystemPolicy, reason));
+  }
+  m_replayPenStateAfterInit = false;
 }
 
 void DeviceRuntime::DispatchPenButtonAction(const PenButtonAction& action, const char* source) {
@@ -568,36 +635,49 @@ void DeviceRuntime::DispatchPenButtonAction(const PenButtonAction& action, const
 // --------------- 命令注入 ---------------
 
 bool DeviceRuntime::SubmitExternalAfeCommand(AFE_Command type, uint8_t param) {
-  if (!m_running.load(std::memory_order_acquire)) {
-    return false;
-  }
-
   command cmd{};
   cmd.type = type;
   cmd.param = param;
-  SubmitCommand(cmd, CommandSource::External, "IPC AFE");
+  auto qc = MakeQueuedCommand(cmd, CommandSource::External, "IPC AFE");
+
+  std::lock_guard<std::mutex> lk(m_mu);
+  // Recheck while holding the queue lock used by Stop() to clear pending work.
+  // This closes the check-then-enqueue race at the stopped boundary.
+  if (!m_running.load(std::memory_order_acquire) ||
+      m_stopped.load(std::memory_order_acquire)) {
+    return false;
+  }
+  if (!m_cmdQueue.push(std::move(qc))) {
+    LOG_ERROR("Runtime", __func__, "Queue", "Command queue overflow! Command dropped.");
+    return false;
+  }
   return true;
 }
 
-uint64_t DeviceRuntime::SubmitCommand(command cmd, CommandSource src,
-                                      const char *reason) {
+DeviceRuntime::QueuedCommand DeviceRuntime::MakeQueuedCommand(
+    command cmd, CommandSource src, const char* reason) {
   QueuedCommand qc{};
-  qc.id = m_nextCmdId.fetch_add(1);
+  qc.id = m_nextCmdId.fetch_add(1, std::memory_order_relaxed);
   qc.cmd = cmd;
   qc.source = src;
   qc.enqueued_at = std::chrono::steady_clock::now();
   if (reason) {
     std::strncpy(qc.reason.data(), reason, qc.reason.size() - 1);
   }
+  return qc;
+}
+
+uint64_t DeviceRuntime::SubmitCommand(command cmd, CommandSource src,
+                                      const char *reason) {
+  auto qc = MakeQueuedCommand(cmd, src, reason);
+  const uint64_t commandId = qc.id;
   {
     std::lock_guard<std::mutex> lk(m_mu);
-    if (m_cmdQueue.push(std::move(qc))) {
-      // Pushed successfully
-    } else {
+    if (!m_cmdQueue.push(std::move(qc))) {
       LOG_ERROR("Runtime", __func__, "Queue", "Command queue overflow! Command dropped.");
     }
   }
-  return qc.id;
+  return commandId;
 }
 
 void DeviceRuntime::IngestPolicyEvent(const RuntimePolicyEvent &ev) {
@@ -774,6 +854,21 @@ void DeviceRuntime::RecordHistory(const QueuedCommand &qc, bool ok,
 
 // --------------- 命令执行 ---------------
 
+bool DeviceRuntime::ExecuteCommand(const QueuedCommand& qc) {
+  const bool ok = static_cast<bool>(m_chip.SendAfeCommand(qc.cmd));
+  {
+    std::lock_guard<std::mutex> lk(m_mu);
+    m_lastCmdId = qc.id;
+    RecordHistory(qc, ok, ok ? "OK" : "afe_sendCommand failed");
+  }
+  if (!ok) {
+    LOG_WARN("Runtime", __func__, "CmdExec",
+             "Command '{}' (type={}) failed — skipping (non-fatal).",
+             qc.reason.data(), static_cast<int>(qc.cmd.type));
+  }
+  return ok;
+}
+
 bool DeviceRuntime::DrainCommands() {
   while (true) {
     QueuedCommand qc{};
@@ -782,21 +877,8 @@ bool DeviceRuntime::DrainCommands() {
       if (!m_cmdQueue.pop(qc)) {
         return true;
       }
-      m_lastCmdId = qc.id;
     }
-
-    const bool ok = static_cast<bool>(m_chip.SendAfeCommand(qc.cmd));
-    {
-      std::lock_guard<std::mutex> lk(m_mu);
-      RecordHistory(qc, ok, ok ? "OK" : "afe_sendCommand failed");
-    }
-    if (!ok) {
-      LOG_WARN("Runtime", __func__, "CmdExec",
-               "Command '{}' (type={}) failed — skipping (non-fatal).",
-               qc.reason.data(), static_cast<int>(qc.cmd.type));
-      // 不再触发 recover: AFE 命令失败不代表 bus 挂了
-      continue;
-    }
+    ExecuteCommand(qc);
   }
 }
 
@@ -842,6 +924,12 @@ ThreadResult DeviceRuntime::WorkerMain() {
       } else {
         LOG_INFO("Runtime", __func__, "StopReq",
                  "StopReason::Shutdown consumed -> quit");
+        {
+          std::lock_guard<std::mutex> penIngressLock(m_penIngressMu);
+          m_acceptPenAfeCommands = false;
+          m_replayPenStateAfterInit = false;
+        }
+        m_stopped.store(true, std::memory_order_release);
         SetState(workerState::quit);
       }
       std::lock_guard<std::mutex> lk(m_mu);
@@ -891,6 +979,7 @@ void DeviceRuntime::OnReady() {
       SetState(workerState::recover);
       return;
     }
+    ReplayPenStateAfterChipInit();
     SetState(workerState::streaming);
   } else {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -1005,6 +1094,9 @@ void DeviceRuntime::HandlePenButtonStatusCode(uint8_t statusCode,
 }
 
 void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
+  // Keep state mutation and any derived AFE submission on the same side of a
+  // Stop/Start boundary. Stop still permits state updates after releasing this lock.
+  std::lock_guard<std::mutex> penIngressLock(m_penIngressMu);
   using EC = Himax::Pen::PenUsbEventCode;
   const uint8_t payload0 = PayloadByteOrZero(ev);
 
@@ -1184,12 +1276,11 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
     if (connected) {
       cmd.type = AFE_Command::InitStylus;
       cmd.param = 0;
-      SubmitCommand(cmd, CommandSource::SystemPolicy, "PenConnStatus->Init");
+      SubmitPenAfeCommandLocked(cmd, "PenConnStatus->Init");
     } else {
       cmd.type = AFE_Command::DisconnectStylus;
       cmd.param = 0;
-      SubmitCommand(cmd, CommandSource::SystemPolicy,
-                    "PenConnStatus->Disconnect");
+      SubmitPenAfeCommandLocked(cmd, "PenConnStatus->Disconnect");
     }
     break;
   }
@@ -1222,7 +1313,7 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
     command cmd{};
     cmd.type = AFE_Command::SetStylusId;
     cmd.param = commandPenType;
-    SubmitCommand(cmd, CommandSource::SystemPolicy, "PenTypeInfo->SetStylusId");
+    SubmitPenAfeCommandLocked(cmd, "PenTypeInfo->SetStylusId");
     break;
   }
 
@@ -1330,6 +1421,7 @@ void DeviceRuntime::OnRecover() {
     return;
   if (auto res = m_chip.Init(); !res)
     return;
+  ReplayPenStateAfterChipInit();
 
   LOG_INFO("Runtime", __func__, "Recover",
            "Recovery succeeded after {} attempts.", m_recoverCount);

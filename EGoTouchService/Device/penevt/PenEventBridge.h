@@ -4,6 +4,7 @@
 #include "btmcu/PenUsbInitSession.h"
 #include "btmcu/PenUsbTypes.h"
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -37,7 +38,9 @@ public:
     /// 设置 MCU 事件回调（线程安全）。回调从事件读取线程发起，不得长时间阻塞。
     void SetEventCallback(PenEventCallback cb);
     /// 设置状态事件句柄（用于通知 App 侧刷新状态）
-    void SetNotifyEvent(NativeEventHandle h) { m_notifyEvent = h; }
+    void SetNotifyEvent(NativeEventHandle h) {
+        m_notifyEvent.store(h, std::memory_order_release);
+    }
 
     /// 手动触发握手（0x7101 + 0x7701 + 0x7701），通常无需手动调用。
     void RunHandshake();
@@ -71,7 +74,7 @@ private:
     mutable std::mutex m_sessionMutex;
     mutable std::mutex m_txMutex;
     std::shared_ptr<const PenEventCallback> m_eventCallback;
-    NativeEventHandle m_notifyEvent = nullptr;
+    std::atomic<NativeEventHandle> m_notifyEvent{nullptr};
     PenUsbInitSession m_initSession;
 };
 

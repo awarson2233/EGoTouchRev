@@ -200,6 +200,15 @@ struct RuntimePenState {
     uint8_t currentFunc = 0;
 };
 
+struct PenAfeCommandPlan {
+    std::array<command, 2> commands{};
+    std::size_t count = 0;
+};
+
+/// Build the AFE state reconstruction required after a full runtime restart.
+/// Commands are ordered by hardware dependency: InitStylus before SetStylusId.
+PenAfeCommandPlan BuildPenAfeCommandPlan(const RuntimePenState& state) noexcept;
+
 // --------------- DeviceRuntime ---------------
 
 class DeviceRuntime {
@@ -299,6 +308,8 @@ private:
                                    const char* source);
     void ApplyPenStateToStylusPipeline();
     void UpdatePenState(std::function<void(RuntimePenState&, PenStateUpdateResult&)> updateFn);
+    void SubmitPenAfeCommandLocked(command cmd, const char* reason);
+    void ReplayPenStateAfterChipInit();
     void DispatchPenButtonAction(const PenButtonAction& action, const char* source);
 
     // ── Worker 状态处理（每个状态一个入口，Worker 只做调度） ──
@@ -316,6 +327,9 @@ private:
         std::array<char, 32> reason{};
     };
 
+    QueuedCommand MakeQueuedCommand(command cmd, CommandSource src,
+                                    const char* reason);
+    bool ExecuteCommand(const QueuedCommand& qc);
     bool DrainCommands();
     void RecordHistory(const QueuedCommand& qc,
                        bool ok, const std::string& det);
@@ -326,6 +340,9 @@ private:
 
     RuntimePenState m_penState{};
     mutable std::mutex m_penStateMu;
+    mutable std::mutex m_penIngressMu;
+    bool m_acceptPenAfeCommands = false;
+    bool m_replayPenStateAfterInit = false;
     std::atomic<bool> m_autoMode{false};
     std::atomic<bool> m_stylusVhfEnabled{true};
     std::atomic<bool> m_masterParserOnly{false};

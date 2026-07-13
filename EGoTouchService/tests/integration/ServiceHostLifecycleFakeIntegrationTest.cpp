@@ -87,8 +87,8 @@ struct FakeServiceHostHarness {
     }
 
     void Stop() {
-        pen.Stop();
         ipc.Stop();
+        pen.Stop();
         monitor.Stop();
         if (started) runtime.Stop();
         started = false;
@@ -108,9 +108,9 @@ bool FullModeStartsAndStopsInServiceOrder() {
         "ipc.start",
         "penEvent.start",
         "penPressure.start",
+        "ipc.stop",
         "penPressure.stop",
         "penEvent.stop",
-        "ipc.stop",
         "monitor.stop",
         "runtime.stop",
     };

@@ -110,8 +110,8 @@ void PenPressureReader::OnPacketReceived(std::span<const uint8_t> packet) {
     if (callback) {
         (*callback)(stats);
     }
-    if (m_notifyEvent) {
-        SetEvent(static_cast<HANDLE>(m_notifyEvent));
+    if (const auto notifyEvent = m_notifyEvent.load(std::memory_order_acquire)) {
+        SetEvent(static_cast<HANDLE>(notifyEvent));
     }
 }
 
