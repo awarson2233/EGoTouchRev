@@ -323,6 +323,10 @@ public:
     std::vector<HistoryEntry> GetHistory(std::size_t n = 200) const;
     void ClearHistory();
 
+    /// Deterministic one-shot hook invoked on the actual worker thread.
+    void SetWorkerHookForTesting(std::function<void()> hook);
+    bool IsAcceptingExternalAfeCommands() const;
+
     /// MCU 事件 ingress（runtime 内部完成状态/AFE 命令分派）
     void IngestPenEvent(const Himax::Pen::PenEvent& ev);
 
@@ -401,6 +405,9 @@ private:
     bool m_displayOffSuspendPending = false;
     std::chrono::steady_clock::time_point m_displayOffSuspendDeadline{};
     std::atomic<bool> m_systemSuspendObserved{false};
+
+    mutable std::mutex m_workerHookMu;
+    std::function<void()> m_workerHookForTesting;
 
     std::array<HistoryEntry, kMaxHistoryItems> m_history{};
     size_t m_historyWriteIdx = 0;

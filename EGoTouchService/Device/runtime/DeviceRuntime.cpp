@@ -273,6 +273,14 @@ bool DeviceRuntime::Start() {
 
 DeviceRuntime::StartRequestResult DeviceRuntime::StartStateMachine() {
   std::unique_lock<std::mutex> lifecycleLock(m_lifecycleMu);
+  const auto caller = std::this_thread::get_id();
+  if (m_workerThreadId == caller ||
+      (m_thread.joinable() && m_thread.get_id() == caller)) {
+    LOG_WARN("Runtime", __func__, "Thread",
+             "Worker-thread start request rejected to avoid lifecycle self-deadlock.");
+    return StartRequestResult::Failed;
+  }
+
   m_lifecycleCv.wait(lifecycleLock, [this]() {
     return !m_stopInProgress && !m_selfStopDetached;
   });
@@ -734,6 +742,21 @@ void DeviceRuntime::IngestPolicyEvent(const RuntimePolicyEvent &ev) {
   std::unique_lock<std::mutex> lifecycleLock(m_lifecycleMu);
   using EventType = RuntimePolicyEvent::Type;
 
+  if (ev.type != EventType::Shutdown) {
+    bool acceptingCommands = false;
+    {
+      std::lock_guard<std::mutex> lk(m_mu);
+      acceptingCommands = m_acceptExternalAfeCommands;
+    }
+    if (m_stopInProgress || !acceptingCommands ||
+        m_stopReason.load(std::memory_order_acquire) == StopReason::Shutdown) {
+      LOG_INFO("Runtime", __func__, "Policy",
+               "Ignoring non-terminal event ({}) while termination is in progress.",
+               ToString(ev.type));
+      return;
+    }
+  }
+
   const auto now = std::chrono::steady_clock::now();
   const bool isWakeEvent = ev.type == EventType::DisplayOn ||
                            ev.type == EventType::LidOn ||
@@ -770,7 +793,11 @@ void DeviceRuntime::IngestPolicyEvent(const RuntimePolicyEvent &ev) {
     LOG_INFO("Runtime", __func__, "Policy",
              "Sleep event ({}), requesting suspend.", ToString(ev.type));
     m_chip.CancelPendingFrameRead();
-    m_stopReason.store(StopReason::ScreenOff);
+    {
+      StopReason expected = StopReason::None;
+      m_stopReason.compare_exchange_strong(
+          expected, StopReason::ScreenOff, std::memory_order_acq_rel);
+    }
     break;
   case EventType::Suspend: {
     {
@@ -781,7 +808,11 @@ void DeviceRuntime::IngestPolicyEvent(const RuntimePolicyEvent &ev) {
     LOG_INFO("Runtime", __func__, "Policy",
              "System suspend event, requesting immediate suspend.");
     m_chip.CancelPendingFrameRead();
-    m_stopReason.store(StopReason::ScreenOff);
+    {
+      StopReason expected = StopReason::None;
+      m_stopReason.compare_exchange_strong(
+          expected, StopReason::ScreenOff, std::memory_order_acq_rel);
+    }
     break;
   }
   case EventType::DisplayOn:
@@ -899,6 +930,16 @@ void DeviceRuntime::ClearHistory() {
   m_history.fill(HistoryEntry{});
 }
 
+void DeviceRuntime::SetWorkerHookForTesting(std::function<void()> hook) {
+  std::lock_guard<std::mutex> lock(m_workerHookMu);
+  m_workerHookForTesting = std::move(hook);
+}
+
+bool DeviceRuntime::IsAcceptingExternalAfeCommands() const {
+  std::lock_guard<std::mutex> lk(m_mu);
+  return m_acceptExternalAfeCommands;
+}
+
 // --------------- 审计日志 ---------------
 
 void DeviceRuntime::CancelQueuedCommandsLocked(const char* detail) {
@@ -978,6 +1019,15 @@ ThreadResult DeviceRuntime::WorkerMain() {
   {
     std::lock_guard<std::mutex> lifecycleLock(m_lifecycleMu);
     m_workerThreadId = std::this_thread::get_id();
+  }
+
+  std::function<void()> workerHook;
+  {
+    std::lock_guard<std::mutex> hookLock(m_workerHookMu);
+    workerHook = std::move(m_workerHookForTesting);
+  }
+  if (workerHook) {
+    workerHook();
   }
 
   while (true) {

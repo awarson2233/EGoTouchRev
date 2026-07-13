@@ -30,6 +30,19 @@ bool WaitForState(DeviceRuntime& runtime,
     return runtime.GetSnapshot().state == expected;
 }
 
+bool WaitForCommandGate(DeviceRuntime& runtime,
+                        bool expected,
+                        std::chrono::milliseconds timeout) {
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (runtime.IsAcceptingExternalAfeCommands() == expected) {
+            return true;
+        }
+        std::this_thread::yield();
+    }
+    return runtime.IsAcceptingExternalAfeCommands() == expected;
+}
+
 DeviceRuntime MakeRuntimeWithMissingHardware() {
     return DeviceRuntime(
         L"\\\\?\\EGoTouchMissingMaster",
@@ -612,6 +625,160 @@ bool RunStoppedPenIngressDoesNotQueueAfeCommandsTest() {
     return true;
 }
 
+bool RunWorkerSelfStopRejectsWorkerRestartTest() {
+    auto runtime = std::make_unique<DeviceRuntime>(
+        L"\\\\?\\EGoTouchMissingMaster",
+        L"\\\\?\\EGoTouchMissingSlave",
+        L"\\\\?\\EGoTouchMissingInterrupt");
+    runtime->SetAutoMode(false);
+
+    std::barrier hookCompleted(2);
+    std::atomic<int> startResult{-1};
+    runtime->SetWorkerHookForTesting([&]() {
+        runtime->Stop();
+        startResult.store(
+            static_cast<int>(runtime->RequestStart()),
+            std::memory_order_release);
+        hookCompleted.arrive_and_wait();
+    });
+
+    if (!runtime->Start()) {
+        std::cerr << "[TEST] Failed to start runtime for worker self-stop test.\n";
+        return false;
+    }
+    hookCompleted.arrive_and_wait();
+    const auto result = static_cast<DeviceRuntime::StartRequestResult>(
+        startResult.load(std::memory_order_acquire));
+    runtime->Stop();
+
+    if (result != DeviceRuntime::StartRequestResult::Failed) {
+        std::cerr << "[TEST] Worker RequestStart was not rejected after self-stop.\n";
+        return false;
+    }
+    return true;
+}
+
+bool RunExternalStopDoesNotDeadlockWorkerRestartTest() {
+    using namespace std::chrono_literals;
+
+    auto runtime = std::make_unique<DeviceRuntime>(
+        L"\\\\?\\EGoTouchMissingMaster",
+        L"\\\\?\\EGoTouchMissingSlave",
+        L"\\\\?\\EGoTouchMissingInterrupt");
+    runtime->SetAutoMode(false);
+
+    std::barrier hookEntered(2);
+    std::barrier releaseHook(2);
+    std::atomic<int> startResult{-1};
+    runtime->SetWorkerHookForTesting([&]() {
+        hookEntered.arrive_and_wait();
+        releaseHook.arrive_and_wait();
+        startResult.store(
+            static_cast<int>(runtime->RequestStart()),
+            std::memory_order_release);
+    });
+
+    if (!runtime->Start()) {
+        std::cerr << "[TEST] Failed to start runtime for external stop test.\n";
+        return false;
+    }
+    hookEntered.arrive_and_wait();
+
+    std::thread stopper([&]() { (void)runtime->RequestStop(); });
+    const bool gateClosed = WaitForCommandGate(*runtime, false, 2s);
+    releaseHook.arrive_and_wait();
+    stopper.join();
+
+    const auto result = static_cast<DeviceRuntime::StartRequestResult>(
+        startResult.load(std::memory_order_acquire));
+    if (!gateClosed || result != DeviceRuntime::StartRequestResult::Failed ||
+        runtime->IsRunning()) {
+        std::cerr << "[TEST] Worker RequestStart did not fail cleanly during external Stop.\n";
+        return false;
+    }
+    return true;
+}
+
+bool RunExplicitStopRemainsTerminalAfterSleepEventsTest() {
+    using namespace std::chrono_literals;
+
+    auto runtime = std::make_unique<DeviceRuntime>(
+        L"\\\\?\\EGoTouchMissingMaster",
+        L"\\\\?\\EGoTouchMissingSlave",
+        L"\\\\?\\EGoTouchMissingInterrupt");
+    runtime->SetAutoMode(false);
+
+    std::barrier hookEntered(2);
+    std::barrier releaseHook(2);
+    runtime->SetWorkerHookForTesting([&]() {
+        hookEntered.arrive_and_wait();
+        releaseHook.arrive_and_wait();
+    });
+
+    if (!runtime->Start()) {
+        std::cerr << "[TEST] Failed to start runtime for terminal Stop test.\n";
+        return false;
+    }
+    hookEntered.arrive_and_wait();
+
+    std::thread stopper([&]() { runtime->Stop(); });
+    const bool gateClosed = WaitForCommandGate(*runtime, false, 2s);
+    runtime->IngestPolicyEvent(MakePolicyEvent(RuntimePolicyEvent::Type::Suspend));
+    runtime->IngestPolicyEvent(MakePolicyEvent(RuntimePolicyEvent::Type::LidOff));
+    releaseHook.arrive_and_wait();
+    stopper.join();
+
+    if (!gateClosed || runtime->IsRunning() ||
+        runtime->GetSnapshot().state != workerState::quit) {
+        std::cerr << "[TEST] Sleep event downgraded an explicit Stop request.\n";
+        return false;
+    }
+    return true;
+}
+
+bool RunPolicyShutdownRemainsTerminalAfterSleepEventsTest() {
+    using namespace std::chrono_literals;
+
+    auto runtime = std::make_unique<DeviceRuntime>(
+        L"\\\\?\\EGoTouchMissingMaster",
+        L"\\\\?\\EGoTouchMissingSlave",
+        L"\\\\?\\EGoTouchMissingInterrupt");
+    runtime->SetAutoMode(false);
+
+    std::barrier hookEntered(2);
+    std::barrier releaseHook(2);
+    runtime->SetWorkerHookForTesting([&]() {
+        hookEntered.arrive_and_wait();
+        releaseHook.arrive_and_wait();
+    });
+
+    if (!runtime->Start()) {
+        std::cerr << "[TEST] Failed to start runtime for terminal Shutdown test.\n";
+        return false;
+    }
+    hookEntered.arrive_and_wait();
+
+    runtime->IngestPolicyEvent(MakePolicyEvent(RuntimePolicyEvent::Type::Shutdown));
+    const bool gateClosed = WaitForCommandGate(*runtime, false, 2s);
+    runtime->IngestPolicyEvent(MakePolicyEvent(RuntimePolicyEvent::Type::Suspend));
+    runtime->IngestPolicyEvent(MakePolicyEvent(RuntimePolicyEvent::Type::LidOff));
+    releaseHook.arrive_and_wait();
+
+    const auto deadline = std::chrono::steady_clock::now() + 2s;
+    while (std::chrono::steady_clock::now() < deadline && runtime->IsRunning()) {
+        std::this_thread::yield();
+    }
+    const bool terminated = !runtime->IsRunning() &&
+        runtime->GetSnapshot().state == workerState::quit;
+    runtime->Stop();
+
+    if (!gateClosed || !terminated) {
+        std::cerr << "[TEST] Sleep event downgraded a policy Shutdown request.\n";
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -665,6 +832,22 @@ int main() {
 
     if (!RunStoppedPenIngressDoesNotQueueAfeCommandsTest()) {
         return 13;
+    }
+
+    if (!RunWorkerSelfStopRejectsWorkerRestartTest()) {
+        return 14;
+    }
+
+    if (!RunExternalStopDoesNotDeadlockWorkerRestartTest()) {
+        return 15;
+    }
+
+    if (!RunExplicitStopRemainsTerminalAfterSleepEventsTest()) {
+        return 16;
+    }
+
+    if (!RunPolicyShutdownRemainsTerminalAfterSleepEventsTest()) {
+        return 17;
     }
 
     std::cout << "[TEST] DeviceRuntime system power policy tests passed.\n";
