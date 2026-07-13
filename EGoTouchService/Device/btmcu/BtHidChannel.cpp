@@ -18,11 +18,19 @@ BtHidChannel::~BtHidChannel() {
     }
 }
 
-void BtHidChannel::Start() {
-    if (m_running.exchange(true)) return;
-    m_thread = std::thread(&BtHidChannel::WorkerFunc, this);
+bool BtHidChannel::Start() {
+    if (m_running.exchange(true)) return true;
+    try {
+        m_thread = std::thread(&BtHidChannel::WorkerFunc, this);
+    } catch (...) {
+        m_running.store(false);
+        LOG_ERROR(ChannelName(), "Start", "MCU",
+                  "Failed to create channel worker thread.");
+        return false;
+    }
     LOG_INFO(ChannelName(), "Start", "MCU",
              "Channel thread launched.");
+    return true;
 }
 
 void BtHidChannel::Stop() {

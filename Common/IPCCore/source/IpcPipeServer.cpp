@@ -1,5 +1,4 @@
 #include "Ipc/IpcPipeServer.h"
-#include "Ipc/IpcSecurity.h"
 #include "Logger.h"
 
 #include <utility>
@@ -105,57 +104,168 @@ bool WriteFullResponse(HANDLE pipe, const IpcResponse& resp) noexcept {
     return ok && bytesWritten == sizeof(resp);
 }
 
+HANDLE CreateDefaultPipe(SECURITY_ATTRIBUTES* securityAttributes) {
+    return CreateNamedPipeW(
+        kPipeName,
+        PIPE_ACCESS_DUPLEX,
+        PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+        1,
+        sizeof(IpcResponse),
+        sizeof(IpcRequest),
+        0,
+        securityAttributes);
+}
+
 } // namespace
 
+IpcPipeServer::IpcPipeServer()
+    : IpcPipeServer(IpcPipeServerStartupOps{}) {}
+
+IpcPipeServer::IpcPipeServer(IpcPipeServerStartupOps startupOps)
+    : m_startupOps(std::move(startupOps)) {
+    if (!m_startupOps.buildSecurity) {
+        m_startupOps.buildSecurity = [](SECURITY_ATTRIBUTES& sa,
+                                        ScopedSecurityDescriptor& sd) {
+            return BuildAdminOnlySecurityAttributes(sa, sd);
+        };
+    }
+    if (!m_startupOps.createPipe) {
+        m_startupOps.createPipe = &CreateDefaultPipe;
+    }
+}
+
+IpcPipeServer::~IpcPipeServer() {
+    Stop();
+}
+
 void IpcPipeServer::SetCommandHandler(CommandHandler handler) {
+    std::lock_guard<std::mutex> lock(m_handlerMutex);
     m_handler = std::move(handler);
 }
 
 bool IpcPipeServer::Start() {
-    if (m_running.load()) return true;
-    m_running.store(true);
-    m_thread = std::thread(&IpcPipeServer::ServerLoop, this);
-    LOG_INFO("IPC", __func__, "IPC", "Pipe server started.");
+    std::unique_lock<std::mutex> lifecycleLock(m_lifecycleMutex);
+    if (m_running.load(std::memory_order_acquire)) {
+        return true;
+    }
+
+    if (m_thread.joinable()) {
+        m_thread.join();
+    }
+
+    {
+        std::lock_guard<std::mutex> startupLock(m_startupMutex);
+        m_startupState = StartupState::Starting;
+    }
+    m_state.store(ServerState::Idle, std::memory_order_release);
+    m_running.store(true, std::memory_order_release);
+
+    try {
+        m_thread = std::thread(&IpcPipeServer::ServerLoop, this);
+    } catch (...) {
+        m_running.store(false, std::memory_order_release);
+        PublishStartupState(StartupState::Failed);
+        LOG_ERROR("IPC", __func__, "IPC", "Failed to create pipe server thread.");
+        return false;
+    }
+
+    StartupState startupState = StartupState::Failed;
+    {
+        std::unique_lock<std::mutex> startupLock(m_startupMutex);
+        m_startupCv.wait(startupLock, [this] {
+            return m_startupState != StartupState::Starting;
+        });
+        startupState = m_startupState;
+    }
+
+    if (startupState != StartupState::Ready) {
+        m_running.store(false, std::memory_order_release);
+        if (m_thread.joinable()) {
+            m_thread.join();
+        }
+        LOG_ERROR("IPC", __func__, "IPC", "Pipe server failed startup readiness handshake.");
+        return false;
+    }
+
+    LOG_INFO("IPC", __func__, "IPC", "Pipe server ready.");
     return true;
 }
 
 void IpcPipeServer::Stop() {
-    m_running.store(false);
+    std::unique_lock<std::mutex> lifecycleLock(m_lifecycleMutex);
+    m_running.store(false, std::memory_order_release);
 
     if (m_thread.joinable()) {
         const ServerState state = m_state.load(std::memory_order_acquire);
         if (state == ServerState::Connecting || state == ServerState::Reading) {
             CancelSynchronousIo(m_thread.native_handle());
         }
+
+        HANDLE h = CreateFileW(
+            kPipeName, GENERIC_READ | GENERIC_WRITE,
+            0, nullptr, OPEN_EXISTING, 0, nullptr);
+        if (h != INVALID_HANDLE_VALUE) {
+            CloseHandle(h);
+        }
+        m_thread.join();
     }
 
-    HANDLE h = CreateFileW(
-        kPipeName, GENERIC_READ | GENERIC_WRITE,
-        0, nullptr, OPEN_EXISTING, 0, nullptr);
-    if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
-    if (m_thread.joinable()) m_thread.join();
+    m_state.store(ServerState::Idle, std::memory_order_release);
+    {
+        std::lock_guard<std::mutex> startupLock(m_startupMutex);
+        m_startupState = StartupState::Stopped;
+    }
+    m_startupCv.notify_all();
     LOG_INFO("IPC", __func__, "IPC", "Pipe server stopped.");
+}
+
+void IpcPipeServer::PublishStartupState(StartupState state) noexcept {
+    {
+        std::lock_guard<std::mutex> startupLock(m_startupMutex);
+        m_startupState = state;
+    }
+    m_startupCv.notify_all();
 }
 
 void IpcPipeServer::ServerLoop() {
     ScopedSecurityDescriptor sd;
     SECURITY_ATTRIBUTES sa{};
-    if (!BuildAdminOnlySecurityAttributes(sa, sd)) {
-        LOG_ERROR("IPC", __func__, "IPC", "Failed to create pipe security descriptor: {}", GetLastError());
+    try {
+        if (!m_startupOps.buildSecurity(sa, sd)) {
+            LOG_ERROR("IPC", __func__, "IPC", "Failed to create pipe security descriptor: {}", GetLastError());
+            m_running.store(false, std::memory_order_release);
+            PublishStartupState(StartupState::Failed);
+            return;
+        }
+    } catch (...) {
+        LOG_ERROR("IPC", __func__, "IPC", "Pipe security initialization threw an exception.");
+        m_running.store(false, std::memory_order_release);
+        PublishStartupState(StartupState::Failed);
         return;
     }
 
-    while (m_running.load()) {
+    bool startupPublished = false;
+    while (m_running.load(std::memory_order_acquire)) {
         m_state.store(ServerState::Idle, std::memory_order_release);
-        HANDLE pipe = CreateNamedPipeW(
-            kPipeName,
-            PIPE_ACCESS_DUPLEX,
-            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
-            1, sizeof(IpcResponse), sizeof(IpcRequest),
-            0, &sa);
+        HANDLE pipe = INVALID_HANDLE_VALUE;
+        try {
+            pipe = m_startupOps.createPipe(&sa);
+        } catch (...) {
+            LOG_ERROR("IPC", __func__, "IPC", "Pipe creation threw an exception.");
+        }
+
         if (pipe == INVALID_HANDLE_VALUE) {
-            LOG_ERROR("IPC", __func__, "IPC", "CreateNamedPipe failed: {}",  GetLastError());
+            LOG_ERROR("IPC", __func__, "IPC", "CreateNamedPipe failed: {}", GetLastError());
+            m_running.store(false, std::memory_order_release);
+            if (!startupPublished) {
+                PublishStartupState(StartupState::Failed);
+            }
             break;
+        }
+
+        if (!startupPublished) {
+            startupPublished = true;
+            PublishStartupState(StartupState::Ready);
         }
 
         m_state.store(ServerState::Connecting, std::memory_order_release);
@@ -163,7 +273,7 @@ void IpcPipeServer::ServerLoop() {
                          ? TRUE
                          : (GetLastError() == ERROR_PIPE_CONNECTED);
         m_state.store(ServerState::Idle, std::memory_order_release);
-        if (!connected || !m_running.load()) {
+        if (!connected || !m_running.load(std::memory_order_acquire)) {
             CloseHandle(pipe);
             continue;
         }
@@ -173,7 +283,7 @@ void IpcPipeServer::ServerLoop() {
 
         LOG_INFO("IPC", __func__, "IPC", "Client connected.");
 
-        while (m_running.load()) {
+        while (m_running.load(std::memory_order_acquire)) {
             IpcRequest req{};
             DWORD bytesRead = 0;
             m_state.store(ServerState::Reading, std::memory_order_release);
@@ -205,12 +315,18 @@ void IpcPipeServer::ServerLoop() {
                 continue;
             }
 
+            CommandHandler handler;
+            {
+                std::lock_guard<std::mutex> handlerLock(m_handlerMutex);
+                handler = m_handler;
+            }
+
             if (!IsKnownCommand(req.command)) {
                 MarkFailure(resp, IpcStatusCode::UnsupportedCommand);
             } else if (!IsCommandAllowed(req.command, client)) {
                 MarkFailure(resp, IpcStatusCode::PermissionDenied);
-            } else if (m_handler) {
-                resp = m_handler(req);
+            } else if (handler) {
+                resp = handler(req);
             } else {
                 MarkFailure(resp, IpcStatusCode::InvalidState);
             }
@@ -230,6 +346,11 @@ void IpcPipeServer::ServerLoop() {
         CloseHandle(pipe);
         LOG_INFO("IPC", __func__, "IPC", "Client disconnected.");
     }
+
+    if (!startupPublished) {
+        PublishStartupState(StartupState::Failed);
+    }
+    m_state.store(ServerState::Idle, std::memory_order_release);
 }
 
 } // namespace Ipc

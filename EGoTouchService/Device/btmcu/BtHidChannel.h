@@ -35,7 +35,7 @@ public:
     BtHidChannel(const BtHidChannel&) = delete;
     BtHidChannel& operator=(const BtHidChannel&) = delete;
 
-    void Start();
+    bool Start();
     /// MUST be called before destruction so the worker cannot dispatch into
     /// already-destroyed subclass state.
     void Stop();

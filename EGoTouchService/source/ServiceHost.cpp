@@ -507,6 +507,8 @@ bool ServiceHost::StartRuntimeAndPipeline() {
 
     if (!m_deviceRuntime->Start()) {
         LOG_ERROR("Service", __func__, "Boot", "DeviceRuntime::Start() failed.");
+        m_deviceRuntime->Stop();
+        m_deviceRuntime.reset();
         return false;
     }
 
@@ -514,7 +516,7 @@ bool ServiceHost::StartRuntimeAndPipeline() {
     return true;
 }
 
-void ServiceHost::StartSystemStateMonitor() {
+bool ServiceHost::StartSystemStateMonitor() {
     m_impl->m_sysMonitor = std::make_unique<Host::SystemStateMonitor>();
     const bool monitorOk = m_impl->m_sysMonitor->Start(
         [this](const Host::SystemStateEvent& ev) {
@@ -543,15 +545,16 @@ void ServiceHost::StartSystemStateMonitor() {
         });
 
     if (!monitorOk) {
-        LOG_WARN("Service", __func__, "Monitor", "SystemStateMonitor failed to start; running without system state detection.");
+        LOG_ERROR("Service", __func__, "Monitor", "SystemStateMonitor failed to start; service startup will roll back.");
         m_impl->m_sysMonitor.reset();
-        return;
+        return false;
     }
 
     LOG_INFO("Service", __func__, "Monitor", "SystemStateMonitor started.");
+    return true;
 }
 
-void ServiceHost::StartIpcSubsystem() {
+bool ServiceHost::StartIpcSubsystem() {
 #if EGOTOUCH_SERVICE_ENABLE_IPC
 #ifdef _DEBUG
     // Service creates Global\\ mapping in debug builds.
@@ -582,56 +585,78 @@ void ServiceHost::StartIpcSubsystem() {
         }
     }
 
-    m_impl->m_configDirty.Open();
+    if (!m_impl->m_configDirty.Open()) {
+        LOG_WARN("Service", __func__, "IPC", "Legacy config dirty flag unavailable.");
+    }
     m_impl->m_ipcServer.SetCommandHandler(
         [this](const Ipc::IpcRequest& req) {
             return HandleIpcCommand(req);
         });
-    m_impl->m_ipcServer.Start();
-    LOG_INFO("Service", __func__, "Boot", "IPC pipe server started.");
+    if (!m_impl->m_ipcServer.Start()) {
+        LOG_ERROR("Service", __func__, "Boot", "IPC pipe server failed readiness handshake.");
+        return false;
+    }
+    LOG_INFO("Service", __func__, "Boot", "IPC pipe server started and ready.");
 #endif
+    return true;
 }
 
-void ServiceHost::StartPenSubsystem() {
+bool ServiceHost::StartPenSubsystem() {
     if (m_runtimeMode != ServiceMode::Full) {
         LOG_INFO("Service", __func__, "MCU", "Pen modules skipped (touch_only mode).");
-        return;
+        return true;
     }
 
-    std::lock_guard<std::mutex> penLock(m_impl->m_penSubsystemMutex);
-    m_impl->m_penEventBridge = std::make_unique<Himax::Pen::PenEventBridge>();
+    try {
+        auto eventBridge = std::make_unique<Himax::Pen::PenEventBridge>();
 #if EGOTOUCH_SERVICE_ENABLE_IPC
-    if (m_impl->m_penEvent) {
-        m_impl->m_penEventBridge->SetNotifyEvent(m_impl->m_penEvent);
-    }
+        if (m_impl->m_penEvent) {
+            eventBridge->SetNotifyEvent(m_impl->m_penEvent);
+        }
 #endif
-    m_impl->m_penEventBridge->SetEventCallback(
-        [this](const Himax::Pen::PenEvent& ev) {
-            if (m_deviceRuntime) {
-                m_deviceRuntime->IngestPenEvent(ev);
-            }
-        });
-    m_impl->m_penEventBridge->Start();
-    LOG_INFO("Service", __func__, "MCU", "PenEventBridge started (col00 event channel).");
+        eventBridge->SetEventCallback(
+            [this](const Himax::Pen::PenEvent& ev) {
+                if (m_deviceRuntime) {
+                    m_deviceRuntime->IngestPenEvent(ev);
+                }
+            });
+        if (!eventBridge->Start()) {
+            LOG_ERROR("Service", __func__, "MCU", "PenEventBridge failed to start.");
+            return false;
+        }
 
-    m_impl->m_penPressureReader = std::make_unique<Himax::Pen::PenPressureReader>();
+        auto pressureReader = std::make_unique<Himax::Pen::PenPressureReader>();
 #if EGOTOUCH_SERVICE_ENABLE_IPC
-    if (m_impl->m_penEvent) {
-        m_impl->m_penPressureReader->SetNotifyEvent(m_impl->m_penEvent);
-    }
+        if (m_impl->m_penEvent) {
+            pressureReader->SetNotifyEvent(m_impl->m_penEvent);
+        }
 #endif
-    m_impl->m_penPressureReader->SetPressureCallback(
-        [this](const Himax::Pen::PenPressureStats& stats) {
-            if (m_deviceRuntime) {
-                m_deviceRuntime->IngestBtMcuPressurePacket(
-                    std::array<uint16_t, 4>{stats.press[0], stats.press[1], stats.press[2], stats.press[3]},
-                    std::array<uint16_t, 4>{stats.rawPress[0], stats.rawPress[1], stats.rawPress[2], stats.rawPress[3]},
-                    stats.freq1,
-                    stats.freq2);
-            }
-        });
-    m_impl->m_penPressureReader->Start();
-    LOG_INFO("Service", __func__, "MCU", "PenPressureReader started (col01 pressure channel).");
+        pressureReader->SetPressureCallback(
+            [this](const Himax::Pen::PenPressureStats& stats) {
+                if (m_deviceRuntime) {
+                    m_deviceRuntime->IngestBtMcuPressurePacket(
+                        std::array<uint16_t, 4>{stats.press[0], stats.press[1], stats.press[2], stats.press[3]},
+                        std::array<uint16_t, 4>{stats.rawPress[0], stats.rawPress[1], stats.rawPress[2], stats.rawPress[3]},
+                        stats.freq1,
+                        stats.freq2);
+                }
+            });
+        if (!pressureReader->Start()) {
+            LOG_ERROR("Service", __func__, "MCU", "PenPressureReader failed to start.");
+            return false;
+        }
+
+        {
+            std::lock_guard<std::mutex> penLock(m_impl->m_penSubsystemMutex);
+            m_impl->m_penEventBridge = std::move(eventBridge);
+            m_impl->m_penPressureReader = std::move(pressureReader);
+        }
+        LOG_INFO("Service", __func__, "MCU", "PenEventBridge and PenPressureReader started.");
+        return true;
+    } catch (...) {
+        LOG_ERROR("Service", __func__, "MCU", "Pen subsystem startup threw an exception.");
+        return false;
+    }
 }
 
 bool ServiceHost::Start() {

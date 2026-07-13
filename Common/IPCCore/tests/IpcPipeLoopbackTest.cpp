@@ -8,11 +8,14 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <mutex>
 #include <thread>
+#include <utility>
 
 namespace {
 
@@ -182,10 +185,107 @@ Ipc::IpcResponse SendWithFakeServer(const Ipc::IpcRequest& request,
     return result;
 }
 
+void TestRepeatedSecurityStartupFailure() {
+    Ipc::IpcPipeServerStartupOps ops{};
+    ops.buildSecurity = [](SECURITY_ATTRIBUTES&,
+                           Ipc::ScopedSecurityDescriptor&) {
+        SetLastError(ERROR_ACCESS_DENIED);
+        return false;
+    };
+    ops.createPipe = [](SECURITY_ATTRIBUTES*) -> HANDLE {
+        Require(false, "pipe creation must not run after security failure");
+        return INVALID_HANDLE_VALUE;
+    };
+
+    Ipc::IpcPipeServer server(std::move(ops));
+    for (int i = 0; i < 25; ++i) {
+        Require(!server.Start(), "security startup failure propagates from Start");
+        Require(!server.IsRunning(), "failed security startup never reports running");
+    }
+    server.Stop();
+}
+
+void TestPipeCreationStartupFailure() {
+    Ipc::IpcPipeServerStartupOps ops{};
+    ops.buildSecurity = [](SECURITY_ATTRIBUTES& sa,
+                           Ipc::ScopedSecurityDescriptor&) {
+        sa.nLength = sizeof(sa);
+        sa.lpSecurityDescriptor = nullptr;
+        sa.bInheritHandle = FALSE;
+        return true;
+    };
+    ops.createPipe = [](SECURITY_ATTRIBUTES*) -> HANDLE {
+        SetLastError(ERROR_ACCESS_DENIED);
+        return INVALID_HANDLE_VALUE;
+    };
+
+    Ipc::IpcPipeServer server(std::move(ops));
+    Require(!server.Start(), "CreateNamedPipe startup failure propagates from Start");
+    Require(!server.IsRunning(), "pipe creation failure never reports running");
+    server.Stop();
+}
+
+void TestStopSerializesWithStartupHandshake() {
+    std::mutex mutex;
+    std::condition_variable cv;
+    bool buildEntered = false;
+    bool releaseBuild = false;
+
+    Ipc::IpcPipeServerStartupOps ops{};
+    ops.buildSecurity = [&](SECURITY_ATTRIBUTES&,
+                            Ipc::ScopedSecurityDescriptor&) {
+        std::unique_lock<std::mutex> lock(mutex);
+        buildEntered = true;
+        cv.notify_all();
+        cv.wait(lock, [&] { return releaseBuild; });
+        SetLastError(ERROR_ACCESS_DENIED);
+        return false;
+    };
+
+    Ipc::IpcPipeServer server(std::move(ops));
+    std::atomic<bool> startResult{true};
+    std::atomic<bool> stopReturned{false};
+    std::thread starter([&] {
+        startResult.store(server.Start(), std::memory_order_release);
+    });
+
+    {
+        std::unique_lock<std::mutex> lock(mutex);
+        Require(cv.wait_for(lock, std::chrono::seconds(2), [&] { return buildEntered; }),
+                "startup worker enters injected security handshake");
+    }
+
+    std::thread stopper([&] {
+        server.Stop();
+        stopReturned.store(true, std::memory_order_release);
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    Require(!stopReturned.load(std::memory_order_acquire),
+            "Stop waits for the in-progress startup handshake owner");
+
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        releaseBuild = true;
+    }
+    cv.notify_all();
+    starter.join();
+    stopper.join();
+
+    Require(!startResult.load(std::memory_order_acquire),
+            "injected startup failure remains visible with concurrent Stop");
+    Require(stopReturned.load(std::memory_order_acquire),
+            "Stop completes after startup failure cleanup");
+    Require(!server.IsRunning(), "concurrent startup failure and Stop leave server stopped");
+}
+
 } // namespace
 
 int main() {
     using namespace Ipc;
+
+    TestRepeatedSecurityStartupFailure();
+    TestPipeCreationStartupFailure();
+    TestStopSerializesWithStartupHandshake();
 
     if (!IsElevatedAdmin()) {
         std::cout << "[SKIP] IpcPipeLoopbackTest requires an elevated Administrators token because IpcPipeServer validates pipe clients.\n";
@@ -242,9 +342,8 @@ int main() {
         MarkFailure(response, IpcStatusCode::InvalidRequest);
         return response;
     });
-    Require(server.Start(), "pipe server starts");
-    Require(server.IsRunning(), "pipe server reports running");
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    Require(server.Start(), "pipe server starts only after pipe readiness");
+    Require(server.IsRunning(), "ready pipe server reports running");
 
     IpcResponse pingResponse = SendRequest(IpcCommand::Ping);
     Require(pingResponse.success, "Ping loopback succeeds");

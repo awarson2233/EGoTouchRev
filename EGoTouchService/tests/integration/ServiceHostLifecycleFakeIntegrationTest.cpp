@@ -8,6 +8,7 @@
 #include <condition_variable>
 #include <functional>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
@@ -76,11 +77,12 @@ public:
 
     bool startResult = true;
 
-    void Start(Callback callback) {
+    bool Start(Callback callback) {
         m_calls->Add("monitor.start");
         m_callback = std::move(callback);
         m_started = startResult;
         if (!startResult) m_calls->Add("monitor.reset");
+        return startResult;
     }
 
     void Emit(Host::SystemStateEventType event) {
@@ -142,11 +144,28 @@ public:
         if (m_handlerThread.joinable()) m_handlerThread.join();
     }
 
-    void Start() {
+    bool resourcesStartResult = true;
+    bool serverStartResult = true;
+    bool throwAfterResources = false;
+
+    bool Start() {
         m_calls->Add("ipc.resources.start");
+        if (!resourcesStartResult) {
+            m_calls->Add("ipc.resources.start.fail");
+            return false;
+        }
         m_resourcesOpen = true;
+        if (throwAfterResources) {
+            m_calls->Add("ipc.resources.start.throw");
+            throw std::runtime_error("injected IPC startup failure");
+        }
         m_calls->Add("ipc.server.start");
+        if (!serverStartResult) {
+            m_calls->Add("ipc.server.start.fail");
+            return false;
+        }
         m_serverStarted = true;
+        return true;
     }
 
     void BeginInFlightHandler() {
@@ -194,21 +213,27 @@ private:
 
 struct FakePen {
     CallLog* calls = nullptr;
+    bool startResult = true;
     bool eventStarted = false;
     bool pressureStarted = false;
     bool notifyAttached = false;
 
-    void Start(Service::ServiceMode mode) {
+    bool Start(Service::ServiceMode mode) {
         if (mode != Service::ServiceMode::Full) {
             calls->Add("pen.skip");
-            return;
+            return true;
         }
         calls->Add("pen.notify.attach");
         notifyAttached = true;
         calls->Add("penEvent.start");
         eventStarted = true;
         calls->Add("penPressure.start");
+        if (!startResult) {
+            calls->Add("penPressure.start.fail");
+            return false;
+        }
         pressureStarted = true;
+        return true;
     }
 
     void SendQueryPenStatus() {
@@ -238,13 +263,16 @@ struct FakeServiceHostHarness {
         runtime.ApplyPolicy(config);
         runtime.BuildPipeline();
         started = runtime.Start();
+        if (!started) {
+            runtime.Stop();
+        }
         return started;
     }
 
-    void StartIpcSubsystem() { ipc.Start(); }
-    void StartPenSubsystem() { pen.Start(config.mode); }
-    void StartSystemStateMonitor() {
-        monitor.Start([this](Host::SystemStateEventType event) {
+    bool StartIpcSubsystem() { return ipc.Start(); }
+    bool StartPenSubsystem() { return pen.Start(config.mode); }
+    bool StartSystemStateMonitor() {
+        return monitor.Start([this](Host::SystemStateEventType event) {
             runtime.HandlePolicyEvent();
             if (config.mode == Service::ServiceMode::Full &&
                 Host::IsPenStatusWakeEvent(event)) {
@@ -270,6 +298,7 @@ struct FakeServiceHostHarness {
 bool FullModeStartsAndStopsInRaceFreeOrder() {
     FakeServiceHostHarness host;
     REQUIRE_TRUE(host.Start());
+    host.Stop();
     host.Stop();
 
     const std::vector<std::string> expected{
@@ -321,7 +350,7 @@ bool TouchOnlySkipsPenButKeepsCoreSubsystems() {
     return true;
 }
 
-bool RuntimeStartFailureBlocksLaterSubsystems() {
+bool RuntimeStartFailureRollsBackRuntimeObject() {
     FakeServiceHostHarness host;
     host.runtime.startResult = false;
     REQUIRE_TRUE(!host.Start());
@@ -330,15 +359,96 @@ bool RuntimeStartFailureBlocksLaterSubsystems() {
         "runtime.applyPolicy",
         "runtime.buildPipeline",
         "runtime.start",
+        "runtime.stop",
     };
     REQUIRE_TRUE(host.calls.Snapshot() == expected);
     return true;
 }
 
-bool MonitorFailureDoesNotFailServiceStart() {
+bool IpcResourceFailureRollsBackRuntime() {
+    FakeServiceHostHarness host;
+    host.ipc.resourcesStartResult = false;
+    REQUIRE_TRUE(!host.Start());
+
+    const std::vector<std::string> expected{
+        "runtime.applyPolicy",
+        "runtime.buildPipeline",
+        "runtime.start",
+        "ipc.resources.start",
+        "ipc.resources.start.fail",
+        "runtime.stop",
+    };
+    REQUIRE_TRUE(host.calls.Snapshot() == expected);
+    return true;
+}
+
+bool IpcServerFailureClosesResourcesAndRuntime() {
+    FakeServiceHostHarness host;
+    host.ipc.serverStartResult = false;
+    REQUIRE_TRUE(!host.Start());
+
+    const std::vector<std::string> expected{
+        "runtime.applyPolicy",
+        "runtime.buildPipeline",
+        "runtime.start",
+        "ipc.resources.start",
+        "ipc.server.start",
+        "ipc.server.start.fail",
+        "ipc.resources.close",
+        "runtime.stop",
+    };
+    REQUIRE_TRUE(host.calls.Snapshot() == expected);
+    return true;
+}
+
+bool IpcStartupExceptionStillClosesResourcesAndRuntime() {
+    FakeServiceHostHarness host;
+    host.ipc.throwAfterResources = true;
+    REQUIRE_TRUE(!host.Start());
+
+    const std::vector<std::string> expected{
+        "runtime.applyPolicy",
+        "runtime.buildPipeline",
+        "runtime.start",
+        "ipc.resources.start",
+        "ipc.resources.start.throw",
+        "ipc.resources.close",
+        "runtime.stop",
+    };
+    REQUIRE_TRUE(host.calls.Snapshot() == expected);
+    return true;
+}
+
+bool PenFailureGatesIpcThenRollsBackPartialPen() {
+    FakeServiceHostHarness host;
+    host.pen.startResult = false;
+    REQUIRE_TRUE(!host.Start());
+
+    const std::vector<std::string> expected{
+        "runtime.applyPolicy",
+        "runtime.buildPipeline",
+        "runtime.start",
+        "ipc.resources.start",
+        "ipc.server.start",
+        "pen.notify.attach",
+        "penEvent.start",
+        "penPressure.start",
+        "penPressure.start.fail",
+        "ipc.server.stop.begin",
+        "ipc.server.stop",
+        "pen.notify.detach",
+        "penEvent.stop",
+        "ipc.resources.close",
+        "runtime.stop",
+    };
+    REQUIRE_TRUE(host.calls.Snapshot() == expected);
+    return true;
+}
+
+bool MonitorFailureRollsBackAllCompletedStages() {
     FakeServiceHostHarness host;
     host.monitor.startResult = false;
-    REQUIRE_TRUE(host.Start());
+    REQUIRE_TRUE(!host.Start());
 
     const std::vector<std::string> expected{
         "runtime.applyPolicy",
@@ -351,6 +461,13 @@ bool MonitorFailureDoesNotFailServiceStart() {
         "penPressure.start",
         "monitor.start",
         "monitor.reset",
+        "ipc.server.stop.begin",
+        "ipc.server.stop",
+        "pen.notify.detach",
+        "penPressure.stop",
+        "penEvent.stop",
+        "ipc.resources.close",
+        "runtime.stop",
     };
     REQUIRE_TRUE(host.calls.Snapshot() == expected);
     return true;
@@ -416,8 +533,12 @@ int main() {
     int failures = 0;
     failures += RunTest(&FullModeStartsAndStopsInRaceFreeOrder, "FullModeStartsAndStopsInRaceFreeOrder");
     failures += RunTest(&TouchOnlySkipsPenButKeepsCoreSubsystems, "TouchOnlySkipsPenButKeepsCoreSubsystems");
-    failures += RunTest(&RuntimeStartFailureBlocksLaterSubsystems, "RuntimeStartFailureBlocksLaterSubsystems");
-    failures += RunTest(&MonitorFailureDoesNotFailServiceStart, "MonitorFailureDoesNotFailServiceStart");
+    failures += RunTest(&RuntimeStartFailureRollsBackRuntimeObject, "RuntimeStartFailureRollsBackRuntimeObject");
+    failures += RunTest(&IpcResourceFailureRollsBackRuntime, "IpcResourceFailureRollsBackRuntime");
+    failures += RunTest(&IpcServerFailureClosesResourcesAndRuntime, "IpcServerFailureClosesResourcesAndRuntime");
+    failures += RunTest(&IpcStartupExceptionStillClosesResourcesAndRuntime, "IpcStartupExceptionStillClosesResourcesAndRuntime");
+    failures += RunTest(&PenFailureGatesIpcThenRollsBackPartialPen, "PenFailureGatesIpcThenRollsBackPartialPen");
+    failures += RunTest(&MonitorFailureRollsBackAllCompletedStages, "MonitorFailureRollsBackAllCompletedStages");
     failures += RunTest(&WakeCallbacksIssuePenStatusQueryOnlyInFullMode, "WakeCallbacksIssuePenStatusQueryOnlyInFullMode");
     failures += RunTest(&StopWaitsForMonitorAndIpcBeforePenTeardown, "StopWaitsForMonitorAndIpcBeforePenTeardown");
     return failures == 0 ? 0 : 1;

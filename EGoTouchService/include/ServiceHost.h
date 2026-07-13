@@ -86,9 +86,9 @@ private:
     bool ValidateStartupConfig(const Config::ConfigStore& store) const;
 #endif
     bool StartRuntimeAndPipeline();
-    void StartSystemStateMonitor();
-    void StartIpcSubsystem();
-    void StartPenSubsystem();
+    bool StartSystemStateMonitor();
+    bool StartIpcSubsystem();
+    bool StartPenSubsystem();
 
     void StopIpcServer();
     void CloseIpcResources();
