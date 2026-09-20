@@ -5,9 +5,8 @@
 // with DilateErode, MarkEdges, ScanAbsorbedPeaks, MultiFinger centroid.
 
 #include "SolverTypes.h"
-#include "MSType.hpp"
+#include "TouchSharedTypes.h"
 #include "EdgeCompensation.hpp"  // ZoneEdgeInfo, EdgeBounds, TZ_* helpers
-#include <vector>
 #include <array>
 #include <algorithm>
 #include <cstdint>

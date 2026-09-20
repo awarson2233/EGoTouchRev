@@ -74,7 +74,6 @@ void TestSchemaCoversServiceTouchAndStylusCatalogKeys() {
     RequireLiveMappedEntry(schema, "service.stylus_vhf_enabled");
     RequireLiveMappedEntry(schema, "service.pen_button_mode");
     RequireLiveMappedEntry(schema, "service.pen_button_route");
-    RequireLiveMappedEntry(schema, "touch.signal_cond.baseline_no_finger_max_step");
     RequireLiveMappedEntry(schema, "stylus.sp.bt_freq_shift_debounce_frames");
     RequireLiveMappedEntry(schema, "stylus.sp.lock_flash_edge_y");
 }
@@ -86,7 +85,6 @@ void TestDirtyPathKeyIdsRemainStable() {
         {"service.stylus_vhf_enabled", Config::ConfigKeyId::SvcStylusVhfEnabled},
         {"service.pen_button_mode", Config::ConfigKeyId::SvcPenButtonMode},
         {"service.pen_button_route", Config::ConfigKeyId::SvcPenButtonRoute},
-        {"touch.signal_cond.baseline_no_finger_max_step", Config::ConfigKeyId::TouchBaselineNoFingerMaxStep},
         {"stylus.sp.bt_freq_shift_debounce_frames", Config::ConfigKeyId::StylusSpBtFreqShiftDebounceFrames},
     };
 
@@ -211,7 +209,6 @@ void TestV3CatalogPayloadAppliesSchemaAndDefaults() {
     const auto& schema = proxy.GetConfigSchemaSnapshot();
 
     RequireMappedRestartEntry(schema, "service.mode");
-    RequireLiveMappedEntry(schema, "touch.signal_cond.baseline_no_finger_max_step");
     RequireLiveMappedEntry(schema, "stylus.sp.bt_freq_shift_debounce_frames");
     Require(proxy.GetConfigDraftStore().has("service.mode"), "local fallback draft should remain populated");
     const auto versions = proxy.GetConfigV3BaselineVersionsForTest();
@@ -371,8 +368,8 @@ void TestLocalFallbackInitializesSchemaAndDefaultStore() {
             "local fallback schema should include service.mode");
     Require(proxy.GetConfigDraftStore().has("service.mode"), "local fallback default draft should contain service.mode");
     Require(proxy.GetConfigDraftStore().has("service.auto_mode"), "local fallback default draft should contain service.auto_mode");
-    Require(proxy.GetConfigDraftStore().has("touch.signal_cond.baseline_no_finger_max_step"),
-            "local fallback default draft should contain touch catalog key");
+    Require(proxy.GetConfigDraftStore().has("stylus.sp.signal_floor"),
+            "local fallback default draft should contain stylus catalog key");
     const auto versions = proxy.GetConfigV3BaselineVersionsForTest();
     Require(versions.catalogSchemaVersion == 0, "local fallback should not claim a v3 catalog baseline");
     Require(versions.snapshotVersion == 0, "local fallback should not claim a v3 snapshot baseline");

@@ -20,7 +20,7 @@ void Require(bool condition, const char* message)
 
 struct RuntimeConfig {
     bool serviceMode = false;
-    int32_t baselineStep = 0;
+    int32_t iirSpeedMax = 0;
     int32_t unknownRuntime = 0;
 };
 
@@ -28,7 +28,7 @@ Config::ConfigBinder MakeBinder(RuntimeConfig& runtime)
 {
     Config::ConfigBinder binder;
     binder.bind("service.mode", &RuntimeConfig::serviceMode, runtime, false, {}, "service mode");
-    binder.bind("touch.signal_cond.baseline_bg_max_step", &RuntimeConfig::baselineStep, runtime, int32_t{7}, {0.0, 99.0}, "baseline step");
+    binder.bind("stylus.sp.iir_speed_max", &RuntimeConfig::iirSpeedMax, runtime, int32_t{7}, {0.0, 99.0}, "iir speed max");
     binder.bind("touch.unmapped.runtime_only", &RuntimeConfig::unknownRuntime, runtime, int32_t{11}, {0.0, 20.0}, "unknown runtime");
     return binder;
 }
@@ -65,12 +65,12 @@ void TestUniquePathAndKeyIdValidation()
 
 void TestRoundtripAndStableSort()
 {
-    Config::ConfigDescriptor touch;
-    touch.path = "touch.signal_cond.baseline_bg_max_step";
-    touch.keyId = Config::ConfigKeyId::TouchBaselineBgMaxStep;
-    touch.defaultValue = int32_t{7};
-    touch.uiType = Config::ConfigUiType::Int32;
-    touch.description = "touch descriptor";
+    Config::ConfigDescriptor stylus;
+    stylus.path = "stylus.sp.iir_speed_max";
+    stylus.keyId = Config::ConfigKeyId::StylusSpIirSpeedMax;
+    stylus.defaultValue = int32_t{7};
+    stylus.uiType = Config::ConfigUiType::Int32;
+    stylus.description = "stylus descriptor";
 
     Config::ConfigDescriptor service;
     service.path = "service.mode";
@@ -79,11 +79,11 @@ void TestRoundtripAndStableSort()
     service.uiType = Config::ConfigUiType::Bool;
     service.description = "service descriptor";
 
-    Config::ConfigCatalog catalog({touch, service});
+    Config::ConfigCatalog catalog({stylus, service});
     Require(catalog.descriptors().front().keyId == Config::ConfigKeyId::SvcMode,
             "ConfigCatalog should sort descriptors by keyId");
     Require(catalog.findByPath("service.mode").has_value(), "ConfigCatalog should find by path");
-    Require(catalog.findByKeyId(Config::ConfigKeyId::TouchBaselineBgMaxStep).has_value(),
+    Require(catalog.findByKeyId(Config::ConfigKeyId::StylusSpIirSpeedMax).has_value(),
             "ConfigCatalog should find by keyId");
 
     const auto snapshot = Config::BuildSchemaSnapshot(catalog);
@@ -93,25 +93,25 @@ void TestRoundtripAndStableSort()
 
     const auto roundtrip = Config::ConfigCatalogBuilder::fromSnapshot(snapshot);
     Require(roundtrip.descriptors().size() == 2, "catalog snapshot roundtrip should preserve descriptor count");
-    Require(roundtrip.descriptors()[1].description == "touch descriptor",
+    Require(roundtrip.descriptors()[1].description == "stylus descriptor",
             "catalog snapshot roundtrip should preserve metadata");
 }
 
 void TestConfigV3PayloadSerialization()
 {
     Config::ConfigDescriptor second;
-    second.path = "touch.signal_cond.baseline_bg_max_step";
-    second.keyId = Config::ConfigKeyId::TouchBaselineBgMaxStep;
+    second.path = "stylus.sp.iir_speed_max";
+    second.keyId = Config::ConfigKeyId::StylusSpIirSpeedMax;
     second.defaultValue = int32_t{7};
     second.uiType = Config::ConfigUiType::Int32;
     second.range = Config::ConfigRange{0.0, 99.0};
-    second.displayName = "Baseline Step";
-    second.description = "baseline description";
-    second.moduleTag = "Touch";
+    second.displayName = "IIR Speed Max";
+    second.description = "iir speed description";
+    second.moduleTag = "Stylus";
     second.enumMapping = {{1, "one"}, {2, "two"}};
     second.runtimeBinding = Config::ConfigRuntimeBinding::LiveSetter;
     second.boundToRuntime = true;
-    second.scope = Config::ConfigScope::TouchPipeline;
+    second.scope = Config::ConfigScope::StylusPipeline;
     second.applyTiming = Config::ConfigApplyTiming::FrameBoundary;
     second.persistPolicy = Config::ConfigPersistPolicy::UserOverride;
 
@@ -144,14 +144,14 @@ void TestConfigV3PayloadSerialization()
     Require(catalogRoundtrip.entries[1].enumMapping.size() == 2 && catalogRoundtrip.entries[1].enumMapping[1].second == "two", "Config v3 catalog enumMapping should roundtrip");
     Require(catalogRoundtrip.entries[1].runtimeBinding == Config::ConfigRuntimeBinding::LiveSetter, "Config v3 catalog runtimeBinding should roundtrip");
     Require(catalogRoundtrip.entries[1].boundToRuntime, "Config v3 catalog boundToRuntime should roundtrip");
-    Require(catalogRoundtrip.entries[1].scope == Config::ConfigScope::TouchPipeline, "Config v3 catalog scope should roundtrip");
+    Require(catalogRoundtrip.entries[1].scope == Config::ConfigScope::StylusPipeline, "Config v3 catalog scope should roundtrip");
     Require(catalogRoundtrip.entries[1].applyTiming == Config::ConfigApplyTiming::FrameBoundary, "Config v3 catalog applyTiming should roundtrip");
     Require(catalogRoundtrip.entries[1].persistPolicy == Config::ConfigPersistPolicy::UserOverride, "Config v3 catalog persistPolicy should roundtrip");
 
     Config::ConfigV3SnapshotPayload snapshot;
     snapshot.schemaVersion = 11;
     snapshot.snapshotVersion = 23;
-    snapshot.entries = {{Config::ConfigKeyId::SvcAutoMode, true}, {Config::ConfigKeyId::SvcPenButtonMode, std::string{"native_barrel"}}, {Config::ConfigKeyId::TouchBaselineBgMaxStep, int32_t{42}}};
+    snapshot.entries = {{Config::ConfigKeyId::SvcAutoMode, true}, {Config::ConfigKeyId::SvcPenButtonMode, std::string{"native_barrel"}}, {Config::ConfigKeyId::StylusSpIirSpeedMax, int32_t{42}}};
     Require(snapshot.version == 1, "Config v3 snapshot should remain wire version 1");
     const auto snapshotBytes = Config::serializeConfigV3Snapshot(snapshot);
     const auto snapshotRoundtrip = Config::deserializeConfigV3Snapshot(snapshotBytes.data(), snapshotBytes.size());
@@ -190,12 +190,12 @@ void TestBinderDefaultsCompatibilityAndUnknownRuntimePath()
 {
     RuntimeConfig runtime;
     runtime.serviceMode = true;
-    runtime.baselineStep = 42;
+    runtime.iirSpeedMax = 42;
     auto binder = MakeBinder(runtime);
 
     Config::ConfigStore defaults;
     defaults.set("service.mode", false);
-    defaults.set("touch.signal_cond.baseline_bg_max_step", int32_t{7});
+    defaults.set("stylus.sp.iir_speed_max", int32_t{7});
     defaults.set("stylus.sp.signal_floor", int32_t{5});
 
     Config::registerRuntimeKeyMappings(binder);
@@ -220,7 +220,7 @@ void TestBinderDefaultsCompatibilityAndUnknownRuntimePath()
     bool sawCurrentRuntimeValue = false;
     bool sawRestartRequiredServiceMode = false;
     for (const auto& entry : schema.entries) {
-        if (entry.yamlPath == "touch.signal_cond.baseline_bg_max_step") {
+        if (entry.yamlPath == "stylus.sp.iir_speed_max") {
             sawCurrentRuntimeValue = Config::tryGetValue<int32_t>(entry.currentValue).value_or(0) == 42;
         }
         if (entry.yamlPath == "service.mode") {

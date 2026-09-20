@@ -171,6 +171,59 @@ void TestDuplicateDisconnectClearsIdentityObservably() {
             "identity cleanup on duplicate disconnect should advance revision");
 }
 
+void TestPenLinkDownDeregistersConnectionAndSuppressesReplay() {
+    auto runtime = MakeRuntime();
+
+    auto connected = MakePayloadEvent(PenUsbEventCode::PenConnStatus, 1);
+    connected.semantic.hasConnection = true;
+    connected.semantic.connected = true;
+    runtime.IngestPenEvent(connected);
+
+    auto typeInfo = MakePayloadEvent(PenUsbEventCode::PenTypeInfo, 3);
+    typeInfo.semantic.hasStylusId = true;
+    typeInfo.semantic.stylusId = 3;
+    runtime.IngestPenEvent(typeInfo);
+
+    auto state = runtime.GetPenStateSnapshot();
+    Require(state.hasConnection && state.connected && state.hasStylusId,
+            "pen should be connected with a known stylus id before the power transition");
+    Require(BuildPenAfeCommandPlan(state).count == 2,
+            "connected pen should replay InitStylus and SetStylusId after chip init");
+
+    Require(runtime.NotifyPenLinkDown(),
+            "first link-down notification should report a connection change");
+
+    state = runtime.GetPenStateSnapshot();
+    Require(state.hasConnection && !state.connected,
+            "link down must record an explicit disconnected state, not an unknown one");
+    Require(!state.hasStylusId && state.stylusId == 0,
+            "link down must clear stale stylus identity");
+    Require(BuildPenAfeCommandPlan(state).count == 0,
+            "disconnected pen must not replay InitStylus to the AFE after resume");
+}
+
+void TestPenLinkDownIsIdempotent() {
+    auto runtime = MakeRuntime();
+
+    auto connected = MakePayloadEvent(PenUsbEventCode::PenConnStatus, 1);
+    connected.semantic.hasConnection = true;
+    connected.semantic.connected = true;
+    runtime.IngestPenEvent(connected);
+
+    Require(runtime.NotifyPenLinkDown(),
+            "first link-down notification should report a connection change");
+    const auto afterFirst = runtime.GetPenStateSnapshot();
+
+    Require(!runtime.NotifyPenLinkDown(),
+            "repeated link-down notification should not report a further change");
+    const auto afterSecond = runtime.GetPenStateSnapshot();
+
+    Require(afterSecond.hasConnection && !afterSecond.connected,
+            "repeated link down should preserve the explicit disconnected state");
+    Require(afterSecond.penRevision == afterFirst.penRevision,
+            "repeated link down should not advance the pen revision");
+}
+
 void TestPairStatusIsIndependentFromConnection() {
     auto runtime = MakeRuntime();
 
@@ -292,6 +345,8 @@ int main() {
     try {
         TestIdentityEventsDoNotInferConnection();
         TestDuplicateDisconnectClearsIdentityObservably();
+        TestPenLinkDownDeregistersConnectionAndSuppressesReplay();
+        TestPenLinkDownIsIdempotent();
         TestPairStatusIsIndependentFromConnection();
         TestPairStatusDuringWritingPreservesPipelineAndBtSample();
         TestPairStatusFrameProducesSemanticState();

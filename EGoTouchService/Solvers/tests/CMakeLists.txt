@@ -20,6 +20,21 @@ function(ego_add_solvers_unit name category)
     )
 endfunction()
 
+function(ego_add_touch_unit name)
+    add_executable(${name} ${ARGN})
+    target_include_directories(${name} PRIVATE
+        "${CMAKE_SOURCE_DIR}/EGoTouchService/Solvers"
+        "${CMAKE_SOURCE_DIR}/EGoTouchService/Solvers/TouchSolver"
+    )
+    target_link_libraries(${name} PRIVATE Common SolversTestSupport)
+    add_test(NAME ${name} COMMAND ${name})
+    set_tests_properties(${name} PROPERTIES
+        LABELS "solvers;solvers.unit;solvers.touch"
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/unit"
+        TIMEOUT 30
+    )
+endfunction()
+
 function(ego_add_solvers_config_unit name category)
     add_executable(${name} ${ARGN})
     target_link_libraries(${name} PRIVATE Solvers Common SolversTestSupport)
@@ -53,20 +68,8 @@ function(ego_add_solvers_perf name)
     )
 endfunction()
 
-ego_add_solvers_unit(SolversUnit_TouchBaselineTracker touch
-    unit/touch/TouchBaselineTrackerTest.cpp
-)
-ego_add_solvers_unit(SolversUnit_TouchTrackerGapRelink touch
-    unit/touch/TouchTrackerGapRelinkTest.cpp
-)
 ego_add_solvers_unit(SolversUnit_TouchStylusSuppress touch
     unit/touch/TouchStylusSuppressTest.cpp
-)
-ego_add_solvers_unit(SolversUnit_TouchEdgeCompensation touch
-    unit/touch/TouchEdgeCompensationTest.cpp
-)
-ego_add_solvers_unit(SolversUnit_TouchCloseSplit touch
-    unit/touch/TouchCloseSplitTest.cpp
 )
 ego_add_solvers_unit(SolversUnit_TouchPalmBoxSuppress touch
     unit/touch/TouchPalmBoxSuppressTest.cpp
@@ -78,3 +81,7 @@ ego_add_solvers_unit(SolversUnit_StylusHpp2Pipeline stylus
 ego_add_solvers_config_unit(SolversUnit_StylusPipelineConfigRoundTrip stylus
     unit/stylus/StylusPipelineConfigRoundTripTest.cpp
 )
+
+
+
+

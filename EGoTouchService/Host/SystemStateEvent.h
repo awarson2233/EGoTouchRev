@@ -28,6 +28,17 @@ inline constexpr bool IsPenStatusWakeEvent(SystemStateEventType type) noexcept {
            type == SystemStateEventType::ResumeAutomatic;
 }
 
+// Mirror of IsPenStatusWakeEvent: host power transitions after which the BT MCU
+// link must be treated as lost. DisplayOff is included deliberately — on
+// Modern Standby (S0ix) capable ARM64 hosts Windows commonly delivers only the
+// display transition and never PBT_APMSUSPEND, so keying solely on Suspend
+// would miss the dominant sleep path on this project's target platform.
+inline constexpr bool IsPenLinkDownEvent(SystemStateEventType type) noexcept {
+    return type == SystemStateEventType::DisplayOff ||
+           type == SystemStateEventType::LidOff ||
+           type == SystemStateEventType::Suspend;
+}
+
 // Named events are a transport compatibility surface.
 // Multiple named events may map to the same normalized SystemStateEventType.
 enum class SystemStateNamedEventId : uint8_t {

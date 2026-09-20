@@ -527,22 +527,17 @@ bool ServiceHost::StartSystemStateMonitor() {
                 m_deviceRuntime->IngestPolicyEvent(TranslateSystemStateEvent(ev));
             }
 
-            if (!Host::IsPenStatusWakeEvent(ev.type) ||
-                m_runtimeMode != ServiceMode::Full) {
+            if (m_runtimeMode != ServiceMode::Full) {
                 return;
             }
 
-            std::lock_guard<std::mutex> penLock(m_impl->m_penSubsystemMutex);
-            auto* penEventBridge = m_impl->m_penEventBridge.get();
-            if (!penEventBridge || !penEventBridge->IsRunning()) {
-                LOG_INFO("Service", __func__, "MCU",
-                         "Wake status query skipped because PenEventBridge is not running.");
+            if (Host::IsPenLinkDownEvent(ev.type)) {
+                HandlePenLinkDownEvent(ev);
                 return;
             }
 
-            if (!penEventBridge->SendQueryPenStatus()) {
-                LOG_WARN("Service", __func__, "MCU",
-                         "Wake status query failed for event {}.", Host::ToString(ev.type));
+            if (Host::IsPenStatusWakeEvent(ev.type)) {
+                HandlePenWakeEvent(ev);
             }
         });
 
@@ -554,6 +549,45 @@ bool ServiceHost::StartSystemStateMonitor() {
 
     LOG_INFO("Service", __func__, "Monitor", "SystemStateMonitor started.");
     return true;
+}
+
+void ServiceHost::HandlePenLinkDownEvent(const Host::SystemStateEvent& ev) {
+    // The MCU cannot report PenConnStatus while the host is asleep, so without
+    // an explicit deregistration the runtime keeps a stale connected pen and
+    // replays InitStylus to the AFE on resume against a MCU that has lost its
+    // protocol params.
+    if (m_deviceRuntime && m_deviceRuntime->NotifyPenLinkDown()) {
+        LOG_INFO("Service", __func__, "MCU",
+                 "Pen connection deregistered for power event {}.", Host::ToString(ev.type));
+    }
+
+    std::lock_guard<std::mutex> penLock(m_impl->m_penSubsystemMutex);
+    if (auto* penEventBridge = m_impl->m_penEventBridge.get()) {
+        penEventBridge->MarkLinkStale();
+    }
+}
+
+void ServiceHost::HandlePenWakeEvent(const Host::SystemStateEvent& ev) {
+    std::lock_guard<std::mutex> penLock(m_impl->m_penSubsystemMutex);
+    auto* penEventBridge = m_impl->m_penEventBridge.get();
+    if (!penEventBridge || !penEventBridge->IsRunning()) {
+        LOG_INFO("Service", __func__, "MCU",
+                 "Wake handling skipped because PenEventBridge is not running.");
+        return;
+    }
+
+    // Re-arm before transmitting: any MCU reply must land on a re-armed session,
+    // otherwise Phase::Running swallows it and 0x7D01 is never resent.
+    if (penEventBridge->RearmHandshakeIfStale()) {
+        LOG_INFO("Service", __func__, "MCU",
+                 "Handshake re-armed for wake event {}; MCU event chain will redrive 0x7D01.",
+                 Host::ToString(ev.type));
+    }
+
+    if (!penEventBridge->SendQueryPenStatus()) {
+        LOG_WARN("Service", __func__, "MCU",
+                 "Wake status query failed for event {}.", Host::ToString(ev.type));
+    }
 }
 
 bool ServiceHost::StartIpcSubsystem() {

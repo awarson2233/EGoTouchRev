@@ -13,8 +13,10 @@ namespace VhfTouchPacket {
 
 using TouchPackets = std::array<Solvers::TouchPacket, 2>;
 
-constexpr float kTouchGridHeight = 40.0f;
-constexpr float kTouchGridWidth = 60.0f;
+// 手指管线 Stage 8（PitchRemapAndDisplay）交付的 TouchContact::x/y 是**显示物理
+// 像素**，量程由面板整定表给定：2560 x 1600。上报口径只认这一个单位。
+constexpr float kTouchPixelMaxX = 2560.0f;
+constexpr float kTouchPixelMaxY = 1600.0f;
 constexpr float kTouchLogicalMaxY = 16000.0f;
 constexpr float kTouchLogicalMaxX = 25600.0f;
 constexpr size_t kContactsPerPacket = 5;
@@ -33,9 +35,15 @@ inline void WriteU16Le(std::array<uint8_t, 32>& bytes,
     bytes[offset + 1] = static_cast<uint8_t>((value >> 8) & 0xFFu);
 }
 
-inline uint16_t ToVhf(float gridValue, float gridMax,
+// 像素 → HID 逻辑单位。曾经这里按 `pixelValue > gridMax` 猜单位（大于 60/40 当
+// 像素、否则当节点坐标），于是最外一列/行映射出来的小像素值（X ≤ 60、Y ≤ 40）会
+// 被当成节点坐标除以 60/40，报点瞬间跳到屏幕另一侧再逐步走回中央 —— 长轴的那
+// 60 px 死区比一列（2560/60 ≈ 42.7 px）还宽，所以整列受害；短轴的 40 px 死区恰
+// 好等于一行（1600/40 = 40 px），重心一旦贴边就直接落到 0，跳不进死区，因此只有
+// 长轴暴露出回绕。单位由调用方显式给定，不再推断。
+inline uint16_t ToVhf(float pixelValue, float pixelMax,
                       float logicalMax, bool invert) {
-    const float norm = std::clamp(gridValue / gridMax, 0.0f, 1.0f);
+    const float norm = std::clamp(pixelValue / pixelMax, 0.0f, 1.0f);
     const int vhf = std::clamp(
         static_cast<int>(std::lround(norm * logicalMax)),
         0, static_cast<int>(logicalMax));
@@ -72,10 +80,10 @@ inline void AppendContact(TouchPackets& packets,
     bytes[base] = EncodeContactState(contact);
     bytes[base + 1] = static_cast<uint8_t>(std::clamp(contact.id, 0, 255));
     WriteU16Le(bytes, base + 2,
-               ToVhf(contact.y, kTouchGridHeight,
+               ToVhf(contact.y, kTouchPixelMaxY,
                      kTouchLogicalMaxY, invertY));
     WriteU16Le(bytes, base + 4,
-               ToVhf(contact.x, kTouchGridWidth,
+               ToVhf(contact.x, kTouchPixelMaxX,
                      kTouchLogicalMaxX, invertX));
     ++count;
 }

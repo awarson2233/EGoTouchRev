@@ -538,6 +538,14 @@ if (EGO_BUILD_TESTS)
         15
     )
 
+    # 离线重放工具：把 .dvrbin 灌回 TouchPipeline，用于复现只在真机出现的现象
+    add_executable(DvrReplay Tools/DvrReplay/main.cpp)
+    target_link_libraries(DvrReplay PRIVATE DVRCore Solvers Common)
+
+    # 手指管线吞吐基准：往返播放一段录制并统计每帧解算耗时
+    add_executable(TouchBench Tools/TouchBench/main.cpp)
+    target_link_libraries(TouchBench PRIVATE DVRCore Solvers Common)
+
     if (EGO_BUILD_TOOLS)
         add_executable(EGoTouchApp_ServiceProxyDvrBridgeTest
             Tools/EGoTouchApp/tests/ServiceProxyDvrBridgeTest.cpp

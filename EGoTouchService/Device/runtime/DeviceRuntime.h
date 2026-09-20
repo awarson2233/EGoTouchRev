@@ -336,6 +336,13 @@ public:
     /// MCU 事件 ingress（runtime 内部完成状态/AFE 命令分派）
     void IngestPenEvent(const Himax::Pen::PenEvent& ev);
 
+    /// 主机电源转换（Suspend / DisplayOff / LidOff）时注销笔连接。
+    /// MCU 在休眠期间不会补发 PenConnStatus，若不主动注销，m_penState.connected
+    /// 会保持陈旧 true，恢复期 ReplayPenStateAfterChipInit() 会据此向 AFE 重放
+    /// InitStylus，与尚未重新握手的 MCU 侧状态不一致。
+    /// @return true 表示连接状态确实发生了变化。
+    bool NotifyPenLinkDown();
+
 private:
     friend struct DeviceRuntimePenStateTestAccess;
     StartRequestResult StartStateMachine();

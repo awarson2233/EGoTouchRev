@@ -19,6 +19,10 @@ namespace Himax::Pen {
 struct PenPressureStats;
 }
 
+namespace Host {
+struct SystemStateEvent;
+}
+
 namespace Ipc {
 struct DebugFieldSchemaWire;
 struct IpcRequest;
@@ -87,6 +91,8 @@ private:
 #endif
     bool StartRuntimeAndPipeline();
     bool StartSystemStateMonitor();
+    void HandlePenLinkDownEvent(const Host::SystemStateEvent& ev);
+    void HandlePenWakeEvent(const Host::SystemStateEvent& ev);
     bool StartIpcSubsystem();
     bool StartPenSubsystem();
 

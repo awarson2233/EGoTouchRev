@@ -1188,6 +1188,43 @@ void DeviceRuntime::HandlePenButtonStatusCode(uint8_t statusCode,
   DispatchPenButtonAction(action, source);
 }
 
+bool DeviceRuntime::NotifyPenLinkDown() {
+  // Mirror the PenConnStatus(disconnected) ingress path so the AFE, the stylus
+  // pipeline and the replay plan all observe the same disconnected state.
+  std::lock_guard<std::mutex> penIngressLock(m_penIngressMu);
+
+  bool connectionChanged = false;
+  UpdatePenState([&](RuntimePenState &state, PenStateUpdateResult &res) {
+    const bool hadConnection = state.hasConnection;
+    const bool oldConnected = state.connected;
+
+    state.hasConnection = true;
+    state.connected = false;
+
+    connectionChanged =
+        hadConnection != state.hasConnection || oldConnected != state.connected;
+    res.stateChanged = connectionChanged;
+    if (connectionChanged) {
+      ResetPenTransientState(state);
+    }
+
+    const bool pipelineIdentityChanged =
+        state.hasStylusId ||
+        state.protocolHint != Solvers::StylusProtocolHint::Auto;
+    res.stateChanged = ClearPenIdentityState(state) || res.stateChanged;
+    res.applyToPipeline = connectionChanged || pipelineIdentityChanged;
+  });
+
+  if (const auto cmd = BuildPenConnectionAfeCommand(connectionChanged, false)) {
+    SubmitPenAfeCommandLocked(*cmd, "HostPowerTransition->Disconnect");
+  }
+
+  LOG_INFO("Runtime", __func__, "Policy",
+           "Pen link marked down by host power transition (connectionChanged={}).",
+           connectionChanged);
+  return connectionChanged;
+}
+
 void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
   // Keep state mutation and any derived AFE submission on the same side of a
   // Stop/Start boundary. Stop still permits state updates after releasing this lock.

@@ -15,6 +15,7 @@ namespace Solvers {
 
 namespace Touch {
 class StylusTouchSuppressor;
+struct TouchBigFrame;
 }
 
 enum TouchContactState : int {
@@ -264,6 +265,7 @@ struct TouchRuntimeState {
 struct TouchFrameData {
     TouchOutputState output{};
     TouchRuntimeState runtime{};
+    Touch::TouchBigFrame* bigFrame = nullptr;
 #if EGOTOUCH_DIAG
     TouchDebugFrame debug{};
 #endif

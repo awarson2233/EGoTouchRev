@@ -41,6 +41,10 @@ public:
     void Stop();
     bool IsRunning() const { return m_running.load(); }
 
+    /// 要求 worker 丢弃当前 transport 并重新走设备发现 → Open → OnConnected()。
+    /// 用于被动重握手超时后的升级路径。最长在一个读超时周期（1s）后生效。
+    void RequestReconnect();
+
 protected:
     BtHidChannel();
 
@@ -61,6 +65,11 @@ protected:
     /// Called for each received packet.
     virtual void OnPacketReceived(std::span<const uint8_t> packet) = 0;
 
+    /// Called on the worker thread each time a read times out without a packet
+    /// (≈1 Hz). Lets subclasses run low-frequency housekeeping without owning
+    /// a timer thread. Default: no-op.
+    virtual void OnIdleTick() {}
+
     /// Return a short name for log messages (e.g. "PenEventBridge").
     virtual const char* ChannelName() const = 0;
 
@@ -68,6 +77,7 @@ private:
     void WorkerFunc();
 
     std::atomic<bool> m_running{false};
+    std::atomic<bool> m_reconnectRequested{false};
     std::unique_ptr<IPenUsbTransport> m_transport;
     std::thread m_thread;
 };
