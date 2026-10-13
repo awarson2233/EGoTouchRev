@@ -153,81 +153,69 @@ undefined1 RFNoise_Detect(void)
 undefined1 RFNoise_Raw2RawProcessDim(int param_1,short *param_2,char *param_3)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x28]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x30];
   char cVar1;
-  int local_28;
-  short local_22;
-  short local_20;
-  short local_1e;
-  short local_1c;
-  undefined1 local_1a;
-  char local_19;
-  int local_18;
-  int local_14;
-  short local_10;
-  short local_e;
-  short local_c;
-  byte local_a;
-  byte local_9;
   
-  local_c = -0x8000;
-  local_e = -0x8000;
-  local_10 = -0x8000;
-  local_14 = 0;
-  local_18 = 0;
-  local_19 = '\0';
-  local_1a = 0;
+  (*(short *)(_stk + 0x24)) = -0x8000;
+  (*(short *)(_stk + 0x22)) = -0x8000;
+  (*(short *)(_stk + 0x20)) = -0x8000;
+  (*(int *)(_stk + 0x1c)) = 0;
+  (*(int *)(_stk + 0x18)) = 0;
+  (*(char *)(_stk + 0x17)) = '\0';
+  (*(undefined1 *)(_stk + 0x16)) = 0;
   if (param_1 == 1) {
-    local_9 = _refptr_g_tsaPrmtFlash->bRows;
+    (*(byte *)(_stk + 0x27)) = _refptr_g_tsaPrmtFlash->bRows;
   }
   else {
-    local_9 = _refptr_g_tsaPrmtFlash->bCols;
+    (*(byte *)(_stk + 0x27)) = _refptr_g_tsaPrmtFlash->bCols;
   }
-  for (local_a = 0; local_a < local_9; local_a = local_a + 1) {
-    RFNoise_Raw2RawProcessDimUnit(param_1,local_a,&local_1e,&local_20,&local_22,&local_28);
-    if ((short)_refptr_g_tsaPrmtFlash->wPeakMode3ThresholdMax < local_1e) {
-      local_19 = local_19 + '\x01';
-      if (local_a < local_9 >> 1) {
-        local_14 = local_14 + local_28;
+  for ((*(byte *)(_stk + 0x26)) = 0; (*(byte *)(_stk + 0x26)) < (*(byte *)(_stk + 0x27)); (*(byte *)(_stk + 0x26)) = (*(byte *)(_stk + 0x26)) + 1) {
+    RFNoise_Raw2RawProcessDimUnit(param_1,(*(byte *)(_stk + 0x26)),&(*(short *)(_stk + 0x12)),&(*(short *)(_stk + 0x10)),&(*(short *)(_stk + 0xe)),&(*(int *)(_stk + 0x8)));
+    if ((short)_refptr_g_tsaPrmtFlash->wPeakMode3ThresholdMax < (*(short *)(_stk + 0x12))) {
+      (*(char *)(_stk + 0x17)) = (*(char *)(_stk + 0x17)) + '\x01';
+      if ((*(byte *)(_stk + 0x26)) < (*(byte *)(_stk + 0x27)) >> 1) {
+        (*(int *)(_stk + 0x1c)) = (*(int *)(_stk + 0x1c)) + (*(int *)(_stk + 0x8));
       }
       else {
-        local_18 = local_18 + local_28;
+        (*(int *)(_stk + 0x18)) = (*(int *)(_stk + 0x18)) + (*(int *)(_stk + 0x8));
       }
     }
-    if (*(short *)&_refptr_g_tsaPrpt[1].field_0x14 < local_1e) {
-      if (local_a < local_9 >> 1) {
-        local_14 = local_14 + local_28;
+    if (*(short *)&_refptr_g_tsaPrpt[1].field_0x14 < (*(short *)(_stk + 0x12))) {
+      if ((*(byte *)(_stk + 0x26)) < (*(byte *)(_stk + 0x27)) >> 1) {
+        (*(int *)(_stk + 0x1c)) = (*(int *)(_stk + 0x1c)) + (*(int *)(_stk + 0x8));
       }
       else {
-        local_18 = local_18 + local_28;
+        (*(int *)(_stk + 0x18)) = (*(int *)(_stk + 0x18)) + (*(int *)(_stk + 0x8));
       }
     }
-    if (local_c < local_1e) {
-      local_c = local_1e;
+    if ((*(short *)(_stk + 0x24)) < (*(short *)(_stk + 0x12))) {
+      (*(short *)(_stk + 0x24)) = (*(short *)(_stk + 0x12));
     }
-    if (local_e < local_20) {
-      local_e = local_20;
+    if ((*(short *)(_stk + 0x22)) < (*(short *)(_stk + 0x10))) {
+      (*(short *)(_stk + 0x22)) = (*(short *)(_stk + 0x10));
     }
-    if (local_10 < local_22) {
-      local_10 = local_22;
+    if ((*(short *)(_stk + 0x20)) < (*(short *)(_stk + 0xe))) {
+      (*(short *)(_stk + 0x20)) = (*(short *)(_stk + 0xe));
     }
   }
-  local_1c = local_c;
-  if (local_e <= local_c) {
-    local_1c = local_e;
+  (*(short *)(_stk + 0x14)) = (*(short *)(_stk + 0x24));
+  if ((*(short *)(_stk + 0x22)) <= (*(short *)(_stk + 0x24))) {
+    (*(short *)(_stk + 0x14)) = (*(short *)(_stk + 0x22));
   }
-  if (local_10 <= local_1c) {
-    local_1c = local_10;
+  if ((*(short *)(_stk + 0x20)) <= (*(short *)(_stk + 0x14))) {
+    (*(short *)(_stk + 0x14)) = (*(short *)(_stk + 0x20));
   }
-  if ((local_19 != '\0') ||
+  if (((*(char *)(_stk + 0x17)) != '\0') ||
      (_refptr_g_tsaPrmtFlash->wBufElementCount >> 1 < *(ushort *)&_refptr_g_tsaPrpt->field_0x4)) {
-    cVar1 = RFNoise_IsVariationInRangeUpDown(local_14,-local_18,4);
+    cVar1 = RFNoise_IsVariationInRangeUpDown((*(int *)(_stk + 0x1c)),-(*(int *)(_stk + 0x18)),4);
     if (cVar1 != '\0') {
-      local_1a = 1;
+      (*(undefined1 *)(_stk + 0x16)) = 1;
     }
   }
-  *param_2 = local_1c;
-  *param_3 = local_19;
-  return local_1a;
+  *param_2 = (*(short *)(_stk + 0x14));
+  *param_3 = (*(char *)(_stk + 0x17));
+  return (*(undefined1 *)(_stk + 0x16));
 }
 
 

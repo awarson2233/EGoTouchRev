@@ -3007,7 +3007,7 @@ undefined8 TSAMS_GetBLPtr(void);
 undefined * TSAMS_GetCMNPtr(void);
 
 // TSAMS_GetDifPtr @ 0x6ba91631 (Core\TSAMS.c)
-void TSAMS_GetDifPtr(void);
+undefined8 TSAMS_GetDifPtr(void);
 
 // TSAMS_GetExtROIPeakDim1 @ 0x6ba99c16 (Core\TSAMS.c)
 uchar TSAMS_GetExtROIPeakDim1(void);
@@ -3022,7 +3022,7 @@ undefined8 TSAMS_GetNormalBLPtr(void);
 undefined8 TSAMS_GetPreCMFDifPtr(void);
 
 // TSAMS_GetPreFilteredDifPtr @ 0x6ba916d7 (Core\TSAMS.c)
-void TSAMS_GetPreFilteredDifPtr(void);
+undefined8 TSAMS_GetPreFilteredDifPtr(void);
 
 // TSAMS_GetPreFilteredRawPtr @ 0x6ba91699 (Core\TSAMS.c)
 undefined8 TSAMS_GetPreFilteredRawPtr(void);
@@ -4477,10 +4477,10 @@ undefined8 TSA_RptASAYPos();
 undefined8 TSA_RptASAYTilt(void);
 
 // TSA_RptBaselinePtr @ 0x6ba9c541 (Core\TSA.c)
-void TSA_RptBaselinePtr(void);
+undefined8 TSA_RptBaselinePtr(void);
 
 // TSA_RptCMNPtr @ 0x6ba9c5f4 (Core\TSA.c)
-void TSA_RptCMNPtr(void);
+undefined8 TSA_RptCMNPtr(void);
 
 // TSA_RptDX @ 0x6ba9fd33 (Core\TSA.c)
 undefined8 TSA_RptDX(void);
@@ -4489,7 +4489,7 @@ undefined8 TSA_RptDX(void);
 undefined8 TSA_RptDY(void);
 
 // TSA_RptDiffPtr @ 0x6ba9c5a8 (Core\TSA.c)
-void TSA_RptDiffPtr(void);
+undefined8 TSA_RptDiffPtr(void);
 
 // TSA_RptDisplayXPos @ 0x6ba9fca7 (Core\TSA.c)
 ulonglong TSA_RptDisplayXPos(undefined1 param_1);
@@ -4540,7 +4540,7 @@ void TSA_RptNormalBaselinePtr(void);
 undefined8 TSA_RptPreCMFRawPtr(void);
 
 // TSA_RptPreFilteredDifPtr @ 0x6ba9c52e (Core\TSA.c)
-void TSA_RptPreFilteredDifPtr(void);
+undefined8 TSA_RptPreFilteredDifPtr(void);
 
 // TSA_RptPreFilteredRawPtr @ 0x6ba9c51b (Core\TSA.c)
 void TSA_RptPreFilteredRawPtr(void);
@@ -6035,6 +6035,49 @@ undefined8 UpdateHotZonePosition(byte param_1,undefined8 *param_2);
 
 // UpdateStartTime @ 0x6baf633b (Tracking\HotZoneAdjust.c)
 void UpdateStartTime(undefined8 *param_1);
+
+// Thenar_ProcessInfoByDif @ 0x6bb315e8 (Rejection\Thenar.c)
+void Thenar_ProcessInfoByDif(void);
+// Thenar_UnitCopy @ 0x6bb2fd40 (Rejection\Thenar.c)
+void Thenar_UnitCopy(undefined1 *param_1,undefined1 *param_2);
+// Thenar_EventUpdate @ 0x6bb30eb3 (Rejection\Thenar.c)
+void Thenar_EventUpdate(void);
+// Thenar_ProcessInfoByDifTraditional @ 0x6bb31392 (Rejection\Thenar.c)
+void Thenar_ProcessInfoByDifTraditional(void);
+// Thenar_UpdateExternalInfo @ 0x6bb2fe59 (Rejection\Thenar.c)
+bool Thenar_UpdateExternalInfo(void);
+// Thenar_EventUpdateUnit @ 0x6bb30d38 (Rejection\Thenar.c)
+void Thenar_EventUpdateUnit(int param_1,uint param_2,uint param_3);
+// Thenar_ProcessGensture @ 0x6bb2fefc (Rejection\Thenar.c)
+void Thenar_ProcessGensture(short param_1);
+// Thenar_SideHandDetectByCoreTouch @ 0x6bb300a5 (Rejection\Thenar.c)
+void Thenar_SideHandDetectByCoreTouch(byte param_1);
+// Thenar_FeatureExtraction @ 0x6bb30c47 (Rejection\Thenar.c)
+void Thenar_FeatureExtraction(undefined8 param_1,undefined2 param_2);
+// Thenar_UpdateDetectFeature @ 0x6bb30f99 (Rejection\Thenar.c)
+undefined8 * Thenar_UpdateDetectFeature(undefined8 *param_1);
+// Thenar_Init @ 0x6bb2fce0 (Rejection\Thenar.c)
+void Thenar_Init(void);
+// Thenar_FeatureExtractionUnit @ 0x6bb306a0 (Rejection\Thenar.c)
+void Thenar_FeatureExtractionUnit(longlong param_1,ushort param_2,short param_3,ushort param_4,undefined2 param_5);
+// Thenar_FeatureGradient @ 0x6bb3032e (Rejection\Thenar.c)
+short Thenar_FeatureGradient(longlong param_1,ushort param_2,undefined4 param_3,ushort param_4, undefined8 param_5);
+// Thenar_FeatureUpdateEdgeWidthX @ 0x6bb30495 (Rejection\Thenar.c)
+short Thenar_FeatureUpdateEdgeWidthX(longlong param_1,ushort param_2,undefined4 param_3,ushort param_4,byte param_5);
+// Thenar_FeatureUnitPostUpdate @ 0x6bb305f5 (Rejection\Thenar.c)
+void Thenar_FeatureUnitPostUpdate(byte param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+// Self_Process @ 0x6ba6aea8 (Signal\Self.c)
+void Self_Process(void);
+// Self_ProcessDim @ 0x6ba6abb4 (Signal\Self.c)
+void Self_ProcessDim(int param_1);
+// Self_GetProperty @ 0x6ba6ae85 (Signal\Self.c)
+void Self_GetProperty(void);
+// Self_ProcessDimUnit @ 0x6ba6a984 (Signal\Self.c)
+void Self_ProcessDimUnit(ushort param_1,uint param_2,int param_3,uint param_4);
+// Self_GetPropertyDim @ 0x6ba6ac88 (Signal\Self.c)
+void Self_GetPropertyDim(int param_1);
+// Self_Reset @ 0x6ba6a920 (Signal\Self.c)
+void Self_Reset(void);
 
 #ifdef __cplusplus
 }

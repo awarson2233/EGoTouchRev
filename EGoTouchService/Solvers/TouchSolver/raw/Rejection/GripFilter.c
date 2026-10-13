@@ -1069,7 +1069,6 @@ byte GripFilter_GetCenterLevel(byte param_1)
                                        *(longlong *)_refptr_g_touchesPtr + 0x164) >> 8) *
                 (uint)_refptr_g_tsaPrmtFlash->bCols & 0xffff) +
               *(longlong *)_refptr_g_tsaBufGripRegion));
-  return;
 }
 
 
@@ -1306,7 +1305,6 @@ char GripFilter_IsGripOrTbdTouch(byte param_1)
   return GripFilter_IsGripOrTbd
             (*(undefined4 *)
               ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x210));
-  return;
 }
 
 
@@ -1594,7 +1592,8 @@ void GripFilter_BackToGrip(void)
 
 char GripFilter_IsSafeTouch(void)
 {
-  return 1;
+                    /* 0xa42a9  752  GripFilter_IsSafeTouch */
+  return GripFilter_BasicIsAbsNotGrip();
 }
 
 
@@ -1781,71 +1780,66 @@ void GripFilter_SetDeadZoneFlag(void)
 void GripFilter_ClearDeadZoneFlag(void)
 
 {
-  char local_158 [320];
-  int local_18;
-  byte local_12;
-  byte local_11;
-  int local_10;
-  byte local_a;
-  byte local_9;
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x158]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x160];
   
-  local_10 = (int)((short)_refptr_g_tsaPrmtFlash->wPeakFilterReferenceThreshold / 6);
-  local_11 = _refptr_g_tsaPrmtFlash->bCols;
-  local_12 = _refptr_g_tsaPrmtFlash->bRows;
-  local_18 = memset_s(local_158,0x140,0,0x140);
-  if (local_18 != 0) {
+  (*(int *)(_stk + 0x150)) = (int)((short)_refptr_g_tsaPrmtFlash->wPeakFilterReferenceThreshold / 6);
+  (*(byte *)(_stk + 0x14f)) = _refptr_g_tsaPrmtFlash->bCols;
+  (*(byte *)(_stk + 0x14e)) = _refptr_g_tsaPrmtFlash->bRows;
+  (*(int *)(_stk + 0x148)) = memset_s(((char *)(_stk + 0x8)),0x140,0,0x140);
+  if ((*(int *)(_stk + 0x148)) != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
                       "../../src/Extension/GripFilter/GripFilter_DeadZone.c",0x7d,"rc == EOK");
     HardwareAnalyzer_SetSoftException();
   }
   if ((_refptr_g_tsaPrmtFlash[1].field_0x80 & 1) != 0) {
-    for (local_9 = 0; local_9 < local_11; local_9 = local_9 + 1) {
-      if (local_10 < *(short *)(*(longlong *)_refptr_g_tsaBufDif + (ulonglong)local_9 * 2)) {
-        local_158[(int)(uint)local_9] = '\x01';
+    for ((*(byte *)(_stk + 0x157)) = 0; (*(byte *)(_stk + 0x157)) < (*(byte *)(_stk + 0x14f)); (*(byte *)(_stk + 0x157)) = (*(byte *)(_stk + 0x157)) + 1) {
+      if ((*(int *)(_stk + 0x150)) < *(short *)(*(longlong *)_refptr_g_tsaBufDif + (ulonglong)(*(byte *)(_stk + 0x157)) * 2)) {
+        ((char *)(_stk + 0x8))[(int)(uint)(*(byte *)(_stk + 0x157))] = '\x01';
       }
     }
   }
   if ((_refptr_g_tsaPrmtFlash[1].field_0x80 & 2) != 0) {
-    for (local_9 = 0; local_9 < local_11; local_9 = local_9 + 1) {
-      if (local_10 <
+    for ((*(byte *)(_stk + 0x157)) = 0; (*(byte *)(_stk + 0x157)) < (*(byte *)(_stk + 0x14f)); (*(byte *)(_stk + 0x157)) = (*(byte *)(_stk + 0x157)) + 1) {
+      if ((*(int *)(_stk + 0x150)) <
           *(short *)((ulonglong)
-                     ((uint)local_9 + (local_12 - 1) * (uint)_refptr_g_tsaPrmtFlash->bCols & 0xffff)
+                     ((uint)(*(byte *)(_stk + 0x157)) + ((*(byte *)(_stk + 0x14e)) - 1) * (uint)_refptr_g_tsaPrmtFlash->bCols & 0xffff)
                      * 2 + *(longlong *)_refptr_g_tsaBufDif)) {
-        local_158[(longlong)(int)(uint)local_9 + 0x50] = '\x01';
+        ((char *)(_stk + 0x8))[(longlong)(int)(uint)(*(byte *)(_stk + 0x157)) + 0x50] = '\x01';
       }
     }
   }
   if ((_refptr_g_tsaPrmtFlash[1].field_0x80 & 4) != 0) {
-    for (local_9 = 0; local_9 < local_12; local_9 = local_9 + 1) {
-      if (local_10 <
-          *(short *)((ulonglong)((uint)_refptr_g_tsaPrmtFlash->bCols * (uint)local_9) * 2 +
+    for ((*(byte *)(_stk + 0x157)) = 0; (*(byte *)(_stk + 0x157)) < (*(byte *)(_stk + 0x14e)); (*(byte *)(_stk + 0x157)) = (*(byte *)(_stk + 0x157)) + 1) {
+      if ((*(int *)(_stk + 0x150)) <
+          *(short *)((ulonglong)((uint)_refptr_g_tsaPrmtFlash->bCols * (uint)(*(byte *)(_stk + 0x157))) * 2 +
                     *(longlong *)_refptr_g_tsaBufDif)) {
-        local_158[(longlong)(int)(uint)local_9 + 0xa0] = '\x01';
+        ((char *)(_stk + 0x8))[(longlong)(int)(uint)(*(byte *)(_stk + 0x157)) + 0xa0] = '\x01';
       }
     }
   }
   if ((_refptr_g_tsaPrmtFlash[1].field_0x80 & 8) != 0) {
-    for (local_9 = 0; local_9 < local_12; local_9 = local_9 + 1) {
-      if (local_10 <
+    for ((*(byte *)(_stk + 0x157)) = 0; (*(byte *)(_stk + 0x157)) < (*(byte *)(_stk + 0x14e)); (*(byte *)(_stk + 0x157)) = (*(byte *)(_stk + 0x157)) + 1) {
+      if ((*(int *)(_stk + 0x150)) <
           *(short *)((ulonglong)
-                     (((uint)local_11 + (uint)local_9 * (uint)_refptr_g_tsaPrmtFlash->bCols) - 1 &
+                     (((uint)(*(byte *)(_stk + 0x14f)) + (uint)(*(byte *)(_stk + 0x157)) * (uint)_refptr_g_tsaPrmtFlash->bCols) - 1 &
                      0xffff) * 2 + *(longlong *)_refptr_g_tsaBufDif)) {
-        local_158[(longlong)(int)(uint)local_9 + 0xf0] = '\x01';
+        ((char *)(_stk + 0x8))[(longlong)(int)(uint)(*(byte *)(_stk + 0x157)) + 0xf0] = '\x01';
       }
     }
   }
   if (**(char **)_refptr_g_touchesPtr == '\0') {
-    local_18 = memset_s(local_158,0x140,0,0x140);
-    if (local_18 != 0) {
+    (*(int *)(_stk + 0x148)) = memset_s(((char *)(_stk + 0x8)),0x140,0,0x140);
+    if ((*(int *)(_stk + 0x148)) != 0) {
       StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
                         "../../src/Extension/GripFilter/GripFilter_DeadZone.c",0x9d,"rc == EOK");
       HardwareAnalyzer_SetSoftException();
     }
   }
-  for (local_a = 0; local_a < 4; local_a = local_a + 1) {
-    for (local_9 = 0; local_9 < 0x50; local_9 = local_9 + 1) {
-      if (local_158[(longlong)(int)(uint)local_9 + (longlong)(int)(uint)local_a * 0x50] == '\0') {
-        (&g_gripFilterDeadZone)[(longlong)(int)(uint)local_a * 0x50 + (longlong)(int)(uint)local_9]
+  for ((*(byte *)(_stk + 0x156)) = 0; (*(byte *)(_stk + 0x156)) < 4; (*(byte *)(_stk + 0x156)) = (*(byte *)(_stk + 0x156)) + 1) {
+    for ((*(byte *)(_stk + 0x157)) = 0; (*(byte *)(_stk + 0x157)) < 0x50; (*(byte *)(_stk + 0x157)) = (*(byte *)(_stk + 0x157)) + 1) {
+      if (((char *)(_stk + 0x8))[(longlong)(int)(uint)(*(byte *)(_stk + 0x157)) + (longlong)(int)(uint)(*(byte *)(_stk + 0x156)) * 0x50] == '\0') {
+        (&g_gripFilterDeadZone)[(longlong)(int)(uint)(*(byte *)(_stk + 0x156)) * 0x50 + (longlong)(int)(uint)(*(byte *)(_stk + 0x157))]
              = 0;
       }
     }
@@ -2219,7 +2213,8 @@ void GripFilter_HeavyGripRegionDetect(void)
 
 char GripFilter_IsInPalmRegion(undefined1 param_1)
 {
-  return 0;
+                    /* 0xa696e  728  GripFilter_IsInPalmRegion */
+  return GripFilter_IsTouchInHeavyRegion(param_1);
 }
 
 
@@ -3955,35 +3950,35 @@ undefined8 GripFilter_IsOnDim1(void)
 ushort GripFilter_GetEdgeClickRatioThold(char param_1)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0xb]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x10];
   char cVar1;
-  char local_b;
-  ushort local_a;
   
                     /* 0xacad0  674  GripFilter_GetEdgeClickRatioThold */
-  local_b = param_1;
+  (*(char *)(_stk + 0x5)) = param_1;
   if (0x11 < *(ushort *)
               ((longlong)(int)(uint)(byte)*_refptr_g_grip * 0x168 +
                *(longlong *)_refptr_g_touchesPtr + 0x228)) {
-    local_b = param_1 + '\x01';
+    (*(char *)(_stk + 0x5)) = param_1 + '\x01';
     if (0x2f < *(byte *)((longlong)(int)(uint)(byte)*_refptr_g_grip * 0x168 +
                          *(longlong *)_refptr_g_touchesPtr + 0x267)) {
-      local_b = param_1 + '\x02';
+      (*(char *)(_stk + 0x5)) = param_1 + '\x02';
     }
     if (0x18 < *(ushort *)
                 ((longlong)(int)(uint)(byte)*_refptr_g_grip * 0x168 +
                  *(longlong *)_refptr_g_touchesPtr + 0x228)) {
-      local_b = local_b + '\x01';
+      (*(char *)(_stk + 0x5)) = (*(char *)(_stk + 0x5)) + '\x01';
     }
     if ((*(uint *)((longlong)(int)(uint)(byte)*_refptr_g_grip * 0x168 +
                    *(longlong *)_refptr_g_touchesPtr + 0x1fc) & 8) != 0) {
       cVar1 = GripFilter_IsHeavyRegionTouched(*_refptr_g_grip);
       if (cVar1 != '\0') {
-        local_b = local_b + '\x01';
+        (*(char *)(_stk + 0x5)) = (*(char *)(_stk + 0x5)) + '\x01';
       }
     }
     cVar1 = GripFilter_IsLongPress();
     if (cVar1 != '\0') {
-      local_b = local_b + '\x01';
+      (*(char *)(_stk + 0x5)) = (*(char *)(_stk + 0x5)) + '\x01';
     }
   }
   cVar1 = GripFilter_IsHeavyRegionTouched(*_refptr_g_grip);
@@ -3993,40 +3988,40 @@ ushort GripFilter_GetEdgeClickRatioThold(char param_1)
      (*(int *)&_refptr_g_tsaPrmtFlash[1].field_0x84 != 4)) {
     cVar1 = GripFilter_IsEnableWeakenCornerClickSupress();
     if (cVar1 == '\0') {
-      cVar1 = local_b + '\x01';
+      cVar1 = (*(char *)(_stk + 0x5)) + '\x01';
       if (0x20 < *(byte *)((longlong)(int)(uint)(byte)*_refptr_g_grip * 0x168 +
                            *(longlong *)_refptr_g_touchesPtr + 0x1b9)) {
-        cVar1 = local_b + '\x02';
+        cVar1 = (*(char *)(_stk + 0x5)) + '\x02';
       }
-      local_b = cVar1;
+      (*(char *)(_stk + 0x5)) = cVar1;
       if (0x30 < *(byte *)((longlong)(int)(uint)(byte)*_refptr_g_grip * 0x168 +
                            *(longlong *)_refptr_g_touchesPtr + 0x1b9)) {
-        local_b = local_b + '\x01';
+        (*(char *)(_stk + 0x5)) = (*(char *)(_stk + 0x5)) + '\x01';
       }
     }
     else {
-      GripFilter_WeakenCornerClickSupress(&local_b);
+      GripFilter_WeakenCornerClickSupress(&(*(char *)(_stk + 0x5)));
     }
   }
-  GripFilter_GetRatioTholdLevelExtra(&local_b);
-  if (local_b == '\0') {
-    local_a = GripFilter_GetClickGripRatio();
+  GripFilter_GetRatioTholdLevelExtra(&(*(char *)(_stk + 0x5)));
+  if ((*(char *)(_stk + 0x5)) == '\0') {
+    (*(ushort *)(_stk + 0x6)) = GripFilter_GetClickGripRatio();
   }
-  else if (local_b == '\x01') {
-    local_a = (ushort)*(byte *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap +
+  else if ((*(char *)(_stk + 0x5)) == '\x01') {
+    (*(ushort *)(_stk + 0x6)) = (ushort)*(byte *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap +
                                (ulonglong)*(uint *)(_refptr_g_grip + 4) * 0xc + -0x13);
   }
-  else if (local_b == '\x02') {
-    local_a = (ushort)*(byte *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap +
+  else if ((*(char *)(_stk + 0x5)) == '\x02') {
+    (*(ushort *)(_stk + 0x6)) = (ushort)*(byte *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap +
                                (ulonglong)*(uint *)(_refptr_g_grip + 4) * 0xc + -0x12);
   }
   else {
-    local_a = 0x10;
+    (*(ushort *)(_stk + 0x6)) = 0x10;
   }
-  if (0xfe < local_a) {
-    local_a = 0xffff;
+  if (0xfe < (*(ushort *)(_stk + 0x6))) {
+    (*(ushort *)(_stk + 0x6)) = 0xffff;
   }
-  return local_a;
+  return (*(ushort *)(_stk + 0x6));
 }
 
 
@@ -5234,7 +5229,6 @@ byte GripFilter_GetTouchedLevel(byte param_1)
   return GripFilter_GetGripLevel
             (*(undefined1 *)
               ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x199));
-  return;
 }
 
 

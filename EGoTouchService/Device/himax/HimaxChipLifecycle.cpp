@@ -2,6 +2,7 @@
 #include "himax/HimaxProtocol.h"
 #include "himax/HimaxByteUtils.h"
 #include "Logger.h"
+#include "FrameLayout.h"
 
 #include <array>
 #include <vector>
@@ -286,48 +287,67 @@ ChipResult<> Chip::himax_mcu_power_on_init(void) {
     return std::unexpected(ChipError::Timeout);
 }
 
+ChipResult<> Chip::InitFailed(const char* step, const ChipResult<>& res) {
+    m_lastInitFailStep = step;
+    LOG_WARN("HimaxChip", "Init", GetStateStr(), "Init failed at step '{}': {} (master win32={}, slave win32={}).",
+             step, ToString(res.error()), m_master ? m_master->GetError() : 0u,
+             m_slave ? m_slave->GetError() : 0u);
+    return res;
+}
+
 ChipResult<> Chip::Init(void) {
-    if (auto res = hx_hw_reset_ahb_intf(DeviceType::Master); !res) return res;
+    if (auto res = hx_hw_reset_ahb_intf(DeviceType::Master); !res) return InitFailed("hw_reset", res);
     Sleep(10);
     LOG_INFO("HimaxChip", __func__, GetStateStr(), "Starting initialization sequence...");
 
     std::array<uint8_t, 4> tmp_data = {0xA5, 0x5A, 0x00, 0x00};
 
-    if (auto res = himax_mcu_reload_disable(false); !res) return res;
-    if (auto res = himax_switch_mode_inspection(THP_INSPECTION_ENUM::EGO_RAWDATA); !res) return res;
-    if (auto res = hx_set_N_frame(1); !res) return res;
+    if (auto res = himax_mcu_reload_disable(false); !res) return InitFailed("reload_disable", res);
+    if (auto res = himax_switch_mode_inspection(THP_INSPECTION_ENUM::EGO_RAWDATA); !res) return InitFailed("switch_mode_inspection", res);
+    if (auto res = hx_set_N_frame(1); !res) return InitFailed("set_N_frame", res);
 
-    if (auto res = himax_mcu_power_on_init(); !res) return res;
+    if (auto res = himax_mcu_power_on_init(); !res) return InitFailed("power_on_init", res);
 
-    if (auto res = himax_switch_data_type(DeviceType::Master, THP_INSPECTION_ENUM::EGO_RAWDATA); !res) return res;
-    if (auto res = HimaxProtocol::register_write(m_master.get(), psram_op.addr_rawdata_addr, tmp_data.data(), 4); !res) return res;
-    if (auto res = himax_switch_data_type(DeviceType::Slave, THP_INSPECTION_ENUM::EGO_RAWDATA); !res) return res;
-    if (auto res = HimaxProtocol::register_write(m_slave.get(), psram_op.addr_rawdata_addr, tmp_data.data(), 4); !res) return res;
+    if (auto res = himax_switch_data_type(DeviceType::Master, THP_INSPECTION_ENUM::EGO_RAWDATA); !res) return InitFailed("master_data_type", res);
+    if (auto res = HimaxProtocol::register_write(m_master.get(), psram_op.addr_rawdata_addr, tmp_data.data(), 4); !res) return InitFailed("master_rawdata_addr", res);
+    if (auto res = himax_switch_data_type(DeviceType::Slave, THP_INSPECTION_ENUM::EGO_RAWDATA); !res) return InitFailed("slave_data_type", res);
+    if (auto res = HimaxProtocol::register_write(m_slave.get(), psram_op.addr_rawdata_addr, tmp_data.data(), 4); !res) return InitFailed("slave_rawdata_addr", res);
 
     if (auto res = m_master->IntOpen(); !res) {
-        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "Master IntOpen failed!");
-        return res;
+        return InitFailed("master_int_open", res);
     }
     if (auto res = m_slave->IntOpen(); !res) {
-        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "Slave IntOpen failed!");
         (void)m_slave->IntClose();
         (void)m_master->IntClose();
-        return res;
+        return InitFailed("slave_int_open", res);
     }
 
-    if (auto res = SetFrameReadNormalPolicy(); !res) {
-        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "Apply normal read policy failed");
+    if (auto res = ApplyFrameReadPolicy(); !res) {
         (void)m_slave->IntClose();
         (void)m_master->IntClose();
-        return res;
+        return InitFailed("read_policy", res);
     }
 
+    // thp_afe_start 的「start cleaning buffer」：复位前攒在通道里的旧帧读掉丢弃，先 slave 后 master，
+    // 读不到就重开那一路的中断通道。不清的话第一帧会是上一轮留下的（常见是一帧 IDLE 帧）。
+    int staleFrames = 0;
+    for (int i = 0; i < 3; ++i) {
+        if (m_slave->GetFrame(back_data.data() + Frame::kSlaveHeaderOffset, static_cast<uint32_t>(Frame::kSlaveFrameSize), nullptr)) {
+            ++staleFrames;
+        } else {
+            (void)m_slave->IntOpen();
+        }
+        if (m_master->GetFrame(back_data.data(), static_cast<uint32_t>(Frame::kMasterFrameSize), nullptr)) {
+            ++staleFrames;
+        } else {
+            (void)m_master->IntOpen();
+        }
+    }
+    LOG_INFO("HimaxChip", __func__, GetStateStr(), "Discarded {} buffered frame(s) after reset.", staleFrames);
+
+    m_lastInitFailStep = "";
     current_slot = 0;
-    m_zeroFrameCount = 0;
-    m_frameCount = 0;
-    m_stylusActive = false;
-    m_lastMasterWasRead = true;
-    afe_mode.store(THP_AFE_MODE::Normal);
+    ResetFrameReadState();
     m_connState.store(ConnectionState::Connected);
 
     m_afe.ResetStylusState();
@@ -351,11 +371,7 @@ ChipResult<> Chip::Init(void) {
 ChipResult<> Chip::Deinit(bool check_en) {
     LOG_INFO("HimaxChip", __func__, GetStateStr(), "Starting Deinit sequence...");
     m_connState.store(ConnectionState::Unconnected);
-    afe_mode.store(THP_AFE_MODE::Normal);
-    m_zeroFrameCount = 0;
-    m_frameCount = 0;
-    m_stylusActive = false;
-    m_lastMasterWasRead = true;
+    ResetFrameReadState();
     current_slot = 0;
     m_afe.ResetStylusState();
 
@@ -375,24 +391,18 @@ ChipResult<> Chip::Deinit(bool check_en) {
     return {};
 }
 
-void Chip::HoldReset() {
+void Chip::Quiesce() {
     m_connState.store(ConnectionState::Unconnected);
-    afe_mode.store(THP_AFE_MODE::Normal);
-    m_zeroFrameCount = 0;
-    m_frameCount = 0;
-    m_stylusActive = false;
-    m_lastMasterWasRead = true;
+    ResetFrameReadState();
     current_slot = 0;
     m_afe.ResetStylusState();
 
-    CancelPendingFrameRead();
+    // 对齐 thp_afe_screen_off：不拉 reset，不发总线命令。TDDI 的触摸部分随显示链路
+    // 上下电，reset 一直压低会让它在亮屏时没法正常完成初始化。
+    if (m_master) (void)m_master->IntClose();
+    if (m_slave)  (void)m_slave->IntClose();
 
-    (void)m_master->SetReset(false);
-
-    (void)m_master->IntClose();
-    (void)m_slave->IntClose();
-
-    LOG_INFO("HimaxChip", __func__, "Unconnected", "Reset held low, interrupt channels closed (suspend).");
+    LOG_INFO("HimaxChip", __func__, "Unconnected", "Interrupt channels closed.");
 }
 
 } // namespace Himax

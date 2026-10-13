@@ -249,32 +249,28 @@ void ER_TouchDownProcess(byte param_1,byte param_2)
 undefined8 ER_IsTouchNeedMoveInCorrection(byte param_1)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x16]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x20];
   int iVar1;
   undefined8 uVar2;
-  ushort local_16;
-  ushort local_14;
-  ushort local_12;
-  undefined4 local_10;
-  undefined2 local_c;
-  undefined2 local_a;
   
                     /* 0x1719b  547  ER_IsTouchNeedMoveInCorrection */
-  local_a = *(undefined2 *)
+  (*(undefined2 *)(_stk + 0x16)) = *(undefined2 *)
              ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x170);
-  local_c = *(undefined2 *)
+  (*(undefined2 *)(_stk + 0x14)) = *(undefined2 *)
              ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x172);
   g_flagMoveInCorrectedButDisabled = 0;
-  local_10 = TSA_GetDimEdge(local_a,local_c);
-  ER_GetPrmt(local_10,&local_14,&local_16);
-  local_12 = Touch_GetDistToLogicEdge(local_10,local_a,local_c);
-  if (local_14 == 0) {
+  (*(undefined4 *)(_stk + 0x10)) = TSA_GetDimEdge((*(undefined2 *)(_stk + 0x16)),(*(undefined2 *)(_stk + 0x14)));
+  ER_GetPrmt((*(undefined4 *)(_stk + 0x10)),&(*(ushort *)(_stk + 0xc)),&(*(ushort *)(_stk + 0xa)));
+  (*(ushort *)(_stk + 0xe)) = Touch_GetDistToLogicEdge((*(undefined4 *)(_stk + 0x10)),(*(undefined2 *)(_stk + 0x16)),(*(undefined2 *)(_stk + 0x14)));
+  if ((*(ushort *)(_stk + 0xc)) == 0) {
     g_flagMoveInCorrectedButDisabled = 1;
     uVar2 = 0;
   }
   else {
-    iVar1 = TPSensor_IsNoMoveInCorrection(local_a,local_c);
+    iVar1 = TPSensor_IsNoMoveInCorrection((*(undefined2 *)(_stk + 0x16)),(*(undefined2 *)(_stk + 0x14)));
     if (iVar1 == 0) {
-      if (((local_14 < local_12) && (local_12 < local_16)) &&
+      if ((((*(ushort *)(_stk + 0xc)) < (*(ushort *)(_stk + 0xe))) && ((*(ushort *)(_stk + 0xe)) < (*(ushort *)(_stk + 0xa)))) &&
          (*(ushort *)
            ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x188) < 0x1e
          )) {
@@ -299,28 +295,11 @@ undefined8 ER_IsTouchNeedMoveInCorrection(byte param_1)
 int ER_BottomMoveInCorrection(byte param_1,byte param_2)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x68]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x70];
   char cVar1;
   byte bVar2;
   short sVar3;
-  undefined1 local_68 [16];
-  ushort local_58;
-  ushort local_56;
-  ushort local_48;
-  ushort local_46;
-  int local_2c;
-  int local_28;
-  ushort local_24;
-  ushort local_22;
-  ushort local_20;
-  ushort local_1e;
-  ushort local_1c;
-  ushort local_1a;
-  int local_18;
-  ushort local_14;
-  ushort local_12;
-  ushort local_10;
-  ushort local_e;
-  int local_c;
   
                     /* 0x17355  540  ER_BottomMoveInCorrection */
   if (((*(char *)(_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 9) == '\0') ||
@@ -328,30 +307,30 @@ int ER_BottomMoveInCorrection(byte param_1,byte param_2)
                ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x188)))
      || (*(short *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x1be
                    ) < 1000)) {
-    local_c = 0;
+    (*(int *)(_stk + 0x64)) = 0;
   }
   else {
-    local_c = 0;
+    (*(int *)(_stk + 0x64)) = 0;
     if (*(short *)((longlong)*_refptr_g_prevTouchesPtr +
                   (longlong)(int)(uint)param_2 * 0x478 + 0x4e4) == 1) {
       cVar1 = PrevTouch_HistoryBufferGetNum(param_2);
       if (cVar1 != '\0') {
         cVar1 = PrevTouch_HistoryBufferGetNum(param_2);
-        PrevTouch_HistoryBufferGet(param_2,cVar1 + -1,&local_48);
-        local_e = local_48;
-        local_10 = local_46;
-        local_12 = *(ushort *)
+        PrevTouch_HistoryBufferGet(param_2,cVar1 + -1,&(*(ushort *)(_stk + 0x28)));
+        (*(ushort *)(_stk + 0x62)) = (*(ushort *)(_stk + 0x28));
+        (*(ushort *)(_stk + 0x60)) = (*(ushort *)(_stk + 0x2a));
+        (*(ushort *)(_stk + 0x5e)) = *(ushort *)
                     ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr +
                     0x170);
-        local_14 = *(ushort *)
+        (*(ushort *)(_stk + 0x5c)) = *(ushort *)
                     ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr +
                     0x172);
-        local_18 = (uint)local_46 - (uint)local_14;
-        cVar1 = ER_IsInBottomZone(local_48,local_46);
-        if (((cVar1 != '\0') && (0x32 < local_18)) &&
-           ((-0x100 < (int)((uint)local_12 - (uint)local_e) &&
-            ((int)((uint)local_12 - (uint)local_e) < 0x100)))) {
-          local_c = 1;
+        (*(int *)(_stk + 0x58)) = (uint)(*(ushort *)(_stk + 0x2a)) - (uint)(*(ushort *)(_stk + 0x5c));
+        cVar1 = ER_IsInBottomZone((*(ushort *)(_stk + 0x28)),(*(ushort *)(_stk + 0x2a)));
+        if (((cVar1 != '\0') && (0x32 < (*(int *)(_stk + 0x58)))) &&
+           ((-0x100 < (int)((uint)(*(ushort *)(_stk + 0x5e)) - (uint)(*(ushort *)(_stk + 0x62))) &&
+            ((int)((uint)(*(ushort *)(_stk + 0x5e)) - (uint)(*(ushort *)(_stk + 0x62))) < 0x100)))) {
+          (*(int *)(_stk + 0x64)) = 1;
         }
       }
     }
@@ -369,44 +348,44 @@ int ER_BottomMoveInCorrection(byte param_1,byte param_2)
       PrevTouch_HistoryBufferGet
                 (param_2,sVar3 - *(short *)((longlong)*_refptr_g_prevTouchesPtr +
                                            (longlong)(int)(uint)param_2 * 0x478 + 0x4e4) & 0xff,
-                 &local_58);
-      local_1a = local_58;
-      local_1c = local_56;
+                 &(*(ushort *)(_stk + 0x18)));
+      (*(ushort *)(_stk + 0x56)) = (*(ushort *)(_stk + 0x18));
+      (*(ushort *)(_stk + 0x54)) = (*(ushort *)(_stk + 0x1a));
       cVar1 = PrevTouch_HistoryBufferGetNum(param_2);
-      PrevTouch_HistoryBufferGet(param_2,cVar1 + -1,&local_58);
-      local_1e = local_58;
-      local_20 = local_56;
-      local_22 = *(ushort *)
+      PrevTouch_HistoryBufferGet(param_2,cVar1 + -1,&(*(ushort *)(_stk + 0x18)));
+      (*(ushort *)(_stk + 0x52)) = (*(ushort *)(_stk + 0x18));
+      (*(ushort *)(_stk + 0x50)) = (*(ushort *)(_stk + 0x1a));
+      (*(ushort *)(_stk + 0x4e)) = *(ushort *)
                   ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x170)
       ;
-      local_24 = *(ushort *)
+      (*(ushort *)(_stk + 0x4c)) = *(ushort *)
                   ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x172)
       ;
-      local_28 = (uint)local_56 - (uint)local_24;
-      local_2c = (uint)local_1c - (uint)local_24;
-      cVar1 = ER_IsInBottomZone(local_1a,local_1c);
-      if ((((((cVar1 != '\0') && (0x32 < local_28)) && (100 < local_2c)) &&
-           ((-0x100 < (int)((uint)local_1a - (uint)local_1e) &&
-            ((int)((uint)local_1a - (uint)local_1e) < 0x100)))) &&
-          ((-0x100 < (int)((uint)local_1e - (uint)local_22) &&
-           (((int)((uint)local_1e - (uint)local_22) < 0x100 &&
-            (-0x100 < (int)((uint)local_22 - (uint)local_1a))))))) &&
-         ((int)((uint)local_22 - (uint)local_1a) < 0x100)) {
-        local_c = 1;
+      (*(int *)(_stk + 0x48)) = (uint)(*(ushort *)(_stk + 0x1a)) - (uint)(*(ushort *)(_stk + 0x4c));
+      (*(int *)(_stk + 0x44)) = (uint)(*(ushort *)(_stk + 0x54)) - (uint)(*(ushort *)(_stk + 0x4c));
+      cVar1 = ER_IsInBottomZone((*(ushort *)(_stk + 0x56)),(*(ushort *)(_stk + 0x54)));
+      if ((((((cVar1 != '\0') && (0x32 < (*(int *)(_stk + 0x48)))) && (100 < (*(int *)(_stk + 0x44)))) &&
+           ((-0x100 < (int)((uint)(*(ushort *)(_stk + 0x56)) - (uint)(*(ushort *)(_stk + 0x52))) &&
+            ((int)((uint)(*(ushort *)(_stk + 0x56)) - (uint)(*(ushort *)(_stk + 0x52))) < 0x100)))) &&
+          ((-0x100 < (int)((uint)(*(ushort *)(_stk + 0x52)) - (uint)(*(ushort *)(_stk + 0x4e))) &&
+           (((int)((uint)(*(ushort *)(_stk + 0x52)) - (uint)(*(ushort *)(_stk + 0x4e))) < 0x100 &&
+            (-0x100 < (int)((uint)(*(ushort *)(_stk + 0x4e)) - (uint)(*(ushort *)(_stk + 0x56))))))))) &&
+         ((int)((uint)(*(ushort *)(_stk + 0x4e)) - (uint)(*(ushort *)(_stk + 0x56))) < 0x100)) {
+        (*(int *)(_stk + 0x64)) = 1;
       }
     }
-    if (local_c != 0) {
+    if ((*(int *)(_stk + 0x64)) != 0) {
       do {
         bVar2 = PrevTouch_HistoryBufferGetNum(param_2);
         if ((ushort)bVar2 <=
             *(ushort *)
              ((longlong)*_refptr_g_prevTouchesPtr + (longlong)(int)(uint)param_2 * 0x478 + 0x4e4))
         break;
-        cVar1 = PrevTouch_HistoryBufferPop(param_2,local_68);
+        cVar1 = PrevTouch_HistoryBufferPop(param_2,((undefined1 *)(_stk + 0x8)));
       } while (cVar1 != '\0');
     }
   }
-  return local_c;
+  return (*(int *)(_stk + 0x64));
 }
 
 
@@ -417,58 +396,47 @@ int ER_BottomMoveInCorrection(byte param_1,byte param_2)
 char ER_MoveInCheck(byte param_1,undefined1 param_2)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x38]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x40];
   char cVar1;
   byte bVar2;
-  undefined2 local_38;
-  undefined2 local_36;
-  uint local_28;
-  uint local_24;
-  uint local_20;
-  uint local_1c;
-  undefined2 local_16;
-  undefined2 local_14;
-  undefined2 local_12;
-  undefined2 local_10;
-  undefined2 local_e;
-  undefined2 local_c;
-  char local_9;
   
                     /* 0x17a07  549  ER_MoveInCheck */
   cVar1 = PrevTouch_HistoryBufferGetNum(param_2);
   if ((cVar1 != '\0') && (bVar2 = PrevTouch_HistoryBufferGetNum(param_2), 1 < bVar2)) {
-    local_9 = '\x01';
+    (*(char *)(_stk + 0x37)) = '\x01';
     cVar1 = PrevTouch_HistoryBufferGetNum(param_2);
-    PrevTouch_HistoryBufferGet(param_2,cVar1 + -2,&local_38);
-    local_c = local_38;
-    local_e = local_36;
+    PrevTouch_HistoryBufferGet(param_2,cVar1 + -2,&(*(undefined2 *)(_stk + 0x8)));
+    (*(undefined2 *)(_stk + 0x34)) = (*(undefined2 *)(_stk + 0x8));
+    (*(undefined2 *)(_stk + 0x32)) = (*(undefined2 *)(_stk + 0xa));
     cVar1 = PrevTouch_HistoryBufferGetNum(param_2);
-    PrevTouch_HistoryBufferGet(param_2,cVar1 + -1,&local_38);
-    local_10 = local_38;
-    local_12 = local_36;
-    local_14 = *(undefined2 *)
+    PrevTouch_HistoryBufferGet(param_2,cVar1 + -1,&(*(undefined2 *)(_stk + 0x8)));
+    (*(undefined2 *)(_stk + 0x30)) = (*(undefined2 *)(_stk + 0x8));
+    (*(undefined2 *)(_stk + 0x2e)) = (*(undefined2 *)(_stk + 0xa));
+    (*(undefined2 *)(_stk + 0x2c)) = *(undefined2 *)
                 ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x170);
-    local_16 = *(undefined2 *)
+    (*(undefined2 *)(_stk + 0x2a)) = *(undefined2 *)
                 ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x172);
-    local_1c = Touch_GetSQDistPixel(local_c,local_e,local_38,local_36);
-    local_20 = Touch_GetSQDistPixel(local_10,local_12,local_14,local_16);
-    local_24 = Touch_GetSQDistPixel(local_c,local_e,local_14,local_16);
-    local_28 = Touch_GetSQDistPixelToEdge(local_c,local_e,local_10,local_12);
-    if (local_1c < 0x9c4) {
-      local_9 = '\0';
+    (*(uint *)(_stk + 0x24)) = Touch_GetSQDistPixel((*(undefined2 *)(_stk + 0x34)),(*(undefined2 *)(_stk + 0x32)),(*(undefined2 *)(_stk + 0x8)),(*(undefined2 *)(_stk + 0xa)));
+    (*(uint *)(_stk + 0x20)) = Touch_GetSQDistPixel((*(undefined2 *)(_stk + 0x30)),(*(undefined2 *)(_stk + 0x2e)),(*(undefined2 *)(_stk + 0x2c)),(*(undefined2 *)(_stk + 0x2a)));
+    (*(uint *)(_stk + 0x1c)) = Touch_GetSQDistPixel((*(undefined2 *)(_stk + 0x34)),(*(undefined2 *)(_stk + 0x32)),(*(undefined2 *)(_stk + 0x2c)),(*(undefined2 *)(_stk + 0x2a)));
+    (*(uint *)(_stk + 0x18)) = Touch_GetSQDistPixelToEdge((*(undefined2 *)(_stk + 0x34)),(*(undefined2 *)(_stk + 0x32)),(*(undefined2 *)(_stk + 0x30)),(*(undefined2 *)(_stk + 0x2e)));
+    if ((*(uint *)(_stk + 0x24)) < 0x9c4) {
+      (*(char *)(_stk + 0x37)) = '\0';
     }
-    if (local_20 < 0x9c4) {
-      local_9 = '\0';
+    if ((*(uint *)(_stk + 0x20)) < 0x9c4) {
+      (*(char *)(_stk + 0x37)) = '\0';
     }
-    if (local_24 < 10000) {
-      local_9 = '\0';
+    if ((*(uint *)(_stk + 0x1c)) < 10000) {
+      (*(char *)(_stk + 0x37)) = '\0';
     }
-    if (local_24 < local_28) {
-      local_9 = '\0';
+    if ((*(uint *)(_stk + 0x1c)) < (*(uint *)(_stk + 0x18))) {
+      (*(char *)(_stk + 0x37)) = '\0';
     }
-    if (local_9 == '\x01') {
+    if ((*(char *)(_stk + 0x37)) == '\x01') {
       ER_MoveInCorrection(param_2);
     }
-    return local_9;
+    return (*(char *)(_stk + 0x37));
   }
   return '\0';
 }
@@ -481,10 +449,10 @@ char ER_MoveInCheck(byte param_1,undefined1 param_2)
 void ER_Init(void)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0xc]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x10];
   undefined2 uVar1;
   undefined4 uVar2;
-  undefined1 local_c [2];
-  undefined1 local_a [2];
   
                     /* 0x16f76  544  ER_Init */
   uVar1 = ER_MMPrmtToPixelPrmt
@@ -510,7 +478,7 @@ void ER_Init(void)
   uVar1 = ER_MMPrmtToPixelPrmt(*(undefined2 *)(_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0xb),8);
   *(undefined2 *)(_refptr_g_tsaPrmtFlashConst + 0x54) = uVar1;
   uVar2 = TSA_SideToDimEdge(1);
-  ER_GetPrmt(uVar2,local_a,local_c);
+  ER_GetPrmt(uVar2,((undefined1 *)(_stk + 0x6)),((undefined1 *)(_stk + 0x4)));
   return;
 }
 
@@ -570,73 +538,62 @@ undefined8 ER_IsInBottomZone(undefined2 param_1,undefined2 param_2)
 void ER_MoveInCorrection(undefined1 param_1)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x38]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x40];
   char cVar1;
   byte bVar2;
-  short local_38;
-  short local_36;
-  longlong local_30;
-  int local_24;
-  short local_20;
-  short local_1e;
-  short local_1c;
-  short local_1a;
-  short local_18;
-  short local_16;
-  short local_14;
-  short local_12;
-  longlong local_10;
   
                     /* 0x17786  550  ER_MoveInCorrection */
   cVar1 = PrevTouch_HistoryBufferGetNum(param_1);
   if ((cVar1 != '\0') && (bVar2 = PrevTouch_HistoryBufferGetNum(param_1), 1 < bVar2)) {
     while (bVar2 = PrevTouch_HistoryBufferGetNum(param_1), 2 < bVar2) {
-      PrevTouch_HistoryBufferPop(param_1,&local_38);
-      local_16 = local_38;
-      local_18 = local_36;
+      PrevTouch_HistoryBufferPop(param_1,&(*(short *)(_stk + 0x8)));
+      (*(short *)(_stk + 0x2a)) = (*(short *)(_stk + 0x8));
+      (*(short *)(_stk + 0x28)) = (*(short *)(_stk + 0xa));
     }
-    PrevTouch_HistoryBufferGet(param_1,0,&local_38);
-    local_16 = local_38;
-    local_18 = local_36;
-    local_10 = local_30;
-    PrevTouch_HistoryBufferGet(param_1,1,&local_38);
-    local_1a = local_38;
-    local_1c = local_36;
-    local_1e = local_38 - local_16;
-    local_20 = local_36 - local_18;
-    local_24 = (int)local_30 - (int)local_10;
-    local_12 = local_16;
-    local_14 = local_18;
-    while (((local_1e != 0 && (local_20 != 0)) &&
+    PrevTouch_HistoryBufferGet(param_1,0,&(*(short *)(_stk + 0x8)));
+    (*(short *)(_stk + 0x2a)) = (*(short *)(_stk + 0x8));
+    (*(short *)(_stk + 0x28)) = (*(short *)(_stk + 0xa));
+    (*(longlong *)(_stk + 0x30)) = (*(longlong *)(_stk + 0x10));
+    PrevTouch_HistoryBufferGet(param_1,1,&(*(short *)(_stk + 0x8)));
+    (*(short *)(_stk + 0x26)) = (*(short *)(_stk + 0x8));
+    (*(short *)(_stk + 0x24)) = (*(short *)(_stk + 0xa));
+    (*(short *)(_stk + 0x22)) = (*(short *)(_stk + 0x8)) - (*(short *)(_stk + 0x2a));
+    (*(short *)(_stk + 0x20)) = (*(short *)(_stk + 0xa)) - (*(short *)(_stk + 0x28));
+    (*(int *)(_stk + 0x1c)) = (int)(*(longlong *)(_stk + 0x10)) - (int)(*(longlong *)(_stk + 0x30));
+    (*(short *)(_stk + 0x2e)) = (*(short *)(_stk + 0x2a));
+    (*(short *)(_stk + 0x2c)) = (*(short *)(_stk + 0x28));
+    while ((((*(short *)(_stk + 0x22)) != 0 && ((*(short *)(_stk + 0x20)) != 0)) &&
            (cVar1 = PrevTouch_IsHistoryBufferFull(param_1), cVar1 == '\0'))) {
-      local_12 = local_12 - local_1e;
-      local_14 = local_14 - local_20;
-      local_30 = local_10 - local_24;
-      if ((int)local_12 < (int)(uint)*(ushort *)(_refptr_g_tsaPrmtFlashConst + 0x2a)) {
-        local_12 = *(short *)(_refptr_g_tsaPrmtFlashConst + 0x2a);
+      (*(short *)(_stk + 0x2e)) = (*(short *)(_stk + 0x2e)) - (*(short *)(_stk + 0x22));
+      (*(short *)(_stk + 0x2c)) = (*(short *)(_stk + 0x2c)) - (*(short *)(_stk + 0x20));
+      (*(longlong *)(_stk + 0x10)) = (*(longlong *)(_stk + 0x30)) - (*(int *)(_stk + 0x1c));
+      if ((int)(*(short *)(_stk + 0x2e)) < (int)(uint)*(ushort *)(_refptr_g_tsaPrmtFlashConst + 0x2a)) {
+        (*(short *)(_stk + 0x2e)) = *(short *)(_refptr_g_tsaPrmtFlashConst + 0x2a);
       }
-      if ((int)local_14 < (int)(uint)*(ushort *)(_refptr_g_tsaPrmtFlashConst + 0x2e)) {
-        local_14 = *(short *)(_refptr_g_tsaPrmtFlashConst + 0x2e);
+      if ((int)(*(short *)(_stk + 0x2c)) < (int)(uint)*(ushort *)(_refptr_g_tsaPrmtFlashConst + 0x2e)) {
+        (*(short *)(_stk + 0x2c)) = *(short *)(_refptr_g_tsaPrmtFlashConst + 0x2e);
       }
-      if ((int)(*(ushort *)(_refptr_g_tsaPrmtFlashConst + 0x2c) - 1) < (int)local_12) {
-        local_12 = *(short *)(_refptr_g_tsaPrmtFlashConst + 0x2c) + -1;
+      if ((int)(*(ushort *)(_refptr_g_tsaPrmtFlashConst + 0x2c) - 1) < (int)(*(short *)(_stk + 0x2e))) {
+        (*(short *)(_stk + 0x2e)) = *(short *)(_refptr_g_tsaPrmtFlashConst + 0x2c) + -1;
       }
-      if ((int)(*(ushort *)(_refptr_g_tsaPrmtFlashConst + 0x30) - 1) < (int)local_14) {
-        local_14 = *(short *)(_refptr_g_tsaPrmtFlashConst + 0x30) + -1;
+      if ((int)(*(ushort *)(_refptr_g_tsaPrmtFlashConst + 0x30) - 1) < (int)(*(short *)(_stk + 0x2c))) {
+        (*(short *)(_stk + 0x2c)) = *(short *)(_refptr_g_tsaPrmtFlashConst + 0x30) + -1;
       }
-      local_38 = local_12;
-      local_36 = local_14;
-      local_10 = local_30;
-      PrevTouch_HistoryBufferInsert(param_1,0,&local_38);
-      if ((int)local_12 == (uint)*(ushort *)(_refptr_g_tsaPrmtFlashConst + 0x2a)) {
+      (*(short *)(_stk + 0x8)) = (*(short *)(_stk + 0x2e));
+      (*(short *)(_stk + 0xa)) = (*(short *)(_stk + 0x2c));
+      (*(longlong *)(_stk + 0x30)) = (*(longlong *)(_stk + 0x10));
+      PrevTouch_HistoryBufferInsert(param_1,0,&(*(short *)(_stk + 0x8)));
+      if ((int)(*(short *)(_stk + 0x2e)) == (uint)*(ushort *)(_refptr_g_tsaPrmtFlashConst + 0x2a)) {
         return;
       }
-      if ((int)local_14 == (uint)*(ushort *)(_refptr_g_tsaPrmtFlashConst + 0x2e)) {
+      if ((int)(*(short *)(_stk + 0x2c)) == (uint)*(ushort *)(_refptr_g_tsaPrmtFlashConst + 0x2e)) {
         return;
       }
-      if ((int)local_12 == *(ushort *)(_refptr_g_tsaPrmtFlashConst + 0x2c) - 1) {
+      if ((int)(*(short *)(_stk + 0x2e)) == *(ushort *)(_refptr_g_tsaPrmtFlashConst + 0x2c) - 1) {
         return;
       }
-      if ((int)local_14 == *(ushort *)(_refptr_g_tsaPrmtFlashConst + 0x30) - 1) {
+      if ((int)(*(short *)(_stk + 0x2c)) == *(ushort *)(_refptr_g_tsaPrmtFlashConst + 0x30) - 1) {
         return;
       }
     }

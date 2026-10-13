@@ -7,43 +7,43 @@
 void StylusAft_PostProcessUnit(byte param_1)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0xa]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x10];
   char cVar1;
   undefined1 uVar2;
-  char local_a;
-  byte local_9;
   
                     /* 0xe23ef  1448  StylusAft_PostProcessUnit */
-  local_9 = PrevTouch_GetIdxBasedOnCurIdx(param_1);
-  local_a = '\0';
+  (*(byte *)(_stk + 0x7)) = PrevTouch_GetIdxBasedOnCurIdx(param_1);
+  (*(char *)(_stk + 0x6)) = '\0';
   cVar1 = ASA_GetBluetoothConnectStatus();
   if (cVar1 != '\0') {
     if ((*(ushort *)
           ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x156) < 0xf1)
        || (*(char *)((longlong)*_refptr_g_prevTouchesPtr +
-                    (longlong)(int)(uint)local_9 * 0x478 + 0x58d) != '\0')) {
+                    (longlong)(int)(uint)(*(byte *)(_stk + 0x7)) * 0x478 + 0x58d) != '\0')) {
       if ((*_refptr_g_tsaStaticPtr)->bField_0x111 < 3) {
         if (*(char *)((longlong)*_refptr_g_prevTouchesPtr +
-                     (longlong)(int)(uint)local_9 * 0x478 + 0x58c) == '\0') {
+                     (longlong)(int)(uint)(*(byte *)(_stk + 0x7)) * 0x478 + 0x58c) == '\0') {
           if ((((*_refptr_g_tsaStaticPtr)->bField_0x111 < 2) ||
               (((*_refptr_g_tsaStaticPtr)->dwStylusAftGateFlags & 0x20) != 0)) &&
              (cVar1 = StylusAft_PalmLocationJudge(param_1,0x32), cVar1 != '\0')) {
-            StylusAft_ProcessWithdraw(param_1,local_9,&local_a);
+            StylusAft_ProcessWithdraw(param_1,(*(byte *)(_stk + 0x7)),&(*(char *)(_stk + 0x6)));
           }
         }
         else {
           *(undefined1 *)
-           ((longlong)*_refptr_g_prevTouchesPtr + (longlong)(int)(uint)local_9 * 0x478 + 0x58d) =
+           ((longlong)*_refptr_g_prevTouchesPtr + (longlong)(int)(uint)(*(byte *)(_stk + 0x7)) * 0x478 + 0x58d) =
                0x28;
         }
-        if (local_a != '\x01') {
-          StylusAft_ProcessSuppress(param_1,local_9);
+        if ((*(char *)(_stk + 0x6)) != '\x01') {
+          StylusAft_ProcessSuppress(param_1,(*(byte *)(_stk + 0x7)));
         }
         if (*(char *)((longlong)*_refptr_g_prevTouchesPtr +
-                     (longlong)(int)(uint)local_9 * 0x478 + 0x58d) != '\0') {
+                     (longlong)(int)(uint)(*(byte *)(_stk + 0x7)) * 0x478 + 0x58d) != '\0') {
           *(char *)((longlong)*_refptr_g_prevTouchesPtr +
-                   (longlong)(int)(uint)local_9 * 0x478 + 0x58d) =
+                   (longlong)(int)(uint)(*(byte *)(_stk + 0x7)) * 0x478 + 0x58d) =
                *(char *)((longlong)*_refptr_g_prevTouchesPtr +
-                        (longlong)(int)(uint)local_9 * 0x478 + 0x58d) + -1;
+                        (longlong)(int)(uint)(*(byte *)(_stk + 0x7)) * 0x478 + 0x58d) + -1;
           *(uint *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x208
                    ) = *(uint *)((longlong)(int)(uint)param_1 * 0x168 +
                                  *(longlong *)_refptr_g_touchesPtr + 0x208) | 0x40;
@@ -78,7 +78,7 @@ void StylusAft_PostProcessUnit(byte param_1)
             ((longlong)(*_refptr_g_tsaStaticPtr)->pFrameBufferPtr - (longlong)g_lastStylusTimeStamp)
             < 200)) {
           *(undefined1 *)
-           ((longlong)*_refptr_g_prevTouchesPtr + (longlong)(int)(uint)local_9 * 0x478 + 0x58c) = 1;
+           ((longlong)*_refptr_g_prevTouchesPtr + (longlong)(int)(uint)(*(byte *)(_stk + 0x7)) * 0x478 + 0x58c) = 1;
           *(uint *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x208
                    ) = *(uint *)((longlong)(int)(uint)param_1 * 0x168 +
                                  *(longlong *)_refptr_g_touchesPtr + 0x208) | 0x40;
@@ -94,10 +94,10 @@ void StylusAft_PostProcessUnit(byte param_1)
                             "\nStylusAFT: Id=%d, withdrawFlag=%d, suppressNum=%d, maxAxisMajor=%d, ellipseRate=%d"
                             ,param_1,*(undefined1 *)
                                       ((longlong)*_refptr_g_prevTouchesPtr +
-                                      (longlong)(int)(uint)local_9 * 0x478 + 0x58c),
+                                      (longlong)(int)(uint)(*(byte *)(_stk + 0x7)) * 0x478 + 0x58c),
                             *(undefined1 *)
                              ((longlong)*_refptr_g_prevTouchesPtr +
-                             (longlong)(int)(uint)local_9 * 0x478 + 0x58d),
+                             (longlong)(int)(uint)(*(byte *)(_stk + 0x7)) * 0x478 + 0x58d),
                             *(undefined2 *)
                              ((longlong)(int)(uint)param_1 * 0x168 +
                               *(longlong *)_refptr_g_touchesPtr + 0x228),
@@ -115,9 +115,9 @@ void StylusAft_PostProcessUnit(byte param_1)
       }
       else {
         *(undefined1 *)
-         ((longlong)*_refptr_g_prevTouchesPtr + (longlong)(int)(uint)local_9 * 0x478 + 0x58d) = 0;
+         ((longlong)*_refptr_g_prevTouchesPtr + (longlong)(int)(uint)(*(byte *)(_stk + 0x7)) * 0x478 + 0x58d) = 0;
         *(undefined1 *)
-         ((longlong)*_refptr_g_prevTouchesPtr + (longlong)(int)(uint)local_9 * 0x478 + 0x58c) = 0;
+         ((longlong)*_refptr_g_prevTouchesPtr + (longlong)(int)(uint)(*(byte *)(_stk + 0x7)) * 0x478 + 0x58c) = 0;
         *(uint *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x208)
              = *(uint *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr +
                         0x208) & 0xffffffbf;

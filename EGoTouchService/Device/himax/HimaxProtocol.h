@@ -14,7 +14,7 @@
 #include <windows.h>
 
 namespace Himax {
-    enum class DeviceType { Master, Slave, Interrupt };
+    enum class DeviceType { Master, Slave };
     
     class HalDevice {
     public:
@@ -25,8 +25,6 @@ namespace Himax {
         ChipResult<> Ioctl(DWORD code, const void* in, uint32_t inLen, void* out,
                    uint32_t outLen, uint32_t* retLen);
         ChipResult<> Read(void* buffer, uint32_t len);
-        // Legacy path: prefer GetFrame + SetBlock/SetTimeOut policy in user mode.
-        ChipResult<> WaitInterrupt();
         ChipResult<> ReadBus(uint8_t cmd, uint8_t* data, uint32_t len);
         ChipResult<> WriteBus(const uint8_t cmd, const uint8_t* addr, const uint8_t* data, uint32_t len);
         ChipResult<> ReadAcpi(uint8_t* data, uint32_t len);
@@ -38,10 +36,14 @@ namespace Himax {
         ChipResult<> IntClose(void);
         DWORD GetError(void);
         bool IsTimeoutError() const;
-        void CancelPendingIo();
+        /// 最近一次失败是不是被 RequestCancel 取消的
+        bool IsCancelledError() const;
+        /// 只发取消请求，不碰任何成员状态；可以从任意线程调用，用来把阻塞在读帧里的 worker 唤醒。
+        void RequestCancel() noexcept;
 
     private:
-        bool DrainInterruptOverlapped(DWORD waitMs);
+        ChipResult<> IoctlOnce(DWORD code, const void* in, uint32_t inLen, void* out,
+                               uint32_t outLen, uint32_t* retLen);
 
         HANDLE m_handle;
         HANDLE m_syncEvent = nullptr;
@@ -54,8 +56,6 @@ namespace Himax {
         const size_t header_size = 2;
         const size_t data_offset = header_size + dummy_size;
         
-        OVERLAPPED m_ov = {};
-        bool m_ovPending = false;
         std::vector<uint8_t> m_xfer_buffer;
     };
 

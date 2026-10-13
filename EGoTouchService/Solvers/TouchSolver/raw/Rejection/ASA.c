@@ -4,7 +4,27 @@
 // Function: ASAStaticInit @ 6bac8481
 // ============================================================================
 
-// ASAStaticInit pruned to TSAPrunedStubs.h
+void ASAStaticInit(longlong param_1)
+
+{
+  int iVar1;
+  uint8_t *s;
+  
+                    /* 0x88481  111  ASAStaticInit */
+  s = (uint8_t *)&g_asaStatic;
+  if ((param_1 != 0) && (iVar1 = memset_s(s,0xf8,0,0xf8), iVar1 == 0)) {
+    *(uint *)(s + 0x54) =
+         *(uint *)((uint8_t *)*_refptr_g_asaPrmtFlash + 0xa40) |
+         *(uint *)((uint8_t *)*_refptr_g_asaPrmtFlash + 0xa44);
+    *(uint *)(s + 0x50) = *(uint *)(s + 0x54) & 0x4813;
+    *(uint *)(s + 0x58) = *(uint *)(s + 0x54);
+    *(uint *)(s + 0x5c) =
+         *(uint *)((uint8_t *)*_refptr_g_asaPrmtFlash + 0xa48) |
+         *(uint *)((uint8_t *)*_refptr_g_asaPrmtFlash + 0xa4c);
+    *(longlong *)(s + 0x40) = param_1;
+  }
+  return;
+}
 
 
 // ============================================================================

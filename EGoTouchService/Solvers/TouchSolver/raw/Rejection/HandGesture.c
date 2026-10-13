@@ -418,6 +418,8 @@ undefined8 HandGesture_IsOKToProcessTouch(void)
 void HandGesture_TouchProcess(void)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x26b8]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x26c0];
   byte bVar1;
   uchar uVar2;
   TSAFlashPrmt *pTVar3;
@@ -426,33 +428,22 @@ void HandGesture_TouchProcess(void)
   errno_t eVar6;
   undefined8 in_stack_ffffffffffffd938;
   undefined4 uVar7;
-  undefined1 local_26b8 [9808];
-  undefined8 local_68;
-  undefined8 local_60;
-  undefined8 local_58;
-  undefined8 local_50;
-  uint local_48;
-  undefined8 local_38;
-  undefined8 local_30;
-  undefined2 local_28;
-  errno_t local_20;
-  uint local_1c;
   
   uVar7 = (undefined4)((ulonglong)in_stack_ffffffffffffd938 >> 0x20);
-  local_38 = *(undefined8 *)&_refptr_g_tsaPrpt[1].field_0x14;
-  local_30 = *(undefined8 *)&_refptr_g_tsaPrpt[1].field_0x1c;
-  local_28 = *(undefined2 *)&_refptr_g_tsaPrpt[1].field_0x24;
-  local_68 = *(undefined8 *)&_refptr_g_tsaPrmtFlash->field_0x81c;
-  local_60 = *(undefined8 *)&_refptr_g_tsaPrmtFlash->field_0x824;
-  local_58 = *(undefined8 *)&_refptr_g_tsaPrmtFlash->field_0x82c;
-  local_50 = *(undefined8 *)&_refptr_g_tsaPrmtFlash->field_0x834;
-  local_48 = _refptr_g_tsaPrmtFlash->dwGripFlags;
-  local_1c = (*_refptr_g_tsaStaticPtr)->dwSpecialControlFlags;
-  local_20 = 0x6baef318;
-  memset(local_26b8,0,0x2648);
-  local_20 = memcpy_s(local_26b8,0x2648,*(void **)_refptr_g_tsaBufDif,
+  (*(undefined8 *)(_stk + 0x2688)) = *(undefined8 *)&_refptr_g_tsaPrpt[1].field_0x14;
+  (*(undefined8 *)(_stk + 0x2690)) = *(undefined8 *)&_refptr_g_tsaPrpt[1].field_0x1c;
+  (*(undefined2 *)(_stk + 0x2698)) = *(undefined2 *)&_refptr_g_tsaPrpt[1].field_0x24;
+  (*(undefined8 *)(_stk + 0x2658)) = *(undefined8 *)&_refptr_g_tsaPrmtFlash->field_0x81c;
+  (*(undefined8 *)(_stk + 0x2660)) = *(undefined8 *)&_refptr_g_tsaPrmtFlash->field_0x824;
+  (*(undefined8 *)(_stk + 0x2668)) = *(undefined8 *)&_refptr_g_tsaPrmtFlash->field_0x82c;
+  (*(undefined8 *)(_stk + 0x2670)) = *(undefined8 *)&_refptr_g_tsaPrmtFlash->field_0x834;
+  (*(uint *)(_stk + 0x2678)) = _refptr_g_tsaPrmtFlash->dwGripFlags;
+  (*(uint *)(_stk + 0x26a4)) = (*_refptr_g_tsaStaticPtr)->dwSpecialControlFlags;
+  (*(errno_t *)(_stk + 0x26a0)) = 0x6baef318;
+  memset(((undefined1 *)(_stk + 0x8)),0,0x2648);
+  (*(errno_t *)(_stk + 0x26a0)) = memcpy_s(((undefined1 *)(_stk + 0x8)),0x2648,*(void **)_refptr_g_tsaBufDif,
                       (ulonglong)_refptr_g_tsaPrmtFlash->wBufElementCount * 2);
-  if (local_20 != 0) {
+  if ((*(errno_t *)(_stk + 0x26a0)) != 0) {
     uVar7 = 0;
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
                       "../../src/Extension/HandGesture/HandGesture.c",0x1a5,"rc == EOK");
@@ -479,25 +470,25 @@ void HandGesture_TouchProcess(void)
   PrevTouch_PostProcess();
   PrevPeak_Process();
   TSAIDE_LogPreFltHandRpt();
-  (*_refptr_g_tsaStaticPtr)->dwSpecialControlFlags = local_1c;
-  eVar6 = memcpy_s(*(void **)_refptr_g_tsaBufDif,0x2648,local_26b8,
+  (*_refptr_g_tsaStaticPtr)->dwSpecialControlFlags = (*(uint *)(_stk + 0x26a4));
+  eVar6 = memcpy_s(*(void **)_refptr_g_tsaBufDif,0x2648,((undefined1 *)(_stk + 0x8)),
                    (ulonglong)_refptr_g_tsaPrmtFlash->wBufElementCount * 2);
-  (void)CONCAT44(local_1c,eVar6);
+  (void)CONCAT44((*(uint *)(_stk + 0x26a4)),eVar6);
   if (eVar6 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
                       "../../src/Extension/HandGesture/HandGesture.c",0x1cf,"rc == EOK");
     HardwareAnalyzer_SetSoftException();
   }
   pTVar3 = _refptr_g_tsaPrmtFlash;
-  *(undefined8 *)&_refptr_g_tsaPrmtFlash->field_0x81c = local_68;
-  *(undefined8 *)&pTVar3->field_0x824 = local_60;
-  *(undefined8 *)&pTVar3->field_0x82c = local_58;
-  *(undefined8 *)&pTVar3->field_0x834 = local_50;
-  pTVar3->dwGripFlags = local_48;
+  *(undefined8 *)&_refptr_g_tsaPrmtFlash->field_0x81c = (*(undefined8 *)(_stk + 0x2658));
+  *(undefined8 *)&pTVar3->field_0x824 = (*(undefined8 *)(_stk + 0x2660));
+  *(undefined8 *)&pTVar3->field_0x82c = (*(undefined8 *)(_stk + 0x2668));
+  *(undefined8 *)&pTVar3->field_0x834 = (*(undefined8 *)(_stk + 0x2670));
+  pTVar3->dwGripFlags = (*(uint *)(_stk + 0x2678));
   pTVar4 = _refptr_g_tsaPrpt;
-  *(undefined8 *)&_refptr_g_tsaPrpt[1].field_0x14 = local_38;
-  *(undefined8 *)&pTVar4[1].field_0x1c = local_30;
-  *(undefined2 *)&pTVar4[1].field_0x24 = local_28;
+  *(undefined8 *)&_refptr_g_tsaPrpt[1].field_0x14 = (*(undefined8 *)(_stk + 0x2688));
+  *(undefined8 *)&pTVar4[1].field_0x1c = (*(undefined8 *)(_stk + 0x2690));
+  *(undefined2 *)&pTVar4[1].field_0x24 = (*(undefined2 *)(_stk + 0x2698));
   return;
 }
 

@@ -28,31 +28,30 @@ void BadChannel_Init(void)
 undefined8 BadChannel_IsDMDDetected(void)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x28]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x30];
   char cVar1;
-  undefined1 local_28 [30];
-  byte local_a;
-  byte local_9;
   
                     /* 0x102e68  384  BadChannel_IsDMDDetected */
   if (3 < (byte)*_refptr_g_tsaLogLoglevel) {
     StrPrintf_Process(0,&DAT_6bb601ef,"BadChannel_IsDMDDetected");
   }
-  for (local_9 = 0; local_9 < _refptr_g_tsaPrmtFlash->bCols; local_9 = local_9 + 1) {
-    for (local_a = 0; local_a < _refptr_g_tsaPrmtFlash->bRows; local_a = local_a + 4) {
-      cVar1 = BadChannel_DetectType1(local_9,local_a,0x41a0,42000);
+  for ((*(byte *)(_stk + 0x27)) = 0; (*(byte *)(_stk + 0x27)) < _refptr_g_tsaPrmtFlash->bCols; (*(byte *)(_stk + 0x27)) = (*(byte *)(_stk + 0x27)) + 1) {
+    for ((*(byte *)(_stk + 0x26)) = 0; (*(byte *)(_stk + 0x26)) < _refptr_g_tsaPrmtFlash->bRows; (*(byte *)(_stk + 0x26)) = (*(byte *)(_stk + 0x26)) + 4) {
+      cVar1 = BadChannel_DetectType1((*(byte *)(_stk + 0x27)),(*(byte *)(_stk + 0x26)),0x41a0,42000);
       if (cVar1 != '\0') {
         return 1;
       }
     }
   }
-  local_9 = 0;
+  (*(byte *)(_stk + 0x27)) = 0;
   while( true ) {
-    if (_refptr_g_tsaPrmtFlash->bCols <= local_9) {
+    if (_refptr_g_tsaPrmtFlash->bCols <= (*(byte *)(_stk + 0x27))) {
       return 0;
     }
-    cVar1 = BadChannel_DetectType2(local_9,0x5cf8,0xdac,local_28);
+    cVar1 = BadChannel_DetectType2((*(byte *)(_stk + 0x27)),0x5cf8,0xdac,((undefined1 *)(_stk + 0x8)));
     if (cVar1 != '\0') break;
-    local_9 = local_9 + 1;
+    (*(byte *)(_stk + 0x27)) = (*(byte *)(_stk + 0x27)) + 1;
   }
   return 1;
 }
@@ -224,33 +223,29 @@ void BadChannel_CheckType1(void)
 void BadChannel_CheckType2(void)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x28]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x30];
   char cVar1;
   int iVar2;
-  int local_28 [5];
-  short local_12;
-  byte local_f;
-  ushort local_e;
-  ushort local_c;
-  byte local_9;
   
-  for (local_9 = 0; local_9 < _refptr_g_tsaPrmtFlash->bCols; local_9 = local_9 + 1) {
-    local_28[0] = 0;
-    local_28[1] = 0;
-    local_28[2] = 0;
-    local_28[3] = 0;
-    cVar1 = BadChannel_DetectType2(local_9,21000,0x15e0,local_28);
+  for ((*(byte *)(_stk + 0x27)) = 0; (*(byte *)(_stk + 0x27)) < _refptr_g_tsaPrmtFlash->bCols; (*(byte *)(_stk + 0x27)) = (*(byte *)(_stk + 0x27)) + 1) {
+    ((int *)(_stk + 0x8))[0] = 0;
+    ((int *)(_stk + 0x8))[1] = 0;
+    ((int *)(_stk + 0x8))[2] = 0;
+    ((int *)(_stk + 0x8))[3] = 0;
+    cVar1 = BadChannel_DetectType2((*(byte *)(_stk + 0x27)),21000,0x15e0,((int *)(_stk + 0x8)));
     if (cVar1 != '\0') {
-      for (local_c = 0; local_c < 4; local_c = local_c + 1) {
-        if (-1 < local_28[(int)(uint)local_c]) {
-          iVar2 = local_28[(int)(uint)local_c];
+      for ((*(ushort *)(_stk + 0x24)) = 0; (*(ushort *)(_stk + 0x24)) < 4; (*(ushort *)(_stk + 0x24)) = (*(ushort *)(_stk + 0x24)) + 1) {
+        if (-1 < ((int *)(_stk + 0x8))[(int)(uint)(*(ushort *)(_stk + 0x24))]) {
+          iVar2 = ((int *)(_stk + 0x8))[(int)(uint)(*(ushort *)(_stk + 0x24))];
           if (iVar2 < 0) {
             iVar2 = iVar2 + 3;
           }
-          local_f = (byte)((iVar2 >> 2) << 2);
-          for (local_e = 0; local_e < 4; local_e = local_e + 1) {
-            local_12 = (ushort)local_9 + (local_e + local_f) * (ushort)_refptr_g_tsaPrmtFlash->bCols
+          (*(byte *)(_stk + 0x21)) = (byte)((iVar2 >> 2) << 2);
+          for ((*(ushort *)(_stk + 0x22)) = 0; (*(ushort *)(_stk + 0x22)) < 4; (*(ushort *)(_stk + 0x22)) = (*(ushort *)(_stk + 0x22)) + 1) {
+            (*(short *)(_stk + 0x1e)) = (ushort)(*(byte *)(_stk + 0x27)) + ((*(ushort *)(_stk + 0x22)) + (*(byte *)(_stk + 0x21))) * (ushort)_refptr_g_tsaPrmtFlash->bCols
             ;
-            BadChannel_SetDebounce(local_12);
+            BadChannel_SetDebounce((*(short *)(_stk + 0x1e)));
           }
         }
       }

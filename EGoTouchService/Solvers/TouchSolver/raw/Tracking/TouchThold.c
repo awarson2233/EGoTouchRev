@@ -393,22 +393,21 @@ undefined8 TouchThold_SOFInSmartCoverMode(void)
 // ============================================================================
 
 short TouchThold_GetTouchDownThold(short param_1)
-
 {
   short local_2;
-  short sMax;
+  short sPeak;
   short sCfg;
-
+                    /* 0x3cca5  TouchThold_GetTouchDownThold（Ghidra 无法反编译，按汇编重建） */
   local_2 = param_1;
   if (_refptr_g_tsaPrmtFlash->dwPeakProcessingMode == 3) {
     if (((*_refptr_g_tsaStaticPtr)->dwFeatureFlags & 0x1000) == 0) {
-      sMax = (short)_refptr_g_tsaPrpt->wBoundaryPositive;
-      sCfg = (short)_refptr_g_tsaPrmtFlash->wPeakMode3ThresholdMax;
-      if (sCfg < sMax) {
-        local_2 = sCfg / 3;
+      sPeak = *(short *)((char *)_refptr_g_tsaPrpt + 0xa0);
+      sCfg = *(short *)((char *)_refptr_g_tsaPrmtFlash + 0x5b4);
+      if (sPeak <= sCfg) {
+        local_2 = sPeak / 3;
       }
       else {
-        local_2 = sMax / 3;
+        local_2 = sCfg / 3;
       }
     }
     if (local_2 < param_1) {

@@ -34,11 +34,8 @@ void TZ_Process(void)
 void TZ_PeakBasedProcess(void)
 
 {
-  undefined1 local_388 [882];
-  ushort local_16;
-  undefined4 local_14;
-  int local_10;
-  byte local_9;
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x388]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x390];
   
                     /* 0x4bffd  2432  TZ_PeakBasedProcess */
   if (3 < (byte)*_refptr_g_tsaLogLoglevel) {
@@ -47,25 +44,25 @@ void TZ_PeakBasedProcess(void)
   if (((*_refptr_g_tsaStaticPtr)->dwFeatureFlags & 0x100000) != 0) {
     TZ_SSLoProcess();
   }
-  memset(local_388,0,0x370);
-  local_10 = memset_s(*(undefined8 *)_refptr_g_tsaBufTz,0x1324,0,
+  memset(((undefined1 *)(_stk + 0x8)),0,0x370);
+  (*(int *)(_stk + 0x380)) = memset_s(*(undefined8 *)_refptr_g_tsaBufTz,0x1324,0,
                       _refptr_g_tsaPrmtFlash->wBufElementCount);
-  if (local_10 != 0) {
+  if ((*(int *)(_stk + 0x380)) != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
                       "../../src/Alg/TouchZone/TZ_StateMachine.c",0x21f,"rc == EOK");
     HardwareAnalyzer_SetSoftException();
   }
   if (((*_refptr_g_tsaStaticPtr)->dwProcessingState & PROC_MS_ACTIVE) != 0) {
-    local_10 = memset_s(*(undefined8 *)_refptr_g_tsaBufSubTZ,0x1324,0,
+    (*(int *)(_stk + 0x380)) = memset_s(*(undefined8 *)_refptr_g_tsaBufSubTZ,0x1324,0,
                         _refptr_g_tsaPrmtFlash->wBufElementCount);
-    if (local_10 != 0) {
+    if ((*(int *)(_stk + 0x380)) != 0) {
       StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
                         "../../src/Alg/TouchZone/TZ_StateMachine.c",0x222,"rc == EOK");
       HardwareAnalyzer_SetSoftException();
     }
-    local_10 = memset_s(*(undefined8 *)_refptr_g_tsaBufTzZone,*(undefined2 *)_refptr_g_gridBufSize,0
+    (*(int *)(_stk + 0x380)) = memset_s(*(undefined8 *)_refptr_g_tsaBufTzZone,*(undefined2 *)_refptr_g_gridBufSize,0
                         ,_refptr_g_tsaPrmtFlash->wBufElementCount);
-    if (local_10 != 0) {
+    if ((*(int *)(_stk + 0x380)) != 0) {
       StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
                         "../../src/Alg/TouchZone/TZ_StateMachine.c",0x225,"rc == EOK");
       HardwareAnalyzer_SetSoftException();
@@ -79,27 +76,27 @@ void TZ_PeakBasedProcess(void)
   g_pkAccessedFlag = 0;
   *(undefined4 *)_refptr_g_pkAccessedFlagSubTZ = 0;
   g_pkBeforeSDCAccessedFlag = 0;
-  local_14 = TZ_CheckFatFingerSD();
+  (*(undefined4 *)(_stk + 0x37c)) = TZ_CheckFatFingerSD();
   if (*_refptr_g_tsaLogLoglevel != '\0') {
-    StrPrintf_Process(0,"isFatFingerSD = %d",local_14);
+    StrPrintf_Process(0,"isFatFingerSD = %d",(*(undefined4 *)(_stk + 0x37c)));
   }
-  for (local_9 = 0; local_9 < (*_refptr_g_peaksPtr)->bPeakCount; local_9 = local_9 + 1) {
-    local_16 = (ushort)(*_refptr_g_peaksPtr)[(longlong)(int)(uint)local_9 * 0x14 + 0x15].bPeakCount
-               + (ushort)(*_refptr_g_peaksPtr)[(longlong)(int)(uint)local_9 * 0x14 + 0x16].
+  for ((*(byte *)(_stk + 0x387)) = 0; (*(byte *)(_stk + 0x387)) < (*_refptr_g_peaksPtr)->bPeakCount; (*(byte *)(_stk + 0x387)) = (*(byte *)(_stk + 0x387)) + 1) {
+    (*(ushort *)(_stk + 0x37a)) = (ushort)(*_refptr_g_peaksPtr)[(longlong)(int)(uint)(*(byte *)(_stk + 0x387)) * 0x14 + 0x15].bPeakCount
+               + (ushort)(*_refptr_g_peaksPtr)[(longlong)(int)(uint)(*(byte *)(_stk + 0x387)) * 0x14 + 0x16].
                          bPeakCount * (ushort)_refptr_g_tsaPrmtFlash->bCols;
-    if ((*(char *)((ulonglong)local_16 + *(longlong *)_refptr_g_tsaBufTz) == '\0') &&
+    if ((*(char *)((ulonglong)(*(ushort *)(_stk + 0x37a)) + *(longlong *)_refptr_g_tsaBufTz) == '\0') &&
        ((((*_refptr_g_tsaStaticPtr)->dwProcessingState & PROC_MS_ACTIVE) == 0 ||
-        (*(char *)((ulonglong)local_16 + *(longlong *)_refptr_g_tsaBufSubTZ) == '\0')))) {
+        (*(char *)((ulonglong)(*(ushort *)(_stk + 0x37a)) + *(longlong *)_refptr_g_tsaBufSubTZ) == '\0')))) {
       if ((_refptr_g_tsaPrmtFlash->dwGripFlags & 0x100) == 0) {
         if ((_refptr_g_tsaPrmtFlash->dwGripFlags & 0x80) == 0) {
-          TZ_NormalTraversal(local_388,local_9,local_14);
+          TZ_NormalTraversal(((undefined1 *)(_stk + 0x8)),(*(byte *)(_stk + 0x387)),(*(undefined4 *)(_stk + 0x37c)));
         }
         else {
-          TZ_CentrodToTouch(local_388,local_9);
+          TZ_CentrodToTouch(((undefined1 *)(_stk + 0x8)),(*(byte *)(_stk + 0x387)));
         }
       }
       else {
-        TZ_SimpleTraversal(local_388,local_9);
+        TZ_SimpleTraversal(((undefined1 *)(_stk + 0x8)),(*(byte *)(_stk + 0x387)));
       }
     }
   }
@@ -118,20 +115,15 @@ void TZ_PeakBasedProcess(void)
 void TZ_AgeProcess(void)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x168]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x170];
   char cVar1;
   uint uVar2;
   longlong lVar3;
   undefined8 *puVar4;
-  ushort auStack_168 [128];
-  undefined8 local_68 [7];
-  int local_2c;
-  int local_28;
-  int local_24;
-  int local_20;
-  uint local_1c;
   
                     /* 0x4c428  2356  TZ_AgeProcess */
-  puVar4 = local_68;
+  puVar4 = ((undefined8 *)(_stk + 0x108));
   for (lVar3 = 7; lVar3 != 0; lVar3 = lVar3 + -1) {
     *puVar4 = 0;
     puVar4 = puVar4 + 1;
@@ -140,44 +132,44 @@ void TZ_AgeProcess(void)
   if (*(longlong *)&_refptr_g_tsaPrpt[1].field_0xc == -1) {
     *(void **)&_refptr_g_tsaPrpt[1].field_0xc = (*_refptr_g_tsaStaticPtr)->pFrameBufferPtr;
   }
-  local_24 = (int)(*_refptr_g_tsaStaticPtr)->pFrameBufferPtr -
+  (*(int *)(_stk + 0x14c)) = (int)(*_refptr_g_tsaStaticPtr)->pFrameBufferPtr -
              (int)*(undefined8 *)&_refptr_g_tsaPrpt[1].field_0xc;
-  local_1c = (uint)_refptr_g_tsaPrmtFlash->wBufElementCount;
-  while (local_1c = local_1c - 1, -1 < (int)local_1c) {
-    uVar2 = Sensor_GetPosType2(local_1c & 0xffff);
+  (*(uint *)(_stk + 0x154)) = (uint)_refptr_g_tsaPrmtFlash->wBufElementCount;
+  while ((*(uint *)(_stk + 0x154)) = (*(uint *)(_stk + 0x154)) - 1, -1 < (int)(*(uint *)(_stk + 0x154))) {
+    uVar2 = Sensor_GetPosType2((*(uint *)(_stk + 0x154)) & 0xffff);
     if (uVar2 < 3) {
-      *(undefined2 *)(*(longlong *)_refptr_g_tsaBufTzAge + (longlong)(int)local_1c * 2) = 0;
+      *(undefined2 *)(*(longlong *)_refptr_g_tsaBufTzAge + (longlong)(int)(*(uint *)(_stk + 0x154)) * 2) = 0;
     }
     else {
-      if (*(ushort *)(*(longlong *)_refptr_g_tsaBufTzAge + (longlong)(int)local_1c * 2) < 2) {
-        local_20 = 2;
+      if (*(ushort *)(*(longlong *)_refptr_g_tsaBufTzAge + (longlong)(int)(*(uint *)(_stk + 0x154)) * 2) < 2) {
+        (*(int *)(_stk + 0x150)) = 2;
       }
       else {
-        local_20 = local_24 +
+        (*(int *)(_stk + 0x150)) = (*(int *)(_stk + 0x14c)) +
                    (uint)*(ushort *)
-                          (*(longlong *)_refptr_g_tsaBufTzAge + (longlong)(int)local_1c * 2);
-        if (0xffff < local_20) {
-          local_20 = 0xffff;
+                          (*(longlong *)_refptr_g_tsaBufTzAge + (longlong)(int)(*(uint *)(_stk + 0x154)) * 2);
+        if (0xffff < (*(int *)(_stk + 0x150))) {
+          (*(int *)(_stk + 0x150)) = 0xffff;
         }
       }
-      cVar1 = Sensor_GetZoneIndex2(local_1c & 0xffff);
-      local_28 = (int)cVar1;
-      if (((-1 < local_28) && (local_28 < 0x1e)) &&
-         ((int)(uint)*(ushort *)((longlong)local_68 + (longlong)local_28 * 2) < local_20)) {
-        *(short *)((longlong)local_68 + (longlong)local_28 * 2) = (short)local_20;
+      cVar1 = Sensor_GetZoneIndex2((*(uint *)(_stk + 0x154)) & 0xffff);
+      (*(int *)(_stk + 0x148)) = (int)cVar1;
+      if (((-1 < (*(int *)(_stk + 0x148))) && ((*(int *)(_stk + 0x148)) < 0x1e)) &&
+         ((int)(uint)*(ushort *)((longlong)((undefined8 *)(_stk + 0x108)) + (longlong)(*(int *)(_stk + 0x148)) * 2) < (*(int *)(_stk + 0x150)))) {
+        *(short *)((longlong)((undefined8 *)(_stk + 0x108)) + (longlong)(*(int *)(_stk + 0x148)) * 2) = (short)(*(int *)(_stk + 0x150));
       }
-      *(short *)(*(longlong *)_refptr_g_tsaBufTzAge + (longlong)(int)local_1c * 2) = (short)local_20
+      *(short *)(*(longlong *)_refptr_g_tsaBufTzAge + (longlong)(int)(*(uint *)(_stk + 0x154)) * 2) = (short)(*(int *)(_stk + 0x150))
       ;
     }
   }
-  local_1c = (uint)_refptr_g_tsaPrmtFlash->wBufElementCount;
-  while (local_1c = local_1c - 1, -1 < (int)local_1c) {
-    cVar1 = Sensor_GetZoneIndex2(local_1c & 0xffff);
-    local_2c = (int)cVar1;
-    if (((-1 < local_2c) && (local_2c < 0x1e)) &&
-       (*(short *)(*(longlong *)_refptr_g_tsaBufTzAge + (longlong)(int)local_1c * 2) != 0)) {
-      *(undefined2 *)((longlong)(int)local_1c * 2 + *(longlong *)_refptr_g_tsaBufTzAge) =
-           *(undefined2 *)((longlong)local_68 + (longlong)local_2c * 2);
+  (*(uint *)(_stk + 0x154)) = (uint)_refptr_g_tsaPrmtFlash->wBufElementCount;
+  while ((*(uint *)(_stk + 0x154)) = (*(uint *)(_stk + 0x154)) - 1, -1 < (int)(*(uint *)(_stk + 0x154))) {
+    cVar1 = Sensor_GetZoneIndex2((*(uint *)(_stk + 0x154)) & 0xffff);
+    (*(int *)(_stk + 0x144)) = (int)cVar1;
+    if (((-1 < (*(int *)(_stk + 0x144))) && ((*(int *)(_stk + 0x144)) < 0x1e)) &&
+       (*(short *)(*(longlong *)_refptr_g_tsaBufTzAge + (longlong)(int)(*(uint *)(_stk + 0x154)) * 2) != 0)) {
+      *(undefined2 *)((longlong)(int)(*(uint *)(_stk + 0x154)) * 2 + *(longlong *)_refptr_g_tsaBufTzAge) =
+           *(undefined2 *)((longlong)((undefined8 *)(_stk + 0x108)) + (longlong)(*(int *)(_stk + 0x144)) * 2);
     }
   }
   *(void **)&_refptr_g_tsaPrpt[1].field_0xc = (*_refptr_g_tsaStaticPtr)->pFrameBufferPtr;
@@ -209,14 +201,11 @@ void TZ_UpdatePeakTzAge(void)
 undefined8 TZ_CheckFatFingerSD(void)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x30]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x30];
   char cVar1;
   int iVar2;
   int iVar3;
-  int local_30;
-  int local_2c;
-  int local_28;
-  int local_24 [6];
-  byte local_9;
   
                     /* 0x4b4f9  2361  TZ_CheckFatFingerSD */
   cVar1 = SS_IsDim1Valid();
@@ -244,24 +233,24 @@ undefined8 TZ_CheckFatFingerSD(void)
      ((*_refptr_g_prevTouchesPtr)->nTouchCount != 0x8000)) {
     return 0;
   }
-  TZ_GetTouchZoneRange(local_24,&local_28,&local_2c,&local_30);
-  for (local_9 = 1; local_9 < (*_refptr_g_peaksPtr)->bPeakCount; local_9 = local_9 + 1) {
-    if ((((local_28 <
-           (int)(uint)(*_refptr_g_peaksPtr)[(longlong)(int)(uint)local_9 * 0x14 + 0x15].bPeakCount)
-         || ((int)(uint)(*_refptr_g_peaksPtr)[(longlong)(int)(uint)local_9 * 0x14 + 0x15].bPeakCount
-             < local_24[0])) ||
-        (local_30 <
-         (int)(uint)(*_refptr_g_peaksPtr)[(longlong)(int)(uint)local_9 * 0x14 + 0x16].bPeakCount))
-       || ((int)(uint)(*_refptr_g_peaksPtr)[(longlong)(int)(uint)local_9 * 0x14 + 0x16].bPeakCount <
-           local_2c)) {
+  TZ_GetTouchZoneRange(((int *)(_stk + 0xc)),&(*(int *)(_stk + 0x8)),&(*(int *)(_stk + 0x4)),&(*(int *)(_stk + 0x0)));
+  for ((*(byte *)(_stk + 0x27)) = 1; (*(byte *)(_stk + 0x27)) < (*_refptr_g_peaksPtr)->bPeakCount; (*(byte *)(_stk + 0x27)) = (*(byte *)(_stk + 0x27)) + 1) {
+    if (((((*(int *)(_stk + 0x8)) <
+           (int)(uint)(*_refptr_g_peaksPtr)[(longlong)(int)(uint)(*(byte *)(_stk + 0x27)) * 0x14 + 0x15].bPeakCount)
+         || ((int)(uint)(*_refptr_g_peaksPtr)[(longlong)(int)(uint)(*(byte *)(_stk + 0x27)) * 0x14 + 0x15].bPeakCount
+             < ((int *)(_stk + 0xc))[0])) ||
+        ((*(int *)(_stk + 0x0)) <
+         (int)(uint)(*_refptr_g_peaksPtr)[(longlong)(int)(uint)(*(byte *)(_stk + 0x27)) * 0x14 + 0x16].bPeakCount))
+       || ((int)(uint)(*_refptr_g_peaksPtr)[(longlong)(int)(uint)(*(byte *)(_stk + 0x27)) * 0x14 + 0x16].bPeakCount <
+           (*(int *)(_stk + 0x4)))) {
       return 0;
     }
   }
-  iVar2 = (local_28 - local_24[0]) + 1;
+  iVar2 = ((*(int *)(_stk + 0x8)) - ((int *)(_stk + 0xc))[0]) + 1;
   if ((iVar2 < 4) || (10 < iVar2)) {
     return 0;
   }
-  iVar3 = (local_30 - local_2c) + 1;
+  iVar3 = ((*(int *)(_stk + 0x0)) - (*(int *)(_stk + 0x4))) + 1;
   if ((3 < iVar3) && (iVar3 < 0xb)) {
     if ((0xf < iVar2 * iVar3) && (iVar2 * iVar3 < 0x52)) {
       return 1;
@@ -783,32 +772,31 @@ void TZ_GetGripRatio(longlong param_1)
 void TZ_PeakBasedTraversalSimple(undefined8 param_1,short param_2,byte param_3,byte param_4)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0xe8]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0xf0];
   char cVar1;
-  undefined1 local_e8 [214];
-  ushort local_12;
-  longlong local_10;
   
                     /* 0x49b60  2434  TZ_PeakBasedTraversalSimple */
   if (3 < (byte)*_refptr_g_tsaLogLoglevel) {
     StrPrintf_Process(0,&_rdata,"TZ_PeakBasedTraversalSimple");
   }
-  local_10 = *(longlong *)_refptr_g_tzAccess;
-  PosnSpecial_Init(local_e8,100);
+  (*(longlong *)(_stk + 0xe0)) = *(longlong *)_refptr_g_tzAccess;
+  PosnSpecial_Init(((undefined1 *)(_stk + 0x8)),100);
   TZ_UnitMaxMinInit(param_1,(int)param_2);
   PosnSpecial_Put((ushort)param_3 + (ushort)param_4 * (ushort)_refptr_g_tsaPrmtFlash->bCols);
   while( true ) {
     cVar1 = PosnSpecial_IsEmpty();
     if (cVar1 != '\0') break;
     PosnSpecial_ReBase();
-    local_12 = PosnSpecial_Get();
-    TZ_TraversalNeighborSimple(param_1,local_12,local_10,(int)param_2);
-    if (*(short *)(*(longlong *)_refptr_g_tsaBufDif + (ulonglong)local_12 * 2) < 0) {
+    (*(ushort *)(_stk + 0xde)) = PosnSpecial_Get();
+    TZ_TraversalNeighborSimple(param_1,(*(ushort *)(_stk + 0xde)),(*(longlong *)(_stk + 0xe0)),(int)param_2);
+    if (*(short *)(*(longlong *)_refptr_g_tsaBufDif + (ulonglong)(*(ushort *)(_stk + 0xde)) * 2) < 0) {
       cVar1 = -1;
     }
     else {
       cVar1 = '\x01';
     }
-    *(char *)((ulonglong)local_12 + local_10) =
+    *(char *)((ulonglong)(*(ushort *)(_stk + 0xde)) + (*(longlong *)(_stk + 0xe0))) =
          (*(char *)(*(longlong *)_refptr_g_ptrAccess + 9) + '\x05') * cVar1;
   }
   return;
@@ -871,53 +859,46 @@ LAB_6ba8a9f1:
 void TZ_PeakBasedTraversal(longlong param_1,short param_2,byte param_3,byte param_4)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0xe8]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0xf0];
   byte bVar1;
   char cVar2;
   int iVar3;
   undefined8 in_stack_fffffffffffffef8;
   undefined4 uVar4;
-  undefined1 local_e8 [200];
-  short local_20;
-  ushort local_1e;
-  short local_1c;
-  short local_1a;
-  undefined2 local_18;
-  short local_16;
-  int local_14;
-  longlong local_10;
   
                     /* 0x49162  2433  TZ_PeakBasedTraversal */
   if (3 < (byte)*_refptr_g_tsaLogLoglevel) {
     StrPrintf_Process(0,&_rdata,"TZ_PeakBasedTraversal");
   }
-  local_10 = *(longlong *)_refptr_g_tzAccess;
-  local_14 = memset_s(_refptr_g_tsaBufSelf + 0x1400,0x280,0,0x280);
-  if (local_14 != 0) {
+  (*(longlong *)(_stk + 0xe0)) = *(longlong *)_refptr_g_tzAccess;
+  (*(int *)(_stk + 0xdc)) = memset_s(_refptr_g_tsaBufSelf + 0x1400,0x280,0,0x280);
+  if ((*(int *)(_stk + 0xdc)) != 0) {
     in_stack_fffffffffffffef8 = 0;
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
                       "../../src/Alg/TouchZone/TZ_PeakBasedTraversal.c",0x563,"rc == EOK");
     HardwareAnalyzer_SetSoftException();
   }
-  local_14 = memset_s(_refptr_g_tsaBufSelf + 0x1900,0x280,0,0x280);
-  if (local_14 != 0) {
+  (*(int *)(_stk + 0xdc)) = memset_s(_refptr_g_tsaBufSelf + 0x1900,0x280,0,0x280);
+  if ((*(int *)(_stk + 0xdc)) != 0) {
     in_stack_fffffffffffffef8 = 0;
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
                       "../../src/Alg/TouchZone/TZ_PeakBasedTraversal.c",0x566,"rc == EOK");
     HardwareAnalyzer_SetSoftException();
   }
-  PosnSpecial_Init(local_e8,100);
+  PosnSpecial_Init(((undefined1 *)(_stk + 0x8)),100);
   TZ_UnitMaxMinInit(param_1,(int)param_2);
   memset_s(g_tzBuffer,(ulonglong)*(ushort *)_refptr_g_gridBufSize * 2,0,
            (ulonglong)_refptr_g_tsaPrmtFlash->wBufElementCount * 2);
-  local_16 = *(short *)((ulonglong)
+  (*(short *)(_stk + 0xda)) = *(short *)((ulonglong)
                         ((uint)param_3 + (uint)param_4 * (uint)_refptr_g_tsaPrmtFlash->bCols &
                         0xffff) * 2 + *(longlong *)_refptr_g_tsaBufDif);
-  local_18 = *(undefined2 *)
+  (*(undefined2 *)(_stk + 0xd8)) = *(undefined2 *)
               ((ulonglong)
                ((uint)param_3 + (uint)param_4 * (uint)_refptr_g_tsaPrmtFlash->bCols & 0xffff) * 2 +
               *(longlong *)_refptr_g_tsaBufTzAge);
-  local_1a = TZ_GetEdgeSigThold((int)local_16,(int)param_2);
-  local_1c = _refptr_g_tsaPrpt->nSPeakPositive / 2;
+  (*(short *)(_stk + 0xd6)) = TZ_GetEdgeSigThold((int)(*(short *)(_stk + 0xda)),(int)param_2);
+  (*(short *)(_stk + 0xd4)) = _refptr_g_tsaPrpt->nSPeakPositive / 2;
   PosnSpecial_Put((ushort)param_3 + (ushort)param_4 * (ushort)_refptr_g_tsaPrmtFlash->bCols);
 LAB_6ba89671:
   do {
@@ -929,63 +910,63 @@ LAB_6ba89671:
         return;
       }
       PosnSpecial_ReBase();
-      local_1e = PosnSpecial_Get();
-      in_stack_fffffffffffffef8 = CONCAT44(uVar4,(int)local_1a);
+      (*(ushort *)(_stk + 0xd2)) = PosnSpecial_Get();
+      in_stack_fffffffffffffef8 = CONCAT44(uVar4,(int)(*(short *)(_stk + 0xd6)));
       TZ_TraversalNeighbor
-                (param_1,local_1e,local_10,(int)param_2,in_stack_fffffffffffffef8,(int)local_1c,
-                 local_18);
-      local_20 = *(short *)(*(longlong *)_refptr_g_tsaBufDif + (ulonglong)local_1e * 2);
+                (param_1,(*(ushort *)(_stk + 0xd2)),(*(longlong *)(_stk + 0xe0)),(int)param_2,in_stack_fffffffffffffef8,(int)(*(short *)(_stk + 0xd4)),
+                 (*(undefined2 *)(_stk + 0xd8)));
+      (*(short *)(_stk + 0xd0)) = *(short *)(*(longlong *)_refptr_g_tsaBufDif + (ulonglong)(*(ushort *)(_stk + 0xd2)) * 2);
       bVar1 = PosnSpecial_GetNumSignChange();
       if (2 < bVar1) {
         *(short *)(param_1 + 0x358) = *(short *)(param_1 + 0x358) + 1;
       }
       cVar2 = PosnSpecial_GetNumValidSensor();
       if (cVar2 != '\x04') break;
-      if (*(short *)(*(longlong *)_refptr_g_tsaBufDif + (ulonglong)local_1e * 2) < 0) {
+      if (*(short *)(*(longlong *)_refptr_g_tsaBufDif + (ulonglong)(*(ushort *)(_stk + 0xd2)) * 2) < 0) {
         cVar2 = -1;
       }
       else {
         cVar2 = '\x01';
       }
-      *(char *)((ulonglong)local_1e + local_10) =
+      *(char *)((ulonglong)(*(ushort *)(_stk + 0xd2)) + (*(longlong *)(_stk + 0xe0))) =
            (*(char *)(*(longlong *)_refptr_g_ptrAccess + 9) + '\x06') * cVar2;
     }
     bVar1 = PosnSpecial_GetNumEdgeSensor();
-    if ((bVar1 < 2) && (param_2 <= local_20)) {
+    if ((bVar1 < 2) && (param_2 <= (*(short *)(_stk + 0xd0)))) {
       iVar3 = PosnSpecial_GetSumEdgeSensor();
-      if (iVar3 < local_20 * 2) {
-        if (*(short *)(*(longlong *)_refptr_g_tsaBufDif + (ulonglong)local_1e * 2) < 0) {
+      if (iVar3 < (*(short *)(_stk + 0xd0)) * 2) {
+        if (*(short *)(*(longlong *)_refptr_g_tsaBufDif + (ulonglong)(*(ushort *)(_stk + 0xd2)) * 2) < 0) {
           cVar2 = -1;
         }
         else {
           cVar2 = '\x01';
         }
-        *(char *)((ulonglong)local_1e + local_10) =
+        *(char *)((ulonglong)(*(ushort *)(_stk + 0xd2)) + (*(longlong *)(_stk + 0xe0))) =
              (*(char *)(*(longlong *)_refptr_g_ptrAccess + 9) + '\x03') * cVar2;
         *(short *)(param_1 + 0x35a) = *(short *)(param_1 + 0x35a) + 1;
         goto LAB_6ba89671;
       }
     }
-    if (local_20 < local_1c) {
-      if (local_1a <= local_20) {
-        if (*(short *)(*(longlong *)_refptr_g_tsaBufDif + (ulonglong)local_1e * 2) < 0) {
+    if ((*(short *)(_stk + 0xd0)) < (*(short *)(_stk + 0xd4))) {
+      if ((*(short *)(_stk + 0xd6)) <= (*(short *)(_stk + 0xd0))) {
+        if (*(short *)(*(longlong *)_refptr_g_tsaBufDif + (ulonglong)(*(ushort *)(_stk + 0xd2)) * 2) < 0) {
           cVar2 = -1;
         }
         else {
           cVar2 = '\x01';
         }
-        *(char *)((ulonglong)local_1e + local_10) =
+        *(char *)((ulonglong)(*(ushort *)(_stk + 0xd2)) + (*(longlong *)(_stk + 0xe0))) =
              (*(char *)(*(longlong *)_refptr_g_ptrAccess + 9) + '\x04') * cVar2;
       }
     }
     else {
-      if (*(short *)(*(longlong *)_refptr_g_tsaBufDif + (ulonglong)local_1e * 2) < 0) {
+      if (*(short *)(*(longlong *)_refptr_g_tsaBufDif + (ulonglong)(*(ushort *)(_stk + 0xd2)) * 2) < 0) {
         cVar2 = -1;
       }
       else {
         cVar2 = '\x01';
       }
-      *(char *)((ulonglong)local_1e + local_10) =
+      *(char *)((ulonglong)(*(ushort *)(_stk + 0xd2)) + (*(longlong *)(_stk + 0xe0))) =
            (*(char *)(*(longlong *)_refptr_g_ptrAccess + 9) + '\x05') * cVar2;
     }
   } while( true );
@@ -2246,38 +2227,36 @@ void TZ_CentroidEdgeFlag(longlong param_1,byte param_2)
 void TZ_UpdateGripRatio(byte param_1,longlong param_2)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x24]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x30];
   longlong lVar1;
   undefined1 uVar2;
-  undefined4 local_24;
-  undefined4 local_20;
-  ushort local_1c;
-  ushort local_1a;
   
   lVar1 = *(longlong *)_refptr_g_touchesPtr;
-  uVar2 = TZ_CalcGripRatio(*(undefined4 *)(_refptr_g_tsaPrmtDynamic + 0x84),param_2,&local_24,
+  uVar2 = TZ_CalcGripRatio(*(undefined4 *)(_refptr_g_tsaPrmtDynamic + 0x84),param_2,&(*(undefined4 *)(_stk + 0xc)),
                            *(undefined1 *)(param_2 + 0x334),*(undefined1 *)(param_2 + 0x335));
   *(undefined1 *)((longlong)(int)(uint)param_1 * 0x168 + lVar1 + 0x1c8) = uVar2;
-  local_1a = (ushort)*(byte *)(param_2 + 0x334);
-  local_1c = (ushort)*(byte *)(param_2 + 0x335);
+  (*(ushort *)(_stk + 0x16)) = (ushort)*(byte *)(param_2 + 0x334);
+  (*(ushort *)(_stk + 0x14)) = (ushort)*(byte *)(param_2 + 0x335);
   if (*(short *)(param_2 + 0x2dc) <=
       *(short *)(*_refptr_g_peaksPtr + (longlong)(int)(uint)*(byte *)(param_2 + 0x2b6) * 0x14 + 0x18
                 ) / 2) {
-    local_1a = 0;
+    (*(ushort *)(_stk + 0x16)) = 0;
   }
   if (*(short *)(param_2 + 0x2e0) <=
       *(short *)(*_refptr_g_peaksPtr + (longlong)(int)(uint)*(byte *)(param_2 + 0x2b6) * 0x14 + 0x18
                 ) / 2) {
-    local_1c = 0;
+    (*(ushort *)(_stk + 0x14)) = 0;
   }
-  local_20 = 0xc;
+  (*(undefined4 *)(_stk + 0x10)) = 0xc;
   if (((*_refptr_g_tsaStaticPtr)->dwSystemFlags & 0x80) != 0) {
-    local_20 = 0xf;
+    (*(undefined4 *)(_stk + 0x10)) = 0xf;
   }
   lVar1 = *(longlong *)_refptr_g_touchesPtr;
-  uVar2 = TZ_CalcGripRatio(local_20,param_2,&local_24,local_1a,local_1c);
+  uVar2 = TZ_CalcGripRatio((*(undefined4 *)(_stk + 0x10)),param_2,&(*(undefined4 *)(_stk + 0xc)),(*(ushort *)(_stk + 0x16)),(*(ushort *)(_stk + 0x14)));
   *(undefined1 *)((longlong)(int)(uint)param_1 * 0x168 + lVar1 + 0x198) = uVar2;
   *(undefined4 *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x1c4)
-       = local_24;
+       = (*(undefined4 *)(_stk + 0xc));
   return;
 }
 
@@ -3865,27 +3844,24 @@ void TZ_GetPeakGripFlag(longlong param_1)
 undefined1 TZ_TryMergePeak(undefined8 param_1)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x18]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x20];
   char cVar1;
-  undefined2 local_18;
-  undefined1 local_16;
-  undefined1 local_15;
-  undefined1 local_a;
-  char local_9;
   
                     /* 0x44d81  2448  TZ_TryMergePeak */
-  local_9 = '\0';
-  local_16 = 0;
-  local_15 = 0;
-  local_18 = 0;
-  cVar1 = TZ_SearchMergePeak(param_1,&local_18);
+  (*(char *)(_stk + 0x17)) = '\0';
+  (*(undefined1 *)(_stk + 0xa)) = 0;
+  (*(undefined1 *)(_stk + 0xb)) = 0;
+  (*(undefined2 *)(_stk + 0x8)) = 0;
+  cVar1 = TZ_SearchMergePeak(param_1,&(*(undefined2 *)(_stk + 0x8)));
   if (cVar1 != '\0') {
-    local_9 = '\x01';
+    (*(char *)(_stk + 0x17)) = '\x01';
   }
-  local_a = 0;
-  if (local_9 != '\0') {
-    local_a = TZ_InsertVirtualPeak(param_1,local_16,local_15);
+  (*(undefined1 *)(_stk + 0x16)) = 0;
+  if ((*(char *)(_stk + 0x17)) != '\0') {
+    (*(undefined1 *)(_stk + 0x16)) = TZ_InsertVirtualPeak(param_1,(*(undefined1 *)(_stk + 0xa)),(*(undefined1 *)(_stk + 0xb)));
   }
-  return local_a;
+  return (*(undefined1 *)(_stk + 0x16));
 }
 
 
@@ -4255,26 +4231,24 @@ undefined2 TZ_GetEllipseRate(longlong param_1)
 undefined2 TZ_GetEllipseRateMirror(longlong param_1)
 
 {
-  short local_2a;
-  int local_28 [6];
-  uint local_10;
-  undefined2 local_a;
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x2a]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x30];
   
-  local_28[0] = 0;
-  local_28[1] = 0;
-  local_28[2] = 0;
-  local_28[3] = 0;
-  TZ_CalcEdgeCount(param_1,local_28,4);
-  local_10 = TZ_GetMaxEdgeType(local_28,4);
-  local_a = *(undefined2 *)(param_1 + 0x2aa);
-  if (local_28[local_10] != 0) {
+  ((int *)(_stk + 0x8))[0] = 0;
+  ((int *)(_stk + 0x8))[1] = 0;
+  ((int *)(_stk + 0x8))[2] = 0;
+  ((int *)(_stk + 0x8))[3] = 0;
+  TZ_CalcEdgeCount(param_1,((int *)(_stk + 0x8)),4);
+  (*(uint *)(_stk + 0x20)) = TZ_GetMaxEdgeType(((int *)(_stk + 0x8)),4);
+  (*(undefined2 *)(_stk + 0x26)) = *(undefined2 *)(param_1 + 0x2aa);
+  if (((int *)(_stk + 0x8))[(*(uint *)(_stk + 0x20))] != 0) {
     TZ_CopyEdgeDot(&edgeDot_11595,param_1);
-    local_2a = *(short *)(param_1 + 0x2a6);
-    TZ_RemoveEdgeDot(&edgeDot_11595,&local_2a,local_10);
-    TZ_MirrorEdgeDot(&edgeDot_11595,&local_2a,local_10);
-    local_a = TZ_GetERInernal(&edgeDot_11595,(int)local_2a);
+    (*(short *)(_stk + 0x6)) = *(short *)(param_1 + 0x2a6);
+    TZ_RemoveEdgeDot(&edgeDot_11595,&(*(short *)(_stk + 0x6)),(*(uint *)(_stk + 0x20)));
+    TZ_MirrorEdgeDot(&edgeDot_11595,&(*(short *)(_stk + 0x6)),(*(uint *)(_stk + 0x20)));
+    (*(undefined2 *)(_stk + 0x26)) = TZ_GetERInernal(&edgeDot_11595,(int)(*(short *)(_stk + 0x6)));
   }
-  return local_a;
+  return (*(undefined2 *)(_stk + 0x26));
 }
 
 
@@ -4373,38 +4347,30 @@ undefined1 TZ_IsVirtualPeakAllowed(longlong param_1)
 undefined1 TZ_TryInsertVPA(longlong param_1)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x18]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x20];
   char cVar1;
-  undefined2 local_18;
-  undefined1 local_16;
-  undefined1 local_15;
-  uchar local_11;
-  uchar local_10;
-  char local_f;
-  short local_e;
-  undefined1 local_b;
-  byte local_a;
-  char local_9;
   
                     /* 0x4d6c4  2447  TZ_TryInsertVPA */
-  local_16 = 0;
-  local_15 = 0;
-  local_18 = 0;
-  local_e = TZ_GetSigTholdForVPA(param_1);
-  local_9 = '\0';
-  for (local_a = 0; local_a < *(byte *)(param_1 + 0x2b2); local_a = local_a + 1) {
-    local_f = *(char *)(param_1 + 0x2b9 + (longlong)(int)(uint)local_a);
-    local_10 = (*_refptr_g_peaksPtr)[(longlong)(int)local_f * 0x14 + 0x15].bPeakCount;
-    local_11 = (*_refptr_g_peaksPtr)[(longlong)(int)local_f * 0x14 + 0x16].bPeakCount;
-    cVar1 = TZ_SearchNxN(local_10,local_11,(int)local_e,&local_18);
+  (*(undefined1 *)(_stk + 0xa)) = 0;
+  (*(undefined1 *)(_stk + 0xb)) = 0;
+  (*(undefined2 *)(_stk + 0x8)) = 0;
+  (*(short *)(_stk + 0x12)) = TZ_GetSigTholdForVPA(param_1);
+  (*(char *)(_stk + 0x17)) = '\0';
+  for ((*(byte *)(_stk + 0x16)) = 0; (*(byte *)(_stk + 0x16)) < *(byte *)(param_1 + 0x2b2); (*(byte *)(_stk + 0x16)) = (*(byte *)(_stk + 0x16)) + 1) {
+    (*(char *)(_stk + 0x11)) = *(char *)(param_1 + 0x2b9 + (longlong)(int)(uint)(*(byte *)(_stk + 0x16)));
+    (*(uchar *)(_stk + 0x10)) = (*_refptr_g_peaksPtr)[(longlong)(int)(*(char *)(_stk + 0x11)) * 0x14 + 0x15].bPeakCount;
+    (*(uchar *)(_stk + 0xf)) = (*_refptr_g_peaksPtr)[(longlong)(int)(*(char *)(_stk + 0x11)) * 0x14 + 0x16].bPeakCount;
+    cVar1 = TZ_SearchNxN((*(uchar *)(_stk + 0x10)),(*(uchar *)(_stk + 0xf)),(int)(*(short *)(_stk + 0x12)),&(*(undefined2 *)(_stk + 0x8)));
     if (cVar1 != '\0') {
-      local_9 = '\x01';
+      (*(char *)(_stk + 0x17)) = '\x01';
     }
   }
-  local_b = 0;
-  if (local_9 != '\0') {
-    local_b = TZ_InsertVirtualPeak(param_1,local_16,local_15);
+  (*(undefined1 *)(_stk + 0x15)) = 0;
+  if ((*(char *)(_stk + 0x17)) != '\0') {
+    (*(undefined1 *)(_stk + 0x15)) = TZ_InsertVirtualPeak(param_1,(*(undefined1 *)(_stk + 0xa)),(*(undefined1 *)(_stk + 0xb)));
   }
-  return local_b;
+  return (*(undefined1 *)(_stk + 0x15));
 }
 
 
@@ -4983,67 +4949,53 @@ undefined8 TZ_IsPeakInGrip(byte param_1)
 char TZ_SearchMergePeak(longlong param_1,short *param_2)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x1e]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x20];
   char cVar1;
-  char local_1e;
-  char local_1d;
-  char local_1c;
-  char local_1b;
-  short local_1a;
-  ushort local_18;
-  byte local_15;
-  byte local_14;
-  char local_13;
-  ushort local_12;
-  byte local_10;
-  byte local_f;
-  char local_e;
-  char local_d;
-  short local_c;
-  char local_9;
   
   if ((*(uint *)(param_1 + 4) & 0x400000) == 0) {
     if (((*(uint *)(param_1 + 4) & 0x400000) == 0) && ((*(uint *)(param_1 + 4) & 0x800000) == 0)) {
-      local_9 = '\0';
+      (*(char *)(_stk + 0x17)) = '\0';
     }
     else {
-      local_9 = '\0';
-      local_f = (byte)((ushort)*(undefined2 *)(param_1 + 0x2ae) >> 8);
-      local_10 = (byte)((ushort)*(undefined2 *)(param_1 + 0x2b0) >> 8);
-      local_12 = (ushort)local_f + (ushort)local_10 * (ushort)_refptr_g_tsaPrmtFlash->bCols;
-      local_13 = (*(uint *)(param_1 + 4) & 0x400000) == 0;
-      local_c = TZ_GetSigTholdForMergePeak(param_1);
-      if (local_13 != '\0') {
-        local_c = GripFilter_GetTrackingThold();
+      (*(char *)(_stk + 0x17)) = '\0';
+      (*(byte *)(_stk + 0x11)) = (byte)((ushort)*(undefined2 *)(param_1 + 0x2ae) >> 8);
+      (*(byte *)(_stk + 0x10)) = (byte)((ushort)*(undefined2 *)(param_1 + 0x2b0) >> 8);
+      (*(ushort *)(_stk + 0xe)) = (ushort)(*(byte *)(_stk + 0x11)) + (ushort)(*(byte *)(_stk + 0x10)) * (ushort)_refptr_g_tsaPrmtFlash->bCols;
+      (*(char *)(_stk + 0xd)) = (*(uint *)(param_1 + 4) & 0x400000) == 0;
+      (*(short *)(_stk + 0x14)) = TZ_GetSigTholdForMergePeak(param_1);
+      if ((*(char *)(_stk + 0xd)) != '\0') {
+        (*(short *)(_stk + 0x14)) = GripFilter_GetTrackingThold();
       }
-      TZ_GetSearchRange(param_1,local_13,&local_1b,&local_1c,&local_1d,&local_1e);
-      for (local_d = local_1b; local_d <= local_1c; local_d = local_d + '\x01') {
-        for (local_e = local_1d; local_e <= local_1e; local_e = local_e + '\x01') {
-          local_14 = local_f + local_d;
-          local_15 = local_10 + local_e;
-          if (((local_14 < _refptr_g_tsaPrmtFlash->bCols) &&
-              (local_15 < _refptr_g_tsaPrmtFlash->bRows)) &&
-             (local_18 = (short)(char)local_14 +
-                         (short)(char)local_15 * (ushort)_refptr_g_tsaPrmtFlash->bCols,
-             local_c <= *(short *)(*(longlong *)_refptr_g_tsaBufDif + (ulonglong)local_18 * 2))) {
-            if (local_13 == '\0') {
-              if (((*(char *)((ulonglong)local_18 + *(longlong *)_refptr_g_tsaBufGripStage) !=
+      TZ_GetSearchRange(param_1,(*(char *)(_stk + 0xd)),&(*(char *)(_stk + 0x5)),&(*(char *)(_stk + 0x4)),&(*(char *)(_stk + 0x3)),&(*(char *)(_stk + 0x2)));
+      for ((*(char *)(_stk + 0x13)) = (*(char *)(_stk + 0x5)); (*(char *)(_stk + 0x13)) <= (*(char *)(_stk + 0x4)); (*(char *)(_stk + 0x13)) = (*(char *)(_stk + 0x13)) + '\x01') {
+        for ((*(char *)(_stk + 0x12)) = (*(char *)(_stk + 0x3)); (*(char *)(_stk + 0x12)) <= (*(char *)(_stk + 0x2)); (*(char *)(_stk + 0x12)) = (*(char *)(_stk + 0x12)) + '\x01') {
+          (*(byte *)(_stk + 0xc)) = (*(byte *)(_stk + 0x11)) + (*(char *)(_stk + 0x13));
+          (*(byte *)(_stk + 0xb)) = (*(byte *)(_stk + 0x10)) + (*(char *)(_stk + 0x12));
+          if ((((*(byte *)(_stk + 0xc)) < _refptr_g_tsaPrmtFlash->bCols) &&
+              ((*(byte *)(_stk + 0xb)) < _refptr_g_tsaPrmtFlash->bRows)) &&
+             ((*(ushort *)(_stk + 0x8)) = (short)(char)(*(byte *)(_stk + 0xc)) +
+                         (short)(char)(*(byte *)(_stk + 0xb)) * (ushort)_refptr_g_tsaPrmtFlash->bCols,
+             (*(short *)(_stk + 0x14)) <= *(short *)(*(longlong *)_refptr_g_tsaBufDif + (ulonglong)(*(ushort *)(_stk + 0x8)) * 2))) {
+            if ((*(char *)(_stk + 0xd)) == '\0') {
+              if (((*(char *)((ulonglong)(*(ushort *)(_stk + 0x8)) + *(longlong *)_refptr_g_tsaBufGripStage) !=
                     '\x01') &&
-                  (*(char *)((ulonglong)local_18 + *(longlong *)_refptr_g_tsaBufTzZone) ==
-                   *(char *)((ulonglong)local_12 + *(longlong *)_refptr_g_tsaBufTzZone))) &&
-                 (*param_2 < *(short *)(*(longlong *)_refptr_g_tsaBufDif + (ulonglong)local_18 * 2))
+                  (*(char *)((ulonglong)(*(ushort *)(_stk + 0x8)) + *(longlong *)_refptr_g_tsaBufTzZone) ==
+                   *(char *)((ulonglong)(*(ushort *)(_stk + 0xe)) + *(longlong *)_refptr_g_tsaBufTzZone))) &&
+                 (*param_2 < *(short *)(*(longlong *)_refptr_g_tsaBufDif + (ulonglong)(*(ushort *)(_stk + 0x8)) * 2))
                  ) goto LAB_6ba84d11;
             }
-            else if ((*(char *)((ulonglong)local_18 + *(longlong *)_refptr_g_tsaBufGripStage) ==
+            else if ((*(char *)((ulonglong)(*(ushort *)(_stk + 0x8)) + *(longlong *)_refptr_g_tsaBufGripStage) ==
                       '\x01') &&
-                    ((local_1a = (ushort)*(byte *)(param_2 + 1) +
+                    (((*(short *)(_stk + 0x6)) = (ushort)*(byte *)(param_2 + 1) +
                                  (ushort)*(byte *)((longlong)param_2 + 3) *
-                                 (ushort)_refptr_g_tsaPrmtFlash->bCols, local_9 == '\0' ||
-                     (cVar1 = TZ_IsVPHighPriority(local_12,local_1a,local_18), cVar1 == '\0')))) {
+                                 (ushort)_refptr_g_tsaPrmtFlash->bCols, (*(char *)(_stk + 0x17)) == '\0' ||
+                     (cVar1 = TZ_IsVPHighPriority((*(ushort *)(_stk + 0xe)),(*(short *)(_stk + 0x6)),(*(ushort *)(_stk + 0x8))), cVar1 == '\0')))) {
 LAB_6ba84d11:
-              local_9 = '\x01';
-              *param_2 = *(short *)(*(longlong *)_refptr_g_tsaBufDif + (ulonglong)local_18 * 2);
-              *(byte *)(param_2 + 1) = local_14;
-              *(byte *)((longlong)param_2 + 3) = local_15;
+              (*(char *)(_stk + 0x17)) = '\x01';
+              *param_2 = *(short *)(*(longlong *)_refptr_g_tsaBufDif + (ulonglong)(*(ushort *)(_stk + 0x8)) * 2);
+              *(byte *)(param_2 + 1) = (*(byte *)(_stk + 0xc));
+              *(byte *)((longlong)param_2 + 3) = (*(byte *)(_stk + 0xb));
             }
           }
         }
@@ -5051,9 +5003,9 @@ LAB_6ba84d11:
     }
   }
   else {
-    local_9 = '\0';
+    (*(char *)(_stk + 0x17)) = '\0';
   }
-  return local_9;
+  return (*(char *)(_stk + 0x17));
 }
 
 
@@ -5271,69 +5223,47 @@ void TZ_PushEdgeDot(longlong param_1,undefined2 param_2,undefined2 param_3)
 undefined2 TZ_GetERInernal(longlong param_1,int param_2)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0xad]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0xb0];
   uint uVar1;
   double dVar2;
-  char local_ad;
-  ushort local_ac;
-  ushort local_aa;
-  double local_a8;
-  double local_a0;
-  double local_98;
-  undefined8 local_90;
-  undefined8 local_88;
-  undefined8 local_80;
-  double local_78;
-  double local_70;
-  double local_68;
-  double local_60;
-  double local_58;
-  double local_50;
-  double local_48;
-  double local_40;
-  double local_38;
-  double local_30;
-  double local_28;
-  undefined2 local_1e;
-  int local_1c;
-  double local_18;
-  double local_10;
   
-  TZ_CalcAxisMass(&local_a8,param_1,param_2);
-  if (local_a8 == 0.0) {
-    local_a8 = 1.0;
+  TZ_CalcAxisMass(&(*(double *)(_stk + 0x8)),param_1,param_2);
+  if ((*(double *)(_stk + 0x8)) == 0.0) {
+    (*(double *)(_stk + 0x8)) = 1.0;
   }
-  local_28 = local_a0 / local_a8;
-  local_30 = local_98 / local_a8;
-  TZ_GetAxisInternal(local_a8,local_a0,local_98,local_90,local_88,local_80,&local_aa,&local_ac,
-                     &local_ad);
-  uVar1 = (uint)local_aa;
-  local_aa = (ushort)(int)((double)uVar1 / 2.449489742783178);
-  local_ac = (ushort)(int)((double)local_ac / 2.449489742783178);
-  local_38 = ((double)(int)local_ad * 3.14159265) / 180.0;
-  local_10 = 0.0;
-  local_18 = 0.0;
-  if (local_ac == 0) {
-    local_ac = 1;
+  (*(double *)(_stk + 0x88)) = (*(double *)(_stk + 0x10)) / (*(double *)(_stk + 0x8));
+  (*(double *)(_stk + 0x80)) = (*(double *)(_stk + 0x18)) / (*(double *)(_stk + 0x8));
+  TZ_GetAxisInternal((*(double *)(_stk + 0x8)),(*(double *)(_stk + 0x10)),(*(double *)(_stk + 0x18)),(*(undefined8 *)(_stk + 0x20)),(*(undefined8 *)(_stk + 0x28)),(*(undefined8 *)(_stk + 0x30)),&(*(ushort *)(_stk + 0x6)),&(*(ushort *)(_stk + 0x4)),
+                     &(*(char *)(_stk + 0x3)));
+  uVar1 = (uint)(*(ushort *)(_stk + 0x6));
+  (*(ushort *)(_stk + 0x6)) = (ushort)(int)((double)uVar1 / 2.449489742783178);
+  (*(ushort *)(_stk + 0x4)) = (ushort)(int)((double)(*(ushort *)(_stk + 0x4)) / 2.449489742783178);
+  (*(double *)(_stk + 0x78)) = ((double)(int)(*(char *)(_stk + 0x3)) * 3.14159265) / 180.0;
+  (*(double *)(_stk + 0xa0)) = 0.0;
+  (*(double *)(_stk + 0x98)) = 0.0;
+  if ((*(ushort *)(_stk + 0x4)) == 0) {
+    (*(ushort *)(_stk + 0x4)) = 1;
   }
-  local_40 = (double)((int)((double)uVar1 / 2.449489742783178) & 0xffff) / (double)local_ac;
-  local_48 = cos(local_38);
-  local_50 = sin(local_38);
-  for (local_1c = 0; local_1c < param_2; local_1c = local_1c + 1) {
-    local_58 = (double)(int)*(short *)(param_1 + (longlong)local_1c * 4) - local_28;
-    local_60 = (double)(int)*(short *)(param_1 + (longlong)local_1c * 4 + 2) - local_30;
-    local_68 = local_58 * local_48 + local_60 * local_50;
-    local_70 = (-local_58 * local_50 + local_60 * local_48) * local_40;
-    local_78 = local_68 * local_68 + local_70 * local_70;
-    local_18 = local_18 + local_78;
-    dVar2 = sqrt(local_78);
-    local_10 = local_10 + dVar2;
+  (*(double *)(_stk + 0x70)) = (double)((int)((double)uVar1 / 2.449489742783178) & 0xffff) / (double)(*(ushort *)(_stk + 0x4));
+  (*(double *)(_stk + 0x68)) = cos((*(double *)(_stk + 0x78)));
+  (*(double *)(_stk + 0x60)) = sin((*(double *)(_stk + 0x78)));
+  for ((*(int *)(_stk + 0x94)) = 0; (*(int *)(_stk + 0x94)) < param_2; (*(int *)(_stk + 0x94)) = (*(int *)(_stk + 0x94)) + 1) {
+    (*(double *)(_stk + 0x58)) = (double)(int)*(short *)(param_1 + (longlong)(*(int *)(_stk + 0x94)) * 4) - (*(double *)(_stk + 0x88));
+    (*(double *)(_stk + 0x50)) = (double)(int)*(short *)(param_1 + (longlong)(*(int *)(_stk + 0x94)) * 4 + 2) - (*(double *)(_stk + 0x80));
+    (*(double *)(_stk + 0x48)) = (*(double *)(_stk + 0x58)) * (*(double *)(_stk + 0x68)) + (*(double *)(_stk + 0x50)) * (*(double *)(_stk + 0x60));
+    (*(double *)(_stk + 0x40)) = (-(*(double *)(_stk + 0x58)) * (*(double *)(_stk + 0x60)) + (*(double *)(_stk + 0x50)) * (*(double *)(_stk + 0x68))) * (*(double *)(_stk + 0x70));
+    (*(double *)(_stk + 0x38)) = (*(double *)(_stk + 0x48)) * (*(double *)(_stk + 0x48)) + (*(double *)(_stk + 0x40)) * (*(double *)(_stk + 0x40));
+    (*(double *)(_stk + 0x98)) = (*(double *)(_stk + 0x98)) + (*(double *)(_stk + 0x38));
+    dVar2 = sqrt((*(double *)(_stk + 0x38)));
+    (*(double *)(_stk + 0xa0)) = (*(double *)(_stk + 0xa0)) + dVar2;
   }
-  local_1e = 0;
-  if ((param_2 != 0) && (local_10 != 0.0)) {
-    dVar2 = sqrt(((double)param_2 * local_18) / (local_10 * local_10) - 1.0);
-    local_1e = (undefined2)(int)(dVar2 * 100.0);
+  (*(undefined2 *)(_stk + 0x92)) = 0;
+  if ((param_2 != 0) && ((*(double *)(_stk + 0xa0)) != 0.0)) {
+    dVar2 = sqrt(((double)param_2 * (*(double *)(_stk + 0x98))) / ((*(double *)(_stk + 0xa0)) * (*(double *)(_stk + 0xa0))) - 1.0);
+    (*(undefined2 *)(_stk + 0x92)) = (undefined2)(int)(dVar2 * 100.0);
   }
-  return local_1e;
+  return (*(undefined2 *)(_stk + 0x92));
 }
 
 
@@ -5611,25 +5541,25 @@ void TZ_GetExceptionRatio(longlong param_1)
 undefined2 TZ_GetAveCentSig(undefined8 param_1,char param_2,char param_3,byte param_4,uint param_5)
 
 {
-  int local_10;
-  byte local_b [3];
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x10]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x10];
   
-  local_b[0] = 0;
-  local_10 = 0;
-  TZ_GetCentInfo(param_1,param_2,param_3,local_b,&local_10);
+  ((byte *)(_stk + 0x5))[0] = 0;
+  (*(int *)(_stk + 0x0)) = 0;
+  TZ_GetCentInfo(param_1,param_2,param_3,((byte *)(_stk + 0x5)),&(*(int *)(_stk + 0x0)));
   if ((param_4 & 1) != 0) {
-    TZ_GetCentInfo(param_1,param_2 + '\x01',param_3,local_b,&local_10);
+    TZ_GetCentInfo(param_1,param_2 + '\x01',param_3,((byte *)(_stk + 0x5)),&(*(int *)(_stk + 0x0)));
   }
   if ((param_5 & 1) != 0) {
-    TZ_GetCentInfo(param_1,param_2,param_3 + '\x01',local_b,&local_10);
+    TZ_GetCentInfo(param_1,param_2,param_3 + '\x01',((byte *)(_stk + 0x5)),&(*(int *)(_stk + 0x0)));
   }
   if (((param_5 & 1) != 0) && ((param_4 & 1) != 0)) {
-    TZ_GetCentInfo(param_1,param_2 + '\x01',param_3 + '\x01',local_b,&local_10);
+    TZ_GetCentInfo(param_1,param_2 + '\x01',param_3 + '\x01',((byte *)(_stk + 0x5)),&(*(int *)(_stk + 0x0)));
   }
-  if (local_b[0] == 0) {
-    local_b[0] = 1;
+  if (((byte *)(_stk + 0x5))[0] == 0) {
+    ((byte *)(_stk + 0x5))[0] = 1;
   }
-  return (short)(local_10 / (int)(uint)local_b[0]);
+  return (short)((*(int *)(_stk + 0x0)) / (int)(uint)((byte *)(_stk + 0x5))[0]);
 }
 
 
@@ -5714,53 +5644,44 @@ void TZ_TryExtraMergePeak(longlong param_1,undefined1 param_2,undefined1 param_3
 undefined8 TZ_PeakFilterOnce(void *param_1)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x388]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x390];
   byte bVar1;
-  undefined1 local_388 [50];
-  byte local_356;
-  undefined1 local_d6;
-  byte local_d1;
-  byte local_cf;
-  byte local_ce;
-  byte local_a0;
-  byte local_c;
-  byte local_b;
-  byte local_a;
-  byte local_9;
   
                     /* 0x49cc0  2436  TZ_PeakFilterOnce */
   if (2 < *(byte *)((longlong)param_1 + 0x2b2)) {
-    memcpy(local_388,param_1,0x370);
-    for (local_9 = 0; (int)(uint)local_9 < (int)(*(byte *)((longlong)param_1 + 0x2b2) - 1);
-        local_9 = local_9 + 1) {
-      local_b = *(byte *)((longlong)param_1 + (longlong)(int)(uint)local_9 + 0x2b9);
-      local_a = local_9;
-      while (local_a = local_a + 1, local_a < *(byte *)((longlong)param_1 + 0x2b2)) {
-        local_c = *(byte *)((longlong)param_1 + (longlong)(int)(uint)local_a + 0x2b9);
-        bVar1 = Peak_GetDistance(local_b,local_c);
+    memcpy(((undefined1 *)(_stk + 0x8)),param_1,0x370);
+    for ((*(byte *)(_stk + 0x387)) = 0; (int)(uint)(*(byte *)(_stk + 0x387)) < (int)(*(byte *)((longlong)param_1 + 0x2b2) - 1);
+        (*(byte *)(_stk + 0x387)) = (*(byte *)(_stk + 0x387)) + 1) {
+      (*(byte *)(_stk + 0x385)) = *(byte *)((longlong)param_1 + (longlong)(int)(uint)(*(byte *)(_stk + 0x387)) + 0x2b9);
+      (*(byte *)(_stk + 0x386)) = (*(byte *)(_stk + 0x387));
+      while ((*(byte *)(_stk + 0x386)) = (*(byte *)(_stk + 0x386)) + 1, (*(byte *)(_stk + 0x386)) < *(byte *)((longlong)param_1 + 0x2b2)) {
+        (*(byte *)(_stk + 0x384)) = *(byte *)((longlong)param_1 + (longlong)(int)(uint)(*(byte *)(_stk + 0x386)) + 0x2b9);
+        bVar1 = Peak_GetDistance((*(byte *)(_stk + 0x385)),(*(byte *)(_stk + 0x384)));
         if (bVar1 < 3) {
-          local_d6 = 2;
-          local_cf = local_b;
-          local_ce = local_c;
-          if (*(short *)(*_refptr_g_peaksPtr + (longlong)(int)(uint)local_b * 0x14 + 0x18) <
-              *(short *)(*_refptr_g_peaksPtr + (longlong)(int)(uint)local_c * 0x14 + 0x18)) {
-            local_d1 = local_b;
+          (*(undefined1 *)(_stk + 0x2ba)) = 2;
+          (*(byte *)(_stk + 0x2c1)) = (*(byte *)(_stk + 0x385));
+          (*(byte *)(_stk + 0x2c2)) = (*(byte *)(_stk + 0x384));
+          if (*(short *)(*_refptr_g_peaksPtr + (longlong)(int)(uint)(*(byte *)(_stk + 0x385)) * 0x14 + 0x18) <
+              *(short *)(*_refptr_g_peaksPtr + (longlong)(int)(uint)(*(byte *)(_stk + 0x384)) * 0x14 + 0x18)) {
+            (*(byte *)(_stk + 0x2bf)) = (*(byte *)(_stk + 0x385));
           }
           else {
-            local_d1 = local_c;
+            (*(byte *)(_stk + 0x2bf)) = (*(byte *)(_stk + 0x384));
           }
-          TZ_GetDFSPrpt(local_388);
-          if (((byte)_refptr_g_tsaPrmtFlash->field_0x832 < local_a0) && (0x30 < local_356)) {
-            if (((*_refptr_g_peaksPtr)[(longlong)(int)(uint)local_b * 0x14 + 0x14].bPeakCount ==
+          TZ_GetDFSPrpt(((undefined1 *)(_stk + 0x8)));
+          if (((byte)_refptr_g_tsaPrmtFlash->field_0x832 < (*(byte *)(_stk + 0x2f0))) && (0x30 < (*(byte *)(_stk + 0x3a)))) {
+            if (((*_refptr_g_peaksPtr)[(longlong)(int)(uint)(*(byte *)(_stk + 0x385)) * 0x14 + 0x14].bPeakCount ==
                  '\0') &&
-               ((*_refptr_g_peaksPtr)[(longlong)(int)(uint)local_c * 0x14 + 0x14].bPeakCount !=
+               ((*_refptr_g_peaksPtr)[(longlong)(int)(uint)(*(byte *)(_stk + 0x384)) * 0x14 + 0x14].bPeakCount !=
                 '\x14')) {
-              (*_refptr_g_peaksPtr)[(longlong)(int)(uint)local_b * 0x14 + 0x14].bPeakCount =
-                   (*_refptr_g_peaksPtr)[(longlong)(int)(uint)local_c * 0x14 + 0x14].bPeakCount;
+              (*_refptr_g_peaksPtr)[(longlong)(int)(uint)(*(byte *)(_stk + 0x385)) * 0x14 + 0x14].bPeakCount =
+                   (*_refptr_g_peaksPtr)[(longlong)(int)(uint)(*(byte *)(_stk + 0x384)) * 0x14 + 0x14].bPeakCount;
             }
-            for (; (int)(uint)local_a < (int)(*(byte *)((longlong)param_1 + 0x2b2) - 1);
-                local_a = local_a + 1) {
-              *(undefined1 *)((longlong)param_1 + (longlong)(int)(uint)local_a + 0x2b9) =
-                   *(undefined1 *)((longlong)param_1 + (longlong)(int)(local_a + 1) + 0x2b9);
+            for (; (int)(uint)(*(byte *)(_stk + 0x386)) < (int)(*(byte *)((longlong)param_1 + 0x2b2) - 1);
+                (*(byte *)(_stk + 0x386)) = (*(byte *)(_stk + 0x386)) + 1) {
+              *(undefined1 *)((longlong)param_1 + (longlong)(int)(uint)(*(byte *)(_stk + 0x386)) + 0x2b9) =
+                   *(undefined1 *)((longlong)param_1 + (longlong)(int)((*(byte *)(_stk + 0x386)) + 1) + 0x2b9);
             }
             *(char *)((longlong)param_1 + 0x2b2) = *(char *)((longlong)param_1 + 0x2b2) + -1;
             return 1;
@@ -5804,51 +5725,49 @@ bool TZ_IsAbsFFRatio(byte param_1)
 void TZ_GetDFSPrpt(longlong param_1)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x12]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x20];
   short sVar1;
   undefined1 uVar2;
-  undefined1 local_12;
-  undefined1 local_11;
-  int local_10;
-  int local_c;
   
                     /* 0x430c5  2375  TZ_GetDFSPrpt */
-  local_c = 0;
+  (*(int *)(_stk + 0x14)) = 0;
   if (*(char *)(param_1 + 0x2b2) != '\0') {
-    local_c = *(int *)(param_1 + 0x18) / (int)(uint)*(byte *)(param_1 + 0x2b2);
+    (*(int *)(_stk + 0x14)) = *(int *)(param_1 + 0x18) / (int)(uint)*(byte *)(param_1 + 0x2b2);
   }
-  local_c = local_c << 4;
+  (*(int *)(_stk + 0x14)) = (*(int *)(_stk + 0x14)) << 4;
   if ((*(uint *)(param_1 + 4) & 0x100) == 0) {
-    local_c = local_c / (int)*(short *)_refptr_g_tsaPrmtDynamic;
+    (*(int *)(_stk + 0x14)) = (*(int *)(_stk + 0x14)) / (int)*(short *)_refptr_g_tsaPrmtDynamic;
     sVar1 = *(short *)_refptr_g_tsaPrmtDynamic;
   }
   else {
     if (*(short *)(*_refptr_g_peaksPtr +
                   (longlong)(int)(uint)*(byte *)(param_1 + 0x2b6) * 0x14 + 0x18) != 0) {
-      local_c = local_c / (int)*(short *)(*_refptr_g_peaksPtr +
+      (*(int *)(_stk + 0x14)) = (*(int *)(_stk + 0x14)) / (int)*(short *)(*_refptr_g_peaksPtr +
                                          (longlong)(int)(uint)*(byte *)(param_1 + 0x2b6) * 0x14 +
                                          0x18);
     }
     sVar1 = *(short *)(*_refptr_g_peaksPtr +
                       (longlong)(int)(uint)*(byte *)(param_1 + 0x2b6) * 0x14 + 0x18);
   }
-  local_10 = (int)sVar1 * (uint)*(ushort *)(param_1 + 0x2ee) * (uint)*(ushort *)(param_1 + 0x2ec);
+  (*(int *)(_stk + 0x10)) = (int)sVar1 * (uint)*(ushort *)(param_1 + 0x2ee) * (uint)*(ushort *)(param_1 + 0x2ec);
   if (*(int *)(param_1 + 0x18) != 0) {
-    local_10 = local_10 / *(int *)(param_1 + 0x18);
+    (*(int *)(_stk + 0x10)) = (*(int *)(_stk + 0x10)) / *(int *)(param_1 + 0x18);
   }
-  if (local_c < 0x100) {
-    *(char *)(param_1 + 0x32) = (char)local_c;
+  if ((*(int *)(_stk + 0x14)) < 0x100) {
+    *(char *)(param_1 + 0x32) = (char)(*(int *)(_stk + 0x14));
   }
   else {
     *(undefined1 *)(param_1 + 0x32) = 0xff;
   }
-  if (local_10 < 0x100) {
-    *(int *)(param_1 + 800) = local_10;
+  if ((*(int *)(_stk + 0x10)) < 0x100) {
+    *(int *)(param_1 + 800) = (*(int *)(_stk + 0x10));
   }
   else {
     *(undefined4 *)(param_1 + 800) = 0xff;
   }
-  TZ_Get2ClosestPeaks(param_1,&local_11,&local_12);
-  uVar2 = TZ_GetAutoCentToMinPkRatio(param_1,local_11,local_12);
+  TZ_Get2ClosestPeaks(param_1,&(*(undefined1 *)(_stk + 0xf)),&(*(undefined1 *)(_stk + 0xe)));
+  uVar2 = TZ_GetAutoCentToMinPkRatio(param_1,(*(undefined1 *)(_stk + 0xf)),(*(undefined1 *)(_stk + 0xe)));
   *(undefined1 *)(param_1 + 0x2e8) = uVar2;
   return;
 }
@@ -6512,62 +6431,55 @@ undefined8 TZ_IsToBeRptTouchMerged(longlong param_1)
 undefined4 TZ_BiCubicInterEdge(int param_1,int param_2,undefined8 param_3,undefined8 param_4)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x68]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x70];
   undefined4 uVar1;
-  int local_68 [8];
-  int aiStack_48 [4];
-  int aiStack_38 [6];
-  int local_20;
-  int local_1c;
-  int local_18;
-  int local_14;
-  int local_10;
-  int local_c;
   
-  local_14 = 0;
-  local_18 = 4;
-  local_1c = 0;
-  local_20 = 4;
+  (*(int *)(_stk + 0x5c)) = 0;
+  (*(int *)(_stk + 0x58)) = 4;
+  (*(int *)(_stk + 0x54)) = 0;
+  (*(int *)(_stk + 0x50)) = 4;
   if (param_1 < 0) {
-    local_14 = 1;
+    (*(int *)(_stk + 0x5c)) = 1;
   }
   else if ((int)(_refptr_g_tsaPrmtFlash->bCols - 4) < param_1) {
-    local_18 = 3;
+    (*(int *)(_stk + 0x58)) = 3;
   }
   if (param_2 < 0) {
-    local_1c = 1;
+    (*(int *)(_stk + 0x54)) = 1;
   }
   else if ((int)(_refptr_g_tsaPrmtFlash->bRows - 4) < param_2) {
-    local_20 = 3;
+    (*(int *)(_stk + 0x50)) = 3;
   }
-  for (local_10 = local_1c; local_10 < local_20; local_10 = local_10 + 1) {
-    for (local_c = local_14; local_c < local_18; local_c = local_c + 1) {
-      local_68[local_10 * 4 + local_c] =
+  for ((*(int *)(_stk + 0x60)) = (*(int *)(_stk + 0x54)); (*(int *)(_stk + 0x60)) < (*(int *)(_stk + 0x50)); (*(int *)(_stk + 0x60)) = (*(int *)(_stk + 0x60)) + 1) {
+    for ((*(int *)(_stk + 0x64)) = (*(int *)(_stk + 0x5c)); (*(int *)(_stk + 0x64)) < (*(int *)(_stk + 0x58)); (*(int *)(_stk + 0x64)) = (*(int *)(_stk + 0x64)) + 1) {
+      ((int *)(_stk + 0x8))[(*(int *)(_stk + 0x60)) * 4 + (*(int *)(_stk + 0x64))] =
            (int)*(short *)((ulonglong)
-                           ((uint)_refptr_g_tsaPrmtFlash->bCols * (local_10 + param_2) +
-                            local_c + param_1 & 0xffff) * 2 + g_tzBuffer);
+                           ((uint)_refptr_g_tsaPrmtFlash->bCols * ((*(int *)(_stk + 0x60)) + param_2) +
+                            (*(int *)(_stk + 0x64)) + param_1 & 0xffff) * 2 + g_tzBuffer);
     }
   }
-  if (local_14 != 0) {
-    for (local_10 = 0; local_10 < 4; local_10 = local_10 + 1) {
-      local_68[local_10 * 4] = local_68[local_10 * 4 + 1];
+  if ((*(int *)(_stk + 0x5c)) != 0) {
+    for ((*(int *)(_stk + 0x60)) = 0; (*(int *)(_stk + 0x60)) < 4; (*(int *)(_stk + 0x60)) = (*(int *)(_stk + 0x60)) + 1) {
+      ((int *)(_stk + 0x8))[(*(int *)(_stk + 0x60)) * 4] = ((int *)(_stk + 0x8))[(*(int *)(_stk + 0x60)) * 4 + 1];
     }
   }
-  if (local_18 != 4) {
-    for (local_10 = 0; local_10 < 4; local_10 = local_10 + 1) {
-      local_68[local_10 * 4 + 3] = local_68[local_10 * 4 + 2];
+  if ((*(int *)(_stk + 0x58)) != 4) {
+    for ((*(int *)(_stk + 0x60)) = 0; (*(int *)(_stk + 0x60)) < 4; (*(int *)(_stk + 0x60)) = (*(int *)(_stk + 0x60)) + 1) {
+      ((int *)(_stk + 0x8))[(*(int *)(_stk + 0x60)) * 4 + 3] = ((int *)(_stk + 0x8))[(*(int *)(_stk + 0x60)) * 4 + 2];
     }
   }
-  if (local_1c != 0) {
-    for (local_c = 0; local_c < 4; local_c = local_c + 1) {
-      local_68[local_c] = local_68[local_c + 4];
+  if ((*(int *)(_stk + 0x54)) != 0) {
+    for ((*(int *)(_stk + 0x64)) = 0; (*(int *)(_stk + 0x64)) < 4; (*(int *)(_stk + 0x64)) = (*(int *)(_stk + 0x64)) + 1) {
+      ((int *)(_stk + 0x8))[(*(int *)(_stk + 0x64))] = ((int *)(_stk + 0x8))[(*(int *)(_stk + 0x64)) + 4];
     }
   }
-  if (local_20 != 4) {
-    for (local_c = 0; local_c < 4; local_c = local_c + 1) {
-      local_68[local_c + 0xc] = local_68[local_c + 8];
+  if ((*(int *)(_stk + 0x50)) != 4) {
+    for ((*(int *)(_stk + 0x64)) = 0; (*(int *)(_stk + 0x64)) < 4; (*(int *)(_stk + 0x64)) = (*(int *)(_stk + 0x64)) + 1) {
+      ((int *)(_stk + 0x8))[(*(int *)(_stk + 0x64)) + 0xc] = ((int *)(_stk + 0x8))[(*(int *)(_stk + 0x64)) + 8];
     }
   }
-  uVar1 = TZ_BiCubicInter4x4(local_68,param_3,param_4);
+  uVar1 = TZ_BiCubicInter4x4(((int *)(_stk + 0x8)),param_3,param_4);
   return uVar1;
 }
 

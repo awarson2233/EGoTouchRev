@@ -81,30 +81,30 @@ void IDT_Map(longlong param_1,uint param_2)
 void IDT_HMProcess(longlong param_1,uint param_2)
 
 {
-  byte local_678 [1647];
-  byte local_9;
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x678]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x680];
   
-  memset(local_678 + 0x20,0,0x640);
-  local_678[0] = 0;
-  local_678[1] = 0;
-  local_678[2] = 0;
-  local_678[3] = 0;
-  local_678[4] = 0;
-  local_678[5] = 0;
-  local_678[6] = 0;
-  local_678[7] = 0;
-  local_678[8] = 0;
-  local_678[9] = 0;
-  local_678[10] = 0;
-  local_678[0xb] = 0;
-  local_678[0xc] = 0;
-  local_678[0xd] = 0;
-  local_678[0xe] = 0;
-  local_678[0xf] = 0;
-  local_678[0x10] = 0;
-  local_678[0x11] = 0;
-  local_678[0x12] = 0;
-  local_678[0x13] = 0;
+  memset(((byte *)(_stk + 0x8)) + 0x20,0,0x640);
+  ((byte *)(_stk + 0x8))[0] = 0;
+  ((byte *)(_stk + 0x8))[1] = 0;
+  ((byte *)(_stk + 0x8))[2] = 0;
+  ((byte *)(_stk + 0x8))[3] = 0;
+  ((byte *)(_stk + 0x8))[4] = 0;
+  ((byte *)(_stk + 0x8))[5] = 0;
+  ((byte *)(_stk + 0x8))[6] = 0;
+  ((byte *)(_stk + 0x8))[7] = 0;
+  ((byte *)(_stk + 0x8))[8] = 0;
+  ((byte *)(_stk + 0x8))[9] = 0;
+  ((byte *)(_stk + 0x8))[10] = 0;
+  ((byte *)(_stk + 0x8))[0xb] = 0;
+  ((byte *)(_stk + 0x8))[0xc] = 0;
+  ((byte *)(_stk + 0x8))[0xd] = 0;
+  ((byte *)(_stk + 0x8))[0xe] = 0;
+  ((byte *)(_stk + 0x8))[0xf] = 0;
+  ((byte *)(_stk + 0x8))[0x10] = 0;
+  ((byte *)(_stk + 0x8))[0x11] = 0;
+  ((byte *)(_stk + 0x8))[0x12] = 0;
+  ((byte *)(_stk + 0x8))[0x13] = 0;
   if (0x14 < **(byte **)_refptr_g_touchesPtr) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/Alg/IDTracking/IDT.c",
                       0x53,"TouchesPrpt(num) <= TSA_MAX_TOUCH_NUM");
@@ -115,27 +115,27 @@ void IDT_HMProcess(longlong param_1,uint param_2)
                       0x54,"PrevTouchesPrpt(num) <= TSA_MAX_TOUCH_NUM");
     HardwareAnalyzer_SetSoftException();
   }
-  for (local_9 = 0; local_9 < param_2; local_9 = local_9 + 1) {
-    *(undefined1 *)(param_1 + (ulonglong)local_9) = 0xff;
+  for ((*(byte *)(_stk + 0x677)) = 0; (*(byte *)(_stk + 0x677)) < param_2; (*(byte *)(_stk + 0x677)) = (*(byte *)(_stk + 0x677)) + 1) {
+    *(undefined1 *)(param_1 + (ulonglong)(*(byte *)(_stk + 0x677))) = 0xff;
   }
   if (**(byte **)_refptr_g_touchesPtr < (*_refptr_g_prevTouchesPtr)->bPrevTouchCount) {
-    IDT_PopulateDistanceMap(local_678 + 0x20,1);
+    IDT_PopulateDistanceMap(((byte *)(_stk + 0x8)) + 0x20,1);
     IDT_HM(**(undefined1 **)_refptr_g_touchesPtr,(*_refptr_g_prevTouchesPtr)->bPrevTouchCount,
-           local_678,local_678 + 0x20);
-    for (local_9 = 0; local_9 < (*_refptr_g_prevTouchesPtr)->bPrevTouchCount; local_9 = local_9 + 1)
+           ((byte *)(_stk + 0x8)),((byte *)(_stk + 0x8)) + 0x20);
+    for ((*(byte *)(_stk + 0x677)) = 0; (*(byte *)(_stk + 0x677)) < (*_refptr_g_prevTouchesPtr)->bPrevTouchCount; (*(byte *)(_stk + 0x677)) = (*(byte *)(_stk + 0x677)) + 1)
     {
-      if (local_678[(int)(uint)local_9] != 0xff) {
-        *(byte *)((ulonglong)local_9 + param_1) = local_678[(int)(uint)local_9];
+      if (((byte *)(_stk + 0x8))[(int)(uint)(*(byte *)(_stk + 0x677))] != 0xff) {
+        *(byte *)((ulonglong)(*(byte *)(_stk + 0x677)) + param_1) = ((byte *)(_stk + 0x8))[(int)(uint)(*(byte *)(_stk + 0x677))];
       }
     }
   }
   else {
-    IDT_PopulateDistanceMap(local_678 + 0x20,0);
+    IDT_PopulateDistanceMap(((byte *)(_stk + 0x8)) + 0x20,0);
     IDT_HM((*_refptr_g_prevTouchesPtr)->bPrevTouchCount,**(undefined1 **)_refptr_g_touchesPtr,
-           local_678,local_678 + 0x20);
-    for (local_9 = 0; local_9 < **(byte **)_refptr_g_touchesPtr; local_9 = local_9 + 1) {
-      if ((local_678[(int)(uint)local_9] != 0xff) && (local_678[(int)(uint)local_9] < param_2)) {
-        *(byte *)((char)local_678[(int)(uint)local_9] + param_1) = local_9;
+           ((byte *)(_stk + 0x8)),((byte *)(_stk + 0x8)) + 0x20);
+    for ((*(byte *)(_stk + 0x677)) = 0; (*(byte *)(_stk + 0x677)) < **(byte **)_refptr_g_touchesPtr; (*(byte *)(_stk + 0x677)) = (*(byte *)(_stk + 0x677)) + 1) {
+      if ((((byte *)(_stk + 0x8))[(int)(uint)(*(byte *)(_stk + 0x677))] != 0xff) && (((byte *)(_stk + 0x8))[(int)(uint)(*(byte *)(_stk + 0x677))] < param_2)) {
+        *(byte *)((char)((byte *)(_stk + 0x8))[(int)(uint)(*(byte *)(_stk + 0x677))] + param_1) = (*(byte *)(_stk + 0x677));
       }
     }
   }
@@ -320,125 +320,96 @@ void IDT_HM(byte param_1,byte param_2,longlong param_3,longlong param_4)
 void IDT_PopulateDistanceMap(longlong param_1,char param_2)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0xa8]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0xb0];
   char cVar1;
   uint uVar2;
   uint uVar3;
-  byte local_a8 [52];
-  int local_74;
-  int local_70;
-  int local_6c;
-  int local_68;
-  int local_64;
-  int local_60;
-  int local_5c;
-  uint local_58;
-  uint local_54;
-  int local_50;
-  int local_4c;
-  uint local_48;
-  uint local_44;
-  uint local_40;
-  uint local_3c;
-  longlong local_38;
-  longlong local_30;
-  int local_28;
-  short local_22;
-  undefined4 local_20;
-  undefined4 local_1c;
-  short local_16;
-  int local_14;
-  byte local_f;
-  byte local_e;
-  char local_d;
-  byte local_c;
-  byte local_b;
-  byte local_a;
-  byte local_9;
   
-  local_d = **(byte **)_refptr_g_touchesPtr < (*_refptr_g_prevTouchesPtr)->bPrevTouchCount;
+  (*(char *)(_stk + 0xa3)) = **(byte **)_refptr_g_touchesPtr < (*_refptr_g_prevTouchesPtr)->bPrevTouchCount;
   if (param_2 == '\0') {
-    local_1c = 1;
-    local_20 = 0x14;
+    (*(undefined4 *)(_stk + 0x94)) = 1;
+    (*(undefined4 *)(_stk + 0x90)) = 0x14;
   }
   else {
-    local_1c = 0x14;
-    local_20 = 1;
+    (*(undefined4 *)(_stk + 0x94)) = 0x14;
+    (*(undefined4 *)(_stk + 0x90)) = 1;
   }
-  local_22 = TS_MMToPixel(_refptr_g_tsaPrmtFlash[1].field_0x48);
-  local_e = 5;
+  (*(short *)(_stk + 0x8e)) = TS_MMToPixel(_refptr_g_tsaPrmtFlash[1].field_0x48);
+  (*(byte *)(_stk + 0xa2)) = 5;
   if (((*_refptr_g_tsaStaticPtr)->dwProcessingState & 0x10) != 0) {
-    local_e = 0;
+    (*(byte *)(_stk + 0xa2)) = 0;
   }
-  local_28 = memset_s(local_a8,0x28,0,0x28);
-  if (local_28 != 0) {
+  (*(int *)(_stk + 0x88)) = memset_s(((byte *)(_stk + 0x8)),0x28,0,0x28);
+  if ((*(int *)(_stk + 0x88)) != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/Alg/IDTracking/IDT.c",
                       0x1e5,"rc == EOK");
     HardwareAnalyzer_SetSoftException();
   }
-  local_f = 0;
-  local_b = 0;
-  for (local_9 = 0; local_9 < **(byte **)_refptr_g_touchesPtr; local_9 = local_9 + 1) {
-    local_c = local_b;
-    local_30 = *(longlong *)_refptr_g_touchesPtr + (longlong)(int)(uint)local_9 * 0x168 + 0x140;
-    for (local_a = 0; local_a < (*_refptr_g_prevTouchesPtr)->bPrevTouchCount; local_a = local_a + 1)
+  (*(byte *)(_stk + 0xa1)) = 0;
+  (*(byte *)(_stk + 0xa5)) = 0;
+  for ((*(byte *)(_stk + 0xa7)) = 0; (*(byte *)(_stk + 0xa7)) < **(byte **)_refptr_g_touchesPtr; (*(byte *)(_stk + 0xa7)) = (*(byte *)(_stk + 0xa7)) + 1) {
+    (*(byte *)(_stk + 0xa4)) = (*(byte *)(_stk + 0xa5));
+    (*(longlong *)(_stk + 0x80)) = *(longlong *)_refptr_g_touchesPtr + (longlong)(int)(uint)(*(byte *)(_stk + 0xa7)) * 0x168 + 0x140;
+    for ((*(byte *)(_stk + 0xa6)) = 0; (*(byte *)(_stk + 0xa6)) < (*_refptr_g_prevTouchesPtr)->bPrevTouchCount; (*(byte *)(_stk + 0xa6)) = (*(byte *)(_stk + 0xa6)) + 1)
     {
-      local_38 = (longlong)*_refptr_g_prevTouchesPtr + (longlong)(int)(uint)local_a * 0x478 + 0x140;
-      local_3c = (uint)*(ushort *)(local_38 + 0x1e);
-      local_40 = (uint)*(ushort *)(local_38 + 0x20);
-      local_44 = *(ushort *)(local_30 + 0x1e) - local_3c;
-      local_48 = *(ushort *)(local_30 + 0x20) - local_40;
-      local_14 = local_48 * local_48 + local_44 * local_44;
-      local_16 = *(short *)(local_38 + 0x10);
+      (*(longlong *)(_stk + 0x78)) = (longlong)*_refptr_g_prevTouchesPtr + (longlong)(int)(uint)(*(byte *)(_stk + 0xa6)) * 0x478 + 0x140;
+      (*(uint *)(_stk + 0x74)) = (uint)*(ushort *)((*(longlong *)(_stk + 0x78)) + 0x1e);
+      (*(uint *)(_stk + 0x70)) = (uint)*(ushort *)((*(longlong *)(_stk + 0x78)) + 0x20);
+      (*(uint *)(_stk + 0x6c)) = *(ushort *)((*(longlong *)(_stk + 0x80)) + 0x1e) - (*(uint *)(_stk + 0x74));
+      (*(uint *)(_stk + 0x68)) = *(ushort *)((*(longlong *)(_stk + 0x80)) + 0x20) - (*(uint *)(_stk + 0x70));
+      (*(int *)(_stk + 0x9c)) = (*(uint *)(_stk + 0x68)) * (*(uint *)(_stk + 0x68)) + (*(uint *)(_stk + 0x6c)) * (*(uint *)(_stk + 0x6c));
+      (*(short *)(_stk + 0x9a)) = *(short *)((*(longlong *)(_stk + 0x78)) + 0x10);
       if ((*_refptr_g_prevTouchesPtr)->nTouchCount == 0x100) {
-        if (*(longlong *)(local_30 + 8) == 0) {
-          local_16 = (short)(*_refptr_g_tsaStaticPtr)->pFrameBufferPtr -
-                     (short)*(undefined8 *)(local_38 + 8);
+        if (*(longlong *)((*(longlong *)(_stk + 0x80)) + 8) == 0) {
+          (*(short *)(_stk + 0x9a)) = (short)(*_refptr_g_tsaStaticPtr)->pFrameBufferPtr -
+                     (short)*(undefined8 *)((*(longlong *)(_stk + 0x78)) + 8);
         }
         else {
-          local_16 = (short)*(undefined8 *)(local_30 + 8) - (short)*(undefined8 *)(local_38 + 8);
+          (*(short *)(_stk + 0x9a)) = (short)*(undefined8 *)((*(longlong *)(_stk + 0x80)) + 8) - (short)*(undefined8 *)((*(longlong *)(_stk + 0x78)) + 8);
         }
       }
-      local_4c = (int)*(short *)(local_38 + 0x38c);
-      local_50 = (int)*(short *)(local_38 + 0x38e);
-      local_54 = local_16 * local_4c;
-      local_58 = local_16 * local_50;
-      local_5c = (int)local_16 * (int)(*(short *)(local_38 + 0x390) / 2) + local_54 + local_3c;
-      local_60 = (int)local_16 * (int)(*(short *)(local_38 + 0x392) / 2) + local_58 + local_40;
-      uVar3 = local_5c - (uint)*(ushort *)(local_30 + 0x1e);
+      (*(int *)(_stk + 0x64)) = (int)*(short *)((*(longlong *)(_stk + 0x78)) + 0x38c);
+      (*(int *)(_stk + 0x60)) = (int)*(short *)((*(longlong *)(_stk + 0x78)) + 0x38e);
+      (*(uint *)(_stk + 0x5c)) = (*(short *)(_stk + 0x9a)) * (*(int *)(_stk + 0x64));
+      (*(uint *)(_stk + 0x58)) = (*(short *)(_stk + 0x9a)) * (*(int *)(_stk + 0x60));
+      (*(int *)(_stk + 0x54)) = (int)(*(short *)(_stk + 0x9a)) * (int)(*(short *)((*(longlong *)(_stk + 0x78)) + 0x390) / 2) + (*(uint *)(_stk + 0x5c)) + (*(uint *)(_stk + 0x74));
+      (*(int *)(_stk + 0x50)) = (int)(*(short *)(_stk + 0x9a)) * (int)(*(short *)((*(longlong *)(_stk + 0x78)) + 0x392) / 2) + (*(uint *)(_stk + 0x58)) + (*(uint *)(_stk + 0x70));
+      uVar3 = (*(int *)(_stk + 0x54)) - (uint)*(ushort *)((*(longlong *)(_stk + 0x80)) + 0x1e);
       uVar2 = (int)uVar3 >> 0x1f;
-      local_64 = (uVar3 ^ uVar2) - uVar2;
-      uVar3 = local_60 - (uint)*(ushort *)(local_30 + 0x20);
+      (*(int *)(_stk + 0x4c)) = (uVar3 ^ uVar2) - uVar2;
+      uVar3 = (*(int *)(_stk + 0x50)) - (uint)*(ushort *)((*(longlong *)(_stk + 0x80)) + 0x20);
       uVar2 = (int)uVar3 >> 0x1f;
-      local_68 = (uVar3 ^ uVar2) - uVar2;
-      if ((((int)local_22 <
-            (int)((((int)local_44 >> 0x1f ^ local_44) - ((int)local_44 >> 0x1f)) +
-                 (((int)local_48 >> 0x1f ^ local_48) - ((int)local_48 >> 0x1f)))) ||
-          (*(ushort *)(local_38 + 0x16) <= (ushort)local_e)) ||
-         ((int)local_22 <
-          (int)((((int)local_54 >> 0x1f ^ local_54) - ((int)local_54 >> 0x1f)) +
-               (((int)local_58 >> 0x1f ^ local_58) - ((int)local_58 >> 0x1f))))) {
-        if (((local_64 + local_68 <= (int)local_22) &&
-            (cVar1 = IDT_IsEdgeTouch(local_9), cVar1 == '\0')) && (local_f < 0x14)) {
-          local_a8[(longlong)(int)(uint)local_f * 2] = local_9;
-          local_a8[(longlong)(int)(uint)local_f * 2 + 1] = local_a;
-          local_f = local_f + 1;
+      (*(int *)(_stk + 0x48)) = (uVar3 ^ uVar2) - uVar2;
+      if ((((int)(*(short *)(_stk + 0x8e)) <
+            (int)((((int)(*(uint *)(_stk + 0x6c)) >> 0x1f ^ (*(uint *)(_stk + 0x6c))) - ((int)(*(uint *)(_stk + 0x6c)) >> 0x1f)) +
+                 (((int)(*(uint *)(_stk + 0x68)) >> 0x1f ^ (*(uint *)(_stk + 0x68))) - ((int)(*(uint *)(_stk + 0x68)) >> 0x1f)))) ||
+          (*(ushort *)((*(longlong *)(_stk + 0x78)) + 0x16) <= (ushort)(*(byte *)(_stk + 0xa2)))) ||
+         ((int)(*(short *)(_stk + 0x8e)) <
+          (int)((((int)(*(uint *)(_stk + 0x5c)) >> 0x1f ^ (*(uint *)(_stk + 0x5c))) - ((int)(*(uint *)(_stk + 0x5c)) >> 0x1f)) +
+               (((int)(*(uint *)(_stk + 0x58)) >> 0x1f ^ (*(uint *)(_stk + 0x58))) - ((int)(*(uint *)(_stk + 0x58)) >> 0x1f))))) {
+        if ((((*(int *)(_stk + 0x4c)) + (*(int *)(_stk + 0x48)) <= (int)(*(short *)(_stk + 0x8e))) &&
+            (cVar1 = IDT_IsEdgeTouch((*(byte *)(_stk + 0xa7))), cVar1 == '\0')) && ((*(byte *)(_stk + 0xa1)) < 0x14)) {
+          ((byte *)(_stk + 0x8))[(longlong)(int)(uint)(*(byte *)(_stk + 0xa1)) * 2] = (*(byte *)(_stk + 0xa7));
+          ((byte *)(_stk + 0x8))[(longlong)(int)(uint)(*(byte *)(_stk + 0xa1)) * 2 + 1] = (*(byte *)(_stk + 0xa6));
+          (*(byte *)(_stk + 0xa1)) = (*(byte *)(_stk + 0xa1)) + 1;
         }
       }
       else {
-        local_14 = -0x3fffffff;
+        (*(int *)(_stk + 0x9c)) = -0x3fffffff;
       }
-      if (local_d != '\0') {
-        local_6c = local_44 - local_4c;
-        local_70 = local_48 - local_50;
-        local_74 = local_70 * local_70 + local_6c * local_6c;
-        local_14 = local_14 + local_74 * 2;
+      if ((*(char *)(_stk + 0xa3)) != '\0') {
+        (*(int *)(_stk + 0x44)) = (*(uint *)(_stk + 0x6c)) - (*(int *)(_stk + 0x64));
+        (*(int *)(_stk + 0x40)) = (*(uint *)(_stk + 0x68)) - (*(int *)(_stk + 0x60));
+        (*(int *)(_stk + 0x3c)) = (*(int *)(_stk + 0x40)) * (*(int *)(_stk + 0x40)) + (*(int *)(_stk + 0x44)) * (*(int *)(_stk + 0x44));
+        (*(int *)(_stk + 0x9c)) = (*(int *)(_stk + 0x9c)) + (*(int *)(_stk + 0x3c)) * 2;
       }
-      *(int *)((ulonglong)local_c * 4 + param_1) = local_14;
-      local_c = local_c + (char)local_1c;
+      *(int *)((ulonglong)(*(byte *)(_stk + 0xa4)) * 4 + param_1) = (*(int *)(_stk + 0x9c));
+      (*(byte *)(_stk + 0xa4)) = (*(byte *)(_stk + 0xa4)) + (char)(*(undefined4 *)(_stk + 0x94));
     }
-    local_b = local_b + (char)local_20;
+    (*(byte *)(_stk + 0xa5)) = (*(byte *)(_stk + 0xa5)) + (char)(*(undefined4 *)(_stk + 0x90));
   }
-  IDT_AlwaysMatchProcess(param_1,param_2,local_a8,local_f);
+  IDT_AlwaysMatchProcess(param_1,param_2,((byte *)(_stk + 0x8)),(*(byte *)(_stk + 0xa1)));
   return;
 }
 

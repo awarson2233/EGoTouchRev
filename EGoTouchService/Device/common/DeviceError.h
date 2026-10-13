@@ -12,6 +12,18 @@ enum class ChipError {
     InternalError        // 内部逻辑异常
 };
 
+inline const char* ToString(ChipError e) noexcept {
+    switch (e) {
+    case ChipError::Success:            return "Success";
+    case ChipError::CommunicationError: return "CommunicationError";
+    case ChipError::Timeout:            return "Timeout";
+    case ChipError::VerificationFailed: return "VerificationFailed";
+    case ChipError::InvalidOperation:   return "InvalidOperation";
+    case ChipError::InternalError:      return "InternalError";
+    }
+    return "Unknown";
+}
+
 // 错误处理别名
 template <typename T = void>
 using ChipResult = std::expected<T, ChipError>;

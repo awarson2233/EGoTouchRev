@@ -5,6 +5,7 @@
 // ============================================================================
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <math.h>
 #include <string.h>
 #include <stdint.h>
@@ -19,7 +20,6 @@ extern "C" {
 // ----------------------------------------------------------------------------
 #define PROC_TSA_ACTIVE 0x40000000u
 #define PROC_MS_ACTIVE  0x80000000u
-#define __rdata         0.0
 
 static const char _rdata = '\0';
 
@@ -55,8 +55,8 @@ typedef PeakTable_t PeakArray;
 #define g_miscSinTable (*((const uint8_t*)TSA_MEM_AT(0x6bb4f040ULL)))
 
 // RT Reflection literal pointer tables in .data
-#define PTR___compound_literal_1_6bb4fce8 ((uint8_t*)TSA_MEM_AT(0x6bb4fce8ULL))
-#define PTR___compound_literal_3_6bb4fcf8 ((uint8_t*)TSA_MEM_AT(0x6bb4fcf8ULL))
+#define PTR___compound_literal_1_6bb4fce8 (*(uint8_t**)TSA_MEM_AT(0x6bb4fce8ULL))
+#define PTR___compound_literal_3_6bb4fcf8 (*(uint8_t**)TSA_MEM_AT(0x6bb4fcf8ULL))
 
 // Dynamic & CMF parameter alias macros
 #define _g_tsaPrmtDynamic (*((undefined8*)TSA_MEM_AT(0x6bcab680ULL)))
@@ -121,13 +121,13 @@ typedef PeakTable_t PeakArray;
 #define _DAT_6bcab6c8 (*((short*)TSA_MEM_AT(0x6bcab6c8ULL)))
 #define _DAT_6bb51d50 (*((const double*)TSA_MEM_AT(0x6bb51d50ULL)))
 
-#define g_afeHalSpec   TSA_VAR_AT(uint8_t, 0x6bb4fa40ULL)
+#define g_afeHalSpec   TSA_VAR_AT(undefined8, 0x6bb4fa40ULL)
 #define g_afeGridData  (*((void**)TSA_MEM_AT(0x6bbaa898ULL)))
 #define g_afeLineData  (*((void**)TSA_MEM_AT(0x6bbaa8a0ULL)))
 #define g_simuAFEInfo  (*((AFE_Info*)TSA_MEM_AT(0x6bbaa700ULL)))
 #define g_simuAFECaps  (*((AFE_Caps*)TSA_MEM_AT(0x6bbaa780ULL)))
 #define g_simuAFEFrame (*((AFE_Frame*)TSA_MEM_AT(0x6bbaa800ULL)))
-#define _DAT_6bbaa7b0  TSA_VAR_AT(uint8_t, 0x6bbaa7b0ULL)
+#define _DAT_6bbaa7b0  TSA_VAR_AT(undefined4, 0x6bbaa7b0ULL)
 #define DAT_6bbaa7b0   TSA_VAR_AT(uint8_t, 0x6bbaa7b0ULL)
 
 #define g_clickNum     TSA_VAR_AT(uint8_t, 0x6bba3380ULL)

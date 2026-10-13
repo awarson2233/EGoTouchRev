@@ -393,17 +393,16 @@ void TSADynPrmt_GetMFLTI(void)
 void TSADynPrmt_GetPkThold(void)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0xe]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x10];
   int iVar1;
-  undefined1 local_e [2];
-  undefined2 local_c;
-  undefined2 local_a;
   
                     /* 0xfcd91  1493  TSADynPrmt_GetPkThold */
   TouchThold_Process((int)(short)(((short)_refptr_g_tsaPrmtFlash->wPeakMode3ThresholdMax * 0x38) /
-                                 0x50),(int)*(short *)&_refptr_g_tsaPrmtFlash->field_0x5da,&local_a,
-                     &local_c,local_e);
-  DAT_6bcab68a = local_a;
-  DAT_6bcab68e = local_c;
+                                 0x50),(int)*(short *)&_refptr_g_tsaPrmtFlash->field_0x5da,&(*(undefined2 *)(_stk + 0x6)),
+                     &(*(undefined2 *)(_stk + 0x4)),((undefined1 *)(_stk + 0x2)));
+  DAT_6bcab68a = (*(undefined2 *)(_stk + 0x6));
+  DAT_6bcab68e = (*(undefined2 *)(_stk + 0x4));
   TouchThold_Process((int)(short)_refptr_g_tsaPrmtFlash->wPeakMode3ThresholdMax,
                      (int)*(short *)&_refptr_g_tsaPrmtFlash->field_0x5da,
                      &_refptr_g_tsaPrpt[1].field_0x16,&_refptr_g_tsaPrpt[1].field_0x18,

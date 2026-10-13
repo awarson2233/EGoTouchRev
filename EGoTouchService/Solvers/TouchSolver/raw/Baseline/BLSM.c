@@ -173,48 +173,177 @@ void BLSM_ShbProcess(void)
 void BLSM_UpdateStage(void)
 
 {
-  uint uVar1;
+  short local_e;
+  uint local_c;
   
-  _refptr_g_tsaPrpt->dwPrevBaselineStage = _refptr_g_tsaPrpt->dwBaselineStage;
-  if ((_refptr_g_tsaPrpt->dwBaselinePropertyFlags & 0x10) == 0) {
-    if ((_refptr_g_tsaPrpt->dwBaselinePropertyFlags & 0x200) == 0) {
-      if ((_refptr_g_tsaPrpt->dwBaselinePropertyFlags & 0x100) == 0) {
-        if ((_refptr_g_tsaPrpt->dwBaselinePropertyFlags & 0x80) == 0) {
-          if ((_refptr_g_tsaPrpt->dwBaselinePropertyFlags & 0x40) == 0) {
-            uVar1 = _refptr_g_tsaPrpt->dwBaselineStage;
-            _refptr_g_tsaPrpt->nBaselineStageFrameCount =
-                 _refptr_g_tsaPrpt->nBaselineStageFrameCount + 1;
-            _refptr_g_tsaPrpt->qwBaselineStageReference =
-                 (longlong)(*_refptr_g_tsaStaticPtr)->pFrameBufferPtr +
-                 (_refptr_g_tsaPrpt->qwBaselineStageReference -
-                 (*_refptr_g_tsaStaticPtr)->llField_0xe8);
-            if (uVar1 < 10) {
-    return;
-  }
-            _refptr_g_tsaPrpt->nBaselineStageFrameCount = 1;
-            _refptr_g_tsaPrpt->qwBaselineStageReference =
-                 (longlong)(*_refptr_g_tsaStaticPtr)->nBaselineStageInitialSignal;
-            _refptr_g_tsaPrpt->dwBaselineStage = 0;
-            _refptr_g_tsaPrpt->dwBaselineStage = uVar1;
+  local_e = (short)DAT_6bcab6c6;
+  g_tsaPrpt.dwPrevBaselineStage = g_tsaPrpt.dwBaselineStage;
+  if ((g_tsaPrpt.dwBaselinePropertyFlags & 0x10) == 0) {
+    if ((g_tsaPrpt.dwBaselinePropertyFlags & 0x200) == 0) {
+      if ((g_tsaPrpt.dwBaselinePropertyFlags & 0x100) == 0) {
+        if ((g_tsaPrpt.dwBaselinePropertyFlags & 0x80) == 0) {
+          if ((g_tsaPrpt.dwBaselinePropertyFlags & 0x40) == 0) {
+            local_c = g_tsaPrpt.dwBaselineStage;
+            g_tsaPrpt.nBaselineStageFrameCount = g_tsaPrpt.nBaselineStageFrameCount + 1;
+            g_tsaPrpt.qwBaselineStageReference =
+                 (longlong)g_tsaStaticPtr->pFrameBufferPtr +
+                 (g_tsaPrpt.qwBaselineStageReference - g_tsaStaticPtr->llField_0xe8);
+            switch(g_tsaPrpt.dwBaselineStage) {
+            case 0:
+              if ((g_tsaPrpt.dwBaselinePropertyFlags & 2) == 0) {
+                if ((g_tsaPrpt.dwBaselinePropertyFlags & 1) != 0) {
+                  g_tsaPrpt.nBaselineStageFrameCount = 1;
+                  g_tsaPrpt.qwBaselineStageReference =
+                       (ulonglong)g_tsaStaticPtr->nBaselineStageInitialSignal;
+                  local_c = 4;
+                }
+              }
+              else {
+                g_tsaPrpt.nBaselineStageFrameCount = 1;
+                g_tsaPrpt.qwBaselineStageReference =
+                     (ulonglong)g_tsaStaticPtr->nBaselineStageInitialSignal;
+                local_c = 5;
+              }
+              break;
+            case 1:
+            case 2:
+              g_tsaPrpt.nBaselineStageFrameCount = 1;
+              g_tsaPrpt.qwBaselineStageReference =
+                   (ulonglong)g_tsaStaticPtr->nBaselineStageInitialSignal;
+              local_c = 0;
+              break;
+            case 3:
+              g_tsaPrpt.nBaselineStageFrameCount = 1;
+              g_tsaPrpt.qwBaselineStageReference =
+                   (ulonglong)g_tsaStaticPtr->nBaselineStageInitialSignal;
+              local_c = 0;
+              break;
+            case 4:
+              if ((g_tsaPrpt.dwBaselinePropertyFlags & 2) == 0) {
+                if ((ushort)(DAT_6bcab6d2 >> 16) <= g_tsaPrpt.qwBaselineStageReference) {
+                  g_tsaPrpt.nBaselineStageFrameCount = 1;
+                  g_tsaPrpt.qwBaselineStageReference =
+                       (ulonglong)g_tsaStaticPtr->nBaselineStageInitialSignal;
+                  local_c = 0;
+                }
+              }
+              else {
+                g_tsaPrpt.nBaselineStageFrameCount = 1;
+                g_tsaPrpt.qwBaselineStageReference =
+                     (ulonglong)g_tsaStaticPtr->nBaselineStageInitialSignal;
+                local_c = 5;
+              }
+              break;
+            case 5:
+              /* bSingleTouchBaselineLatch @ TSAStatic+0x3ec */
+              if ((g_tsaPrpt.dwBaselinePropertyFlags & 2) == 0) {
+                if (*((uint8_t *)g_tsaStaticPtr + 0x3ec) == '\0') {
+                  g_tsaPrpt.nBaselineStageFrameCount = 1;
+                  g_tsaPrpt.qwBaselineStageReference =
+                       (ulonglong)g_tsaStaticPtr->nBaselineStageInitialSignal;
+                  local_c = 6;
+                }
+                else {
+                  g_tsaPrpt.nBaselineStageFrameCount = 1;
+                  g_tsaPrpt.qwBaselineStageReference =
+                       (ulonglong)g_tsaStaticPtr->nBaselineStageInitialSignal;
+                  local_c = 4;
+                }
+              }
+              if ((g_pPrevTouches->bPrevTouchCount == '\x01') &&
+                 ((*(uint *)(g_pPrevTouches + 0xe) & 0x200) == 0)) {
+                *((uint8_t *)g_tsaStaticPtr + 0x3ec) = '\x01';
+              }
+              else {
+                *((uint8_t *)g_tsaStaticPtr + 0x3ec) = '\0';
+              }
+              break;
+            case 6:
+              if ((g_tsaPrpt.dwBaselinePropertyFlags & 2) == 0) {
+                if ((ushort)(DAT_6bcab6d2 >> 16) <= g_tsaPrpt.qwBaselineStageReference) {
+                  g_tsaPrpt.nBaselineStageFrameCount = 1;
+                  g_tsaPrpt.qwBaselineStageReference =
+                       (ulonglong)g_tsaStaticPtr->nBaselineStageInitialSignal;
+                  local_c = 7;
+                }
+              }
+              else {
+                g_tsaPrpt.nBaselineStageFrameCount = 1;
+                g_tsaPrpt.qwBaselineStageReference =
+                     (ulonglong)g_tsaStaticPtr->nBaselineStageInitialSignal;
+                local_c = 5;
+              }
+              break;
+            case 7:
+              if (g_BLSMNextEdgeSmallThresh != '\0') {
+                local_e = _DAT_6bcab6c8;
+              }
+              if ((g_tsaPrpt.dwBaselinePropertyFlags & 2) == 0) {
+                if (g_tsaPrpt.qwBaselineStageReference < (ushort)(DAT_6bcab6d2 >> 16)) {
+                  if ((g_tsaPrpt.nSPeakPositive < local_e) &&
+                     (-(int)g_tsaPrpt.nSPeakNegative < (int)local_e)) {
+                    g_tsaPrpt.nBaselineStageFrameCount = 1;
+                    g_tsaPrpt.qwBaselineStageReference =
+                         (ulonglong)g_tsaStaticPtr->nBaselineStageInitialSignal;
+                    local_c = 0;
+                  }
+                }
+                else {
+                  g_tsaPrpt.nBaselineStageFrameCount = 1;
+                  g_tsaPrpt.qwBaselineStageReference =
+                       (ulonglong)g_tsaStaticPtr->nBaselineStageInitialSignal;
+                  local_c = 0;
+                }
+              }
+              else {
+                g_tsaPrpt.nBaselineStageFrameCount = 1;
+                g_tsaPrpt.qwBaselineStageReference =
+                     (ulonglong)g_tsaStaticPtr->nBaselineStageInitialSignal;
+                local_c = 5;
+              }
+              break;
+            case 8:
+            case 9:
+              if ((g_tsaPrpt.dwBaselinePropertyFlags & 2) == 0) {
+                if ((ushort)(DAT_6bcab6d2 >> 16) <= g_tsaPrpt.qwBaselineStageReference) {
+                  g_tsaPrpt.nBaselineStageFrameCount = 1;
+                  g_tsaPrpt.qwBaselineStageReference =
+                       (ulonglong)g_tsaStaticPtr->nBaselineStageInitialSignal;
+                  local_c = 0;
+                }
+              }
+              else {
+                g_tsaPrpt.nBaselineStageFrameCount = 1;
+                g_tsaPrpt.qwBaselineStageReference =
+                     (ulonglong)g_tsaStaticPtr->nBaselineStageInitialSignal;
+                local_c = 5;
+              }
+              break;
+            default:
+              g_tsaPrpt.nBaselineStageFrameCount = 1;
+              g_tsaPrpt.qwBaselineStageReference =
+                   (ulonglong)g_tsaStaticPtr->nBaselineStageInitialSignal;
+            }
+            g_tsaPrpt.dwBaselineStage = local_c;
           }
           else {
-            _refptr_g_tsaPrpt->dwBaselineStage = 3;
+            g_tsaPrpt.dwBaselineStage = 3;
           }
         }
         else {
-          _refptr_g_tsaPrpt->dwBaselineStage = 9;
+          g_tsaPrpt.dwBaselineStage = 9;
         }
       }
       else {
-        _refptr_g_tsaPrpt->dwBaselineStage = 3;
+        g_tsaPrpt.dwBaselineStage = 3;
       }
     }
     else {
-      _refptr_g_tsaPrpt->dwBaselineStage = 2;
+      g_tsaPrpt.dwBaselineStage = 2;
     }
   }
   else {
-    _refptr_g_tsaPrpt->dwBaselineStage = 1;
+    g_tsaPrpt.dwBaselineStage = 1;
   }
   return;
 }
@@ -231,34 +360,70 @@ void BLSM_UpdateStage(void)
 void BLSM_ProcessStage(void)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0xc]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x10];
+  bool bVar1;
+  short sVar2;
+  int iVar3;
+  
+  (*(short *)(_stk + 0x6)) = DAT_6bcab6c6;
   (*_refptr_g_tsaStaticPtr)->bBaselineUpdatedThisFrame = '\0';
   (*_refptr_g_tsaStaticPtr)->bResetDiffRequested = '\0';
   (*_refptr_g_tsaStaticPtr)[1].bField_0x00 = '\0';
-  if (_refptr_g_tsaPrpt->dwBaselineStage < 10) {
-    switch (_refptr_g_tsaPrpt->dwBaselineStage) {
-      case 0:
-      case 1:
-        (*_refptr_g_tsaStaticPtr)->bResetDiffRequested = 1;
-        BLSM_Stage0();
-        break;
-      case 2:
-        if (_refptr_g_tsaPrpt->dwPrevBaselineStage <= 3 && _refptr_g_tsaPrpt->dwPrevBaselineStage >= 1) {
-          _refptr_g_tsaPrpt->dwBaselineStage = 0;
-        } else {
-          _refptr_g_tsaPrpt->dwBaselineStage = _refptr_g_tsaPrpt->dwPrevBaselineStage;
-        }
-        break;
-      case 3: {
-        short s1 = 0, s2 = 0;
-        BLSM_Stage3(&s1, &s2);
-        BLIIR_UpdateBaseline(0, s1, s2);
-        (*_refptr_g_tsaStaticPtr)->bBaselineUpdatedThisFrame = 1;
-        BLSM_PostStage3();
-        break;
-      }
-      default:
-        break;
+  switch(_refptr_g_tsaPrpt->dwBaselineStage) {
+  case 0:
+    BLSM_GetNoTouchBlStep(&(*(short *)(_stk + 0x6)),(ushort *)&(*(short *)(_stk + 0x4)));
+    BLIIR_Update(0,(*(short *)(_stk + 0x6)),(*(short *)(_stk + 0x4)));
+    (*_refptr_g_tsaStaticPtr)->bBaselineUpdatedThisFrame = '\x01';
+    BLSM_SaveNormalBl();
+    break;
+  case 1:
+    (*_refptr_g_tsaStaticPtr)->bResetDiffRequested = '\x01';
+    BLSM_Reset();
+    break;
+  case 2:
+    (*_refptr_g_tsaStaticPtr)->bResetDiffRequested = '\x01';
+    BLSM_Reset();
+    break;
+  case 3:
+    if (((_refptr_g_tsaPrpt->dwPrevBaselineStage == 1) ||
+         (_refptr_g_tsaPrpt->dwPrevBaselineStage == 2)) ||
+        (_refptr_g_tsaPrpt->dwPrevBaselineStage == 3)) {
+      _refptr_g_tsaPrpt->dwBaselineStage = 0;
     }
+    else {
+      _refptr_g_tsaPrpt->dwBaselineStage = _refptr_g_tsaPrpt->dwPrevBaselineStage;
+    }
+    break;
+  case 7:
+  case 8:
+    if ((g_BLSMNextEdgeSmallThresh != '\0') || (bVar1 = BLSM_ProcessUseNextSideThold(), bVar1)) {
+      BLIIR_Update(0,(short)(DAT_6bcab6ca >> 16),(undefined1)DAT_6bcab6d2);
+    }
+    else {
+      BLIIR_Update(0,(short)DAT_6bcab6ca,(undefined1)DAT_6bcab6d2);
+    }
+    (*_refptr_g_tsaStaticPtr)->bBaselineUpdatedThisFrame = '\x01';
+    break;
+  case 9:
+    iVar3 = -(int)_refptr_g_tsaPrpt->nSPeakNegative;
+    if (iVar3 < 0) {
+      iVar3 = iVar3 + 0xf;
+    }
+    (*(short *)(_stk + 0x4)) = (short)(iVar3 >> 4);
+    sVar2 = DAT_6bcab6c6;
+    if ((short)DAT_6bcab6c6 < 0) {
+      sVar2 = DAT_6bcab6c6 + 3;
+    }
+    if (sVar2 >> 2 < (*(short *)(_stk + 0x4))) {
+      (*(short *)(_stk + 0x4)) = DAT_6bcab6c6;
+      if ((short)DAT_6bcab6c6 < 0) {
+        (*(short *)(_stk + 0x4)) = DAT_6bcab6c6 + 3;
+      }
+      (*(short *)(_stk + 0x4)) = (*(short *)(_stk + 0x4)) >> 2;
+    }
+    BLIIR_Update(1,(short)-_refptr_g_tsaPrpt->nSPeakNegative,(*(short *)(_stk + 0x4)));
+    (*_refptr_g_tsaStaticPtr)->bBaselineUpdatedThisFrame = '\x01';
   }
   if ((*_refptr_g_tsaStaticPtr)->bResetDiffRequested == '\0') {
     BLIIR_CalcDiff();
@@ -268,7 +433,6 @@ void BLSM_ProcessStage(void)
   }
   return;
 }
-
 
 // ============================================================================
 // Function: BLSM_GetProperty @ 6ba4d523

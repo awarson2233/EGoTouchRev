@@ -1,5 +1,14 @@
 #include "TSACoreInternal.h"
 
+// g_tmHandlerTable @ 0x6bb52a40（.rdata）：4 种触控模式各一对 {Detect, Process}。
+// 原 DLL 中是代码指针，不能经内存镜像重定位，这里直接用真实函数地址建表。
+static undefined *const g_tmHandlerTable[8] = {
+  (undefined *)TouchMode_NoObjDetect,  (undefined *)TouchMode_NoObjProcess,
+  (undefined *)TouchMode_FingerDetect, (undefined *)TouchMode_FingerProcess,
+  (undefined *)TouchMode_GloveDetect,  (undefined *)TouchMode_GloveProcess,
+  (undefined *)TouchMode_StylusDetect, (undefined *)TouchMode_StylusProcess,
+};
+
 // ============================================================================
 // Function: TouchMode_Process @ 6ba78dde
 // ============================================================================
@@ -11,13 +20,11 @@
 void TouchMode_Process(void)
 
 {
-  uint dwPrevTouchMode;
-  undefined4 dwPrevModeData;
-  int nPrevModeResult;
-  uint dwNextTouchMode;
-  undefined4 dwNextModeData;
-  int anModeResult [2];
-  undefined **pModeHandlerPair;
+  /* 原栈布局：prev = {mode,data,result} @-0x38，next = {mode,data,result,pad} @-0x28；
+     TouchMode_NewModeProcess 按 [1]/[2] 访问相邻字段，必须保持为数组。 */
+  uint prevUnit[3];
+  uint nextUnit[4];
+  undefined *const *pModeHandlerPair;
   uint dwPriorityIndex;
   TSAPrpt *pTsaReport;
   
@@ -26,13 +33,13 @@ void TouchMode_Process(void)
     StrPrintf_Process(0,&DAT_6bb52a80,"TouchMode_Process");
   }
   pTsaReport = _refptr_g_tsaPrpt;
-  nPrevModeResult = 0;
-  dwPrevModeData = 0;
+  prevUnit[2] = 0;
+  prevUnit[1] = 0;
   pModeHandlerPair = (undefined **)0x0;
   *(undefined8 *)&_refptr_g_tsaPrpt[1].field_0x38 = *(undefined8 *)&_refptr_g_tsaPrpt[1].field_0x2c;
   *(undefined4 *)&pTsaReport[1].field_0x40 = *(undefined4 *)&pTsaReport[1].field_0x34;
-  dwPrevTouchMode = *(uint *)&_refptr_g_tsaPrpt[1].field_0x38;
-  if (3 < dwPrevTouchMode) {
+  prevUnit[0] = *(uint *)&_refptr_g_tsaPrpt[1].field_0x38;
+  if (3 < prevUnit[0]) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
                       "../../src/Alg/TouchMode/TouchMode_Process.c",0xa4,
                       "prevModeUnit.mode < TOUCH_MODE_NUM");
@@ -47,37 +54,37 @@ void TouchMode_Process(void)
     if (3 < dwPriorityIndex) {
 LAB_6ba78fbd:
       if (3 < dwPriorityIndex) {
-        dwNextTouchMode = dwPrevTouchMode;
-        anModeResult[0] = nPrevModeResult;
-        dwNextModeData = dwPrevModeData;
+        nextUnit[0] = prevUnit[0];
+        nextUnit[2] = prevUnit[2];
+        nextUnit[1] = prevUnit[1];
       }
-      *(uint *)&_refptr_g_tsaPrpt[1].field_0x2c = dwNextTouchMode;
-      *(int *)&_refptr_g_tsaPrpt[1].field_0x34 = anModeResult[0];
-      *(undefined4 *)&_refptr_g_tsaPrpt[1].field_0x30 = dwNextModeData;
+      *(uint *)&_refptr_g_tsaPrpt[1].field_0x2c = nextUnit[0];
+      *(int *)&_refptr_g_tsaPrpt[1].field_0x34 = nextUnit[2];
+      *(undefined4 *)&_refptr_g_tsaPrpt[1].field_0x30 = nextUnit[1];
       return;
     }
-    dwNextTouchMode =
+    nextUnit[0] =
          *(uint *)(&g_tmSwitchPriority +
-                  ((ulonglong)dwPriorityIndex + (ulonglong)dwPrevTouchMode * 4) * 4);
-    if (3 < dwNextTouchMode) {
+                  ((ulonglong)dwPriorityIndex + (ulonglong)prevUnit[0] * 4) * 4);
+    if (3 < nextUnit[0]) {
       StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
                         "../../src/Alg/TouchMode/TouchMode_Process.c",0xaf,
                         "nextModeUnit.mode < TOUCH_MODE_NUM");
       HardwareAnalyzer_SetSoftException();
     }
-    pModeHandlerPair = &g_tmHandlerTable + (ulonglong)dwNextTouchMode * 2;
-    (*(code *)*pModeHandlerPair)(anModeResult,&dwNextModeData);
-    if (dwNextTouchMode == dwPrevTouchMode) {
-      nPrevModeResult = anModeResult[0];
-      dwPrevModeData = dwNextModeData;
+    pModeHandlerPair = g_tmHandlerTable + (ulonglong)nextUnit[0] * 2;
+    (*(code *)*pModeHandlerPair)((int *)&nextUnit[2],&nextUnit[1]);
+    if (nextUnit[0] == prevUnit[0]) {
+      prevUnit[2] = nextUnit[2];
+      prevUnit[1] = nextUnit[1];
     }
-    if (anModeResult[0] == 2) {
-      if (dwNextTouchMode == dwPrevTouchMode) {
-        (*(code *)pModeHandlerPair[1])(2,dwNextModeData);
+    if (nextUnit[2] == 2) {
+      if (nextUnit[0] == prevUnit[0]) {
+        (*(code *)pModeHandlerPair[1])(2,nextUnit[1]);
         SWTimer_Stop(&g_tmSwitchTimer);
       }
       else {
-        TouchMode_NewModeProcess(&dwNextTouchMode,&dwPrevTouchMode,pModeHandlerPair);
+        TouchMode_NewModeProcess(nextUnit,prevUnit,pModeHandlerPair);
       }
       goto LAB_6ba78fbd;
     }

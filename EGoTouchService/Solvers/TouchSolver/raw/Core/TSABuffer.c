@@ -87,50 +87,45 @@ void TSABuffer_PrevFrameProcess(void)
 void TSABuffer_TZIDProcess(void)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x128]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x130];
   ushort uVar1;
   char cVar2;
   longlong lVar3;
   undefined8 *puVar4;
-  undefined8 local_128 [33];
-  byte local_20;
-  byte local_1f;
-  byte local_1e;
-  byte local_1d;
-  ushort local_1c;
-  byte local_19;
   
-  puVar4 = local_128;
+  puVar4 = ((undefined8 *)(_stk + 0x8));
   for (lVar3 = 0x20; lVar3 != 0; lVar3 = lVar3 + -1) {
     *puVar4 = 0;
     puVar4 = puVar4 + 1;
   }
-  for (local_19 = 0; local_19 < **(byte **)_refptr_g_touchesPtr; local_19 = local_19 + 1) {
-    cVar2 = Touch_IsOff(local_19);
+  for ((*(byte *)(_stk + 0x117)) = 0; (*(byte *)(_stk + 0x117)) < **(byte **)_refptr_g_touchesPtr; (*(byte *)(_stk + 0x117)) = (*(byte *)(_stk + 0x117)) + 1) {
+    cVar2 = Touch_IsOff((*(byte *)(_stk + 0x117)));
     if (cVar2 == '\0') {
-      local_1d = (byte)((ushort)*(undefined2 *)
-                                 ((longlong)(int)(uint)local_19 * 0x168 +
+      (*(byte *)(_stk + 0x113)) = (byte)((ushort)*(undefined2 *)
+                                 ((longlong)(int)(uint)(*(byte *)(_stk + 0x117)) * 0x168 +
                                   *(longlong *)_refptr_g_touchesPtr + 0x162) >> 8);
-      local_1e = (byte)((ushort)*(undefined2 *)
-                                 ((longlong)(int)(uint)local_19 * 0x168 +
+      (*(byte *)(_stk + 0x112)) = (byte)((ushort)*(undefined2 *)
+                                 ((longlong)(int)(uint)(*(byte *)(_stk + 0x117)) * 0x168 +
                                   *(longlong *)_refptr_g_touchesPtr + 0x164) >> 8);
-      local_1f = *(byte *)((ulonglong)
-                           ((uint)local_1d + (uint)local_1e * (uint)_refptr_g_tsaPrmtFlash->bCols &
+      (*(byte *)(_stk + 0x111)) = *(byte *)((ulonglong)
+                           ((uint)(*(byte *)(_stk + 0x113)) + (uint)(*(byte *)(_stk + 0x112)) * (uint)_refptr_g_tsaPrmtFlash->bCols &
                            0xffff) + g_tsaBufSubTZ);
-      *(undefined1 *)((longlong)local_128 + (longlong)(int)(uint)local_1f) =
+      *(undefined1 *)((longlong)((undefined8 *)(_stk + 0x8)) + (longlong)(int)(uint)(*(byte *)(_stk + 0x111))) =
            *(undefined1 *)
-            ((longlong)(int)(uint)local_19 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x154);
+            ((longlong)(int)(uint)(*(byte *)(_stk + 0x117)) * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x154);
     }
   }
-  ((char*)local_128)[0] = 0;
-  local_1c = _refptr_g_tsaPrmtFlash->wBufElementCount;
+  ((char*)((undefined8 *)(_stk + 0x8)))[0] = 0;
+  (*(ushort *)(_stk + 0x114)) = _refptr_g_tsaPrmtFlash->wBufElementCount;
   while( true ) {
-    uVar1 = local_1c;
-    local_1c = local_1c - 1;
+    uVar1 = (*(ushort *)(_stk + 0x114));
+    (*(ushort *)(_stk + 0x114)) = (*(ushort *)(_stk + 0x114)) - 1;
     if (uVar1 == 0) break;
-    local_20 = *(byte *)((ulonglong)local_1c + g_tsaBufSubTZ);
-    *(undefined1 *)(g_tsaBufTzID + (ulonglong)local_1c) =
+    (*(byte *)(_stk + 0x110)) = *(byte *)((ulonglong)(*(ushort *)(_stk + 0x114)) + g_tsaBufSubTZ);
+    *(undefined1 *)(g_tsaBufTzID + (ulonglong)(*(ushort *)(_stk + 0x114))) =
          *(undefined1 *)
-          ((longlong)local_128 + (longlong)(int)(uint)*(byte *)((ulonglong)local_1c + g_tsaBufSubTZ)
+          ((longlong)((undefined8 *)(_stk + 0x8)) + (longlong)(int)(uint)*(byte *)((ulonglong)(*(ushort *)(_stk + 0x114)) + g_tsaBufSubTZ)
           );
   }
   return;
@@ -209,23 +204,14 @@ void TSABuffer_TzIsNotMergedHandle(uint param_1)
 void TSABuffer_TimeRptProcess(void)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x148]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x150];
   byte *pbVar1;
   char cVar2;
   longlong lVar3;
   char *pcVar4;
-  char local_148 [264];
-  short local_40;
-  short local_3e;
-  byte local_3b;
-  byte local_3a;
-  byte local_39;
-  int local_38;
-  ushort local_32;
-  byte *local_30;
-  short *local_28;
-  byte local_19;
   
-  pcVar4 = local_148;
+  pcVar4 = ((char *)(_stk + 0x8));
   for (lVar3 = 0x20; lVar3 != 0; lVar3 = lVar3 + -1) {
     pcVar4[0] = '\0';
     pcVar4[1] = '\0';
@@ -237,55 +223,55 @@ void TSABuffer_TimeRptProcess(void)
     pcVar4[7] = '\0';
     pcVar4 = pcVar4 + 8;
   }
-  for (local_19 = 0; local_19 < (*_refptr_g_prevTouchesPtr)->bPrevTouchCount;
-      local_19 = local_19 + 1) {
+  for ((*(byte *)(_stk + 0x137)) = 0; (*(byte *)(_stk + 0x137)) < (*_refptr_g_prevTouchesPtr)->bPrevTouchCount;
+      (*(byte *)(_stk + 0x137)) = (*(byte *)(_stk + 0x137)) + 1) {
     cVar2 = Touch_IsOffEvent(*(undefined4 *)
                               ((longlong)*_refptr_g_prevTouchesPtr +
-                              (longlong)(int)(uint)local_19 * 0x478 + 0x21c));
+                              (longlong)(int)(uint)(*(byte *)(_stk + 0x137)) * 0x478 + 0x21c));
     if (cVar2 == '\0') {
-      local_39 = *(byte *)((longlong)
+      (*(byte *)(_stk + 0x117)) = *(byte *)((longlong)
                            (int)(uint)*(byte *)((longlong)*_refptr_g_prevTouchesPtr +
-                                               (longlong)(int)(uint)local_19 * 0x478 + 0x23c) * 0xc
+                                               (longlong)(int)(uint)(*(byte *)(_stk + 0x137)) * 0x478 + 0x23c) * 0xc
                            + *(longlong *)_refptr_g_prevPeaksPtr + 0xe);
-      local_3a = *(byte *)((longlong)
+      (*(byte *)(_stk + 0x116)) = *(byte *)((longlong)
                            (int)(uint)*(byte *)((longlong)*_refptr_g_prevTouchesPtr +
-                                               (longlong)(int)(uint)local_19 * 0x478 + 0x23c) * 0xc
+                                               (longlong)(int)(uint)(*(byte *)(_stk + 0x137)) * 0x478 + 0x23c) * 0xc
                            + *(longlong *)_refptr_g_prevPeaksPtr + 0xf);
-      local_3b = g_tsaBufTzZone
-                 [(uint)local_39 + (uint)local_3a * (uint)_refptr_g_tsaPrmtFlash->bCols & 0xffff];
-      if (local_3b != 0) {
-        local_148[(int)(uint)local_3b] =
+      (*(byte *)(_stk + 0x115)) = g_tsaBufTzZone
+                 [(uint)(*(byte *)(_stk + 0x117)) + (uint)(*(byte *)(_stk + 0x116)) * (uint)_refptr_g_tsaPrmtFlash->bCols & 0xffff];
+      if ((*(byte *)(_stk + 0x115)) != 0) {
+        ((char *)(_stk + 0x8))[(int)(uint)(*(byte *)(_stk + 0x115))] =
              (*(uint *)((longlong)*_refptr_g_prevTouchesPtr +
-                       (longlong)(int)(uint)local_19 * 0x478 + 0x1f8) & 0x20000000) != 0;
+                       (longlong)(int)(uint)(*(byte *)(_stk + 0x137)) * 0x478 + 0x1f8) & 0x20000000) != 0;
       }
     }
   }
-  local_28 = g_tsaBufTimeRpt;
-  local_30 = g_tsaBufTzZone;
-  local_32 = _refptr_g_tsaPrmtFlash->wBufElementCount;
-  local_3e = (*_refptr_g_tsaStaticPtr)->nBaselineStageInitialSignal;
+  (*(short * *)(_stk + 0x128)) = g_tsaBufTimeRpt;
+  (*(byte * *)(_stk + 0x120)) = g_tsaBufTzZone;
+  (*(ushort *)(_stk + 0x11e)) = _refptr_g_tsaPrmtFlash->wBufElementCount;
+  (*(short *)(_stk + 0x112)) = (*_refptr_g_tsaStaticPtr)->nBaselineStageInitialSignal;
   do {
-    pbVar1 = local_30;
-    local_30 = local_30 + 1;
-    if (local_148[(int)(uint)*pbVar1] == '\0') {
-      local_40 = *local_28;
-      local_38 = (int)local_3e + (int)*local_28;
-      if (local_38 < 0x7fff) {
-        if (local_38 < -0x8000) {
-          local_38 = -0x8000;
+    pbVar1 = (*(byte * *)(_stk + 0x120));
+    (*(byte * *)(_stk + 0x120)) = (*(byte * *)(_stk + 0x120)) + 1;
+    if (((char *)(_stk + 0x8))[(int)(uint)*pbVar1] == '\0') {
+      (*(short *)(_stk + 0x110)) = *(*(short * *)(_stk + 0x128));
+      (*(int *)(_stk + 0x118)) = (int)(*(short *)(_stk + 0x112)) + (int)*(*(short * *)(_stk + 0x128));
+      if ((*(int *)(_stk + 0x118)) < 0x7fff) {
+        if ((*(int *)(_stk + 0x118)) < -0x8000) {
+          (*(int *)(_stk + 0x118)) = -0x8000;
         }
       }
       else {
-        local_38 = 0x7fff;
+        (*(int *)(_stk + 0x118)) = 0x7fff;
       }
-      *local_28 = (short)local_38;
+      *(*(short * *)(_stk + 0x128)) = (short)(*(int *)(_stk + 0x118));
     }
     else {
-      *local_28 = 0;
+      *(*(short * *)(_stk + 0x128)) = 0;
     }
-    local_28 = local_28 + 1;
-    local_32 = local_32 - 1;
-  } while (local_32 != 0);
+    (*(short * *)(_stk + 0x128)) = (*(short * *)(_stk + 0x128)) + 1;
+    (*(ushort *)(_stk + 0x11e)) = (*(ushort *)(_stk + 0x11e)) - 1;
+  } while ((*(ushort *)(_stk + 0x11e)) != 0);
   return;
 }
 
@@ -297,23 +283,18 @@ void TSABuffer_TimeRptProcess(void)
 void TSABuffer_GripStageProcess(void)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x228]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x230];
   undefined2 *puVar1;
   char cVar2;
   undefined2 uVar3;
   longlong lVar4;
   undefined8 *puVar5;
   char *pcVar6;
-  char local_228 [4];
-  undefined2 uStack_224;
-  char acStack_222 [250];
-  undefined8 local_128;
-  byte local_1d;
-  ushort local_1c;
-  byte local_19;
   
                     /* 0x4ef57  1478  TSABuffer_GripStageProcess */
   TSABuffer_GripTimeProcess();
-  puVar5 = &local_128;
+  puVar5 = &(*(undefined8 *)(_stk + 0x108));
   for (lVar4 = 0x1f; lVar4 != 0; lVar4 = lVar4 + -1) {
     *puVar5 = 0;
     puVar5 = puVar5 + 1;
@@ -321,7 +302,7 @@ void TSABuffer_GripStageProcess(void)
   *(undefined4 *)puVar5 = 0;
   *(undefined2 *)((longlong)puVar5 + 4) = 0;
   *(undefined1 *)((longlong)puVar5 + 6) = 0;
-  pcVar6 = local_228;
+  pcVar6 = ((char *)(_stk + 0x8));
   for (lVar4 = 0x1f; lVar4 != 0; lVar4 = lVar4 + -1) {
     pcVar6[0] = '\0';
     pcVar6[1] = '\0';
@@ -340,61 +321,61 @@ void TSABuffer_GripStageProcess(void)
   pcVar6[4] = '\0';
   pcVar6[5] = '\0';
   pcVar6[6] = '\0';
-  for (local_19 = 0; local_19 < **(byte **)_refptr_g_touchesPtr; local_19 = local_19 + 1) {
-    cVar2 = Touch_IsOff(local_19);
+  for ((*(byte *)(_stk + 0x217)) = 0; (*(byte *)(_stk + 0x217)) < **(byte **)_refptr_g_touchesPtr; (*(byte *)(_stk + 0x217)) = (*(byte *)(_stk + 0x217)) + 1) {
+    cVar2 = Touch_IsOff((*(byte *)(_stk + 0x217)));
     if (cVar2 == '\0') {
-      local_1d = *(byte *)((longlong)(int)(uint)local_19 * 0x168 + *(longlong *)_refptr_g_touchesPtr
+      (*(byte *)(_stk + 0x213)) = *(byte *)((longlong)(int)(uint)(*(byte *)(_stk + 0x217)) * 0x168 + *(longlong *)_refptr_g_touchesPtr
                           + 0x28c);
-      if (*(int *)((longlong)(int)(uint)local_19 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x210
+      if (*(int *)((longlong)(int)(uint)(*(byte *)(_stk + 0x217)) * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x210
                   ) == 1) {
-        *(undefined1 *)((longlong)&local_128 + (longlong)(int)(uint)local_1d) = 1;
+        *(undefined1 *)((longlong)&(*(undefined8 *)(_stk + 0x108)) + (longlong)(int)(uint)(*(byte *)(_stk + 0x213))) = 1;
       }
-      if (((*(uint *)((longlong)(int)(uint)local_19 * 0x168 + *(longlong *)_refptr_g_touchesPtr +
+      if (((*(uint *)((longlong)(int)(uint)(*(byte *)(_stk + 0x217)) * 0x168 + *(longlong *)_refptr_g_touchesPtr +
                      0x214) & 0x200) != 0) &&
-         (*(short *)((longlong)(int)(uint)local_19 * 0x168 + *(longlong *)_refptr_g_touchesPtr +
+         (*(short *)((longlong)(int)(uint)(*(byte *)(_stk + 0x217)) * 0x168 + *(longlong *)_refptr_g_touchesPtr +
                     0x156) == 1)) {
-        *(undefined1 *)((longlong)&local_128 + (longlong)(int)(uint)local_1d) = 1;
+        *(undefined1 *)((longlong)&(*(undefined8 *)(_stk + 0x108)) + (longlong)(int)(uint)(*(byte *)(_stk + 0x213))) = 1;
       }
       if ((*(ushort *)
-            ((longlong)(int)(uint)local_19 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x234) <
+            ((longlong)(int)(uint)(*(byte *)(_stk + 0x217)) * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x234) <
            0x80) ||
          (*(ushort *)
-           ((longlong)(int)(uint)local_19 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x236) <
+           ((longlong)(int)(uint)(*(byte *)(_stk + 0x217)) * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x236) <
           0x80)) {
-        *(undefined1 *)((longlong)&local_128 + (longlong)(int)(uint)local_1d) = 1;
+        *(undefined1 *)((longlong)&(*(undefined8 *)(_stk + 0x108)) + (longlong)(int)(uint)(*(byte *)(_stk + 0x213))) = 1;
       }
       if ((*(ushort *)
-            ((longlong)(int)(uint)local_19 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x22c) <
+            ((longlong)(int)(uint)(*(byte *)(_stk + 0x217)) * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x22c) <
            0x20) ||
          (*(ushort *)
-           ((longlong)(int)(uint)local_19 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x22e) <
+           ((longlong)(int)(uint)(*(byte *)(_stk + 0x217)) * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x22e) <
           0x20)) {
-        *(undefined1 *)((longlong)&local_128 + (longlong)(int)(uint)local_1d) = 1;
+        *(undefined1 *)((longlong)&(*(undefined8 *)(_stk + 0x108)) + (longlong)(int)(uint)(*(byte *)(_stk + 0x213))) = 1;
       }
-      local_228[(int)(uint)local_1d] =
-           (*(uint *)((longlong)(int)(uint)local_19 * 0x168 + *(longlong *)_refptr_g_touchesPtr +
+      ((char *)(_stk + 0x8))[(int)(uint)(*(byte *)(_stk + 0x213))] =
+           (*(uint *)((longlong)(int)(uint)(*(byte *)(_stk + 0x217)) * 0x168 + *(longlong *)_refptr_g_touchesPtr +
                      0x218) & 1) != 0;
     }
   }
-  for (local_1c = 0; local_1c < _refptr_g_tsaPrmtFlash->wBufElementCount; local_1c = local_1c + 1) {
-    local_1d = *(byte *)((ulonglong)local_1c + g_tsaBufTzZone);
-    if (local_1d == 0) {
-      if (*(char *)((ulonglong)local_1c + g_tsaBufGripStage) != '\0') {
-        *(undefined2 *)(g_tsaBufGripTimeOff + (ulonglong)local_1c * 2) = 0;
+  for ((*(ushort *)(_stk + 0x214)) = 0; (*(ushort *)(_stk + 0x214)) < _refptr_g_tsaPrmtFlash->wBufElementCount; (*(ushort *)(_stk + 0x214)) = (*(ushort *)(_stk + 0x214)) + 1) {
+    (*(byte *)(_stk + 0x213)) = *(byte *)((ulonglong)(*(ushort *)(_stk + 0x214)) + g_tsaBufTzZone);
+    if ((*(byte *)(_stk + 0x213)) == 0) {
+      if (*(char *)((ulonglong)(*(ushort *)(_stk + 0x214)) + g_tsaBufGripStage) != '\0') {
+        *(undefined2 *)(g_tsaBufGripTimeOff + (ulonglong)(*(ushort *)(_stk + 0x214)) * 2) = 0;
       }
-      *(undefined1 *)((ulonglong)local_1c + g_tsaBufGripStage) = 0;
-      puVar1 = (undefined2 *)(g_tsaBufGripTimeOff + (ulonglong)local_1c * 2);
-      uVar3 = TSABuffer_GetNextTime((int)*(short *)(g_tsaBufGripTimeOff + (ulonglong)local_1c * 2));
+      *(undefined1 *)((ulonglong)(*(ushort *)(_stk + 0x214)) + g_tsaBufGripStage) = 0;
+      puVar1 = (undefined2 *)(g_tsaBufGripTimeOff + (ulonglong)(*(ushort *)(_stk + 0x214)) * 2);
+      uVar3 = TSABuffer_GetNextTime((int)*(short *)(g_tsaBufGripTimeOff + (ulonglong)(*(ushort *)(_stk + 0x214)) * 2));
       *puVar1 = uVar3;
     }
-    else if ((local_228[(int)(uint)local_1d] == '\0') &&
+    else if ((((char *)(_stk + 0x8))[(int)(uint)(*(byte *)(_stk + 0x213))] == '\0') &&
             ((int)(uint)*(ushort *)&_refptr_g_tsaPrmtFlash[1].field_0x7a <
-             (int)*(short *)(g_tsaBufGripTime + (ulonglong)local_1c * 2))) {
-      *(undefined1 *)(g_tsaBufGripStage + (ulonglong)local_1c) =
-           *(undefined1 *)((longlong)&local_128 + (longlong)(int)(uint)local_1d);
+             (int)*(short *)(g_tsaBufGripTime + (ulonglong)(*(ushort *)(_stk + 0x214)) * 2))) {
+      *(undefined1 *)(g_tsaBufGripStage + (ulonglong)(*(ushort *)(_stk + 0x214))) =
+           *(undefined1 *)((longlong)&(*(undefined8 *)(_stk + 0x108)) + (longlong)(int)(uint)(*(byte *)(_stk + 0x213)));
     }
-    if (*(short *)(g_tsaBufTimeRpt + (ulonglong)local_1c * 2) == 0) {
-      *(undefined2 *)(g_tsaBufGripTimeOff + (ulonglong)local_1c * 2) = 0x7fff;
+    if (*(short *)(g_tsaBufTimeRpt + (ulonglong)(*(ushort *)(_stk + 0x214)) * 2) == 0) {
+      *(undefined2 *)(g_tsaBufGripTimeOff + (ulonglong)(*(ushort *)(_stk + 0x214)) * 2) = 0x7fff;
     }
   }
   return;

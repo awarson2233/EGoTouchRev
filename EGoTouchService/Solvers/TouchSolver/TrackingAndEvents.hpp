@@ -121,6 +121,43 @@ public:
     uint16_t m_alwaysMatchMinAge          = 5;
     bool     m_useHungarian               = true;     // 启用 Kuhn-Munkres 匈牙利二分图匹配
     bool     m_strictAccCheck             = false;    // 严格加速度校验
+
+    // ══════════════════════════════════════════════════════════════════
+    // IDT 关联重排（**明确偏离原厂**）
+    //
+    // 原厂结构是「评分 → 指派 → 事后校验」，有三个互相叠加的缺陷：
+    //
+    //   A. 评分被并列常数抹平。IDT_PopulateDistanceMap 的「近+老+慢」分支与
+    //      IDT_AlwaysMatchProcess 的唯一性检验都把代价格改写成**同一个**
+    //      0xC0000001。匈牙利求总和最小，多个格子同值时覆盖它们的任意排列
+    //      总代价相同 —— 目标函数在这些配对之间彻底失去分辨力。并拢双指、
+    //      两条轨迹都「近+老+慢」时最容易同时被锚定。
+    //
+    //   B. 评分被惩罚项破坏。numCur < numPrev（任何一根手指消失）那一帧，
+    //      `cost += 2*((dx−vx)² + (dy−vy)²)` 加在锚定常数之上，量级 1e8~1e9，
+    //      锚定值被不同幅度抬起。惩罚项本身量纲还是错的：位移减速度。
+    //
+    //   C. 校验在指派之后，且不重新求解。IDT_AccCheck 把非法配对置 0xFF 之后，
+    //      当前触点领新 ID、历史轨迹走抬起 —— 没有人回头去找那个本来正确的
+    //      配对。一次误配同时毁掉两条轨迹的 ID 连续性。
+    //
+    // 重排后：合法性判据**前移进代价矩阵**（不合法写 kForbidden 哨兵），
+    // 求解器只在合法配对里找最优，事后只需剔除落在哨兵上的配对。这样也就
+    // 不再需要「二次求解」—— 落在哨兵上说明该行本来就没有任何合法去处。
+    // 代价矩阵改用 int64 平凡运算，不再依赖 int32 回绕。
+    // ══════════════════════════════════════════════════════════════════
+
+    /// 关掉即回到原厂的「评分→指派→事后校验」，仅供对拍。
+    bool     m_idtAdmissibilityInCost     = true;
+    /// 位移硬门（mm）。超过即判不合法，不进入指派。并拢双指的指心间距约
+    /// 12~18 mm，取 6 mm 可以保证一根手指不会去继承另一根的轨迹；
+    /// 换算 10 ms 帧即 0.6 m/s 的位移上限，正常滑动远低于此。
+    float    m_idtHardMatchDistMM         = 6.0f;
+    /// 「近+老+慢」的优先奖励。不再用并列常数：奖励是一个固定偏置，减去之后
+    /// 各锚定配对之间**仍按 dx²+dy² 可比**，只是整体排在非锚定配对之前。
+    static constexpr int64_t kIdtAnchorBonus = 1LL << 34;
+    /// 不合法配对的哨兵。取值远大于任何真实代价，但 20 行求和仍在 int64 内。
+    static constexpr int64_t kIdtForbidden   = 1LL << 40;
     bool     m_edgeExtrapolateEnabled     = true;     // 边缘滑出二阶外推与钳位使能
 
     // ── 外部测试与兼容字段 ──
@@ -845,7 +882,13 @@ private:
     // 即只有「速度与加速度都大」才判为不合理；轨迹第二帧没有可靠速度，只看速度
     // 并除以 4。换算：t = 3600 ⇔ v = 60 Q8/ms = 1 mm/ms = 1 m/s。
     [[nodiscard]] int32_t IDT_GetAcc(const ZoneCluster& cur, const InternalTrack& prev) const noexcept {
-        int32_t dt = m_frameIntervalMs < 0 ? -m_frameIntervalMs : m_frameIntervalMs;
+        // ⚠ 偏离原厂：分母固定为**标称**帧间隔，不用实测 m_frameIntervalMs。
+        // 门限是按速度定的，而手指在一帧里能走多远是物理常数；帧间隔抖动或掉
+        // 一帧时，实测 dt 变大会让允许位移等比放大（掉一帧 ⇒ 门限翻倍），这在
+        // 原厂的恒定帧率下不会发生，在本机会。改成按标称 dt 折算即按位移设门。
+        int32_t dt = m_idtAdmissibilityInCost
+                         ? NominalFrameIntervalMs()
+                         : (m_frameIntervalMs < 0 ? -m_frameIntervalMs : m_frameIntervalMs);
         if (dt == 0) dt = 1;
 
         const int32_t vx = (static_cast<int32_t>(cur.cogX_q8) - static_cast<int32_t>(prev.rawX_q8)) / dt;
@@ -854,10 +897,18 @@ private:
         const int32_t ay = vy - prev.velYPerMs;
         const int32_t v2 = vx * vx + vy * vy;
 
+        // ⚠ 偏离原厂：删掉 `age == 1 → v²>>2` 的放宽。新生轨迹没有速度先验，
+        // 把它的允许位移放大到 2 倍只会让它更容易去抢别的区域 —— 双指交替点击
+        // 时新生的那一条恰恰最该收紧。
         if (prev.age == 1) {
-            return Fixed::ShrTowardZero(v2, 2);
+            return m_idtAdmissibilityInCost ? v2 : Fixed::ShrTowardZero(v2, 2);
         }
         return std::min(ax * ax + ay * ay, v2);
+    }
+
+    /// 标称帧间隔（ms）。m_reportRateHz = 100 ⇒ 10 ms。
+    [[nodiscard]] int32_t NominalFrameIntervalMs() const noexcept {
+        return (m_reportRateHz > 0) ? (1000 / m_reportRateHz) : 10;
     }
 
     // ── IDT_IsToIncAccThold @0x6BA615C7 ─────────────────────────────────
@@ -868,13 +919,25 @@ private:
     //   return prev.maxSqMove4F6 >= 25;      // 曾有单帧位移 ≥ 5 mm
     //
     // static.bField_0x111 本机恒 < 2（文档 05 §2.5），该项不产生放宽。
-    [[nodiscard]] static bool IDT_IsToIncAccThold(const ZoneCluster& cur,
-                                                  const InternalTrack& prev) noexcept {
+    [[nodiscard]] bool IDT_IsToIncAccThold(const ZoneCluster& cur,
+                                           const InternalTrack& prev) const noexcept {
         const bool absGrip = (cur.zoneFlags & ZONE_FLAG_ABS_GRIP) != 0;
         if (!absGrip && prev.gripStage210 == 1) return false;
         if ((prev.persist1FC & 0x3000000u) != 0) return false;
         if (cur.exceptionState != ZONE_EXC_NONE || prev.exceptionType != 0) return true;
-        return prev.maxSqMoveMm2 >= 25;
+
+        // ⚠ 偏离原厂：`prev.maxSqMoveMm2 >= 25` 是「这条轨迹**历史上曾经**有过
+        // 一次 ≥ 5 mm 的单帧位移」，一旦成立就永久放宽 4 倍。任何一次正常拖动
+        // 都会给轨迹打上这个标记，于是日常使用中绝大多数轨迹都在 4 倍门限下
+        // 跑。改成只看**上一帧的瞬时速度**：真正在快速移动的轨迹才放宽。
+        if (!m_idtAdmissibilityInCost) return prev.maxSqMoveMm2 >= 25;
+
+        const int32_t dt = NominalFrameIntervalMs();
+        const int32_t sx = prev.velXPerMs * dt;   // 上一帧单帧位移（Q8）
+        const int32_t sy = prev.velYPerMs * dt;
+        const int32_t mmPerFrameSq =
+            (sx * sx + sy * sy) / (m_pitchPxPerMm * m_pitchPxPerMm);
+        return mmPerFrameSq >= 25;                // 上一帧确实走了 ≥ 5 mm
     }
 
     // ── IDT_AlwaysMatchProcess @0x6BA620AC（文档 05 §2.3）────────────────
@@ -1135,6 +1198,155 @@ private:
         }
     }
 
+    // ══════════════════════════════════════════════════════════════════
+    // 关联重排后的求解路径（偏离原厂，见成员声明处的说明）
+    //
+    //   ┌──────────────┐   合法？   ┌─────────────────┐
+    //   │ 区域 i × 轨迹 j│──────────►│ cost = dx²+dy²   │──┐
+    //   └──────────────┘    否      │ （近+老+慢再减奖励）│  │
+    //          │                    └─────────────────┘  ├─► 匈牙利(int64)
+    //          └───────────────────► cost = kForbidden ───┘        │
+    //                                                              ▼
+    //                                            剔除落在 kForbidden 上的配对
+    //
+    // 落在哨兵上说明该行本来就没有任何合法去处，所以不需要「二次求解」。
+    // ══════════════════════════════════════════════════════════════════
+
+    /// 单个配对是否合法。原 IDT_AccCheck 的判据 + 位移硬门，全部前移到这里。
+    [[nodiscard]] bool IDT_IsAdmissible(const ZoneCluster& cur, const InternalTrack& prev,
+                                        int64_t d2, bool strictMode) const noexcept {
+        // 07 的 TouchReport_IsHistoryBufferApplied 在「移入回放期间手指已抬起」
+        // 时置 +0x1f8 |= 0x200000，此后强制断开（原 IDT_AccCheck 第 4 条）。
+        if ((prev.persist1F8 & 0x200000u) != 0) return false;
+
+        const int64_t rHard = static_cast<int64_t>(TS_MMToPixel(
+            static_cast<int32_t>(m_idtHardMatchDistMM)));
+        if (d2 > rHard * rHard) return false;
+
+        const int64_t base = static_cast<int64_t>(
+            (TS_MMToPixel(static_cast<int32_t>(m_maxAccMM)) >> 4) *
+            (TS_MMToPixel(static_cast<int32_t>(m_maxAccMM)) >> 4));
+        int64_t t = base;
+        if (IDT_IsToIncAccThold(cur, prev) || strictMode) t <<= 2;
+        return static_cast<int64_t>(IDT_GetAcc(cur, prev)) <= t;
+    }
+
+    /// 建代价矩阵并求解。scratch[j] = 与历史 j 配对的当前下标，0xFF 表示未配。
+    void IDT_SolveAdmissible(uint8_t* scratch, const IdtContext& ctx) const noexcept {
+        for (uint8_t i = 0; i < kIdtMatDim; ++i) scratch[i] = 0xFF;
+        const size_t nCur = ctx.numCur, nPrev = ctx.numPrev;
+        if (nCur == 0 || nPrev == 0) return;
+
+        static_assert(kIdtAnchorBonus < kIdtForbidden,
+                      "奖励后的代价必须仍然低于哨兵");
+
+        const int32_t thr = TS_MMToPixel(static_cast<int32_t>(m_maxMatchDistMM));
+        const int32_t dtNom = NominalFrameIntervalMs();
+
+        int64_t cost[kIdtMatDim][kIdtMatDim];
+        for (size_t i = 0; i < nCur; ++i) {
+            const ZoneCluster& cur = ctx.cur[i];
+            for (size_t j = 0; j < nPrev; ++j) {
+                const InternalTrack& prev = PrevOf(ctx, j);
+
+                const int64_t dx = static_cast<int64_t>(cur.cogX_q8) - prev.rawX_q8;
+                const int64_t dy = static_cast<int64_t>(cur.cogY_q8) - prev.rawY_q8;
+                const int64_t d2 = dx * dx + dy * dy;
+
+                if (!IDT_IsAdmissible(cur, prev, d2, ctx.strictMode)) {
+                    cost[i][j] = kIdtForbidden;
+                    continue;
+                }
+
+                int64_t c = d2;
+
+                // 「近 + 老 + 慢」的优先奖励。与原厂不同的是这里**保留** d²，
+                // 所以多个锚定配对之间仍然可比，不会并列成同一个常数。
+                const int64_t px = static_cast<int64_t>(dtNom) * prev.velXPerMs;
+                const int64_t py = static_cast<int64_t>(dtNom) * prev.velYPerMs;
+                // ⚠ 不要把这些局部量叫 near / far：windef.h 把它们定义成了宏。
+                const bool isNear = (std::abs(dx) + std::abs(dy)) <= thr;
+                const bool isOld  = prev.age > m_alwaysMatchMinAge;
+                const bool isSlow = (std::abs(px) + std::abs(py)) <= thr;
+                if (isNear && isOld && isSlow && !IDT_IsEdgeTouch(cur.cogX_q8, cur.cogY_q8)) {
+                    c -= kIdtAnchorBonus;
+                }
+                cost[i][j] = c;
+            }
+        }
+
+        // 行取较少的一侧，保证每行都能被指派。
+        uint8_t assign[kIdtMatDim];
+        if (nCur <= nPrev) {
+            IDT_Hungarian64(nCur, nPrev, &cost[0][0], kIdtMatDim, /*transposed=*/false, assign);
+            // assign[j] = 与列 j（历史）配对的行（当前），0xFF 未配
+            for (size_t j = 0; j < nPrev; ++j) {
+                const uint8_t i = assign[j];
+                if (i != 0xFF && cost[i][j] < kIdtForbidden) scratch[j] = i;
+            }
+        } else {
+            IDT_Hungarian64(nPrev, nCur, &cost[0][0], kIdtMatDim, /*transposed=*/true, assign);
+            // assign[i] = 与列 i（当前）配对的行（历史）
+            for (size_t i = 0; i < nCur; ++i) {
+                const uint8_t j = assign[i];
+                if (j != 0xFF && cost[i][j] < kIdtForbidden) scratch[j] = static_cast<uint8_t>(i);
+            }
+        }
+    }
+
+    /// 带势函数的最短增广路匈牙利，int64 平凡运算（不再依赖 int32 回绕）。
+    /// `a` 按 [row][col] 取值；transposed 时行列互换。rows <= cols。
+    /// 输出 out[col] = 与该列配对的行，0xFF 表示该列未被占用。
+    static void IDT_Hungarian64(size_t rows, size_t cols, const int64_t* a, size_t stride,
+                                bool transposed, uint8_t* out) noexcept {
+        constexpr int64_t kInf = INT64_MAX / 4;
+        const size_t n = rows, m = cols;
+
+        auto at = [&](size_t r, size_t c) -> int64_t {
+            return transposed ? a[c * stride + r] : a[r * stride + c];
+        };
+
+        // 1-based，索引 0 是哑列
+        int64_t u[kIdtMatDim + 1]{}, v[kIdtMatDim + 1]{}, minv[kIdtMatDim + 1];
+        size_t  p[kIdtMatDim + 1]{}, way[kIdtMatDim + 1]{};
+        bool    used[kIdtMatDim + 1];
+
+        for (size_t i = 1; i <= n; ++i) {
+            p[0] = i;
+            size_t j0 = 0;
+            for (size_t j = 0; j <= m; ++j) { minv[j] = kInf; used[j] = false; }
+            do {
+                used[j0] = true;
+                const size_t i0 = p[j0];
+                int64_t delta = kInf;
+                size_t j1 = 0;
+                for (size_t j = 1; j <= m; ++j) {
+                    if (used[j]) continue;
+                    const int64_t c = at(i0 - 1, j - 1) - u[i0] - v[j];
+                    if (c < minv[j]) { minv[j] = c; way[j] = j0; }
+                    if (minv[j] < delta) { delta = minv[j]; j1 = j; }
+                }
+                if (j1 == 0) break;             // 理论上不会发生（n <= m）
+                for (size_t j = 0; j <= m; ++j) {
+                    if (used[j]) { u[p[j]] += delta; v[j] -= delta; }
+                    else         { minv[j] -= delta; }
+                }
+                j0 = j1;
+            } while (p[j0] != 0);
+
+            while (j0 != 0) {
+                const size_t j1 = way[j0];
+                p[j0] = p[j1];
+                j0 = j1;
+            }
+        }
+
+        for (size_t j = 0; j < kIdtMatDim; ++j) out[j] = 0xFF;
+        for (size_t j = 1; j <= m && j <= kIdtMatDim; ++j) {
+            if (p[j] != 0) out[j - 1] = static_cast<uint8_t>(p[j] - 1);
+        }
+    }
+
     // ── IDT_Process(mode) @0x6BA611A6 ───────────────────────────────────
     /// 产出 matchCurToTrack / matchTrackToCur 两张表（复刻侧的 IDT_Map 等价物：
     /// 原版是把历史 ID 抄到当前触点 +0x154，未匹配的当前触点 ID 保持 0）。
@@ -1147,8 +1359,12 @@ private:
         uint8_t scratch[kIdtMatDim]{};
         IdtContext ctx{curZones, &prevSlots, curZones.size(), numPrev, strictMode};
 
-        IDT_HMProcess(scratch, ctx);
-        IDT_AccCheck(scratch, ctx);
+        if (m_idtAdmissibilityInCost) {
+            IDT_SolveAdmissible(scratch, ctx);
+        } else {
+            IDT_HMProcess(scratch, ctx);
+            IDT_AccCheck(scratch, ctx);
+        }
 
         for (size_t j = 0; j < numPrev && j < kIdtMatDim; ++j) {
             if (scratch[j] == 0xFF) continue;

@@ -89,6 +89,9 @@ bool TouchPipeline::Process(HeatmapFrame& frame) {
     if (m_dynThold.m_enabled) {
         m_dynThold.m_inputs.framePeakPositive = Touch::TouchThold::ScanFramePeakPositive(
             &m_bigFrame.diff[0][0], static_cast<size_t>(Touch::kTotalCells));
+        // Stage 4 要的是同一个量，挂到大帧上共用，省掉它那趟全屏遍历。
+        m_bigFrame.framePeakPositive = m_dynThold.m_inputs.framePeakPositive;
+        m_bigFrame.framePeakValid = true;
         m_bigFrame.tholds = m_dynThold.Process();
     }
 
@@ -273,8 +276,15 @@ bool TouchPipeline::ProcessGestureOutput(HeatmapFrame& frame) {
     return m_legacyGesture.Process(frame);
 }
 
+// ⚠ 非诊断构建下这里**不再取 m_diagMu**。该锁的名义作用是保护 UI / IPC 线程
+// 读 m_bigFrame，但 Process 的其余十几级本来就在锁外原位改写 m_bigFrame ——
+// 只在帧尾这一处加锁并不能让那些读变安全，却让热路径每帧多一次加解锁（p99
+// 尾部抖动的主要来源之一）。非诊断构建下本函数只写三个原子量，无需互斥。
+// 诊断构建仍保留原有行为：debug 快照的填充与 GetPeaks/GetTouchZones 串行化。
 void TouchPipeline::UpdateContactCaches(HeatmapFrame& frame) {
+#if EGOTOUCH_DIAG
     std::lock_guard<std::mutex> lk(m_diagMu);
+#endif
     m_cachedPeakCount.store(static_cast<int>(m_bigFrame.peaks.size()), std::memory_order_relaxed);
     m_cachedZoneCount.store(static_cast<int>(m_bigFrame.zones.size()), std::memory_order_relaxed);
     m_cachedContactCount.store(static_cast<int>(frame.touch.output.contacts.size()), std::memory_order_relaxed);
@@ -311,7 +321,9 @@ void TouchPipeline::UpdateContactCaches(HeatmapFrame& frame) {
 }
 
 void TouchPipeline::ResetIdleOutputs(HeatmapFrame& frame) {
+#if EGOTOUCH_DIAG
     std::lock_guard<std::mutex> lk(m_diagMu);
+#endif
     frame.touch.output.contacts.clear();
     frame.touch.output.touchPackets = {};
 

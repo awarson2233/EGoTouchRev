@@ -7,54 +7,41 @@
 void MtLsm_CalcMatrixB(longlong param_1,longlong param_2,ushort param_3,longlong param_4)
 
 {
-  float local_168 [28];
-  float local_f8 [25];
-  byte local_93;
-  float local_88 [25];
-  byte local_23;
-  ushort local_20;
-  byte local_1d;
-  uint local_1c;
-  byte local_15;
-  uint local_14;
-  byte local_10;
-  byte local_f;
-  byte local_e;
-  byte local_d;
-  uint local_c;
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x168]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x170];
   
                     /* 0x14882  930  MtLsm_CalcMatrixB */
-  local_1c = (uint)*(byte *)(param_4 + 0x10);
-  local_1d = *(byte *)(param_4 + 0x11);
-  Matrix_ReShape(local_88,1,local_1d);
-  Matrix_Init(local_f8,local_1d,local_1d,0);
-  for (local_c = 0; local_c < local_1c; local_c = local_c + 1) {
-    MtLst_GetVectorA(local_88,local_c,param_4);
-    for (local_d = 0; local_d < local_23; local_d = local_d + 1) {
-      for (local_e = local_d; local_e < local_23; local_e = local_e + 1) {
-        local_f8[(int)((uint)local_d * (uint)local_93 + (uint)local_e)] =
-             local_f8[(int)((uint)local_e + (uint)local_d * (uint)local_93)] +
-             local_88[(int)(uint)local_d] * local_88[(int)(uint)local_e];
+  (*(uint *)(_stk + 0x154)) = (uint)*(byte *)(param_4 + 0x10);
+  (*(byte *)(_stk + 0x153)) = *(byte *)(param_4 + 0x11);
+  Matrix_ReShape(((float *)(_stk + 0xe8)),1,(*(byte *)(_stk + 0x153)));
+  Matrix_Init(((float *)(_stk + 0x78)),(*(byte *)(_stk + 0x153)),(*(byte *)(_stk + 0x153)),0);
+  for ((*(uint *)(_stk + 0x164)) = 0; (*(uint *)(_stk + 0x164)) < (*(uint *)(_stk + 0x154)); (*(uint *)(_stk + 0x164)) = (*(uint *)(_stk + 0x164)) + 1) {
+    MtLst_GetVectorA(((float *)(_stk + 0xe8)),(*(uint *)(_stk + 0x164)),param_4);
+    for ((*(byte *)(_stk + 0x163)) = 0; (*(byte *)(_stk + 0x163)) < (*(byte *)(_stk + 0x14d)); (*(byte *)(_stk + 0x163)) = (*(byte *)(_stk + 0x163)) + 1) {
+      for ((*(byte *)(_stk + 0x162)) = (*(byte *)(_stk + 0x163)); (*(byte *)(_stk + 0x162)) < (*(byte *)(_stk + 0x14d)); (*(byte *)(_stk + 0x162)) = (*(byte *)(_stk + 0x162)) + 1) {
+        ((float *)(_stk + 0x78))[(int)((uint)(*(byte *)(_stk + 0x163)) * (uint)(*(byte *)(_stk + 0xdd)) + (uint)(*(byte *)(_stk + 0x162)))] =
+             ((float *)(_stk + 0x78))[(int)((uint)(*(byte *)(_stk + 0x162)) + (uint)(*(byte *)(_stk + 0x163)) * (uint)(*(byte *)(_stk + 0xdd)))] +
+             ((float *)(_stk + 0xe8))[(int)(uint)(*(byte *)(_stk + 0x163))] * ((float *)(_stk + 0xe8))[(int)(uint)(*(byte *)(_stk + 0x162))];
       }
     }
   }
-  Matrix_SymmetricFromUpper(local_f8);
-  for (local_f = 0; local_f < local_23; local_f = local_f + 1) {
-    for (local_10 = 0; local_10 < local_23; local_10 = local_10 + 1) {
-      *(float *)((longlong)(int)((uint)local_10 + (uint)local_f * (uint)local_23) * 4 + param_2) =
-           local_f8[(int)((uint)local_10 + (uint)local_f * (uint)local_93)];
+  Matrix_SymmetricFromUpper(((float *)(_stk + 0x78)));
+  for ((*(byte *)(_stk + 0x161)) = 0; (*(byte *)(_stk + 0x161)) < (*(byte *)(_stk + 0x14d)); (*(byte *)(_stk + 0x161)) = (*(byte *)(_stk + 0x161)) + 1) {
+    for ((*(byte *)(_stk + 0x160)) = 0; (*(byte *)(_stk + 0x160)) < (*(byte *)(_stk + 0x14d)); (*(byte *)(_stk + 0x160)) = (*(byte *)(_stk + 0x160)) + 1) {
+      *(float *)((longlong)(int)((uint)(*(byte *)(_stk + 0x160)) + (uint)(*(byte *)(_stk + 0x161)) * (uint)(*(byte *)(_stk + 0x14d))) * 4 + param_2) =
+           ((float *)(_stk + 0x78))[(int)((uint)(*(byte *)(_stk + 0x160)) + (uint)(*(byte *)(_stk + 0x161)) * (uint)(*(byte *)(_stk + 0xdd)))];
     }
   }
-  Matrix_Inv(local_f8,local_f8);
-  Matrix_ReShape(local_88,*(undefined1 *)(param_4 + 0x11),1);
-  for (local_14 = 0; local_14 < local_1c; local_14 = local_14 + 1) {
-    MtLst_GetVectorA(local_88,local_14,param_4);
-    Matrix_Mul(local_168,local_f8,local_88);
-    for (local_15 = 0; local_15 < local_1d; local_15 = local_15 + 1) {
-      local_20 = (ushort)local_15 * (short)local_1c + (short)local_14;
-      if (local_20 < param_3) {
-        *(short *)((ulonglong)local_20 * 2 + param_1) =
-             (short)(int)(local_168[(int)(uint)local_15] * DAT_6bb51d6c);
+  Matrix_Inv(((float *)(_stk + 0x78)),((float *)(_stk + 0x78)));
+  Matrix_ReShape(((float *)(_stk + 0xe8)),*(undefined1 *)(param_4 + 0x11),1);
+  for ((*(uint *)(_stk + 0x15c)) = 0; (*(uint *)(_stk + 0x15c)) < (*(uint *)(_stk + 0x154)); (*(uint *)(_stk + 0x15c)) = (*(uint *)(_stk + 0x15c)) + 1) {
+    MtLst_GetVectorA(((float *)(_stk + 0xe8)),(*(uint *)(_stk + 0x15c)),param_4);
+    Matrix_Mul(((float *)(_stk + 0x8)),((float *)(_stk + 0x78)),((float *)(_stk + 0xe8)));
+    for ((*(byte *)(_stk + 0x15b)) = 0; (*(byte *)(_stk + 0x15b)) < (*(byte *)(_stk + 0x153)); (*(byte *)(_stk + 0x15b)) = (*(byte *)(_stk + 0x15b)) + 1) {
+      (*(ushort *)(_stk + 0x150)) = (ushort)(*(byte *)(_stk + 0x15b)) * (short)(*(uint *)(_stk + 0x154)) + (short)(*(uint *)(_stk + 0x15c));
+      if ((*(ushort *)(_stk + 0x150)) < param_3) {
+        *(short *)((ulonglong)(*(ushort *)(_stk + 0x150)) * 2 + param_1) =
+             (short)(int)(((float *)(_stk + 0x8))[(int)(uint)(*(byte *)(_stk + 0x15b))] * DAT_6bb51d6c);
       }
     }
   }
@@ -195,23 +182,22 @@ void MtLsm_LinearReconstruct
 void MtLsm_LinearRegressionCalcState(longlong param_1)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x78]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x80];
   uint uVar1;
-  undefined4 local_78 [26];
-  byte local_d;
-  uint local_c;
   
                     /* 0x15037  932  MtLsm_LinearRegressionCalcState */
-  local_d = *(byte *)(param_1 + 0x11);
-  Matrix_Init(local_78,local_d,1,0);
+  (*(byte *)(_stk + 0x73)) = *(byte *)(param_1 + 0x11);
+  Matrix_Init(((undefined4 *)(_stk + 0x8)),(*(byte *)(_stk + 0x73)),1,0);
   if (*(char *)(param_1 + 0x30) == '\0') {
-    MtLsm_GetStateByWeightSensor(local_78,param_1);
+    MtLsm_GetStateByWeightSensor(((undefined4 *)(_stk + 0x8)),param_1);
   }
   else {
-    MtLsm_GetStateByAllSensor(local_78,param_1);
+    MtLsm_GetStateByAllSensor(((undefined4 *)(_stk + 0x8)),param_1);
   }
-  local_c = (uint)local_d;
-  while (uVar1 = local_c, local_c = local_c - 1, uVar1 != 0) {
-    *(undefined4 *)(param_1 + ((longlong)(int)local_c + 0x10) * 4) = local_78[(int)local_c];
+  (*(uint *)(_stk + 0x74)) = (uint)(*(byte *)(_stk + 0x73));
+  while (uVar1 = (*(uint *)(_stk + 0x74)), (*(uint *)(_stk + 0x74)) = (*(uint *)(_stk + 0x74)) - 1, uVar1 != 0) {
+    *(undefined4 *)(param_1 + ((longlong)(int)(*(uint *)(_stk + 0x74)) + 0x10) * 4) = ((undefined4 *)(_stk + 0x8))[(int)(*(uint *)(_stk + 0x74))];
   }
   return;
 }
@@ -261,67 +247,55 @@ void MtLsm_GetStateByAllSensor(longlong param_1,undefined8 *param_2)
 void MtLsm_GetStateByWeightSensor(undefined8 param_1,longlong *param_2)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x128]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x130];
   uint uVar1;
-  float local_128 [28];
-  float local_b8 [25];
-  byte local_53;
-  int local_44;
-  longlong local_40;
-  uint local_38;
-  byte local_31;
-  longlong local_30;
-  uint local_24;
-  uint local_20;
-  uint local_1c;
-  uint local_18;
-  uint local_14;
-  longlong local_10;
   
-  local_30 = param_2[1];
-  local_31 = *(byte *)((longlong)param_2 + 0x11);
-  local_38 = (uint)*(byte *)(param_2 + 2);
-  local_40 = *param_2;
-  Matrix_Init(local_b8,local_31,local_31,param_2[5]);
-  Matrix_Init(local_128,local_31,1,0);
-  local_10 = param_2[4];
-  local_14 = local_38;
-  for (local_18 = 0; local_18 < local_38; local_18 = local_18 + 1) {
-    if (*(short *)(local_30 + (ulonglong)local_18 * 2) == 0) {
-      local_14 = local_14 - 1;
-      local_20 = (uint)local_31;
+  (*(longlong *)(_stk + 0x100)) = param_2[1];
+  (*(byte *)(_stk + 0xff)) = *(byte *)((longlong)param_2 + 0x11);
+  (*(uint *)(_stk + 0xf8)) = (uint)*(byte *)(param_2 + 2);
+  (*(longlong *)(_stk + 0xf0)) = *param_2;
+  Matrix_Init(((float *)(_stk + 0x78)),(*(byte *)(_stk + 0xff)),(*(byte *)(_stk + 0xff)),param_2[5]);
+  Matrix_Init(((float *)(_stk + 0x8)),(*(byte *)(_stk + 0xff)),1,0);
+  (*(longlong *)(_stk + 0x120)) = param_2[4];
+  (*(uint *)(_stk + 0x11c)) = (*(uint *)(_stk + 0xf8));
+  for ((*(uint *)(_stk + 0x118)) = 0; (*(uint *)(_stk + 0x118)) < (*(uint *)(_stk + 0xf8)); (*(uint *)(_stk + 0x118)) = (*(uint *)(_stk + 0x118)) + 1) {
+    if (*(short *)((*(longlong *)(_stk + 0x100)) + (ulonglong)(*(uint *)(_stk + 0x118)) * 2) == 0) {
+      (*(uint *)(_stk + 0x11c)) = (*(uint *)(_stk + 0x11c)) - 1;
+      (*(uint *)(_stk + 0x110)) = (uint)(*(byte *)(_stk + 0xff));
       while( true ) {
-        uVar1 = local_20;
-        local_20 = local_20 - 1;
+        uVar1 = (*(uint *)(_stk + 0x110));
+        (*(uint *)(_stk + 0x110)) = (*(uint *)(_stk + 0x110)) - 1;
         if (uVar1 == 0) break;
-        for (local_24 = local_20; local_24 < local_31; local_24 = local_24 + 1) {
-          local_b8[local_53 * local_20 + local_24] =
-               local_b8[local_24 + local_53 * local_20] -
-               *(float *)(local_10 + (ulonglong)local_20 * 4) *
-               *(float *)(local_10 + (ulonglong)local_24 * 4);
+        for ((*(uint *)(_stk + 0x10c)) = (*(uint *)(_stk + 0x110)); (*(uint *)(_stk + 0x10c)) < (*(byte *)(_stk + 0xff)); (*(uint *)(_stk + 0x10c)) = (*(uint *)(_stk + 0x10c)) + 1) {
+          ((float *)(_stk + 0x78))[(*(byte *)(_stk + 0xdd)) * (*(uint *)(_stk + 0x110)) + (*(uint *)(_stk + 0x10c))] =
+               ((float *)(_stk + 0x78))[(*(uint *)(_stk + 0x10c)) + (*(byte *)(_stk + 0xdd)) * (*(uint *)(_stk + 0x110))] -
+               *(float *)((*(longlong *)(_stk + 0x120)) + (ulonglong)(*(uint *)(_stk + 0x110)) * 4) *
+               *(float *)((*(longlong *)(_stk + 0x120)) + (ulonglong)(*(uint *)(_stk + 0x10c)) * 4);
         }
       }
     }
     else {
-      local_44 = (int)*(short *)(local_40 + (ulonglong)local_18 * 2);
-      local_1c = (uint)local_31;
+      (*(int *)(_stk + 0xec)) = (int)*(short *)((*(longlong *)(_stk + 0xf0)) + (ulonglong)(*(uint *)(_stk + 0x118)) * 2);
+      (*(uint *)(_stk + 0x114)) = (uint)(*(byte *)(_stk + 0xff));
       while( true ) {
-        uVar1 = local_1c;
-        local_1c = local_1c - 1;
+        uVar1 = (*(uint *)(_stk + 0x114));
+        (*(uint *)(_stk + 0x114)) = (*(uint *)(_stk + 0x114)) - 1;
         if (uVar1 == 0) break;
-        local_128[local_1c] =
-             local_128[local_1c] + *(float *)(local_10 + (ulonglong)local_1c * 4) * (float)local_44;
+        ((float *)(_stk + 0x8))[(*(uint *)(_stk + 0x114))] =
+             ((float *)(_stk + 0x8))[(*(uint *)(_stk + 0x114))] + *(float *)((*(longlong *)(_stk + 0x120)) + (ulonglong)(*(uint *)(_stk + 0x114)) * 4) * (float)(*(int *)(_stk + 0xec));
       }
     }
-    local_10 = local_10 + (ulonglong)local_31 * 4;
+    (*(longlong *)(_stk + 0x120)) = (*(longlong *)(_stk + 0x120)) + (ulonglong)(*(byte *)(_stk + 0xff)) * 4;
   }
-  Matrix_SymmetricFromUpper(local_b8);
-  if ((int)local_14 < (int)(uint)local_31) {
-    Matrix_Init(param_1,local_31,1,0);
+  Matrix_SymmetricFromUpper(((float *)(_stk + 0x78)));
+  if ((int)(*(uint *)(_stk + 0x11c)) < (int)(uint)(*(byte *)(_stk + 0xff))) {
+    Matrix_Init(param_1,(*(byte *)(_stk + 0xff)),1,0);
   }
   else {
-    MtLsm_Solve(param_1,local_b8,local_128);
+    MtLsm_Solve(param_1,((float *)(_stk + 0x78)),((float *)(_stk + 0x8)));
     if (*(char *)((longlong)param_2 + 0x12) != '\0') {
-      MtLsm_SolveWithConstrain(param_1,local_b8,local_128,param_2);
+      MtLsm_SolveWithConstrain(param_1,((float *)(_stk + 0x78)),((float *)(_stk + 0x8)),param_2);
     }
   }
   return;
@@ -335,10 +309,11 @@ void MtLsm_GetStateByWeightSensor(undefined8 param_1,longlong *param_2)
 void MtLsm_Solve(undefined8 param_1,undefined8 param_2,undefined8 param_3)
 
 {
-  undefined1 local_78 [112];
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x78]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x80];
   
-  Matrix_Inv(local_78,param_2);
-  Matrix_Mul(param_1,local_78,param_3);
+  Matrix_Inv(((undefined1 *)(_stk + 0x8)),param_2);
+  Matrix_Mul(param_1,((undefined1 *)(_stk + 0x8)),param_3);
   return;
 }
 
@@ -351,28 +326,23 @@ void MtLsm_SolveWithConstrain
                (undefined8 param_1,undefined8 param_2,undefined8 param_3,longlong param_4)
 
 {
-  undefined4 local_88 [25];
-  byte local_23;
-  float local_1c;
-  float local_18;
-  byte local_11;
-  float local_10;
-  uint local_c;
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x88]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x90];
   
-  local_11 = *(byte *)(param_4 + 0x11);
-  Matrix_Init(local_88,local_11,local_11,0);
-  for (local_c = 0; local_c < local_11; local_c = local_c + 1) {
-    local_88[(local_23 + 1) * local_c] =
-         *(undefined4 *)(*(longlong *)(param_4 + 0x18) + (ulonglong)local_c * 4);
+  (*(byte *)(_stk + 0x7f)) = *(byte *)(param_4 + 0x11);
+  Matrix_Init(((undefined4 *)(_stk + 0x8)),(*(byte *)(_stk + 0x7f)),(*(byte *)(_stk + 0x7f)),0);
+  for ((*(uint *)(_stk + 0x84)) = 0; (*(uint *)(_stk + 0x84)) < (*(byte *)(_stk + 0x7f)); (*(uint *)(_stk + 0x84)) = (*(uint *)(_stk + 0x84)) + 1) {
+    ((undefined4 *)(_stk + 0x8))[((*(byte *)(_stk + 0x6d)) + 1) * (*(uint *)(_stk + 0x84))] =
+         *(undefined4 *)(*(longlong *)(param_4 + 0x18) + (ulonglong)(*(uint *)(_stk + 0x84)) * 4);
   }
-  local_10 = DAT_6bb51d68;
-  local_c = 0;
-  while (((local_c < 6 && (local_18 = (float)MtLsm_GetF(param_1,local_88), 0.01 <= local_18)) &&
-         (local_1c = (float)MtLsm_GetFDeriv(param_1,param_2,param_3,local_88,local_10),
-         DAT_6bb51d68 != local_1c))) {
-    local_10 = local_10 - local_18 / local_1c;
-    MtLsm_GetP(param_1,param_2,param_3,local_88,local_10);
-    local_c = local_c + 1;
+  (*(float *)(_stk + 0x80)) = DAT_6bb51d68;
+  (*(uint *)(_stk + 0x84)) = 0;
+  while ((((*(uint *)(_stk + 0x84)) < 6 && ((*(float *)(_stk + 0x78)) = (float)MtLsm_GetF(param_1,((undefined4 *)(_stk + 0x8))), 0.01 <= (*(float *)(_stk + 0x78)))) &&
+         ((*(float *)(_stk + 0x74)) = (float)MtLsm_GetFDeriv(param_1,param_2,param_3,((undefined4 *)(_stk + 0x8)),(*(float *)(_stk + 0x80))),
+         DAT_6bb51d68 != (*(float *)(_stk + 0x74))))) {
+    (*(float *)(_stk + 0x80)) = (*(float *)(_stk + 0x80)) - (*(float *)(_stk + 0x78)) / (*(float *)(_stk + 0x74));
+    MtLsm_GetP(param_1,param_2,param_3,((undefined4 *)(_stk + 0x8)),(*(float *)(_stk + 0x80)));
+    (*(uint *)(_stk + 0x84)) = (*(uint *)(_stk + 0x84)) + 1;
   }
   return;
 }
@@ -386,10 +356,11 @@ void MtLsm_GetP(undefined8 param_1,undefined8 param_2,undefined8 param_3,undefin
                undefined4 param_5)
 
 {
-  undefined1 local_78 [112];
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x78]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x80];
   
-  MtLsm_GetInvATA(local_78,param_2,param_4,param_5);
-  Matrix_Mul(param_1,local_78,param_3);
+  MtLsm_GetInvATA(((undefined1 *)(_stk + 0x8)),param_2,param_4,param_5);
+  Matrix_Mul(param_1,((undefined1 *)(_stk + 0x8)),param_3);
   return;
 }
 
@@ -401,12 +372,13 @@ void MtLsm_GetP(undefined8 param_1,undefined8 param_2,undefined8 param_3,undefin
 float MtLsm_GetF(undefined8 param_1,undefined8 param_2)
 
 {
-  float local_78 [28];
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x78]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x80];
   
-  Matrix_Rotate(local_78,param_1);
-  Matrix_Mul(local_78,local_78,param_2);
-  Matrix_Mul(local_78,local_78,param_1);
-  return local_78[0] - 1.0f;
+  Matrix_Rotate(((float *)(_stk + 0x8)),param_1);
+  Matrix_Mul(((float *)(_stk + 0x8)),((float *)(_stk + 0x8)),param_2);
+  Matrix_Mul(((float *)(_stk + 0x8)),((float *)(_stk + 0x8)),param_1);
+  return ((float *)(_stk + 0x8))[0] - 1.0f;
 }
 
 
@@ -418,17 +390,17 @@ float MtLsm_GetFDeriv(undefined8 param_1,undefined8 param_2,undefined8 param_3,u
                      undefined4 param_5)
 
 {
-  float local_e8 [28];
-  undefined1 local_78 [112];
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0xe8]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0xf0];
   
-  MtLsm_GetInvATA(local_78,param_2,param_4,param_5);
-  Matrix_Mul(local_e8,local_78,param_4);
-  Matrix_Mul(local_e8,local_e8,local_78);
-  Matrix_Mul(local_e8,local_e8,param_3);
-  Matrix_Rotate(local_e8,local_e8);
-  Matrix_Mul(local_e8,local_e8,param_4);
-  Matrix_Mul(local_e8,local_e8,param_1);
-  return local_e8[0] * DAT_6bb51d64;
+  MtLsm_GetInvATA(((undefined1 *)(_stk + 0x78)),param_2,param_4,param_5);
+  Matrix_Mul(((float *)(_stk + 0x8)),((undefined1 *)(_stk + 0x78)),param_4);
+  Matrix_Mul(((float *)(_stk + 0x8)),((float *)(_stk + 0x8)),((undefined1 *)(_stk + 0x78)));
+  Matrix_Mul(((float *)(_stk + 0x8)),((float *)(_stk + 0x8)),param_3);
+  Matrix_Rotate(((float *)(_stk + 0x8)),((float *)(_stk + 0x8)));
+  Matrix_Mul(((float *)(_stk + 0x8)),((float *)(_stk + 0x8)),param_4);
+  Matrix_Mul(((float *)(_stk + 0x8)),((float *)(_stk + 0x8)),param_1);
+  return ((float *)(_stk + 0x8))[0] * DAT_6bb51d64;
 }
 
 
@@ -439,11 +411,12 @@ float MtLsm_GetFDeriv(undefined8 param_1,undefined8 param_2,undefined8 param_3,u
 void MtLsm_GetInvATA(undefined8 param_1,undefined8 param_2,undefined8 param_3,undefined4 param_4)
 
 {
-  undefined1 local_78 [112];
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x78]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x80];
   
-  Matrix_Mul_C(local_78,param_3,param_4);
-  Matrix_Add(local_78,param_2,local_78);
-  Matrix_Inv(param_1,local_78);
+  Matrix_Mul_C(((undefined1 *)(_stk + 0x8)),param_3,param_4);
+  Matrix_Add(((undefined1 *)(_stk + 0x8)),param_2,((undefined1 *)(_stk + 0x8)));
+  Matrix_Inv(param_1,((undefined1 *)(_stk + 0x8)));
   return;
 }
 

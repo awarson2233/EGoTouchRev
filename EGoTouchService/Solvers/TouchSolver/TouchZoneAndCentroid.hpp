@@ -363,11 +363,17 @@ public:
         static constexpr int kDc[9] = {0, 1, 1, 1, 0, -1, -1, -1, 0};
         static constexpr int kDr[9] = {0, -1, 0, 1, 1, 1, 0, -1, -1};
 
-        // 全屏正峰值，供 TZ_GetEdgeSigThold 与分类门限使用 (g_tsaPrpt.nSPeakPositive)
+        // 全屏正峰值，供 TZ_GetEdgeSigThold 与分类门限使用 (g_tsaPrpt.nSPeakPositive)。
+        // Stage 2.5 已经扫过同一块 diff 算过同一个量，中间没有任何人改写它 ——
+        // 直接取用，只有独立入口（没走 Stage 2.5）时才自己扫一遍。
         int16_t framePeakPositive = 0;
-        for (int r = 0; r < kRows; ++r) {
-            for (int c = 0; c < kCols; ++c) {
-                framePeakPositive = std::max(framePeakPositive, bigFrame.diff[r][c]);
+        if (bigFrame.framePeakValid) {
+            framePeakPositive = bigFrame.framePeakPositive;
+        } else {
+            for (int r = 0; r < kRows; ++r) {
+                for (int c = 0; c < kCols; ++c) {
+                    framePeakPositive = std::max(framePeakPositive, bigFrame.diff[r][c]);
+                }
             }
         }
         m_lastFramePeakPositive = framePeakPositive;
@@ -1729,8 +1735,11 @@ public:
         int32_t m1y = 0;
         int32_t m0  = 0;
 
-        for (int c = minC; c <= maxC; ++c) {
-            for (int r = minR; r <= maxR; ++r) {
+        // 行主序遍历。原版这里写成 for c { for r } 的列主序，对行主序存放的
+        // 网格是每格一次 cache line miss；求和顺序对结果没有影响（整型加法
+        // 可交换，且不涉及回绕语义），换成行主序是纯粹的等价改写。
+        for (int r = minR; r <= maxR; ++r) {
+            for (int c = minC; c <= maxC; ++c) {
                 const int16_t sig = diff[r][c];
                 if (sig > 0) {
                     m1x += static_cast<int32_t>(sig) * c;

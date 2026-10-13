@@ -190,10 +190,32 @@ public:
     uint16_t m_preCmfOverCount = 0;   // |Dif| ≥ DAT_6BC4A910 的节点数
 
     /// g_tsaBufOneOrderDiffRx @0x6BC16080 / g_tsaBufTwoOrderDiffRx @0x6BC32180。
-    /// 只被 CMF_SaveOrderDiff 自己与 IDE 抓图读取，不参与判决；跨帧保留残值
-    /// （二阶边界缺陷依赖这一点，见 SaveOrderDiff）。
+    /// 只被 CMF_SaveOrderDiff 自己与 IDE 抓图读取，**不参与任何判决**，因此只在
+    /// 诊断构建里存在。两张表各 4900 × 2 B，非诊断构建省下 19.6 KB 常驻。
+#if EGOTOUCH_DIAG
     std::array<int16_t, kMaxSensorNum> m_oneOrderDiff{};
     std::array<int16_t, kMaxSensorNum> m_twoOrderDiff{};
+#endif
+
+    // ══════════════════════════════════════════════════════════════════
+    // 逐行剔除均值 CMF（**明确偏离原厂**，默认路径）
+    //
+    // 大面积触摸会在整行抬起一个共同偏置，共模滤波是必需的。但 TSACore 的
+    // 1D 共模链是为它自己的 AFE 拓扑写的：2D 共模图谱、多张中间缓冲、
+    // 幅值/梯度双门限的草案-回退结构，在本机大部分分支都走不到，却要付
+    // 17.95 µs/帧（全管线 20%）。
+    //
+    // 这一路回到复刻之前 CMFProcessor 的做法：逐行取**剔除大信号之后**的
+    // 均值作为该行共模量，减掉并限幅。exclusionThold 把真实触摸排除在共模
+    // 估计之外 —— 这是关键，否则一根手指会把自己那一行整体压下去。
+    // ══════════════════════════════════════════════════════════════════
+    bool    m_useRowTrimmedMeanCmf = true;
+    /// 参与共模估计的幅值上限：|Dif| ≥ 该值的格子视为真实触摸，不计入均值。
+    int16_t m_cmfExclusionThold = 2000;
+    /// 单帧共模修正量的上限。
+    int16_t m_cmfMaxCorrection = 2000;
+    /// 是否在行向之后再做一次列向。W273AS2700 的干扰以行向为主，默认关。
+    bool    m_cmfColumnPass = false;
 
     CmfAndGridFilter() { Reset(); }
 
@@ -207,8 +229,10 @@ public:
         m_lastSliceOffsets.fill(0);
         m_preCmfMaxAbsDif = 0;
         m_preCmfOverCount = 0;
+#if EGOTOUCH_DIAG
         m_oneOrderDiff.fill(0);
         m_twoOrderDiff.fill(0);
+#endif
         m_ampThold = kAmpTholdNormal;
         m_gradThold = kGradTholdNormal;
         m_gameExtraCmf = kGameExtraCmfNormal;
@@ -336,8 +360,10 @@ public:
             for (int c = 0; c < kCols; ++c) bigFrame.cmNoise[r][c] = 0;
         }
 
-        // bCmfForceDim1Pass == 1 ⇒ CMF_ProcessDim(1)
-        if constexpr (kForceDim1Pass) {
+        if (m_useRowTrimmedMeanCmf) {
+            CMF_RowTrimmedMean(bigFrame);
+        } else if constexpr (kForceDim1Pass) {
+            // bCmfForceDim1Pass == 1 ⇒ CMF_ProcessDim(1)
             CMF_ProcessDim(bigFrame, CmfDimension::Dim1Rows);
         } else {
             CMF_ProcessDim(bigFrame, m_dimMode);
@@ -367,7 +393,75 @@ public:
     //     写了一串无用的 0。
     // 这两个缓冲只被自己和 IDE 抓图读取，不参与判决。
     // ══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════
+    // 逐行剔除均值共模滤波（默认路径，见成员声明处的说明）
+    //
+    //   对每一行：  m = mean{ Dif[r][c] : |Dif[r][c]| < exclusionThold }
+    //               m = clamp(m, ±maxCorrection)
+    //               Dif[r][c] -= m                       （整行，包括被剔除的格）
+    //
+    // 剔除的是**估计**而不是**修正**：真实触摸不参与算 m，但仍然要减掉 m，
+    // 否则手指所在行会相对邻行整体偏移。
+    // cmNoise 按行填 m，供下游（GripFilter 的共模比值等）继续消费。
+    // ══════════════════════════════════════════════════════════════════
+    void CMF_RowTrimmedMean(TouchBigFrame& bigFrame) noexcept {
+        m_lastMinNoise = 0x7FFF;
+        m_lastMaxNoise = -0x8000;
+
+        const int32_t excl = m_cmfExclusionThold;
+        const int32_t cap  = m_cmfMaxCorrection;
+
+        for (int r = 0; r < kRows; ++r) {
+            int16_t* row = &bigFrame.diff[r][0];
+            int32_t sum = 0;
+            int32_t n = 0;
+            for (int c = 0; c < kCols; ++c) {
+                const int32_t v = row[c];
+                if (v < excl && v > -excl) { sum += v; ++n; }
+            }
+            // 整行都是大信号（例如手掌横压）时没有可信的共模样本，不修正。
+            int32_t m = (n > 0) ? Fixed::TruncDiv(sum, n) : 0;
+            m = std::clamp(m, -cap, cap);
+
+            const int16_t nCm = Fixed::Wrap16(m);
+            for (int c = 0; c < kCols; ++c) bigFrame.cmNoise[r][c] = nCm;
+            if (nCm < m_lastMinNoise) m_lastMinNoise = nCm;
+            if (m_lastMaxNoise < nCm) m_lastMaxNoise = nCm;
+
+            if (m != 0) {
+                for (int c = 0; c < kCols; ++c) {
+                    row[c] = Fixed::Wrap16(static_cast<int32_t>(row[c]) - m);
+                }
+            }
+            m_lastSliceOffsets[static_cast<size_t>(r)] = nCm;
+
+            // 共模量超过上一帧噪声基准 ⇒ 与原版同样打 bit3（§14 关键时序）。
+            if (m_noiseTholdPrevFrame < nCm) bigFrame.specialControlFlags |= 0x08u;
+        }
+
+        if (!m_cmfColumnPass) return;
+
+        for (int c = 0; c < kCols; ++c) {
+            int32_t sum = 0;
+            int32_t n = 0;
+            for (int r = 0; r < kRows; ++r) {
+                const int32_t v = bigFrame.diff[r][c];
+                if (v < excl && v > -excl) { sum += v; ++n; }
+            }
+            int32_t m = (n > 0) ? Fixed::TruncDiv(sum, n) : 0;
+            m = std::clamp(m, -cap, cap);
+            if (m == 0) continue;
+            for (int r = 0; r < kRows; ++r) {
+                bigFrame.diff[r][c] = Fixed::Wrap16(static_cast<int32_t>(bigFrame.diff[r][c]) - m);
+            }
+        }
+    }
+
     void CMF_SaveOrderDiff(const TouchBigFrame& bigFrame) noexcept {
+#if !EGOTOUCH_DIAG
+        (void)bigFrame;   // 一阶/二阶差分只供抓图，非诊断构建不计算
+        return;
+#else
         // Dim1Pass == 1：outer = bRows(40)，inner = bCols(60)
         const int outerCount = kForceDim1Pass ? kRows : kCols;
         const int innerCount = kForceDim1Pass ? kCols : kRows;
@@ -405,6 +499,7 @@ public:
                                   static_cast<int32_t>(m_oneOrderDiff[static_cast<size_t>(cur & 0xFFFF)]));
             }
         }
+#endif
     }
 
     // ══════════════════════════════════════════════════════════════════

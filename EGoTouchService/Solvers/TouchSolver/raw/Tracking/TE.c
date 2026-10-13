@@ -340,79 +340,75 @@ void TE_LiftOffProcess(byte param_1)
 undefined1 TE_AssertProcess(void)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x28]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x30];
   char cVar1;
-  char local_28 [24];
-  int local_10;
-  byte local_c;
-  undefined1 local_b;
-  byte local_a;
-  byte local_9;
   
-  local_b = 0;
+  (*(undefined1 *)(_stk + 0x25)) = 0;
   if ((*_refptr_g_prevTouchesPtr)->bPrevTouchCount != **(uchar **)_refptr_g_touchesPtr) {
     cVar1 = TSALog_RtEnable(1,1,1);
     if (cVar1 != '\0') {
       StrPrintf_Process(0,"\nTouch/PrevTouch number not match...\n");
     }
-    local_b = 1;
+    (*(undefined1 *)(_stk + 0x25)) = 1;
   }
-  local_10 = memset_s(local_28,0x14,0,0x14);
-  if (local_10 != 0) {
+  (*(int *)(_stk + 0x20)) = memset_s(((char *)(_stk + 0x8)),0x14,0,0x14);
+  if ((*(int *)(_stk + 0x20)) != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
                       "../../src/Alg/TouchEvent/TE_Process.c",0x131,"rc == EOK");
     HardwareAnalyzer_SetSoftException();
   }
-  for (local_a = 0; local_a < (*_refptr_g_prevTouchesPtr)->bPrevTouchCount; local_a = local_a + 1) {
-    local_9 = Touch_GetIdxBasedOnPreIdx(local_a);
-    if (local_9 < 0x14) {
-      local_28[(int)(uint)local_9] = '\x01';
+  for ((*(byte *)(_stk + 0x26)) = 0; (*(byte *)(_stk + 0x26)) < (*_refptr_g_prevTouchesPtr)->bPrevTouchCount; (*(byte *)(_stk + 0x26)) = (*(byte *)(_stk + 0x26)) + 1) {
+    (*(byte *)(_stk + 0x27)) = Touch_GetIdxBasedOnPreIdx((*(byte *)(_stk + 0x26)));
+    if ((*(byte *)(_stk + 0x27)) < 0x14) {
+      ((char *)(_stk + 0x8))[(int)(uint)(*(byte *)(_stk + 0x27))] = '\x01';
     }
     else {
       cVar1 = TSALog_RtEnable(1,1,1);
       if (cVar1 != '\0') {
         StrPrintf_Process(0,"\nPrevTouch buffer overflow...\n");
       }
-      local_b = 1;
+      (*(undefined1 *)(_stk + 0x25)) = 1;
     }
   }
-  for (local_c = 0; local_c < (*_refptr_g_prevTouchesPtr)->bPrevTouchCount; local_c = local_c + 1) {
-    if (local_28[(int)(uint)local_c] != '\x01') {
+  for ((*(byte *)(_stk + 0x24)) = 0; (*(byte *)(_stk + 0x24)) < (*_refptr_g_prevTouchesPtr)->bPrevTouchCount; (*(byte *)(_stk + 0x24)) = (*(byte *)(_stk + 0x24)) + 1) {
+    if (((char *)(_stk + 0x8))[(int)(uint)(*(byte *)(_stk + 0x24))] != '\x01') {
       cVar1 = TSALog_RtEnable(1,1,1);
       if (cVar1 != '\0') {
         StrPrintf_Process(0,"\npreIdx exception...\n");
       }
-      local_b = 1;
+      (*(undefined1 *)(_stk + 0x25)) = 1;
     }
   }
-  local_10 = memset_s(local_28,0x14,0,0x14);
-  if (local_10 != 0) {
+  (*(int *)(_stk + 0x20)) = memset_s(((char *)(_stk + 0x8)),0x14,0,0x14);
+  if ((*(int *)(_stk + 0x20)) != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
                       "../../src/Alg/TouchEvent/TE_Process.c",0x144,"rc == EOK");
     HardwareAnalyzer_SetSoftException();
   }
-  for (local_9 = 0; local_9 < **(byte **)_refptr_g_touchesPtr; local_9 = local_9 + 1) {
-    local_a = PrevTouch_GetIdxBasedOnCurIdx(local_9);
-    if (local_a < 0x14) {
-      local_28[(int)(uint)local_a] = '\x01';
+  for ((*(byte *)(_stk + 0x27)) = 0; (*(byte *)(_stk + 0x27)) < **(byte **)_refptr_g_touchesPtr; (*(byte *)(_stk + 0x27)) = (*(byte *)(_stk + 0x27)) + 1) {
+    (*(byte *)(_stk + 0x26)) = PrevTouch_GetIdxBasedOnCurIdx((*(byte *)(_stk + 0x27)));
+    if ((*(byte *)(_stk + 0x26)) < 0x14) {
+      ((char *)(_stk + 0x8))[(int)(uint)(*(byte *)(_stk + 0x26))] = '\x01';
     }
     else {
       cVar1 = TSALog_RtEnable(1,1,1);
       if (cVar1 != '\0') {
         StrPrintf_Process(0,"\nTouch buffer overflow...\n");
       }
-      local_b = 1;
+      (*(undefined1 *)(_stk + 0x25)) = 1;
     }
   }
-  for (local_c = 0; local_c < **(byte **)_refptr_g_touchesPtr; local_c = local_c + 1) {
-    if (local_28[(int)(uint)local_c] != '\x01') {
+  for ((*(byte *)(_stk + 0x24)) = 0; (*(byte *)(_stk + 0x24)) < **(byte **)_refptr_g_touchesPtr; (*(byte *)(_stk + 0x24)) = (*(byte *)(_stk + 0x24)) + 1) {
+    if (((char *)(_stk + 0x8))[(int)(uint)(*(byte *)(_stk + 0x24))] != '\x01') {
       cVar1 = TSALog_RtEnable(1,1,1);
       if (cVar1 != '\0') {
         StrPrintf_Process(0,"\ncurIdx exception...\n");
       }
-      local_b = 1;
+      (*(undefined1 *)(_stk + 0x25)) = 1;
     }
   }
-  return local_b;
+  return (*(undefined1 *)(_stk + 0x25));
 }
 
 

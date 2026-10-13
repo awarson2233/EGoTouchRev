@@ -70,7 +70,7 @@ int SensorPitchSizeMap(int param_1,double *param_2,ushort param_3)
 {
   ushort uVar1;
   
-  if (*param_2 != __rdata) {
+  if (*param_2 != 100.0) {
     if (param_3 == 0) {
       param_1 = 0;
     }
@@ -370,20 +370,20 @@ int Misc_SqrtUint32(uint param_1)
 longlong Misc_SqrtUint64(ulonglong param_1)
 
 {
-  longlong local_18;
-  ulonglong local_10;
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x18]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x20];
   
                     /* 0x24ddd  928  Misc_SqrtUint64 */
-  local_18 = 0;
-  for (local_10 = 0x80000000; param_1 < local_10; local_10 = local_10 >> 1) {
+  (*(longlong *)(_stk + 0x8)) = 0;
+  for ((*(ulonglong *)(_stk + 0x10)) = 0x80000000; param_1 < (*(ulonglong *)(_stk + 0x10)); (*(ulonglong *)(_stk + 0x10)) = (*(ulonglong *)(_stk + 0x10)) >> 1) {
   }
-  for (; local_10 != 0; local_10 = local_10 >> 1) {
-    local_18 = local_18 + local_10;
-    if (param_1 <= (ulonglong)(local_18 * local_18) && local_18 * local_18 - param_1 != 0) {
-      local_18 = local_18 - local_10;
+  for (; (*(ulonglong *)(_stk + 0x10)) != 0; (*(ulonglong *)(_stk + 0x10)) = (*(ulonglong *)(_stk + 0x10)) >> 1) {
+    (*(longlong *)(_stk + 0x8)) = (*(longlong *)(_stk + 0x8)) + (*(ulonglong *)(_stk + 0x10));
+    if (param_1 <= (ulonglong)((*(longlong *)(_stk + 0x8)) * (*(longlong *)(_stk + 0x8))) && (*(longlong *)(_stk + 0x8)) * (*(longlong *)(_stk + 0x8)) - param_1 != 0) {
+      (*(longlong *)(_stk + 0x8)) = (*(longlong *)(_stk + 0x8)) - (*(ulonglong *)(_stk + 0x10));
     }
   }
-  return local_18;
+  return (*(longlong *)(_stk + 0x8));
 }
 
 
@@ -485,15 +485,11 @@ undefined8 Misc_IsInRect(ushort *param_1,int param_2,int param_3)
 undefined4 Misc_FindKthSmallest(longlong param_1,int param_2,int param_3, ...)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x48]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x50];
   bool bVar1;
   undefined4 uVar2;
   undefined4 *puVar3;
-  int aiStack_48 [6];
-  int local_30;
-  int local_2c;
-  int local_24;
-  int local_20;
-  int local_1c;
   
                     /* 0x2572e  920  Misc_FindKthSmallest */
   if ((((param_1 == 0) || (param_2 < 1)) || (param_3 < 1)) || (param_2 <= param_3)) {
@@ -501,49 +497,49 @@ undefined4 Misc_FindKthSmallest(longlong param_1,int param_2,int param_3, ...)
   }
   else {
     puVar3 = (undefined4 *)
-             ((longlong)aiStack_48 - ((longlong)param_2 * 4 + 0x12U & 0xfffffffffffffff0));
-    for (local_1c = 0; local_1c < param_3; local_1c = local_1c + 1) {
-      puVar3[local_1c] = 0;
+             ((longlong)((int *)(_stk + 0x8)) - ((longlong)param_2 * 4 + 0x12U & 0xfffffffffffffff0));
+    for ((*(int *)(_stk + 0x34)) = 0; (*(int *)(_stk + 0x34)) < param_3; (*(int *)(_stk + 0x34)) = (*(int *)(_stk + 0x34)) + 1) {
+      puVar3[(*(int *)(_stk + 0x34))] = 0;
     }
-    local_24 = 0;
-    for (local_20 = 0; local_20 < param_2; local_20 = local_20 + 1) {
-      if (local_24 != 0) {
+    (*(int *)(_stk + 0x2c)) = 0;
+    for ((*(int *)(_stk + 0x30)) = 0; (*(int *)(_stk + 0x30)) < param_2; (*(int *)(_stk + 0x30)) = (*(int *)(_stk + 0x30)) + 1) {
+      if ((*(int *)(_stk + 0x2c)) != 0) {
         bVar1 = false;
-        local_2c = 0;
+        (*(int *)(_stk + 0x24)) = 0;
 LAB_6ba658f1:
-        if (local_2c < local_24) {
-          if ((int)puVar3[local_2c] <= *(int *)(param_1 + (longlong)local_20 * 4))
+        if ((*(int *)(_stk + 0x24)) < (*(int *)(_stk + 0x2c))) {
+          if ((int)puVar3[(*(int *)(_stk + 0x24))] <= *(int *)(param_1 + (longlong)(*(int *)(_stk + 0x30)) * 4))
           goto code_r0x6ba6586f;
-          if (local_24 == param_3) {
-            local_30 = local_24 + -1;
+          if ((*(int *)(_stk + 0x2c)) == param_3) {
+            (*(int *)(_stk + 0x20)) = (*(int *)(_stk + 0x2c)) + -1;
           }
           else {
-            local_30 = local_24;
+            (*(int *)(_stk + 0x20)) = (*(int *)(_stk + 0x2c));
           }
-          for (; local_2c < local_30; local_30 = local_30 + -1) {
-            puVar3[local_30] = puVar3[local_30 + -1];
+          for (; (*(int *)(_stk + 0x24)) < (*(int *)(_stk + 0x20)); (*(int *)(_stk + 0x20)) = (*(int *)(_stk + 0x20)) + -1) {
+            puVar3[(*(int *)(_stk + 0x20))] = puVar3[(*(int *)(_stk + 0x20)) + -1];
           }
-          puVar3[local_2c] = *(undefined4 *)(param_1 + (longlong)local_20 * 4);
-          if (local_24 < param_3) {
-            local_24 = local_24 + 1;
+          puVar3[(*(int *)(_stk + 0x24))] = *(undefined4 *)(param_1 + (longlong)(*(int *)(_stk + 0x30)) * 4);
+          if ((*(int *)(_stk + 0x2c)) < param_3) {
+            (*(int *)(_stk + 0x2c)) = (*(int *)(_stk + 0x2c)) + 1;
           }
           bVar1 = true;
         }
-        if ((local_24 < param_3) && (!bVar1)) {
-          puVar3[local_24] = *(undefined4 *)(param_1 + (longlong)local_20 * 4);
-          local_24 = local_24 + 1;
+        if (((*(int *)(_stk + 0x2c)) < param_3) && (!bVar1)) {
+          puVar3[(*(int *)(_stk + 0x2c))] = *(undefined4 *)(param_1 + (longlong)(*(int *)(_stk + 0x30)) * 4);
+          (*(int *)(_stk + 0x2c)) = (*(int *)(_stk + 0x2c)) + 1;
         }
         goto LAB_6ba65932;
       }
-      *puVar3 = *(undefined4 *)(param_1 + (longlong)local_20 * 4);
-      local_24 = 1;
+      *puVar3 = *(undefined4 *)(param_1 + (longlong)(*(int *)(_stk + 0x30)) * 4);
+      (*(int *)(_stk + 0x2c)) = 1;
 LAB_6ba65932:
     }
     uVar2 = puVar3[param_3 + -1];
   }
   return uVar2;
 code_r0x6ba6586f:
-  local_2c = local_2c + 1;
+  (*(int *)(_stk + 0x24)) = (*(int *)(_stk + 0x24)) + 1;
   goto LAB_6ba658f1;
 }
 

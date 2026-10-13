@@ -769,7 +769,8 @@ void TSA_MSProcessEnding(void)
 
 char TSA_IsToBypassCurrentFrame(void)
 {
-  return 0;
+                    /* 0x5f720  2099  TSA_IsToBypassCurrentFrame */
+  return HardwareAnalyzer_IsToBypassCurrentFrame();
 }
 
 
@@ -1488,7 +1489,7 @@ void TSA_GetRawPrpt(longlong param_1,longlong param_2)
   g_tsaPrpt.wBoundaryPositive = local_48._0_2_;
   g_tsaPrpt.wBoundaryNegative = local_48._2_2_;
   *(uint32_t*)((char*)&g_tsaPrpt + 150) = local_48._4_4_;
-  *(uint32_t*)((char*)&g_tsaPrpt + 154) = local_40;
+  *(uint32_t*)((char*)&g_tsaPrpt + 154) = (uint32_t)(ushort)local_40 | ((uint32_t)(ushort)uStack_3e << 16);
   *(uint16_t*)((char*)&g_tsaPrpt + 158) = local_3c.u16;
   return;
 }
@@ -1506,14 +1507,14 @@ void TSA_GetDifPrpt(void)
   
   TSA_InitBlockPrpt();
   TSA_GetDifPrptCommon();
-  TSA_CombineBlock(0x6bc4a700,5);
+  TSA_CombineBlock((undefined8 *)TSA_MEM_AT(0x6bc4a700ULL),5);
   local_c = 0x7f;
   if ((((*_refptr_g_tsaStaticPtr)->dwFeatureFlags & 0x8000) != 0) &&
      (local_c = 0x7d, (*(uint *)&(*_refptr_g_tsaStaticPtr)->field_0xd8 & 0x40000) != 0)) {
     local_c = 0x55;
   }
-  TSA_CombineBlock(0x6bc4a6e0,local_c);
-  TSA_CombineBlock(0x6bc4a720,1);
+  TSA_CombineBlock((undefined8 *)TSA_MEM_AT(0x6bc4a6e0ULL),local_c);
+  TSA_CombineBlock((undefined8 *)TSA_MEM_AT(0x6bc4a720ULL),1);
   g_tsaPrpt._256_2_ = g_tsaPrpt.nSPeakPositive;
   g_tsaPrpt._258_2_ = g_tsaPrpt.nSPeakNegative;
   g_tsaPrpt._260_1_ = g_tsaPrpt.bSpecialThreshCol;
@@ -1527,7 +1528,7 @@ void TSA_GetDifPrpt(void)
   if (((*_refptr_g_tsaStaticPtr)->dwFeatureFlags & 0x8000) != 0) {
     local_10 = 0x1e;
   }
-  TSA_CombineBlock(0x6bc4a780,local_10);
+  TSA_CombineBlock((undefined8 *)TSA_MEM_AT(0x6bc4a780ULL),local_10);
   return;
 }
 
@@ -1560,7 +1561,8 @@ undefined4 TSA_GetThenarSide(void)
 
 char* TSA_GetPrmtName(void)
 {
-  return "W273AS2700";
+                    /* 0x5e911  1973  TSA_GetPrmtName */
+  return (char *)TSAPrmt_GetProjectName();
 }
 
 
@@ -2816,9 +2818,10 @@ undefined8 TSA_GetAFEScanFreqIndex(longlong param_1)
 undefined8 TSA_GetAFEScanRateIndex(longlong param_1)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x9]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x10];
   char cVar1;
   undefined8 uVar2;
-  undefined1 local_9;
   
                     /* 0x5fa2d  1860  TSA_GetAFEScanRateIndex */
   if (param_1 == 0) {
@@ -2831,7 +2834,7 @@ undefined8 TSA_GetAFEScanRateIndex(longlong param_1)
     }
     cVar1 = TSA_IsOKToEnterIDLEMode();
     if (cVar1 == '\0') {
-      uVar2 = AFE_GetNextScanRateIndex(param_1,&local_9);
+      uVar2 = AFE_GetNextScanRateIndex(param_1,&(*(undefined1 *)(_stk + 0x7)));
     }
     else {
       uVar2 = 1;
@@ -3162,7 +3165,7 @@ void TSA_GridDataRawInit(int param_1)
   errno_t eVar1;
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = *(undefined8 *)_refptr_g_tsaBufRaw;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"Raw");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"Raw");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x3cd,"rc == EOK");
@@ -3190,7 +3193,7 @@ void TSA_GridDataPreRawInit(int param_1)
   errno_t eVar1;
   
   *(undefined **)(&g_ideGridData + (longlong)param_1 * 0x88) = _refptr_g_tsaBufPreRaw;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"PreRaw");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"PreRaw");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x3df,"rc == EOK");
@@ -3215,7 +3218,7 @@ void TSA_GridDataPreUnifiedRawInit(int param_1)
   errno_t eVar1;
   
   *(undefined **)(&g_ideGridData + (longlong)param_1 * 0x88) = _refptr_g_tsaBufPreUnifiedRaw;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"PreUnifiedRaw");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"PreUnifiedRaw");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x3ec,"rc == EOK");
@@ -3245,7 +3248,7 @@ void TSA_GridDataPreDiffInit(int param_1)
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = *(undefined8 *)_refptr_g_tsaBufPreDif
   ;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"PreDiff");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"PreDiff");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x3fe,"rc == EOK");
@@ -3272,7 +3275,7 @@ void TSA_GridDataDiffInit(int param_1)
   undefined8 uVar2;
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = *(undefined8 *)_refptr_g_tsaBufDif;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"DIFF");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"DIFF");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x40b,"rc == EOK");
@@ -3304,7 +3307,7 @@ void TSA_GridDataPreUnifiedDifInit(int param_1)
   undefined8 uVar2;
   
   *(undefined **)(&g_ideGridData + (longlong)param_1 * 0x88) = _refptr_g_tsaBufPreUnifiedDif;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"PreUnifiedDiff");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"PreUnifiedDiff");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x422,"rc == EOK");
@@ -3331,7 +3334,7 @@ void TSA_GridDataPreHWRawInit(int param_1)
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) =
        *(undefined8 *)_refptr_g_tsaBufPreHWRaw;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"PreHWRaw");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"PreHWRaw");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x430,"rc == EOK");
@@ -3358,7 +3361,7 @@ void TSA_GridDataRaw2RawDiffInit(int param_1)
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) =
        *(undefined8 *)_refptr_g_tsaBufRaw2rawDif;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"Raw2RawDiff");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"Raw2RawDiff");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x43d,"rc == EOK");
@@ -3386,7 +3389,7 @@ void TSA_GridDataRaw2RawDiffCmfInit(int param_1)
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) =
        *(undefined8 *)_refptr_g_tsaBufRaw2rawDifAftCMF;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"Raw2RawDiffAftCMF");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"Raw2RawDiffAftCMF");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x44a,"rc == EOK");
@@ -3414,7 +3417,7 @@ void TSA_GridDataRaw2RawDiff2Init(int param_1)
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) =
        *(undefined8 *)_refptr_g_tsaBufRaw2rawDif2;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"Raw2RawDiff2");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"Raw2RawDiff2");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x457,"rc == EOK");
@@ -3442,7 +3445,7 @@ void TSA_GridDataRaw2RawDiff3Init(int param_1)
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) =
        *(undefined8 *)_refptr_g_tsaBufRaw2rawDif3;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"Raw2RawDiff3");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"Raw2RawDiff3");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x464,"rc == EOK");
@@ -3470,7 +3473,7 @@ void TSA_GridDataPreCMFDiffInit(int param_1)
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) =
        *(undefined8 *)_refptr_g_tsaBufPreCMFDif;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"PreCMFDiff");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"PreCMFDiff");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x473,"rc == EOK");
@@ -3501,7 +3504,7 @@ void TSA_GridDataAftSSCMFDiffInit(int param_1)
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) =
        *(undefined8 *)_refptr_g_tsaBufAftSSCMFDif;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"AftSSCMFDiff");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"AftSSCMFDiff");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x48b,"rc == EOK");
@@ -3532,7 +3535,7 @@ void TSA_GridDataAftSSChargerNFilterDiffInit(int param_1)
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) =
        *(undefined8 *)_refptr_g_tsaBufSSChargerNFilterDif;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"AftSSChargerNFilterDiff");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"AftSSChargerNFilterDiff");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x49c,"rc == EOK");
@@ -3563,7 +3566,7 @@ void TSA_GridDataCommonModeNoiseInit(int param_1)
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) =
        *(undefined8 *)_refptr_g_tsaBufCommonModeNoise;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"CommonModeNoise");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"CommonModeNoise");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x4ae,"rc == EOK");
@@ -3591,7 +3594,7 @@ void TSA_GridDataAftCMFDiffInit(int param_1)
   errno_t eVar1;
   
   *(undefined **)(&g_ideGridData + (longlong)param_1 * 0x88) = _refptr_g_tsaBufAftCMFDif;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"AftCMFDiff");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"AftCMFDiff");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x4c0,"rc == EOK");
@@ -3620,7 +3623,7 @@ void TSA_GridDataCmfDraftNeighborDistanceInit(int param_1)
   
   *(undefined **)(&g_ideGridData + (longlong)param_1 * 0x88) =
        _refptr_g_tsaBufCmfDraftNeighborDistance;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"CMFDraftNeighborDistance");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"CMFDraftNeighborDistance");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x4d2,"rc == EOK");
@@ -3648,7 +3651,7 @@ void TSA_GridDataCmfNeighborDistanceInit(int param_1)
   errno_t eVar1;
   
   *(undefined **)(&g_ideGridData + (longlong)param_1 * 0x88) = _refptr_g_tsaBufCmfNeighborDistance;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"CMFNeighborDistance");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"CMFNeighborDistance");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x4e4,"rc == EOK");
@@ -3676,7 +3679,7 @@ void TSA_GridDataAftPcaFilterDifInit(int param_1)
   errno_t eVar1;
   
   *(undefined **)(&g_ideGridData + (longlong)param_1 * 0x88) = _refptr_g_tsaBufAftPcaFilterDif;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"AftPcaFilterDif");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"AftPcaFilterDif");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x4f6,"rc == EOK");
@@ -3704,7 +3707,7 @@ void TSA_GridDataCmfWeightInit(int param_1)
   errno_t eVar1;
   
   *(undefined **)(&g_ideGridData + (longlong)param_1 * 0x88) = _refptr_g_tsaBufCmfWeight;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"CMFWeight");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"CMFWeight");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x508,"rc == EOK");
@@ -3732,7 +3735,7 @@ void TSA_GridDataCmfDraftWeightInit(int param_1)
   errno_t eVar1;
   
   *(undefined **)(&g_ideGridData + (longlong)param_1 * 0x88) = _refptr_g_tsaBufCmfDraftWeight;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"CMFDraftWeight");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"CMFDraftWeight");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x51a,"rc == EOK");
@@ -3760,7 +3763,7 @@ void TSA_GridDataAftDim1CMFDiffInit(int param_1)
   errno_t eVar1;
   
   *(undefined **)(&g_ideGridData + (longlong)param_1 * 0x88) = _refptr_g_tsaBufAftDim1CMFDif;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"AftDim1CMFDiff");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"AftDim1CMFDiff");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x52c,"rc == EOK");
@@ -3788,7 +3791,7 @@ void TSA_GridDataOneOrderDiffRxInit(int param_1)
   errno_t eVar1;
   
   *(undefined **)(&g_ideGridData + (longlong)param_1 * 0x88) = _refptr_g_tsaBufOneOrderDiffRx;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"OneOrderDiffRx");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"OneOrderDiffRx");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x53e,"rc == EOK");
@@ -3816,7 +3819,7 @@ void TSA_GridDataTwoOrderDiffRxInit(int param_1)
   errno_t eVar1;
   
   *(undefined **)(&g_ideGridData + (longlong)param_1 * 0x88) = _refptr_g_tsaBufTwoOrderDiffRx;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"TwoOrderDiffRx");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"TwoOrderDiffRx");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x550,"rc == EOK");
@@ -3844,7 +3847,7 @@ void TSA_GridDataPreNotchCorrectDiffInit(int param_1)
   errno_t eVar1;
   
   *(undefined **)(&g_ideGridData + (longlong)param_1 * 0x88) = _refptr_g_tsaBufPreNotchCorrectDif;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"PreNotchCorrectDiff");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"PreNotchCorrectDiff");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x562,"rc == EOK");
@@ -3869,7 +3872,7 @@ void TSA_GridDataAftNotchCorrectDiffInit(int param_1)
   errno_t eVar1;
   
   *(undefined **)(&g_ideGridData + (longlong)param_1 * 0x88) = _refptr_g_tsaBufAftNotchCorrectDif;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"AftNotchCorrectDiff");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"AftNotchCorrectDiff");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x56f,"rc == EOK");
@@ -3895,7 +3898,7 @@ void TSA_GridDataGridIIRDifInit(int param_1)
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) =
        *(undefined8 *)_refptr_g_tsaBufGridIIRDif;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"GridIIRDif");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"GridIIRDif");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x57d,"rc == EOK");
@@ -3924,7 +3927,7 @@ void TSA_GridDataSDInit(int param_1)
   undefined8 uVar2;
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = *(undefined8 *)_refptr_g_tsaBufSd;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"SD");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"SD");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x591,"rc == EOK");
@@ -3953,7 +3956,7 @@ void TSA_GridDataBaselineInit(int param_1)
   errno_t eVar1;
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = *(undefined8 *)_refptr_g_tsaBufBl;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"Baseline");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"Baseline");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x5a4,"rc == EOK");
@@ -3982,7 +3985,7 @@ void TSA_GridDataNormalBaselineInit(int param_1)
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) =
        *(undefined8 *)_refptr_g_tsaBufBlNormal;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"NormalBaseline");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"NormalBaseline");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x5b7,"rc == EOK");
@@ -4007,7 +4010,7 @@ void TSA_GridDataCMFRemapInit(int param_1)
   errno_t eVar1;
   
   *(undefined **)(&g_ideGridData + (longlong)param_1 * 0x88) = _refptr_g_tsaBufCMFRemap;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"CMFRemap");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"CMFRemap");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x5c6,"rc == EOK");
@@ -4032,7 +4035,7 @@ void TSA_GridDataCMFRemapBackInit(int param_1)
   errno_t eVar1;
   
   *(undefined **)(&g_ideGridData + (longlong)param_1 * 0x88) = _refptr_g_tsaBufCMFRemapBack;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"CMFRemapBack");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"CMFRemapBack");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x5d5,"rc == EOK");
@@ -4058,7 +4061,7 @@ void TSA_GridDataTZFlagInit(int param_1)
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = *(undefined8 *)_refptr_g_tsaBufTzGrid
   ;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"TZFlag");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"TZFlag");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x5e2,"rc == EOK");
@@ -4085,7 +4088,7 @@ void TSA_GridDataDistanceMapInit(int param_1)
   
   uVar2 = TZ_GetDistanceMapPtr();
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = uVar2;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"DistanceMap");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"DistanceMap");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x5ee,"rc == EOK");
@@ -4110,7 +4113,7 @@ void TSA_GridDataAfterDilateInit(int param_1)
   errno_t eVar1;
   
   *(undefined **)(&g_ideGridData + (longlong)param_1 * 0x88) = _refptr_g_tsaFlagAfterDilate;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"AfterDilate");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"AfterDilate");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x5fa,"rc == EOK");
@@ -4135,7 +4138,7 @@ void TSA_GridDataAfterErodeInit(int param_1)
   errno_t eVar1;
   
   *(undefined **)(&g_ideGridData + (longlong)param_1 * 0x88) = _refptr_g_tsaFlagAfterErode;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"AfterErode");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"AfterErode");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x606,"rc == EOK");
@@ -4160,7 +4163,7 @@ void TSA_GridDataProxDifInit(int param_1)
   errno_t eVar1;
   undefined8 uVar2;
   
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"ProxDif");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"ProxDif");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x612,"rc == EOK");
@@ -4193,7 +4196,7 @@ void TSA_GridDataProxIIRRawInit(int param_1)
   errno_t eVar1;
   undefined8 uVar2;
   
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"ProxIIRRaw");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"ProxIIRRaw");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x625,"rc == EOK");
@@ -4226,7 +4229,7 @@ void TSA_GridDataProxZnDifInit(int param_1)
   errno_t eVar1;
   undefined8 uVar2;
   
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"ProxZnDif");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"ProxZnDif");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x638,"rc == EOK");
@@ -4258,7 +4261,7 @@ void TSA_GridDataProxBaselineInit(int param_1)
 {
   errno_t eVar1;
   
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"ProxBaseline");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"ProxBaseline");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x64b,"rc == EOK");
@@ -4289,7 +4292,7 @@ void TSA_GridDataProxTZInit(int param_1)
 {
   errno_t eVar1;
   
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"ProxTZ");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"ProxTZ");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x65e,"rc == EOK");
@@ -4322,7 +4325,7 @@ void TSA_GridDataSideTZInit(int param_1)
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = *(undefined8 *)_refptr_g_tsaBufTzSide
   ;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"SideTZ");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"SideTZ");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x671,"rc == EOK");
@@ -4348,7 +4351,7 @@ void TSA_GridDataSideTouchInit(int param_1)
   undefined8 uVar2;
   
   *(undefined **)(&g_ideGridData + (longlong)param_1 * 0x88) = _refptr_g_tsaBufSideTouch;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"SideTouch");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"SideTouch");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x680,"rc == EOK");
@@ -4376,7 +4379,7 @@ void TSA_GridDataSafeBaselineInit(int param_1)
   
   uVar2 = SafeBaseline_GetLatestBuf();
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = uVar2;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"SafeBaseline");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"SafeBaseline");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x68e,"rc == EOK");
@@ -4403,7 +4406,7 @@ void TSA_GridDataDifSafeBL2RawInit(int param_1)
   
   uVar2 = SafeBaseline_GetSafeBL2RawDif();
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = uVar2;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"DifSafeBL2Raw");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"DifSafeBL2Raw");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x69a,"rc == EOK");
@@ -4431,7 +4434,7 @@ void TSA_GridDataDifSafeBL2RawCMFInit(int param_1)
   
   uVar2 = SafeBaseline_GetSafeBL2RawDifCMF();
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = uVar2;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"DifSafeBL2RawCMF");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"DifSafeBL2RawCMF");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x6a6,"rc == EOK");
@@ -4459,7 +4462,7 @@ void TSA_GridDataDifSafeBL2BLInit(int param_1)
   
   uVar2 = SafeBaseline_GetSafeBL2BLDif();
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = uVar2;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"DifSafeBL2BL");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"DifSafeBL2BL");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x6b2,"rc == EOK");
@@ -4487,7 +4490,7 @@ void TSA_GridDataDifSafeBL2BLCMFInit(int param_1)
   
   uVar2 = SafeBaseline_GetSafeBL2BLDifCMF();
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = uVar2;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"DifSafeBL2BLCMF");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"DifSafeBL2BLCMF");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x6be,"rc == EOK");
@@ -4514,7 +4517,7 @@ void TSA_GridDataMaxSigDownInit(int param_1)
   undefined8 uVar2;
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = g_tsaBufMaxSigDown;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"MaxSigDown");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"MaxSigDown");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x6ca,"rc == EOK");
@@ -4541,7 +4544,7 @@ void TSA_GridDataMinSigOffInit(int param_1)
   undefined8 uVar2;
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = g_tsaBufMinSigOff;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"MinSigOff");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"MinSigOff");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x6d6,"rc == EOK");
@@ -4568,7 +4571,7 @@ void TSA_GridDataTouchOnTimeInit(int param_1)
   undefined8 uVar2;
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = g_tsaBufTimeDown;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"TouchOnTime");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"TouchOnTime");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x6e1,"rc == EOK");
@@ -4595,7 +4598,7 @@ void TSA_GridDataTouchRptTimeInit(int param_1)
   undefined8 uVar2;
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = g_tsaBufTimeRpt;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"TouchRptTime");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"TouchRptTime");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x6ec,"rc == EOK");
@@ -4622,7 +4625,7 @@ void TSA_GridDataTouchOffTimeInit(int param_1)
   undefined8 uVar2;
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = g_tsaBufTimeOff;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"TouchOffTime");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"TouchOffTime");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x6f7,"rc == EOK");
@@ -4649,7 +4652,7 @@ void TSA_GridDataSilentTouchNumInit(int param_1)
   undefined8 uVar2;
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = g_tsaBufSilentTouchNum;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"SilentTouchNum");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"SilentTouchNum");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x702,"rc == EOK");
@@ -4676,7 +4679,7 @@ void TSA_GridDataTZIDInit(int param_1)
   undefined8 uVar2;
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = *(undefined8 *)_refptr_g_tsaBufTzID;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"tzID");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"tzID");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x710,"rc == EOK");
@@ -4704,7 +4707,7 @@ void TSA_GridDataTZZoneInit(int param_1)
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = *(undefined8 *)_refptr_g_tsaBufTzZone
   ;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"TzZone");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"TzZone");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x71d,"rc == EOK");
@@ -4731,7 +4734,7 @@ void TSA_GridDataSubTZInit(int param_1)
   undefined8 uVar2;
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = *(undefined8 *)_refptr_g_tsaBufSubTZ;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"subTZ");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"subTZ");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x72a,"rc == EOK");
@@ -4759,7 +4762,7 @@ void TSA_GridDataGripRegionInit(int param_1)
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) =
        *(undefined8 *)_refptr_g_tsaBufGripRegion;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"GripRegion");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"GripRegion");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x737,"rc == EOK");
@@ -4787,7 +4790,7 @@ void TSA_GridDataGripStageInit(int param_1)
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) =
        *(undefined8 *)_refptr_g_tsaBufGripStage;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"gripStage");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"gripStage");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x742,"rc == EOK");
@@ -4815,7 +4818,7 @@ void TSA_GridDataGripTimeInit(int param_1)
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) =
        *(undefined8 *)_refptr_g_tsaBufGripTime;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"gripTime");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"gripTime");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x74d,"rc == EOK");
@@ -4843,7 +4846,7 @@ void TSA_GridDataGripTimeOffInit(int param_1)
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) =
        *(undefined8 *)_refptr_g_tsaBufGripTimeOff;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"gripTimeOff");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"gripTimeOff");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x758,"rc == EOK");
@@ -4871,7 +4874,7 @@ void TSA_GridDataHandGestureBaselineInit(int param_1)
   
   uVar2 = HandGesture_GetHandGestureBL();
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = uVar2;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"HandGestureBaseline");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"HandGestureBaseline");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x767,"rc == EOK");
@@ -4898,7 +4901,7 @@ void TSA_GridDataHandGestureDifInit(int param_1)
   
   uVar2 = HandGesture_GetHandGestureDif();
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = uVar2;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"HandGestureDif");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"HandGestureDif");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x773,"rc == EOK");
@@ -4925,7 +4928,7 @@ void TSA_GridDataHandGestureTZInit(int param_1)
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = *(undefined8 *)_refptr_g_tsaBufTzHand
   ;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"HandTZ");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"HandTZ");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x77e,"rc == EOK");
@@ -4951,7 +4954,7 @@ void TSA_GridDataHandGestureAreaInit(int param_1)
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) =
        *(undefined8 *)_refptr_g_tsaBufAreaHand;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"HandArea");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"HandArea");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x789,"rc == EOK");
@@ -4977,7 +4980,7 @@ void TSA_GridDataHandGestureTZPrevInit(int param_1)
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) =
        *(undefined8 *)_refptr_g_tsaBufTzPrevHand;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"HandTZPrev");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"HandTZPrev");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x794,"rc == EOK");
@@ -5003,7 +5006,7 @@ void TSA_GridDataHandGestureTimeInit(int param_1)
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) =
        *(undefined8 *)_refptr_g_tsaBufTimeHand;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"HandTime");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"HandTime");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x79f,"rc == EOK");
@@ -5029,7 +5032,7 @@ void TSA_GridDatatzAgeInit(int param_1)
   undefined8 uVar2;
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = *(undefined8 *)_refptr_g_tsaBufTzAge;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"tzAge(In ms)");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"tzAge(In ms)");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x7ad,"rc == EOK");
@@ -5057,7 +5060,7 @@ void TSA_GridDatatzOriTx1(int param_1)
   
   uVar2 = ASA_GetOriDataToShowTX1Ptr();
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = uVar2;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"oriTX1");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"oriTX1");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x7ba,"rc == EOK");
@@ -5086,7 +5089,7 @@ void TSA_GridDatatzOriTx2(int param_1)
   
   uVar2 = ASA_GetOriDataToShowTX2Ptr();
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = uVar2;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"oriTX2");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"oriTX2");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x7c7,"rc == EOK");
@@ -5115,7 +5118,7 @@ void TSA_GridDataPeakFlagTx1(int param_1)
   
   uVar2 = ASA_GetPeakFlagToShowTX1Ptr();
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = uVar2;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"peakTX1");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"peakTX1");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x7d4,"rc == EOK");
@@ -5144,7 +5147,7 @@ void TSA_GridDataPeakFlagTx2(int param_1)
   
   uVar2 = ASA_GetPeakFlagToShowTX2Ptr();
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = uVar2;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"peakTX2");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"peakTX2");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x7e1,"rc == EOK");
@@ -5173,7 +5176,7 @@ void TSA_GridNopressTable(int param_1)
   
   uVar2 = ASA_GetGridNopressTablePtr();
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = uVar2;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"NoPressTable");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"NoPressTable");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x7ee,"rc == EOK");
@@ -5202,7 +5205,7 @@ void TSA_GridNopressTableShortTerm(int param_1)
   
   uVar2 = ASA_GetGridNopressTableShortTermPtr();
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = uVar2;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"NoPressTableShortTerm");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"NoPressTableShortTerm");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x7fb,"rc == EOK");
@@ -5231,7 +5234,7 @@ void TSA_GridNopressTableTx2(int param_1)
   
   uVar2 = ASA_GetGridNopressTableTx2Ptr();
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = uVar2;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"NoPressTableTx2");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"NoPressTableTx2");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x808,"rc == EOK");
@@ -5260,7 +5263,7 @@ void TSA_GridNopressTableTx2ShortTerm(int param_1)
   
   uVar2 = ASA_GetGridNopressTableShortTermTx2Ptr();
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = uVar2;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"NoPressTableTx2ShortTerm");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"NoPressTableTx2ShortTerm");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x815,"rc == EOK");
@@ -5289,7 +5292,7 @@ void TSA_GridNopressSafeTable(int param_1)
   
   uVar2 = ASA_GetGridNopressSafeTablePtr();
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = uVar2;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"NoPressSafeTable");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"NoPressSafeTable");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x822,"rc == EOK");
@@ -5317,7 +5320,7 @@ void TSA_GridTiedGridUpdate(int param_1,undefined8 param_2,char *param_3)
   undefined8 uVar2;
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = param_2;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,param_3);
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,param_3);
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x832,"rc == EOK");
@@ -5345,7 +5348,7 @@ void TSA_GridDataUnknownInit(int param_1)
   undefined8 uVar2;
   
   *(undefined8 *)(&g_ideGridData + (longlong)param_1 * 0x88) = *(undefined8 *)_refptr_g_tsaBufDif;
-  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + 0x6bc44f48),100,"Unknown");
+  eVar1 = strcpy_s((char *)((longlong)param_1 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL)),100,"Unknown");
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/App/TSA_MSProc.c",
                       0x83f,"rc == EOK");
@@ -6389,47 +6392,45 @@ TSA_FeatureFlags TSA_GetFeatures(void)
 undefined4 TSA_SetFeatures(TSA_FeatureFlags param_1)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x18]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x20];
   int iVar1;
-  TSA_FeatureFlags local_18;
-  TSA_FeatureFlags local_14;
-  TSA_FeatureFlags local_10;
-  undefined4 local_c;
   
                     /* 0x5f179  2285  TSA_SetFeatures */
-  local_c = 0;
-  local_14 = param_1 & 0xffffb7ec;
-  local_18 = param_1 & 0x4813;
-  local_10 = local_18;
-  iVar1 = TSA_SetGloveFeatures(param_1,&local_14,&local_18);
+  (*(undefined4 *)(_stk + 0x14)) = 0;
+  (*(TSA_FeatureFlags *)(_stk + 0xc)) = param_1 & 0xffffb7ec;
+  (*(TSA_FeatureFlags *)(_stk + 0x8)) = param_1 & 0x4813;
+  (*(TSA_FeatureFlags *)(_stk + 0x10)) = (*(TSA_FeatureFlags *)(_stk + 0x8));
+  iVar1 = TSA_SetGloveFeatures(param_1,&(*(TSA_FeatureFlags *)(_stk + 0xc)),&(*(TSA_FeatureFlags *)(_stk + 0x8)));
   if (iVar1 == 1) {
-    local_c = 1;
+    (*(undefined4 *)(_stk + 0x14)) = 1;
   }
-  iVar1 = TSA_SetSmartCoverFeatures(param_1,&local_14,&local_18);
+  iVar1 = TSA_SetSmartCoverFeatures(param_1,&(*(TSA_FeatureFlags *)(_stk + 0xc)),&(*(TSA_FeatureFlags *)(_stk + 0x8)));
   if (iVar1 == 1) {
-    local_c = 1;
+    (*(undefined4 *)(_stk + 0x14)) = 1;
   }
-  iVar1 = TSA_SetGripFilterFeatures(param_1,&local_14,&local_18);
+  iVar1 = TSA_SetGripFilterFeatures(param_1,&(*(TSA_FeatureFlags *)(_stk + 0xc)),&(*(TSA_FeatureFlags *)(_stk + 0x8)));
   if (iVar1 == 1) {
-    local_c = 1;
+    (*(undefined4 *)(_stk + 0x14)) = 1;
   }
   if ((param_1 & 8) != 0) {
-    local_c = 1;
-    local_14 = local_14 & 0xfffffff7;
+    (*(undefined4 *)(_stk + 0x14)) = 1;
+    (*(TSA_FeatureFlags *)(_stk + 0xc)) = (*(TSA_FeatureFlags *)(_stk + 0xc)) & 0xfffffff7;
   }
-  iVar1 = TSA_SetStylusFeatures(param_1,&local_14,&local_18);
+  iVar1 = TSA_SetStylusFeatures(param_1,&(*(TSA_FeatureFlags *)(_stk + 0xc)),&(*(TSA_FeatureFlags *)(_stk + 0x8)));
   if (iVar1 == 1) {
-    local_c = 1;
+    (*(undefined4 *)(_stk + 0x14)) = 1;
   }
-  iVar1 = TSA_SetUnderWaterFeatures(param_1,&local_14,&local_18);
+  iVar1 = TSA_SetUnderWaterFeatures(param_1,&(*(TSA_FeatureFlags *)(_stk + 0xc)),&(*(TSA_FeatureFlags *)(_stk + 0x8)));
   if (iVar1 == 1) {
-    local_c = 1;
+    (*(undefined4 *)(_stk + 0x14)) = 1;
   }
-  (*_refptr_g_tsaStaticPtr)->dwFeatureFlags = local_14;
-  (*_refptr_g_tsaStaticPtr)->dwFeatureFlags = local_18 | (*_refptr_g_tsaStaticPtr)->dwFeatureFlags;
+  (*_refptr_g_tsaStaticPtr)->dwFeatureFlags = (*(TSA_FeatureFlags *)(_stk + 0xc));
+  (*_refptr_g_tsaStaticPtr)->dwFeatureFlags = (*(TSA_FeatureFlags *)(_stk + 0x8)) | (*_refptr_g_tsaStaticPtr)->dwFeatureFlags;
   (*_refptr_g_tsaStaticPtr)->dwFeatureFlags =
        _refptr_g_tsaPrmtFlash->dwFeatureFlagsBase1_or | (*_refptr_g_tsaStaticPtr)->dwFeatureFlags;
-  (*_refptr_g_tsaStaticPtr)->dwFeatureFlagsMasked = local_10;
-  return local_c;
+  (*_refptr_g_tsaStaticPtr)->dwFeatureFlagsMasked = (*(TSA_FeatureFlags *)(_stk + 0x10));
+  return (*(undefined4 *)(_stk + 0x14));
 }
 
 
@@ -6953,7 +6954,7 @@ longlong TSA_GetGridDataName(byte param_1)
   if (0x5a < param_1) {
     local_res8 = 0x1a;
   }
-  return (longlong)(int)(uint)local_res8 * 0x88 + 0x6bc44f48;
+  return (longlong)(int)(uint)local_res8 * 0x88 + (longlong)TSA_MEM_AT(0x6bc44f48ULL);
 }
 
 
@@ -8460,12 +8461,11 @@ void TSA_RptPreFilteredRawPtr(void)
 // Function: TSA_RptPreFilteredDifPtr @ 6ba9c52e
 // ============================================================================
 
-void TSA_RptPreFilteredDifPtr(void)
+undefined8 TSA_RptPreFilteredDifPtr(void)
 
 {
                     /* 0x5c52e  2185  TSA_RptPreFilteredDifPtr */
-  TSAMS_GetPreFilteredDifPtr();
-  return;
+  return TSAMS_GetPreFilteredDifPtr();
 }
 
 
@@ -8473,12 +8473,11 @@ void TSA_RptPreFilteredDifPtr(void)
 // Function: TSA_RptBaselinePtr @ 6ba9c541
 // ============================================================================
 
-void TSA_RptBaselinePtr(void)
+undefined8 TSA_RptBaselinePtr(void)
 
 {
                     /* 0x5c541  2163  TSA_RptBaselinePtr */
-  TSAMS_GetBLPtr();
-  return;
+  return (undefined8)TSAMS_GetBLPtr();
 }
 
 
@@ -8525,12 +8524,11 @@ void TSA_RptSSBaselinePtr(void)
 // Function: TSA_RptDiffPtr @ 6ba9c5a8
 // ============================================================================
 
-void TSA_RptDiffPtr(void)
+undefined8 TSA_RptDiffPtr(void)
 
 {
                     /* 0x5c5a8  2167  TSA_RptDiffPtr */
-  TSAMS_GetDifPtr();
-  return;
+  return TSAMS_GetDifPtr();
 }
 
 
@@ -8577,12 +8575,11 @@ void TSA_RptSelfDiffPtr(void)
 // Function: TSA_RptCMNPtr @ 6ba9c5f4
 // ============================================================================
 
-void TSA_RptCMNPtr(void)
+undefined8 TSA_RptCMNPtr(void)
 
 {
                     /* 0x5c5f4  2164  TSA_RptCMNPtr */
-  TSAMS_GetCMNPtr();
-  return;
+  return (undefined8)TSAMS_GetCMNPtr();
 }
 
 
@@ -10816,17 +10813,15 @@ void TSA_SetGyroData(void)
 void TSA_SetPostureData(undefined8 *param_1)
 
 {
-  undefined8 local_38;
-  undefined8 local_30;
-  undefined8 local_28;
-  undefined8 local_20;
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x38]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x40];
   
                     /* 0x60165  2296  TSA_SetPostureData */
-  local_38 = *param_1;
-  local_30 = param_1[1];
-  local_28 = local_38;
-  local_20 = local_30;
-  SensorData_PostureProcess(&local_38);
+  (*(undefined8 *)(_stk + 0x8)) = *param_1;
+  (*(undefined8 *)(_stk + 0x10)) = param_1[1];
+  (*(undefined8 *)(_stk + 0x18)) = (*(undefined8 *)(_stk + 0x8));
+  (*(undefined8 *)(_stk + 0x20)) = (*(undefined8 *)(_stk + 0x10));
+  SensorData_PostureProcess(&(*(undefined8 *)(_stk + 0x8)));
   return;
 }
 

@@ -98,49 +98,47 @@ void Peak_Process(void)
 void Peak_SortInSigAscending(void)
 
 {
-  undefined1 local_28 [24];
-  errno_t local_10;
-  char local_a;
-  char local_9;
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x28]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x30];
   
                     /* 0x26013  995  Peak_SortInSigAscending */
-  for (local_9 = '\0'; local_a = local_9, (int)local_9 < (char)g_pPeaks->bPeakCount + -1;
-      local_9 = local_9 + '\x01') {
-    while (local_a = local_a + '\x01', (int)local_a < (int)(uint)g_pPeaks->bPeakCount) {
-      if (*(short *)(g_pPeaks + (longlong)(int)local_a * 0x14 + 0x18) <
-          *(short *)(g_pPeaks + (longlong)(int)local_9 * 0x14 + 0x18)) {
-        local_10 = memcpy_s(local_28,0x14,g_pPeaks + (longlong)(int)local_9 * 0x14 + 0x10,0x14);
-        if (local_10 != 0) {
+  for ((*(char *)(_stk + 0x27)) = '\0'; (*(char *)(_stk + 0x26)) = (*(char *)(_stk + 0x27)), (int)(*(char *)(_stk + 0x27)) < (char)g_pPeaks->bPeakCount + -1;
+      (*(char *)(_stk + 0x27)) = (*(char *)(_stk + 0x27)) + '\x01') {
+    while ((*(char *)(_stk + 0x26)) = (*(char *)(_stk + 0x26)) + '\x01', (int)(*(char *)(_stk + 0x26)) < (int)(uint)g_pPeaks->bPeakCount) {
+      if (*(short *)(g_pPeaks + (longlong)(int)(*(char *)(_stk + 0x26)) * 0x14 + 0x18) <
+          *(short *)(g_pPeaks + (longlong)(int)(*(char *)(_stk + 0x27)) * 0x14 + 0x18)) {
+        (*(errno_t *)(_stk + 0x20)) = memcpy_s(((undefined1 *)(_stk + 0x8)),0x14,g_pPeaks + (longlong)(int)(*(char *)(_stk + 0x27)) * 0x14 + 0x10,0x14);
+        if ((*(errno_t *)(_stk + 0x20)) != 0) {
           StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
                             "../../src/Alg/Peak/PeakData.c",0x89,"rc == EOK");
           HardwareAnalyzer_SetSoftException();
         }
-        local_10 = memcpy_s(g_pPeaks + (longlong)(int)local_9 * 0x14 + 0x10,0x14,
-                            g_pPeaks + (longlong)(int)local_a * 0x14 + 0x10,0x14);
-        if (local_10 != 0) {
+        (*(errno_t *)(_stk + 0x20)) = memcpy_s(g_pPeaks + (longlong)(int)(*(char *)(_stk + 0x27)) * 0x14 + 0x10,0x14,
+                            g_pPeaks + (longlong)(int)(*(char *)(_stk + 0x26)) * 0x14 + 0x10,0x14);
+        if ((*(errno_t *)(_stk + 0x20)) != 0) {
           StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
                             "../../src/Alg/Peak/PeakData.c",0x8b,"rc == EOK");
           HardwareAnalyzer_SetSoftException();
         }
-        local_10 = memcpy_s(g_pPeaks + (longlong)(int)local_a * 0x14 + 0x10,0x14,local_28,0x14);
-        if (local_10 != 0) {
+        (*(errno_t *)(_stk + 0x20)) = memcpy_s(g_pPeaks + (longlong)(int)(*(char *)(_stk + 0x26)) * 0x14 + 0x10,0x14,((undefined1 *)(_stk + 0x8)),0x14);
+        if ((*(errno_t *)(_stk + 0x20)) != 0) {
           StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
                             "../../src/Alg/Peak/PeakData.c",0x8d,"rc == EOK");
           HardwareAnalyzer_SetSoftException();
         }
       }
-      else if (*(short *)(g_pPeaks + (longlong)(int)local_9 * 0x14 + 0x18) ==
-               *(short *)(g_pPeaks + (longlong)(int)local_a * 0x14 + 0x18)) {
-        *(short *)(g_pPeaks + (longlong)(int)local_a * 0x14 + 0x18) =
-             *(short *)(g_pPeaks + (longlong)(int)local_a * 0x14 + 0x18) + 1;
+      else if (*(short *)(g_pPeaks + (longlong)(int)(*(char *)(_stk + 0x27)) * 0x14 + 0x18) ==
+               *(short *)(g_pPeaks + (longlong)(int)(*(char *)(_stk + 0x26)) * 0x14 + 0x18)) {
+        *(short *)(g_pPeaks + (longlong)(int)(*(char *)(_stk + 0x26)) * 0x14 + 0x18) =
+             *(short *)(g_pPeaks + (longlong)(int)(*(char *)(_stk + 0x26)) * 0x14 + 0x18) + 1;
         *(short *)(*(longlong *)_refptr_g_tsaBufDif +
                   (ulonglong)
-                  ((uint)g_pPeaks[(longlong)(int)local_a * 0x14 + 0x15].bPeakCount +
-                   (uint)g_pPeaks[(longlong)(int)local_a * 0x14 + 0x16].bPeakCount *
+                  ((uint)g_pPeaks[(longlong)(int)(*(char *)(_stk + 0x26)) * 0x14 + 0x15].bPeakCount +
+                   (uint)g_pPeaks[(longlong)(int)(*(char *)(_stk + 0x26)) * 0x14 + 0x16].bPeakCount *
                    (uint)_refptr_g_tsaPrmtFlash->bCols & 0xffff) * 2) =
              *(short *)((ulonglong)
-                        ((uint)g_pPeaks[(longlong)(int)local_a * 0x14 + 0x15].bPeakCount +
-                         (uint)g_pPeaks[(longlong)(int)local_a * 0x14 + 0x16].bPeakCount *
+                        ((uint)g_pPeaks[(longlong)(int)(*(char *)(_stk + 0x26)) * 0x14 + 0x15].bPeakCount +
+                         (uint)g_pPeaks[(longlong)(int)(*(char *)(_stk + 0x26)) * 0x14 + 0x16].bPeakCount *
                          (uint)_refptr_g_tsaPrmtFlash->bCols & 0xffff) * 2 +
                        *(longlong *)_refptr_g_tsaBufDif) + 1;
       }
@@ -157,32 +155,30 @@ void Peak_SortInSigAscending(void)
 void Peak_SortInSigDescending(void)
 
 {
-  undefined1 local_28 [24];
-  errno_t local_10;
-  char local_a;
-  char local_9;
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x28]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x30];
   
                     /* 0x26412  996  Peak_SortInSigDescending */
-  for (local_9 = '\0'; local_a = local_9, (int)local_9 < (char)g_pPeaks->bPeakCount + -1;
-      local_9 = local_9 + '\x01') {
-    while (local_a = local_a + '\x01', (int)local_a < (int)(uint)g_pPeaks->bPeakCount) {
-      if (*(short *)(g_pPeaks + (longlong)(int)local_9 * 0x14 + 0x18) <
-          *(short *)(g_pPeaks + (longlong)(int)local_a * 0x14 + 0x18)) {
-        local_10 = memcpy_s(local_28,0x14,g_pPeaks + (longlong)(int)local_9 * 0x14 + 0x10,0x14);
-        if (local_10 != 0) {
+  for ((*(char *)(_stk + 0x27)) = '\0'; (*(char *)(_stk + 0x26)) = (*(char *)(_stk + 0x27)), (int)(*(char *)(_stk + 0x27)) < (char)g_pPeaks->bPeakCount + -1;
+      (*(char *)(_stk + 0x27)) = (*(char *)(_stk + 0x27)) + '\x01') {
+    while ((*(char *)(_stk + 0x26)) = (*(char *)(_stk + 0x26)) + '\x01', (int)(*(char *)(_stk + 0x26)) < (int)(uint)g_pPeaks->bPeakCount) {
+      if (*(short *)(g_pPeaks + (longlong)(int)(*(char *)(_stk + 0x27)) * 0x14 + 0x18) <
+          *(short *)(g_pPeaks + (longlong)(int)(*(char *)(_stk + 0x26)) * 0x14 + 0x18)) {
+        (*(errno_t *)(_stk + 0x20)) = memcpy_s(((undefined1 *)(_stk + 0x8)),0x14,g_pPeaks + (longlong)(int)(*(char *)(_stk + 0x27)) * 0x14 + 0x10,0x14);
+        if ((*(errno_t *)(_stk + 0x20)) != 0) {
           StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
                             "../../src/Alg/Peak/PeakData.c",0xa2,"rc == EOK");
           HardwareAnalyzer_SetSoftException();
         }
-        local_10 = memcpy_s(g_pPeaks + (longlong)(int)local_9 * 0x14 + 0x10,0x14,
-                            g_pPeaks + (longlong)(int)local_a * 0x14 + 0x10,0x14);
-        if (local_10 != 0) {
+        (*(errno_t *)(_stk + 0x20)) = memcpy_s(g_pPeaks + (longlong)(int)(*(char *)(_stk + 0x27)) * 0x14 + 0x10,0x14,
+                            g_pPeaks + (longlong)(int)(*(char *)(_stk + 0x26)) * 0x14 + 0x10,0x14);
+        if ((*(errno_t *)(_stk + 0x20)) != 0) {
           StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
                             "../../src/Alg/Peak/PeakData.c",0xa4,"rc == EOK");
           HardwareAnalyzer_SetSoftException();
         }
-        local_10 = memcpy_s(g_pPeaks + (longlong)(int)local_a * 0x14 + 0x10,0x14,local_28,0x14);
-        if (local_10 != 0) {
+        (*(errno_t *)(_stk + 0x20)) = memcpy_s(g_pPeaks + (longlong)(int)(*(char *)(_stk + 0x26)) * 0x14 + 0x10,0x14,((undefined1 *)(_stk + 0x8)),0x14);
+        if ((*(errno_t *)(_stk + 0x20)) != 0) {
           StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
                             "../../src/Alg/Peak/PeakData.c",0xa6,"rc == EOK");
           HardwareAnalyzer_SetSoftException();

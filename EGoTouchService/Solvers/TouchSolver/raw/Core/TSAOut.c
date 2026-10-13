@@ -7,12 +7,12 @@
 void TSAOut_PostProcess(void)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0xa]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x10];
   char cVar1;
-  uchar local_a;
-  char local_9;
   
                     /* 0x2a77a  1622  TSAOut_PostProcess */
-  local_a = '\0';
+  (*(uchar *)(_stk + 0x6)) = '\0';
   *(undefined1 *)(*(longlong *)_refptr_g_touchesPtr + 5) = 0;
   *(undefined1 *)(*(longlong *)_refptr_g_touchesPtr + 6) = 0;
   if ((*(char *)(*(longlong *)_refptr_g_touchesPtr + 3) != '\0') &&
@@ -23,18 +23,18 @@ void TSAOut_PostProcess(void)
       goto LAB_6ba6a813;
     }
   }
-  local_9 = **(char **)_refptr_g_touchesPtr;
-  while (local_9 = local_9 + -1, -1 < local_9) {
-    TSAOut_PostProcessBefUDFPUnit((int)local_9);
+  (*(char *)(_stk + 0x7)) = **(char **)_refptr_g_touchesPtr;
+  while ((*(char *)(_stk + 0x7)) = (*(char *)(_stk + 0x7)) + -1, -1 < (*(char *)(_stk + 0x7))) {
+    TSAOut_PostProcessBefUDFPUnit((int)(*(char *)(_stk + 0x7)));
   }
 LAB_6ba6a813:
   UDFPEvent_Process();
-  local_9 = **(char **)_refptr_g_touchesPtr;
-  while (local_9 = local_9 + -1, -1 < local_9) {
-    TSAOut_PostProcessUnit((int)local_9,&local_a);
+  (*(char *)(_stk + 0x7)) = **(char **)_refptr_g_touchesPtr;
+  while ((*(char *)(_stk + 0x7)) = (*(char *)(_stk + 0x7)) + -1, -1 < (*(char *)(_stk + 0x7))) {
+    TSAOut_PostProcessUnit((int)(*(char *)(_stk + 0x7)),&(*(uchar *)(_stk + 0x6)));
   }
   (*_refptr_g_prevTouchesPtr)->field_0x6 = *(undefined1 *)(*(longlong *)_refptr_g_touchesPtr + 6);
-  (*_refptr_g_tsaStaticPtr)->bField_0x00 = local_a;
+  (*_refptr_g_tsaStaticPtr)->bField_0x00 = (*(uchar *)(_stk + 0x6));
   *(undefined4 *)&(*_refptr_g_tsaStaticPtr)->field_0x27c =
        *(undefined4 *)(*(longlong *)_refptr_g_touchesPtr + 0x18);
   (*_refptr_g_tsaStaticPtr)->nField_0x280 =

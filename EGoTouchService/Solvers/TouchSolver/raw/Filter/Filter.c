@@ -394,65 +394,56 @@ undefined8 Filter_ReportClickToFlickProcessUnit(byte param_1,byte param_2)
 void Filter_JitFilterProcessUnit(byte param_1,byte param_2)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x58]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x60];
   ushort uVar1;
   ushort uVar2;
   char cVar3;
   int iVar4;
   int iVar5;
-  ulonglong local_58;
-  ulonglong local_50;
-  undefined8 local_48;
-  uint local_38;
-  uint uStack_34;
-  uint local_30;
-  uint uStack_2c;
-  uint local_28;
-  int iStack_24;
-  undefined2 local_14 [2];
-  undefined2 local_10 [4];
   
-  local_38 = (uint)*(ushort *)
+  (*(uint *)(_stk + 0x28)) = (uint)*(ushort *)
                     ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr +
                     0x166);
   uVar1 = *(ushort *)
            ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x168);
-  uStack_34 = (uint)uVar1;
-  local_30 = (uint)*(ushort *)
+  (*(uint *)(_stk + 0x2c)) = (uint)uVar1;
+  (*(uint *)(_stk + 0x30)) = (uint)*(ushort *)
                     ((longlong)*_refptr_g_prevTouchesPtr +
                     (longlong)(int)(uint)param_2 * 0x478 + 0x16c);
   uVar2 = *(ushort *)
            ((longlong)*_refptr_g_prevTouchesPtr + (longlong)(int)(uint)param_2 * 0x478 + 0x16e);
-  uStack_2c = (uint)uVar2;
+  (*(uint *)(_stk + 0x34)) = (uint)uVar2;
   if (*(short *)&_refptr_g_tsaPrmtFlash->field_0x5a6 == 0) {
-    iStack_24 = 2;
+    (*(int *)(_stk + 0x3c)) = 2;
   }
   else {
-    iStack_24 = (uint)*(ushort *)(_refptr_g_tsaPrmtFlashConst + 0x20) /
+    (*(int *)(_stk + 0x3c)) = (uint)*(ushort *)(_refptr_g_tsaPrmtFlashConst + 0x20) /
                 (uint)*(ushort *)&_refptr_g_tsaPrmtFlash->field_0x5a6 + 1;
   }
   if (*(char *)((longlong)*_refptr_g_prevTouchesPtr + (longlong)(int)(uint)param_2 * 0x478 + 0x5ad)
       == '\0') {
-    local_28 = (uint)*(ushort *)(_refptr_g_tsaPrmtFlashConst + 0x12);
-    local_58 = (ulonglong)CONCAT24(uVar1,local_38);
-    local_50 = (ulonglong)CONCAT24(uVar2,local_30);
-    local_48 = CONCAT44(iStack_24,local_28);
-    JITFilter(&local_58,local_10,local_14);
+    (*(uint *)(_stk + 0x38)) = (uint)*(ushort *)(_refptr_g_tsaPrmtFlashConst + 0x12);
+    (*(ulonglong *)(_stk + 0x8)) = (ulonglong)CONCAT24(uVar1,(*(uint *)(_stk + 0x28)));
+    (*(ulonglong *)(_stk + 0x10)) = (ulonglong)CONCAT24(uVar2,(*(uint *)(_stk + 0x30)));
+    (*(undefined8 *)(_stk + 0x18)) = CONCAT44((*(int *)(_stk + 0x3c)),(*(uint *)(_stk + 0x38)));
+    JITFilter(&(*(ulonglong *)(_stk + 0x8)),((undefined2 *)(_stk + 0x50)),((undefined2 *)(_stk + 0x4c)));
   }
   else {
-    local_28 = *(uint *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr +
+    (*(uint *)(_stk + 0x38)) = *(uint *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr +
                         0x27c);
-    local_58 = (ulonglong)CONCAT24(uVar1,local_38);
-    local_50 = (ulonglong)CONCAT24(uVar2,local_30);
-    local_48 = CONCAT44(iStack_24,local_28);
-    JITFilter(&local_58,local_10,local_14);
+    (*(ulonglong *)(_stk + 0x8)) = (ulonglong)CONCAT24(uVar1,(*(uint *)(_stk + 0x28)));
+    (*(ulonglong *)(_stk + 0x10)) = (ulonglong)CONCAT24(uVar2,(*(uint *)(_stk + 0x30)));
+    (*(undefined8 *)(_stk + 0x18)) = CONCAT44((*(int *)(_stk + 0x3c)),(*(uint *)(_stk + 0x38)));
+    JITFilter(&(*(ulonglong *)(_stk + 0x8)),((undefined2 *)(_stk + 0x50)),((undefined2 *)(_stk + 0x4c)));
   }
   cVar3 = Filter_IsTouchLiftOffJitterSuppressEnable(param_1);
   if (cVar3 != '\0') {
-    local_28 = (uint)*(ushort *)(_refptr_g_tsaPrmtFlashConst + 0x12);
-    local_58 = CONCAT44(uStack_34,local_38);
-    local_50 = CONCAT44(uStack_2c,local_30);
-    local_48 = CONCAT44(iStack_24,local_28);
-    JITFilter(&local_58,local_10,local_14);
+    (*(uint *)(_stk + 0x38)) = (uint)*(ushort *)(_refptr_g_tsaPrmtFlashConst + 0x12);
+    (*(ulonglong *)(_stk + 0x8)) = CONCAT44((*(uint *)(_stk + 0x2c)),(*(uint *)(_stk + 0x28)));
+    (*(ulonglong *)(_stk + 0x10)) = CONCAT44((*(uint *)(_stk + 0x34)),(*(uint *)(_stk + 0x30)));
+    (*(undefined8 *)(_stk + 0x18)) = CONCAT44((*(int *)(_stk + 0x3c)),(*(uint *)(_stk + 0x38)));
+    JITFilter(&(*(ulonglong *)(_stk + 0x8)),((undefined2 *)(_stk + 0x50)),((undefined2 *)(_stk + 0x4c)));
   }
   if (((uint)*(ushort *)
               ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x166) ==
@@ -467,7 +458,7 @@ void Filter_JitFilterProcessUnit(byte param_1,byte param_2)
   else {
     *(undefined2 *)
      ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x16c) =
-         local_10[0];
+         ((undefined2 *)(_stk + 0x50))[0];
     cVar3 = TSA_IsGameScenario();
     if (cVar3 != '\0') {
       if (*(ushort *)
@@ -501,7 +492,7 @@ void Filter_JitFilterProcessUnit(byte param_1,byte param_2)
   else {
     *(undefined2 *)
      ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x16e) =
-         local_14[0];
+         ((undefined2 *)(_stk + 0x4c))[0];
     cVar3 = TSA_IsGameScenario();
     if (cVar3 != '\0') {
       if (*(ushort *)
@@ -775,88 +766,63 @@ void Filter_ProcessPDim2(byte param_1,byte param_2,undefined1 param_3)
 void Filter_IsCurveReturn(byte param_1,byte param_2)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x98]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0xa0];
   PrevTouchArray *pPVar1;
   char cVar2;
   undefined1 uVar3;
   int iVar4;
   uint uVar5;
   uint uVar6;
-  short local_98;
-  short local_96;
-  undefined8 local_90;
-  short local_88;
-  short local_86;
-  undefined8 local_80;
-  short local_78;
-  short local_76;
-  short local_68;
-  short local_66;
-  short local_58;
-  short local_56;
-  undefined4 local_40;
-  uint local_3c;
-  short local_38;
-  short local_36;
-  uint local_34;
-  short local_2e;
-  short local_2c;
-  short local_2a;
-  short local_28;
-  byte local_26;
-  byte local_25;
-  uint local_24;
-  short local_20;
-  short local_1e;
-  uint local_1c;
   
                     /* 0x1d178  600  Filter_IsCurveReturn */
   cVar2 = Filter_IsNeedCurve(param_1);
   if (((cVar2 != '\0') &&
-      (local_26 = *(byte *)((longlong)*_refptr_g_prevTouchesPtr +
-                           (longlong)(int)(uint)param_2 * 0x478 + 0x288), local_26 != 0)) &&
+      ((*(byte *)(_stk + 0x7a)) = *(byte *)((longlong)*_refptr_g_prevTouchesPtr +
+                           (longlong)(int)(uint)param_2 * 0x478 + 0x288), (*(byte *)(_stk + 0x7a)) != 0)) &&
      (*(char *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x279) ==
       '\x01')) {
-    local_1c = 0;
-    local_1e = -1;
-    local_20 = -1;
-    local_24 = 0;
-    local_25 = local_26;
+    (*(uint *)(_stk + 0x84)) = 0;
+    (*(short *)(_stk + 0x82)) = -1;
+    (*(short *)(_stk + 0x80)) = -1;
+    (*(uint *)(_stk + 0x7c)) = 0;
+    (*(byte *)(_stk + 0x7b)) = (*(byte *)(_stk + 0x7a));
     do {
-      local_25 = local_25 - 1;
-      if (local_25 == 0) break;
-      PrevTouch_HistoryBufferGet(param_2,local_25,&local_88);
-      PrevTouch_HistoryBufferGet(param_2,local_25 - 1,&local_98);
-      local_28 = local_88 - local_98;
-      local_2a = local_86 - local_96;
-      local_24 = local_24 + ((int)local_80 - (int)local_90);
-      iVar4 = Misc_SqrtUint32((int)local_2a * (int)local_2a + (int)local_28 * (int)local_28);
-      local_1c = local_1c + iVar4;
-      if ((local_1e < 0) && (0x98 < local_1c)) {
-        local_1e = local_25 - 1;
+      (*(byte *)(_stk + 0x7b)) = (*(byte *)(_stk + 0x7b)) - 1;
+      if ((*(byte *)(_stk + 0x7b)) == 0) break;
+      PrevTouch_HistoryBufferGet(param_2,(*(byte *)(_stk + 0x7b)),&(*(short *)(_stk + 0x18)));
+      PrevTouch_HistoryBufferGet(param_2,(*(byte *)(_stk + 0x7b)) - 1,&(*(short *)(_stk + 0x8)));
+      (*(short *)(_stk + 0x78)) = (*(short *)(_stk + 0x18)) - (*(short *)(_stk + 0x8));
+      (*(short *)(_stk + 0x76)) = (*(short *)(_stk + 0x1a)) - (*(short *)(_stk + 0xa));
+      (*(uint *)(_stk + 0x7c)) = (*(uint *)(_stk + 0x7c)) + ((int)(*(undefined8 *)(_stk + 0x20)) - (int)(*(undefined8 *)(_stk + 0x10)));
+      iVar4 = Misc_SqrtUint32((int)(*(short *)(_stk + 0x76)) * (int)(*(short *)(_stk + 0x76)) + (int)(*(short *)(_stk + 0x78)) * (int)(*(short *)(_stk + 0x78)));
+      (*(uint *)(_stk + 0x84)) = (*(uint *)(_stk + 0x84)) + iVar4;
+      if (((*(short *)(_stk + 0x82)) < 0) && (0x98 < (*(uint *)(_stk + 0x84)))) {
+        (*(short *)(_stk + 0x82)) = (*(byte *)(_stk + 0x7b)) - 1;
       }
-      if ((local_20 < 0) && (7 < local_24)) {
-        local_20 = local_25 - 1;
+      if (((*(short *)(_stk + 0x80)) < 0) && (7 < (*(uint *)(_stk + 0x7c)))) {
+        (*(short *)(_stk + 0x80)) = (*(byte *)(_stk + 0x7b)) - 1;
       }
-    } while (local_24 < 0x50);
-    if (((((0x4f < local_24) && (0x80 < local_1c)) && (-1 < local_1e)) &&
-        ((-1 < local_20 && (local_1e < local_20)))) && (-1 < local_1e)) {
-      PrevTouch_HistoryBufferGet(param_2,(char)local_1e,&local_58);
-      PrevTouch_HistoryBufferGet(param_2,local_26 - 1,&local_68);
-      local_2c = local_68 - local_58;
-      local_2e = local_66 - local_56;
-      local_34 = Misc_SqrtUint32((int)local_2e * (int)local_2e + (int)local_2c * (int)local_2c);
-      PrevTouch_HistoryBufferGet(param_2,(char)local_20,&local_78);
-      local_36 = local_78 - local_58;
-      local_38 = local_76 - local_56;
-      local_3c = Misc_SqrtUint32((int)local_38 * (int)local_38 + (int)local_36 * (int)local_36);
-      if (local_34 < local_3c) {
+    } while ((*(uint *)(_stk + 0x7c)) < 0x50);
+    if (((((0x4f < (*(uint *)(_stk + 0x7c))) && (0x80 < (*(uint *)(_stk + 0x84)))) && (-1 < (*(short *)(_stk + 0x82)))) &&
+        ((-1 < (*(short *)(_stk + 0x80)) && ((*(short *)(_stk + 0x82)) < (*(short *)(_stk + 0x80)))))) && (-1 < (*(short *)(_stk + 0x82)))) {
+      PrevTouch_HistoryBufferGet(param_2,(char)(*(short *)(_stk + 0x82)),&(*(short *)(_stk + 0x48)));
+      PrevTouch_HistoryBufferGet(param_2,(*(byte *)(_stk + 0x7a)) - 1,&(*(short *)(_stk + 0x38)));
+      (*(short *)(_stk + 0x74)) = (*(short *)(_stk + 0x38)) - (*(short *)(_stk + 0x48));
+      (*(short *)(_stk + 0x72)) = (*(short *)(_stk + 0x3a)) - (*(short *)(_stk + 0x4a));
+      (*(uint *)(_stk + 0x6c)) = Misc_SqrtUint32((int)(*(short *)(_stk + 0x72)) * (int)(*(short *)(_stk + 0x72)) + (int)(*(short *)(_stk + 0x74)) * (int)(*(short *)(_stk + 0x74)));
+      PrevTouch_HistoryBufferGet(param_2,(char)(*(short *)(_stk + 0x80)),&(*(short *)(_stk + 0x28)));
+      (*(short *)(_stk + 0x6a)) = (*(short *)(_stk + 0x28)) - (*(short *)(_stk + 0x48));
+      (*(short *)(_stk + 0x68)) = (*(short *)(_stk + 0x2a)) - (*(short *)(_stk + 0x4a));
+      (*(uint *)(_stk + 0x64)) = Misc_SqrtUint32((int)(*(short *)(_stk + 0x68)) * (int)(*(short *)(_stk + 0x68)) + (int)(*(short *)(_stk + 0x6a)) * (int)(*(short *)(_stk + 0x6a)));
+      if ((*(uint *)(_stk + 0x6c)) < (*(uint *)(_stk + 0x64))) {
         *(undefined1 *)
          ((longlong)*_refptr_g_prevTouchesPtr + (longlong)(int)(uint)param_2 * 0x478 + 0x280) = 1;
-        uVar5 = (int)local_2c >> 0x1f;
-        uVar6 = (int)local_2e >> 0x1f;
-        if (((int)((((int)local_2e ^ uVar6) - uVar6) * 5) < (int)(((int)local_2c ^ uVar5) - uVar5))
-           && (uVar5 = (int)local_36 >> 0x1f, uVar6 = (int)local_38 >> 0x1f,
-              (int)((((int)local_38 ^ uVar6) - uVar6) * 5) < (int)(((int)local_36 ^ uVar5) - uVar5))
+        uVar5 = (int)(*(short *)(_stk + 0x74)) >> 0x1f;
+        uVar6 = (int)(*(short *)(_stk + 0x72)) >> 0x1f;
+        if (((int)((((int)(*(short *)(_stk + 0x72)) ^ uVar6) - uVar6) * 5) < (int)(((int)(*(short *)(_stk + 0x74)) ^ uVar5) - uVar5))
+           && (uVar5 = (int)(*(short *)(_stk + 0x6a)) >> 0x1f, uVar6 = (int)(*(short *)(_stk + 0x68)) >> 0x1f,
+              (int)((((int)(*(short *)(_stk + 0x68)) ^ uVar6) - uVar6) * 5) < (int)(((int)(*(short *)(_stk + 0x6a)) ^ uVar5) - uVar5))
            ) {
           *(undefined1 *)
            ((longlong)*_refptr_g_prevTouchesPtr + (longlong)(int)(uint)param_2 * 0x478 + 0x5ad) = 1;
@@ -864,12 +830,12 @@ void Filter_IsCurveReturn(byte param_1,byte param_2)
            ((longlong)*_refptr_g_prevTouchesPtr + (longlong)(int)(uint)param_2 * 0x478 + 0x5ac) = 1;
         }
         else {
-          uVar5 = (int)local_2e >> 0x1f;
-          uVar6 = (int)local_2c >> 0x1f;
-          if (((int)((((int)local_2c ^ uVar6) - uVar6) * 5) < (int)(((int)local_2e ^ uVar5) - uVar5)
-              ) && (uVar5 = (int)local_38 >> 0x1f, uVar6 = (int)local_36 >> 0x1f,
-                   (int)((((int)local_36 ^ uVar6) - uVar6) * 5) <
-                   (int)(((int)local_38 ^ uVar5) - uVar5))) {
+          uVar5 = (int)(*(short *)(_stk + 0x72)) >> 0x1f;
+          uVar6 = (int)(*(short *)(_stk + 0x74)) >> 0x1f;
+          if (((int)((((int)(*(short *)(_stk + 0x74)) ^ uVar6) - uVar6) * 5) < (int)(((int)(*(short *)(_stk + 0x72)) ^ uVar5) - uVar5)
+              ) && (uVar5 = (int)(*(short *)(_stk + 0x68)) >> 0x1f, uVar6 = (int)(*(short *)(_stk + 0x6a)) >> 0x1f,
+                   (int)((((int)(*(short *)(_stk + 0x6a)) ^ uVar6) - uVar6) * 5) <
+                   (int)(((int)(*(short *)(_stk + 0x68)) ^ uVar5) - uVar5))) {
             *(undefined1 *)
              ((longlong)*_refptr_g_prevTouchesPtr + (longlong)(int)(uint)param_2 * 0x478 + 0x5ad) =
                  1;
@@ -881,15 +847,15 @@ void Filter_IsCurveReturn(byte param_1,byte param_2)
         if ((*(char *)((longlong)&_refptr_g_tsaPrmtFlash[1].dwAftModeFeatureMask + 3) == '\0') &&
            (*(char *)((longlong)*_refptr_g_prevTouchesPtr +
                      (longlong)(int)(uint)param_2 * 0x478 + 0x5ad) != '\0')) {
-          local_40 = Filter_GetSpeed(param_2,(int)(short)(local_26 - 1),
+          (*(undefined4 *)(_stk + 0x60)) = Filter_GetSpeed(param_2,(int)(short)((*(byte *)(_stk + 0x7a)) - 1),
                                      *(undefined1 *)
                                       ((longlong)*_refptr_g_prevTouchesPtr +
                                       (longlong)(int)(uint)param_2 * 0x478 + 0x5ac));
           pPVar1 = *_refptr_g_prevTouchesPtr;
-          uVar3 = Filter_GetTurnNum(local_40);
+          uVar3 = Filter_GetTurnNum((*(undefined4 *)(_stk + 0x60)));
           *(undefined1 *)((longlong)pPVar1 + (longlong)(int)(uint)param_2 * 0x478 + 0x5ae) = uVar3;
           pPVar1 = *_refptr_g_prevTouchesPtr;
-          uVar3 = Filter_GetForwardNum(local_40);
+          uVar3 = Filter_GetForwardNum((*(undefined4 *)(_stk + 0x60)));
           *(undefined1 *)((longlong)pPVar1 + (longlong)(int)(uint)param_2 * 0x478 + 0x5af) = uVar3;
         }
       }
@@ -906,13 +872,10 @@ void Filter_IsCurveReturn(byte param_1,byte param_2)
 void Filter_IsPredictFinish(byte param_1,byte param_2)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x48]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x50];
   uint uVar1;
   uint uVar2;
-  short local_48;
-  short local_46;
-  short local_38;
-  short local_36;
-  byte local_19;
   
   if (*(char *)((longlong)&_refptr_g_tsaPrmtFlash[1].dwAftModeFeatureMask + 3) == '\0') {
     if (*(byte *)((longlong)*_refptr_g_prevTouchesPtr + (longlong)(int)(uint)param_2 * 0x478 + 0x5ad
@@ -921,19 +884,19 @@ void Filter_IsPredictFinish(byte param_1,byte param_2)
                  )) {
       *(uint *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x27c) =
            (uint)*(ushort *)(_refptr_g_tsaPrmtFlashConst + 0x12);
-      local_19 = *(byte *)((longlong)*_refptr_g_prevTouchesPtr +
+      (*(byte *)(_stk + 0x37)) = *(byte *)((longlong)*_refptr_g_prevTouchesPtr +
                           (longlong)(int)(uint)param_2 * 0x478 + 0x288);
-      if (1 < local_19) {
-        PrevTouch_HistoryBufferGet(param_2,local_19 - 1,&local_38);
-        PrevTouch_HistoryBufferGet(param_2,local_19 - 2,&local_48);
+      if (1 < (*(byte *)(_stk + 0x37))) {
+        PrevTouch_HistoryBufferGet(param_2,(*(byte *)(_stk + 0x37)) - 1,&(*(short *)(_stk + 0x18)));
+        PrevTouch_HistoryBufferGet(param_2,(*(byte *)(_stk + 0x37)) - 2,&(*(short *)(_stk + 0x8)));
         *(short *)((longlong)*_refptr_g_prevTouchesPtr +
                   (longlong)(int)(uint)param_2 * 0x478 + 0x5b0) =
              (*(short *)((longlong)*_refptr_g_prevTouchesPtr +
-                        (longlong)(int)(uint)param_2 * 0x478 + 0x16c) + local_38) - local_48;
+                        (longlong)(int)(uint)param_2 * 0x478 + 0x16c) + (*(short *)(_stk + 0x18))) - (*(short *)(_stk + 0x8));
         *(short *)((longlong)*_refptr_g_prevTouchesPtr +
                   (longlong)(int)(uint)param_2 * 0x478 + 0x5b2) =
              (*(short *)((longlong)*_refptr_g_prevTouchesPtr +
-                        (longlong)(int)(uint)param_2 * 0x478 + 0x16e) + local_36) - local_46;
+                        (longlong)(int)(uint)param_2 * 0x478 + 0x16e) + (*(short *)(_stk + 0x1a))) - (*(short *)(_stk + 0xa));
       }
       *(char *)((longlong)*_refptr_g_prevTouchesPtr + (longlong)(int)(uint)param_2 * 0x478 + 0x5ad)
            = *(char *)((longlong)*_refptr_g_prevTouchesPtr +
@@ -1313,52 +1276,44 @@ undefined1 Filter_IsNeedCurve(byte param_1)
 int Filter_GetSpeed(undefined1 param_1,short param_2,char param_3)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x48]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x50];
   uint uVar1;
-  ushort local_48;
-  ushort local_46;
-  ushort local_38;
-  ushort local_36;
-  short local_1c;
-  short local_1a;
-  int local_18;
-  uint local_14;
-  int local_10;
-  int local_c;
   
-  local_1c = param_2 + -6;
-  if (local_1c < 0) {
-    local_18 = 0;
+  (*(short *)(_stk + 0x34)) = param_2 + -6;
+  if ((*(short *)(_stk + 0x34)) < 0) {
+    (*(int *)(_stk + 0x38)) = 0;
   }
   else {
-    local_10 = 0;
-    local_1a = param_2;
-    for (local_14 = (uint)local_1c; (int)local_14 < (int)local_1a; local_14 = local_14 + 1) {
-      PrevTouch_HistoryBufferGet(param_1,local_14 & 0xff,&local_38);
-      PrevTouch_HistoryBufferGet(param_1,local_14 + 1 & 0xff,&local_48);
+    (*(int *)(_stk + 0x40)) = 0;
+    (*(short *)(_stk + 0x36)) = param_2;
+    for ((*(uint *)(_stk + 0x3c)) = (uint)(*(short *)(_stk + 0x34)); (int)(*(uint *)(_stk + 0x3c)) < (int)(*(short *)(_stk + 0x36)); (*(uint *)(_stk + 0x3c)) = (*(uint *)(_stk + 0x3c)) + 1) {
+      PrevTouch_HistoryBufferGet(param_1,(*(uint *)(_stk + 0x3c)) & 0xff,&(*(ushort *)(_stk + 0x18)));
+      PrevTouch_HistoryBufferGet(param_1,(*(uint *)(_stk + 0x3c)) + 1 & 0xff,&(*(ushort *)(_stk + 0x8)));
       if (param_3 == '\0') {
-        uVar1 = (int)((uint)local_46 - (uint)local_36) >> 0x1f;
-        local_c = ((uint)local_46 - (uint)local_36 ^ uVar1) - uVar1;
+        uVar1 = (int)((uint)(*(ushort *)(_stk + 0xa)) - (uint)(*(ushort *)(_stk + 0x1a))) >> 0x1f;
+        (*(int *)(_stk + 0x44)) = ((uint)(*(ushort *)(_stk + 0xa)) - (uint)(*(ushort *)(_stk + 0x1a)) ^ uVar1) - uVar1;
       }
       else {
-        uVar1 = (int)((uint)local_48 - (uint)local_38) >> 0x1f;
-        local_c = ((uint)local_48 - (uint)local_38 ^ uVar1) - uVar1;
+        uVar1 = (int)((uint)(*(ushort *)(_stk + 0x8)) - (uint)(*(ushort *)(_stk + 0x18))) >> 0x1f;
+        (*(int *)(_stk + 0x44)) = ((uint)(*(ushort *)(_stk + 0x8)) - (uint)(*(ushort *)(_stk + 0x18)) ^ uVar1) - uVar1;
       }
-      local_10 = local_10 + local_c;
+      (*(int *)(_stk + 0x40)) = (*(int *)(_stk + 0x40)) + (*(int *)(_stk + 0x44));
     }
-    local_18 = local_10 / ((int)local_1a - (int)local_1c);
-    PrevTouch_HistoryBufferGet(param_1,(char)local_1c,&local_38);
-    PrevTouch_HistoryBufferGet(param_1,(char)local_1a,&local_48);
+    (*(int *)(_stk + 0x38)) = (*(int *)(_stk + 0x40)) / ((int)(*(short *)(_stk + 0x36)) - (int)(*(short *)(_stk + 0x34)));
+    PrevTouch_HistoryBufferGet(param_1,(char)(*(short *)(_stk + 0x34)),&(*(ushort *)(_stk + 0x18)));
+    PrevTouch_HistoryBufferGet(param_1,(char)(*(short *)(_stk + 0x36)),&(*(ushort *)(_stk + 0x8)));
     if (param_3 == '\0') {
-      local_c = (uint)local_46 - (uint)local_36;
+      (*(int *)(_stk + 0x44)) = (uint)(*(ushort *)(_stk + 0xa)) - (uint)(*(ushort *)(_stk + 0x1a));
     }
     else {
-      local_c = (uint)local_48 - (uint)local_38;
+      (*(int *)(_stk + 0x44)) = (uint)(*(ushort *)(_stk + 0x8)) - (uint)(*(ushort *)(_stk + 0x18));
     }
-    if (local_c < 0) {
-      local_18 = -local_18;
+    if ((*(int *)(_stk + 0x44)) < 0) {
+      (*(int *)(_stk + 0x38)) = -(*(int *)(_stk + 0x38));
     }
   }
-  return local_18;
+  return (*(int *)(_stk + 0x38));
 }
 
 

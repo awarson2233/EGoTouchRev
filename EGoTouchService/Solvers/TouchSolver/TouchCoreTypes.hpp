@@ -412,7 +412,8 @@ struct TrackingSlot {
 struct TouchBigFrame {
     // 1. 矩阵缓冲区 (40 行 x 60 列 = 2400 单元)
     int16_t  raw[kSensorRows][kSensorCols];         // AFE 原始互容帧
-    int16_t  baseline[kSensorRows][kSensorCols];    // 动态基线矩阵
+    // 动态基线矩阵曾在这里镜像一份（BaselineAndDiff 每帧 memcpy 4800 B 过来），
+    // 但全工程没有任何消费者 —— 基线只有 Stage 1 自己用。已删除。
     int16_t  diff[kSensorRows][kSensorCols];        // 差分矩阵 (Dif = Baseline - Raw)
     int16_t  preDif[kSensorRows][kSensorCols];      // 上一帧差分矩阵
     int16_t  cmNoise[kSensorRows][kSensorCols];     // 2D 估计共模噪声图谱 (g_tsaBufCommonModeNoise)
@@ -461,6 +462,13 @@ struct TouchBigFrame {
     // 3.5 本帧运行时动态门限组（Stage 2.5 TouchThold 重算，对位原版
     // TSAPrmt_Process 每帧覆写的 DAT_6bcab688 家族），供 Stage 3 起的各级消费。
     TouchTholdSet tholds{};
+
+    // 3.5b 本帧全屏正峰值（g_tsaPrpt.nSPeakPositive）。Stage 2.5 扫一遍 diff
+    // 得到，Stage 4 原本自己又扫了一遍**同一块内存算同一个量**（中间没有任何
+    // 人改写 diff）。挂在这里共用，省掉一趟 2400 格全屏遍历。
+    // framePeakValid 为 false 时（独立入口、未经 Stage 2.5）由消费方自行扫描。
+    int16_t framePeakPositive = 0;
+    bool    framePeakValid = false;
 
     // 3.6 本帧 Peak 级给出的全互感信号分散结论，对位原版
     // g_tsaStatic->bFullIncellSignalDisparity（+0x114）。Peak_Process 写、
@@ -530,6 +538,7 @@ struct TouchBigFrame {
         activeTouchMask = 0;
         touchGlobalFlags = 0;
         specialControlFlags = 0;
+        framePeakValid = false;
         for (int r = 0; r < kSensorRows; ++r) {
             for (int c = 0; c < kSensorCols; ++c) {
                 gripRegion[r][c] = 0;

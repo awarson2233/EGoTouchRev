@@ -102,17 +102,15 @@ undefined1 TouchReport_IsAllTouchBack(void)
 void TouchReport_ProcessUnit(byte param_1,byte param_2)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0xe]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x10];
   char cVar1;
-  undefined2 local_e;
-  undefined2 local_c;
-  char local_a;
-  char local_9;
   
-  local_c = 0;
-  local_e = 0;
-  local_9 = TouchReport_ToBeReported(param_1,param_2);
-  local_a = TouchReport_IsHistoryBufferApplied(param_1,param_2,&local_c,&local_e);
-  if ((local_9 == '\0') && (local_a == '\0')) {
+  (*(undefined2 *)(_stk + 0x4)) = 0;
+  (*(undefined2 *)(_stk + 0x2)) = 0;
+  (*(char *)(_stk + 0x7)) = TouchReport_ToBeReported(param_1,param_2);
+  (*(char *)(_stk + 0x6)) = TouchReport_IsHistoryBufferApplied(param_1,param_2,&(*(undefined2 *)(_stk + 0x4)),&(*(undefined2 *)(_stk + 0x2)));
+  if (((*(char *)(_stk + 0x7)) == '\0') && ((*(char *)(_stk + 0x6)) == '\0')) {
     *(uint *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x1f8) =
          *(uint *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x1f8)
          & 0xfffffff7;
@@ -150,11 +148,11 @@ void TouchReport_ProcessUnit(byte param_1,byte param_2)
                     0x1f8) | 0x800000;
     }
   }
-  if (local_a != '\0') {
+  if ((*(char *)(_stk + 0x6)) != '\0') {
     *(undefined2 *)
-     ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x162) = local_c;
+     ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x162) = (*(undefined2 *)(_stk + 0x4));
     *(undefined2 *)
-     ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x164) = local_e;
+     ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x164) = (*(undefined2 *)(_stk + 0x2));
   }
   if (((*(uint *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x1f8)
        & 8) != 0) &&
@@ -322,30 +320,26 @@ TouchReport_IsHistoryBufferApplied
           (byte param_1,undefined1 param_2,undefined2 *param_3,undefined2 *param_4)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x38]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x40];
   char cVar1;
-  undefined8 local_38;
-  undefined8 local_30;
-  undefined2 local_28;
-  undefined2 local_26;
-  undefined8 local_20;
-  undefined1 local_9;
   
-  local_9 = 0;
+  (*(undefined1 *)(_stk + 0x37)) = 0;
   if ((*(uint *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x21c) &
       0x38) == 0) {
-    local_28 = *(undefined2 *)
+    (*(undefined2 *)(_stk + 0x18)) = *(undefined2 *)
                 ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x162);
-    local_26 = *(undefined2 *)
+    (*(undefined2 *)(_stk + 0x1a)) = *(undefined2 *)
                 ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x164);
-    local_20 = *(undefined8 *)
+    (*(undefined8 *)(_stk + 0x20)) = *(undefined8 *)
                 ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x148);
-    PrevTouch_HistoryBufferPush(param_2,&local_28);
+    PrevTouch_HistoryBufferPush(param_2,&(*(undefined2 *)(_stk + 0x18)));
   }
   if ((*(uint *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x1f8) &
       0x80) != 0) {
-    local_38 = 0;
-    local_30 = 0;
-    cVar1 = PrevTouch_HistoryBufferPop(param_2,&local_38);
+    (*(undefined8 *)(_stk + 0x8)) = 0;
+    (*(undefined8 *)(_stk + 0x10)) = 0;
+    cVar1 = PrevTouch_HistoryBufferPop(param_2,&(*(undefined8 *)(_stk + 0x8)));
     if (cVar1 != '\0') {
       *param_3 = *(undefined2 *)
                   ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x162)
@@ -355,10 +349,10 @@ TouchReport_IsHistoryBufferApplied
       ;
       *(undefined2 *)
        ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x162) =
-           (undefined2)local_38;
+           (undefined2)(*(undefined8 *)(_stk + 0x8));
       *(undefined2 *)
        ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x164) =
-           (undefined2)(local_38 >> 16);
+           (undefined2)((*(undefined8 *)(_stk + 0x8)) >> 16);
       if ((*(uint *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr +
                     0x1f8) & 8) == 0) {
         *(undefined4 *)
@@ -372,10 +366,10 @@ TouchReport_IsHistoryBufferApplied
         *(undefined4 *)
          ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x21c) = 4;
       }
-      local_9 = 1;
+      (*(undefined1 *)(_stk + 0x37)) = 1;
     }
   }
-  return local_9;
+  return (*(undefined1 *)(_stk + 0x37));
 }
 
 

@@ -144,12 +144,12 @@ undefined8 HotZoneAdjustScenario(void)
 void HotZoneAdjustProcessFirst(byte param_1)
 
 {
-  undefined1 local_18 [15];
-  byte local_9;
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x18]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x20];
   
-  memset_s(local_18,0xe,0,0xe);
-  local_9 = UpdateHotZonePosition(param_1,local_18);
-  if (local_9 == 1) {
+  memset_s(((undefined1 *)(_stk + 0x8)),0xe,0,0xe);
+  (*(byte *)(_stk + 0x17)) = UpdateHotZonePosition(param_1,((undefined1 *)(_stk + 0x8)));
+  if ((*(byte *)(_stk + 0x17)) == 1) {
     StrPrintf_Process(0,"\nAppLog: ");
     StrPrintf_Process(0x10,"\nHotZone Id=%d, NO Widgets",
                       *(undefined1 *)
@@ -157,14 +157,14 @@ void HotZoneAdjustProcessFirst(byte param_1)
                        0x154));
     return;
   }
-  if (local_9 < 2) {
-    if (local_9 == 0) {
-      HotZoneAdjustProcessFirstUnit(param_1,local_18);
+  if ((*(byte *)(_stk + 0x17)) < 2) {
+    if ((*(byte *)(_stk + 0x17)) == 0) {
+      HotZoneAdjustProcessFirstUnit(param_1,((undefined1 *)(_stk + 0x8)));
       return;
     }
   }
   else {
-    if (local_9 == 2) {
+    if ((*(byte *)(_stk + 0x17)) == 2) {
       StrPrintf_Process(0,"\nAppLog: ");
       StrPrintf_Process(0x10,"\nHotZone Id=%d, Too close",
                         *(undefined1 *)
@@ -172,7 +172,7 @@ void HotZoneAdjustProcessFirst(byte param_1)
                          0x154));
       return;
     }
-    if (local_9 == 3) {
+    if ((*(byte *)(_stk + 0x17)) == 3) {
       StrPrintf_Process(0,"\nAppLog: ");
       StrPrintf_Process(0x10,"\nHotZone Id=%d, In core area",
                         *(undefined1 *)
@@ -372,41 +372,39 @@ void HotZoneRecord(undefined1 param_1,undefined8 param_2)
 undefined8 UpdateHotZonePosition(byte param_1,undefined8 *param_2)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x2c9]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x2d0];
   char cVar1;
   undefined8 uVar2;
   longlong lVar3;
-  byte local_2c9;
-  undefined8 local_2c8;
-  undefined4 auStack_2bc [172];
-  byte local_9;
   
-  local_9 = *(byte *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr +
+  (*(byte *)(_stk + 0x2c7)) = *(byte *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr +
                      0x154);
-  memset_s(&DAT_6bba3992 + (longlong)(int)(uint)local_9 * 0xe,0xe,0,0xe);
-  memset_s(&local_2c8,700,0,700);
-  CalculateInternalHotZone(&local_2c8,0x32);
+  memset_s(&DAT_6bba3992 + (longlong)(int)(uint)(*(byte *)(_stk + 0x2c7)) * 0xe,0xe,0,0xe);
+  memset_s(&(*(undefined8 *)(_stk + 0x8)),700,0,700);
+  CalculateInternalHotZone(&(*(undefined8 *)(_stk + 0x8)),0x32);
   cVar1 = HasHotZone();
   if (cVar1 == '\0') {
     uVar2 = 1;
   }
   else {
-    local_2c9 = 0;
-    cVar1 = SearchNearest(param_1,&local_2c8,0x32,&local_2c9);
+    (*(byte *)(_stk + 0x7)) = 0;
+    cVar1 = SearchNearest(param_1,&(*(undefined8 *)(_stk + 0x8)),0x32,&(*(byte *)(_stk + 0x7)));
     if (cVar1 == '\0') {
       uVar2 = 2;
     }
     else {
-      lVar3 = (longlong)(int)(uint)local_2c9;
-      *param_2 = *(undefined8 *)((longlong)&local_2c8 + lVar3 * 0xe);
-      *(undefined4 *)(param_2 + 1) = *(undefined4 *)((longlong)auStack_2bc + (lVar3 * 7 + -2) * 2);
+      lVar3 = (longlong)(int)(uint)(*(byte *)(_stk + 0x7));
+      *param_2 = *(undefined8 *)((longlong)&(*(undefined8 *)(_stk + 0x8)) + lVar3 * 0xe);
+      *(undefined4 *)(param_2 + 1) = *(undefined4 *)((longlong)((undefined4 *)(_stk + 0x14)) + (lVar3 * 7 + -2) * 2);
       *(undefined2 *)((longlong)param_2 + 0xc) =
-           *(undefined2 *)((longlong)auStack_2bc + lVar3 * 0xe);
+           *(undefined2 *)((longlong)((undefined4 *)(_stk + 0x14)) + lVar3 * 0xe);
       CalculateHotZoneIdx(param_2);
       if ((*(int *)&_refptr_g_tsaPrmtFlash[2].field_0x7b8 == 0) &&
          (cVar1 = HotZoneIsInCore(param_2), cVar1 != '\0')) {
         return 3;
       }
-      lVar3 = (longlong)(int)(uint)local_9 * 0xe;
+      lVar3 = (longlong)(int)(uint)(*(byte *)(_stk + 0x2c7)) * 0xe;
       *(undefined8 *)(&DAT_6bba3992 + lVar3) = *param_2;
       *(undefined4 *)(&DAT_6bba399a + lVar3) = *(undefined4 *)(param_2 + 1);
       *(undefined2 *)(&DAT_6bba399e + lVar3) = *(undefined2 *)((longlong)param_2 + 0xc);
@@ -424,27 +422,22 @@ undefined8 UpdateHotZonePosition(byte param_1,undefined8 *param_2)
 void HotZoneAdjustProcessFirstUnit(byte param_1,undefined2 *param_2)
 
 {
-  undefined1 local_78 [32];
-  ushort local_58;
-  ushort local_56;
-  ushort local_54;
-  ushort local_52;
-  int local_50;
-  int local_4c;
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x78]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x80];
   
-  CalculateExpandZone(param_2,&local_58);
-  CalculateTargetZone(param_2,&local_58,local_78);
+  CalculateExpandZone(param_2,&(*(ushort *)(_stk + 0x28)));
+  CalculateTargetZone(param_2,&(*(ushort *)(_stk + 0x28)),((undefined1 *)(_stk + 0x8)));
   if (*_refptr_g_tsaLogLoglevel != '\0') {
     StrPrintf_Process(0,
                       "\nHotZone Id=%d, Widget:%d#%d#%d#%d, Index:%d#%d, Size:%ddp, ExpandWidget:%d#%d#%d#%d"
                       ,*(undefined1 *)
                         ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr +
                         0x154),*param_2,param_2[1],param_2[2],param_2[3],param_2[4],param_2[5],
-                      ((ushort)param_2[6] + 1) * 8,local_50 - (uint)local_58,
-                      local_4c - (uint)local_56,local_50 + (uint)local_54,local_4c + (uint)local_52)
+                      ((ushort)param_2[6] + 1) * 8,(*(int *)(_stk + 0x30)) - (uint)(*(ushort *)(_stk + 0x28)),
+                      (*(int *)(_stk + 0x34)) - (uint)(*(ushort *)(_stk + 0x2a)),(*(int *)(_stk + 0x30)) + (uint)(*(ushort *)(_stk + 0x2c)),(*(int *)(_stk + 0x34)) + (uint)(*(ushort *)(_stk + 0x2e)))
     ;
   }
-  HotZoneAdjustPoint(param_1,&local_58,local_78);
+  HotZoneAdjustPoint(param_1,&(*(ushort *)(_stk + 0x28)),((undefined1 *)(_stk + 0x8)));
   return;
 }
 
@@ -745,21 +738,19 @@ void CalculateInternalHotZone(undefined8 param_1,undefined1 param_2)
 bool SearchNearest(byte param_1,undefined8 param_2,undefined1 param_3,undefined8 param_4)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x12]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x20];
   ushort uVar1;
-  ushort local_12;
-  ushort local_10 [2];
-  undefined2 local_c;
-  undefined2 local_a;
   
-  local_a = *(undefined2 *)
+  (*(undefined2 *)(_stk + 0x16)) = *(undefined2 *)
              ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x170);
-  local_c = *(undefined2 *)
+  (*(undefined2 *)(_stk + 0x14)) = *(undefined2 *)
              ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x172);
-  local_10[0] = 0xffff;
-  local_12 = 0xffff;
-  SearchNearestDisTwo(local_a,local_c,param_2,param_3,local_10,&local_12,param_4);
+  ((ushort *)(_stk + 0x10))[0] = 0xffff;
+  (*(ushort *)(_stk + 0xe)) = 0xffff;
+  SearchNearestDisTwo((*(undefined2 *)(_stk + 0x16)),(*(undefined2 *)(_stk + 0x14)),param_2,param_3,((ushort *)(_stk + 0x10)),&(*(ushort *)(_stk + 0xe)),param_4);
   uVar1 = TSAOut_ExtToIntDist(_refptr_g_tsaPrmtFlash[2].field_0x7bc);
-  return (int)(uint)uVar1 < (int)((uint)local_12 - (uint)local_10[0]);
+  return (int)(uint)uVar1 < (int)((uint)(*(ushort *)(_stk + 0xe)) - (uint)((ushort *)(_stk + 0x10))[0]);
 }
 
 
@@ -907,6 +898,8 @@ void CalculateTargetZone(ushort *param_1,longlong param_2,longlong param_3)
 void HotZoneAdjustPoint(byte param_1,undefined8 param_2,undefined8 param_3)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x30]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x30];
   char cVar1;
   undefined2 uVar2;
   ushort uVar3;
@@ -919,16 +912,12 @@ void HotZoneAdjustPoint(byte param_1,undefined8 param_2,undefined8 param_3)
   undefined8 uVar9;
   ushort *puVar11;
   undefined4 uVar12;
-  ushort local_30;
-  ushort local_2e;
-  ushort local_2c;
-  ushort local_2a;
   
-  local_2a = *(ushort *)
+  (*(ushort *)(_stk + 0x6)) = *(ushort *)
               ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x170);
-  local_2c = *(ushort *)
+  (*(ushort *)(_stk + 0x4)) = *(ushort *)
               ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x172);
-  cVar1 = IsInAdjustArea(local_2a,local_2c,param_2);
+  cVar1 = IsInAdjustArea((*(ushort *)(_stk + 0x6)),(*(ushort *)(_stk + 0x4)),param_2);
   if (cVar1 == '\0') {
     StrPrintf_Process(0,"\nAppLog: ");
     StrPrintf_Process(0x10,"\nHotZone Id=%d, Not in the Expand Zone",
@@ -937,19 +926,19 @@ void HotZoneAdjustPoint(byte param_1,undefined8 param_2,undefined8 param_3)
                        0x154));
   }
   else {
-    puVar11 = &local_30;
-    puVar8 = &local_2e;
-    CalculateNewPosition(param_2,local_2a,local_2c,param_3,puVar8,puVar11);
+    puVar11 = &(*(ushort *)(_stk + 0x0));
+    puVar8 = &(*(ushort *)(_stk + 0x2));
+    CalculateNewPosition(param_2,(*(ushort *)(_stk + 0x6)),(*(ushort *)(_stk + 0x4)),param_3,puVar8,puVar11);
     uVar10 = (undefined4)((ulonglong)puVar8 >> 0x20);
     uVar12 = (undefined4)((ulonglong)puVar11 >> 0x20);
     *(uint *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x174) =
-         (uint)local_2e - (uint)local_2a;
+         (uint)(*(ushort *)(_stk + 0x2)) - (uint)(*(ushort *)(_stk + 0x6));
     *(uint *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x178) =
-         (uint)local_30 - (uint)local_2c;
+         (uint)(*(ushort *)(_stk + 0x0)) - (uint)(*(ushort *)(_stk + 0x4));
     *(ushort *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x170) =
-         local_2e;
+         (*(ushort *)(_stk + 0x2));
     *(ushort *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x172) =
-         local_30;
+         (*(ushort *)(_stk + 0x0));
     *(uint *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x200) =
          *(uint *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x200)
          | 8;
@@ -962,8 +951,8 @@ void HotZoneAdjustPoint(byte param_1,undefined8 param_2,undefined8 param_3)
                         (*(undefined2 *)
                           ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr
                           + 0x170),1);
-      uVar4 = TSAOut_Dim2PosInternal(local_2c,1);
-      uVar5 = TSAOut_Dim1PosInternal(local_2a,1);
+      uVar4 = TSAOut_Dim2PosInternal((*(ushort *)(_stk + 0x4)),1);
+      uVar5 = TSAOut_Dim1PosInternal((*(ushort *)(_stk + 0x6)),1);
       uVar9 = CONCAT44(uVar10,(uint)uVar4);
       StrPrintf_Process(0,"\nHotZone Id=%d, Adjust OK before %d#%d, after %d#%d\n",
                         *(undefined1 *)
@@ -974,10 +963,10 @@ void HotZoneAdjustPoint(byte param_1,undefined8 param_2,undefined8 param_3)
     StrPrintf_Process(0,"\nAppLog: ");
     sVar6 = TSAOut_IntToExtDist((int)(short)(*(short *)((longlong)(int)(uint)param_1 * 0x168 +
                                                         *(longlong *)_refptr_g_touchesPtr + 0x172) -
-                                            local_2c));
+                                            (*(ushort *)(_stk + 0x4))));
     sVar7 = TSAOut_IntToExtDist((int)(short)(*(short *)((longlong)(int)(uint)param_1 * 0x168 +
                                                         *(longlong *)_refptr_g_touchesPtr + 0x170) -
-                                            local_2a));
+                                            (*(ushort *)(_stk + 0x6))));
     StrPrintf_Process(0x10,"\nHotZone Id=%d, Adjust OK %d#%d\n",
                       *(undefined1 *)
                        ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr +
@@ -1280,8 +1269,7 @@ int CalculateDistance(ushort *param_1,ushort param_2,ushort param_3)
   else {
     local_c = ((uint)uVar3 - (uint)param_3) * ((uint)uVar3 - (uint)param_3);
   }
-  Misc_SqrtUint32(local_c);
-  return;
+  return Misc_SqrtUint32(local_c);
 }
 
 

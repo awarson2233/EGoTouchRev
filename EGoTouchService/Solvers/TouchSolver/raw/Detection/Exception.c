@@ -45,23 +45,21 @@ void Exception_CheckUnderWater(void)
 void Exception_Process(void)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x28]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x30];
   undefined *puVar1;
   TSAFlashPrmt *pTVar2;
   char cVar3;
-  int *local_28;
-  undefined8 local_20;
-  ulonglong *local_18;
-  undefined8 local_10;
   
                     /* 0x18f25  584  Exception_Process */
   if (3 < (byte)*_refptr_g_tsaLogLoglevel) {
     StrPrintf_Process(0,&_rdata,"Exception_Process");
   }
-  local_10 = 0;
-  local_18 = (ulonglong *)0x0;
-  local_20 = 0;
-  local_28 = (int *)0x0;
-  Exception_InitVariable(&local_10,&local_18,&local_20,&local_28);
+  (*(undefined8 *)(_stk + 0x20)) = 0;
+  (*(ulonglong * *)(_stk + 0x18)) = (ulonglong *)0x0;
+  (*(undefined8 *)(_stk + 0x10)) = 0;
+  (*(int * *)(_stk + 0x8)) = (int *)0x0;
+  Exception_InitVariable(&(*(undefined8 *)(_stk + 0x20)),&(*(ulonglong * *)(_stk + 0x18)),&(*(undefined8 *)(_stk + 0x10)),&(*(int * *)(_stk + 0x8)));
   if ((*_refptr_g_prevTouchesPtr)->nTouchCount == 0x100) {
     cVar3 = AFE_IsManualFreqHopping();
     if (cVar3 != '\0') {
@@ -71,10 +69,10 @@ void Exception_Process(void)
     (*_refptr_g_prevTouchesPtr)->nTouchCount = 0;
   }
 LAB_6ba58fc8:
-  if (((*_refptr_g_prevTouchesPtr)->nTouchCount == 0x2000) && (*local_28 == 0x4000)) {
+  if (((*_refptr_g_prevTouchesPtr)->nTouchCount == 0x2000) && (*(*(int * *)(_stk + 0x8)) == 0x4000)) {
     (*_refptr_g_prevTouchesPtr)->nTouchCount = 0;
   }
-  Exception_UpdatePrevException(local_10,local_20,local_28);
+  Exception_UpdatePrevException((*(undefined8 *)(_stk + 0x20)),(*(undefined8 *)(_stk + 0x10)),(*(int * *)(_stk + 0x8)));
   if ((*(int *)(*(longlong *)_refptr_g_touchesPtr + 0x20) == 0x40) ||
      (*(int *)(*(longlong *)_refptr_g_touchesPtr + 0x20) == 0x80)) {
     (*_refptr_g_tsaStaticPtr)->bField_0x110 = '\x01';
@@ -84,17 +82,17 @@ LAB_6ba58fc8:
   }
   if (*(int *)(*(longlong *)_refptr_g_touchesPtr + 0x20) == 0x100) {
     (*_refptr_g_tsaStaticPtr)->bField_0x111 = '\x02';
-    *local_18 = 0;
+    *(*(ulonglong * *)(_stk + 0x18)) = 0;
   }
   else if (*(int *)(*(longlong *)_refptr_g_touchesPtr + 0x20) == 0x8000) {
     (*_refptr_g_tsaStaticPtr)->bField_0x111 = '\x03';
-    *local_18 = 0;
+    *(*(ulonglong * *)(_stk + 0x18)) = 0;
   }
   else {
-    *local_18 = (longlong)(*_refptr_g_tsaStaticPtr)->nBaselineStageInitialSignal + *local_18;
-    if (0x52 < *local_18) {
+    *(*(ulonglong * *)(_stk + 0x18)) = (longlong)(*_refptr_g_tsaStaticPtr)->nBaselineStageInitialSignal + *(*(ulonglong * *)(_stk + 0x18));
+    if (0x52 < *(*(ulonglong * *)(_stk + 0x18))) {
       (*_refptr_g_tsaStaticPtr)->bField_0x111 = '\0';
-      *local_18 = 0x53;
+      *(*(ulonglong * *)(_stk + 0x18)) = 0x53;
     }
   }
   pTVar2 = _refptr_g_tsaPrmtFlash;
@@ -107,7 +105,7 @@ LAB_6ba58fc8:
   else {
     _refptr_g_tsaPrmtDynamic[0x80] = _refptr_g_tsaPrmtDynamic[0x80] & 0xfb;
   }
-  *local_28 = 0;
+  *(*(int * *)(_stk + 0x8)) = 0;
   if (*(int *)(*(longlong *)_refptr_g_touchesPtr + 0x20) != (*_refptr_g_prevTouchesPtr)->nTouchCount
      ) {
     (*_refptr_g_tsaStaticPtr)->dwSpecialControlFlags =

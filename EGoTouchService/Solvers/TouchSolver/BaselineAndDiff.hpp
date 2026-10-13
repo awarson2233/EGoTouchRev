@@ -240,8 +240,47 @@ public:
     // true : Dif = Raw - Bl （TSACore bField_0x11a == 1，本机 MCU 预差分输入）
     bool m_signalReverted = true;
 
-    // ── 冷启动基线（输入已是差分量 ⇒ 0 即正确，不采样首帧）───────────
+    // ── 冷启动基线 ────────────────────────────────────────────────────
+    // ⚠ 这里曾写 0，依据是「MCU 送来的已是差分量」。录制实测推翻了该前提：
+    // MCU 只做硬件调零，线上矩阵仍带逐格固定图样（p05 −32 / p95 +13，极值
+    // −64…+46）、整段 ±20 counts 的慢漂移与每格 sd ≈ 26 的时间噪声。
+    // 去基线是主机的责任，所以首帧必须**按格采样**播种，而不是填常数。
+    // 本字段只在 Reset() 到首帧到达之间短暂有效。
     int32_t m_baseline = 0;
+
+    // ══════════════════════════════════════════════════════════════════
+    // 本机自愈层（**明确偏离原厂**）
+    //
+    // 原厂 BLSM 的复位入口全部挂在 AFE 上：BLReset_IsTriggered2 的 11 个触发
+    // 源、TSAStatic_IsHWReset、BLReset_IsBaselineNoisy。本机一个通道都接不到
+    // ⇒ BLSM_Reset 永远不会被调用，BL 只能靠 BLIIR_Update 以 stepNoTouch = 2
+    // counts/帧 爬行，而那条路又被 `maxSig <= clamp && minSig >= -clamp` 的闸门
+    // 挡住。结果是自锁：偏置越大越更新不了基线，基线不更新偏置就不会消失。
+    //
+    // 这一层用本机**有**的输入（master suffix 的 hasFinger + 本帧 Dif 极值）
+    // 补回两条能力，等价于复刻之前 BaselineTracker 的 noFingerAlphaShift 与
+    // 按下沿激进恢复：
+    //   ① 无手指快速收敛 —— MCU 报「没有手指」时用大步长直接追 raw；
+    //   ② 看门狗重播种   —— MCU 报「没有手指」却持续看到大信号，判基线不可信。
+    // ══════════════════════════════════════════════════════════════════
+
+    /// 关掉即完全回到原厂行为（自锁也一并回来），仅供对拍用。
+    bool     m_selfHealEnabled = true;
+    /// ① 无手指时的基线步长。原厂 stepNoTouch = 2 counts/帧，追一个 2000 counts
+    ///    的偏置要 10 秒；这里取 32，约 0.6 秒收敛，且仍远小于一次真实按下的
+    ///    上升沿，不会把刚落下的手指吃进基线（落指那一帧 hasFinger 就会置位）。
+    uint8_t  m_noFingerStep = 32;
+    /// ② 看门狗：连续多少帧「无手指 + 大信号」判基线不可信。100 帧 ≈ 1 秒。
+    uint16_t m_untrustedResetFrames = 100;
+    /// 重播种之后屏蔽输出的帧数，避免复位瞬间自造一批幽灵触点。
+    uint8_t  m_settleFramesAfterReseed = 3;
+
+    /// BLIIR_DoUpdate 的差值是否按有符号相减。
+    /// 原厂写的是 uint16 零扩展相减（`ZeroExtSub`），在它的输入域（无符号 ADC
+    /// 绝对读数）里与有符号等价；本机 raw 是以 0 为中心的有符号量，零扩展会把
+    /// −50 变成 65486，基线对负偏置的修正方向**是反的**。空闲噪声 sd 有 26
+    /// counts，意味着所有负样本都被当成大正值，基线被稳定地往上推。
+    bool     m_signedBaselineDelta = true;
 
     // ── §8 每帧门限与步长（RecomputeDynParams 重算）──────────────────
     // DAT_6BC4A918：TouchThold_Init 置 wPeakMode3ThresholdMax = 600，
@@ -272,6 +311,10 @@ public:
         m_frameCounter = 0;
         m_prevTimestampUs = 0;
         m_hasPrevTimestamp = false;
+        m_seeded = false;
+        m_untrustedFrames = 0;
+        m_settleFrames = 0;
+        m_reseedCount = 0;
         RecomputeDynParams();
 
         const int16_t seed = Fixed::Wrap16(m_baseline);
@@ -494,6 +537,12 @@ private:
     bool     m_hasPrevTimestamp = false;
     int64_t  m_nowMs = 0;                 // static->pFrameBufferPtr（毫秒时间戳）
 
+    // ── 自愈层状态 ────────────────────────────────────────────────────
+    bool     m_seeded = false;          // 首帧是否已按格播种
+    uint16_t m_untrustedFrames = 0;     // 连续「无手指 + 大信号」帧数
+    uint8_t  m_settleFrames = 0;        // 重播种后剩余的屏蔽帧数
+    uint32_t m_reseedCount = 0;         // 累计重播种次数（诊断用）
+
     // §9.1 信誉计数 touch + 0x4EC，按轨迹 ID 索引
     uint8_t  m_trustability[kMaxTracks]{};
     // 上一帧触点的 §9.1 输入快照（PrevTouch_PostProcess 的等价物）
@@ -518,7 +567,7 @@ private:
 
     void PublishTo(TouchBigFrame& bigFrame) noexcept {
         std::memcpy(bigFrame.diff, m_diff, sizeof(m_diff));
-        std::memcpy(bigFrame.baseline, m_bl, sizeof(m_bl));
+        // 基线本身不再往大帧镜像：全工程没有消费者（见 TouchBigFrame 注释）。
         bigFrame.baselineResetInDebounce = m_resetInDebounce;
         bigFrame.specialControlFlags |= m_state.specialControlFlags;
     }
@@ -547,9 +596,21 @@ private:
         // 3. §9.1 上一帧触点快照（BLReset_* 全族的输入）
         CapturePrevTouchSnapshot(bigFrame, hasFinger);
 
+        // 3.5 本机自愈层（偏离原厂）。放在求差分之前：此刻 m_state.maxSig /
+        //     minSig 还是**上一帧**最终 Dif 的极值，正是判「基线可不可信」要
+        //     用的量；在这里改写 BL，下一行的差分立刻反映新基线。
+        SelfHeal_Process(raw, hasFinger);
+
         // 4. §2 BLIIR_CalcDiffCommon —— 全屏差分，先于 BLSM
         BLIIR_CalcDiffCommon(raw, m_bl, m_diff, m_signalReverted);
         //   （§10 的 pre-CMF 统计由模块 02 的 GetDifPreCMFPrpt 产出，不重复）
+
+        // 4.5 重播种后的握手期：BL 刚整体重写，Dif 还没稳定，直接压成 0，
+        //     让峰值级本帧找不到任何候选，轨迹按正常抬起流程自然收敛。
+        if (m_settleFrames != 0) {
+            --m_settleFrames;
+            BLIIR_ResetDiff(m_diff);
+        }
 
         // 5. §9.3 BLSM_UpdateForRawUnstable —— 原版位于 BLSM_Process **之前**
         BLSM_UpdateForRawUnstable(raw);
@@ -565,6 +626,74 @@ private:
         TSA_GetRawPrpt(raw);
     }
 
+    // ══════════════════════════════════════════════════════════════════
+    // 本机自愈层（偏离原厂，见成员声明处的说明）
+    // ══════════════════════════════════════════════════════════════════
+    void SelfHeal_Process(const int16_t raw[kRows][kCols], bool hasFinger) noexcept {
+        if (!m_selfHealEnabled) return;   // 关掉即完全回到原厂行为
+
+        // ── 冷启动 ───────────────────────────────────────────────────
+        // AFE 已经把互容大信号在硬件上调零了，线上残差只有 ±50 counts，所以
+        // BL = 0 本身就是个可用的起点。**只有首帧确实空闲时才按格播种**：
+        // 开机时屏上真有手指的话，播种会把那根手指烙进基线，之后 hasFinger
+        // 一直为真、看门狗永远不触发，反而把「开机有手指」从能用变成不能用。
+        if (!m_seeded) {
+            m_seeded = true;
+            if (!hasFinger) Reseed(raw);
+            return;
+        }
+
+        const int32_t thr = m_dyn.smallThold;
+        const bool bigSignal = (static_cast<int32_t>(m_state.maxSig) >  thr) ||
+                               (static_cast<int32_t>(m_state.minSig) < -thr);
+
+        if (hasFinger) { m_untrustedFrames = 0; return; }
+
+        // 以下都是「MCU 报告屏上没有手指」的分支。
+
+        // ── ② 看门狗：无手指 + 持续大信号 ⇒ 基线不可信 ───────────────
+        // 这两件事只可能同时为真一小段时间（抬手回弹）。持续
+        // m_untrustedResetFrames 帧就说明 BL 本身是错的 —— 典型成因是 AFE 在
+        // 有手指的状态下完成了硬件调零，抬手后留下一个几千 counts 的负坑。
+        // 爬行更新救不回来（stepNoTouch = 2 counts/帧，且闸门已关），直接重播种。
+        if (bigSignal) {
+            if (m_untrustedFrames < 0xFFFF) ++m_untrustedFrames;
+            if (m_untrustedFrames >= m_untrustedResetFrames) Reseed(raw);
+            // ⚠ 大信号期间**不做**渐进更新：宁可等看门狗一次性重播种，也不要
+            // 把一个可能是真实触摸的东西慢慢吃进基线。
+            return;
+        }
+        m_untrustedFrames = 0;
+
+        // ── ① 无手指快速收敛 ─────────────────────────────────────────
+        // 对位复刻之前 BaselineTracker 的 noFingerAlphaShift = 3：只在信号确实
+        // 很小的时候跑，用来清掉逐格固定图样与慢漂移。不经 BLIIR_Update 的
+        // `maxSig <= clamp` 闸门 —— 那道闸是为「屏上有东西时别更新」设计的，
+        // 而这里 MCU 与信号幅值都表明屏上没东西。
+        BLIIR_DoUpdate(raw, static_cast<int16_t>(m_noFingerStep));
+        m_state.baselineUpdatedThisFrame = true;
+    }
+
+    /// BL := raw（逐格），并清掉所有依赖旧基线的瞬态。
+    void Reseed(const int16_t raw[kRows][kCols]) noexcept {
+        BLSM_Reset(raw);
+        std::memcpy(m_normalBl, m_bl, sizeof(m_normalBl));
+        BLIIR_ResetDiff(m_diff);
+        m_untrustedFrames = 0;
+        m_settleFrames = m_settleFramesAfterReseed;
+        m_state.stage = BaselineStage::ResetHw;
+        m_state.propertyFlags = FlagReset;
+        ++m_reseedCount;
+    }
+
+public:
+    /// 诊断：累计重播种次数 / 当前是否处在握手期。
+    [[nodiscard]] uint32_t ReseedCount() const noexcept { return m_reseedCount; }
+    [[nodiscard]] bool IsSettling() const noexcept { return m_settleFrames != 0; }
+    /// 外部（如休眠唤醒、模式切换）可以主动要求下一帧重播种。
+    void RequestReseed() noexcept { m_seeded = false; }
+
+private:
     // ── TSAStatic_PreProcess 的时间部分（§7.2）────────────────────────
     void AdvanceFrameClock(const TouchBigFrame* bigFrame) noexcept {
         const uint64_t nowUs = (bigFrame != nullptr) ? bigFrame->timestampUs : 0;
@@ -1144,10 +1273,16 @@ private:
     // 死区是 `(-step, step)` 的**开区间**：d == -step 属于下行（会减）。
     // 写回按 16 位**回绕**，不饱和。
     // 源缓冲：flash[0x69] = 1 ⇒ g_tsaBufPreCMFRaw（复刻里就是本帧 raw）。
+    // ⚠ 差值改为**有符号**相减（m_signedBaselineDelta，偏离原厂）。原厂的
+    // ZeroExtSub 在它的输入域（无符号 ADC 绝对读数）里与有符号等价，本机 raw
+    // 以 0 为中心，零扩展会让负偏置朝反方向修正。ZeroExtSub 本身保留在
+    // TouchFixed.hpp 供其他复刻点使用，这里只改调用。
     void BLIIR_DoUpdate(const int16_t raw[kRows][kCols], int16_t step) noexcept {
         for (int r = 0; r < kRows; ++r) {
             for (int c = 0; c < kCols; ++c) {
-                const int32_t d = Fixed::ZeroExtSub(raw[r][c], m_bl[r][c]);
+                const int32_t d = m_signedBaselineDelta
+                    ? (static_cast<int32_t>(raw[r][c]) - static_cast<int32_t>(m_bl[r][c]))
+                    : Fixed::ZeroExtSub(raw[r][c], m_bl[r][c]);
                 if (d < step) {
                     if (d <= -static_cast<int32_t>(step)) {
                         m_bl[r][c] = Fixed::Wrap16(static_cast<int32_t>(m_bl[r][c]) - step);

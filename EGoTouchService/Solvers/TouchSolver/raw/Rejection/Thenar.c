@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: Thenar_ProcessInfoByDif @ 6bb315e8
 // ============================================================================
@@ -78,40 +80,32 @@ void Thenar_EventUpdate(void)
 void Thenar_ProcessInfoByDifTraditional(void)
 
 {
-  ushort local_28;
-  ushort local_26;
-  ushort local_24;
-  ushort local_22;
-  byte local_20;
-  byte local_1f;
-  ushort local_1e;
-  ushort local_1c;
-  ushort local_c;
-  byte local_9;
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x28]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x30];
   
   Thenar_FeatureExtraction(*(undefined8 *)_refptr_g_tsaBufDif,0x1324);
-  Thenar_UpdateDetectFeature(&local_28);
-  for (local_9 = 0; local_9 < **(byte **)_refptr_g_touchesPtr; local_9 = local_9 + 1) {
-    Thenar_SideHandDetectByCoreTouch(local_9);
+  Thenar_UpdateDetectFeature(&(*(ushort *)(_stk + 0x8)));
+  for ((*(byte *)(_stk + 0x27)) = 0; (*(byte *)(_stk + 0x27)) < **(byte **)_refptr_g_touchesPtr; (*(byte *)(_stk + 0x27)) = (*(byte *)(_stk + 0x27)) + 1) {
+    Thenar_SideHandDetectByCoreTouch((*(byte *)(_stk + 0x27)));
   }
-  local_c = (ushort)(((uint)(byte)_refptr_g_tsaPrmtFlash->field_0x836 << 4) /
+  (*(ushort *)(_stk + 0x24)) = (ushort)(((uint)(byte)_refptr_g_tsaPrmtFlash->field_0x836 << 4) /
                     (uint)(byte)_refptr_g_tsaPrmtFlash->field_0x1b);
   *(undefined1 *)(*(longlong *)_refptr_g_touchesPtr + 0x41) = 1;
-  if ((local_20 < 3) || (2 < local_1f)) {
-    if ((local_1f < 3) || (2 < local_20)) {
-      if ((local_1e < 4) && (4 < local_1c)) {
+  if (((*(byte *)(_stk + 0x10)) < 3) || (2 < (*(byte *)(_stk + 0x11)))) {
+    if (((*(byte *)(_stk + 0x11)) < 3) || (2 < (*(byte *)(_stk + 0x10)))) {
+      if (((*(ushort *)(_stk + 0x12)) < 4) && (4 < (*(ushort *)(_stk + 0x14)))) {
         *(undefined1 *)(*(longlong *)_refptr_g_touchesPtr + 0x40) = 1;
         *(undefined4 *)(*(longlong *)_refptr_g_touchesPtr + 0x48) = 8;
       }
-      else if ((local_1c < 4) && (4 < local_1e)) {
+      else if (((*(ushort *)(_stk + 0x14)) < 4) && (4 < (*(ushort *)(_stk + 0x12)))) {
         *(undefined1 *)(*(longlong *)_refptr_g_touchesPtr + 0x40) = 1;
         *(undefined4 *)(*(longlong *)_refptr_g_touchesPtr + 0x48) = 4;
       }
-      else if ((local_24 < local_28) && (local_c <= local_28)) {
+      else if (((*(ushort *)(_stk + 0xc)) < (*(ushort *)(_stk + 0x8))) && ((*(ushort *)(_stk + 0x24)) <= (*(ushort *)(_stk + 0x8)))) {
         *(undefined1 *)(*(longlong *)_refptr_g_touchesPtr + 0x40) = 1;
         *(undefined4 *)(*(longlong *)_refptr_g_touchesPtr + 0x48) = 4;
       }
-      else if ((local_28 < local_24) && (local_c <= local_24)) {
+      else if (((*(ushort *)(_stk + 0x8)) < (*(ushort *)(_stk + 0xc))) && ((*(ushort *)(_stk + 0x24)) <= (*(ushort *)(_stk + 0xc)))) {
         *(undefined1 *)(*(longlong *)_refptr_g_touchesPtr + 0x40) = 1;
         *(undefined4 *)(*(longlong *)_refptr_g_touchesPtr + 0x48) = 8;
       }
@@ -125,14 +119,14 @@ void Thenar_ProcessInfoByDifTraditional(void)
     *(undefined1 *)(*(longlong *)_refptr_g_touchesPtr + 0x40) = 1;
     *(undefined4 *)(*(longlong *)_refptr_g_touchesPtr + 0x48) = 8;
   }
-  if (local_28 < local_24) {
+  if ((*(ushort *)(_stk + 0x8)) < (*(ushort *)(_stk + 0xc))) {
     Thenar_ProcessGensture
-              ((int)*(short *)((longlong)(int)(uint)local_22 * 10 +
+              ((int)*(short *)((longlong)(int)(uint)(*(ushort *)(_stk + 0xe)) * 10 +
                                *(longlong *)_refptr_g_touchesPtr + 0x70));
   }
   else {
     Thenar_ProcessGensture
-              ((int)*(short *)((longlong)(int)(uint)local_26 * 10 +
+              ((int)*(short *)((longlong)(int)(uint)(*(ushort *)(_stk + 0xa)) * 10 +
                                *(longlong *)_refptr_g_touchesPtr + 0x70));
   }
   return;
@@ -314,23 +308,22 @@ void Thenar_SideHandDetectByCoreTouch(byte param_1)
 void Thenar_FeatureExtraction(undefined8 param_1,undefined2 param_2)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x38]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x40];
   short sVar1;
-  undefined4 local_38;
-  undefined2 local_28;
-  undefined2 local_18;
   
                     /* 0xf0c47  2457  Thenar_FeatureExtraction */
   Touch_ThenarFeatureReset();
-  local_18 = CONCAT11(_refptr_g_tsaPrmtFlash->bCols,1);
-  local_28._0_1_ = _refptr_g_tsaPrmtFlash->bCols;
-  local_28._1_1_ = _refptr_g_tsaPrmtFlash->bRows;
+  (*(undefined2 *)(_stk + 0x28)) = CONCAT11(_refptr_g_tsaPrmtFlash->bCols,1);
+  (*(uint8_t *)((uint8_t *)&(*(undefined2 *)(_stk + 0x18)) + 0)) = _refptr_g_tsaPrmtFlash->bCols;
+  (*(uint8_t *)((uint8_t *)&(*(undefined2 *)(_stk + 0x18)) + 1)) = _refptr_g_tsaPrmtFlash->bRows;
   if (_refptr_g_tsaPrmtFlash->bCmfForceDim1Pass != _refptr_g_tsaPrmtFlash->field_0x18) {
-    local_18 = CONCAT11(1,_refptr_g_tsaPrmtFlash->bCols);
-    local_28 = CONCAT11(_refptr_g_tsaPrmtFlash->bCols,_refptr_g_tsaPrmtFlash->bRows);
+    (*(undefined2 *)(_stk + 0x28)) = CONCAT11(1,_refptr_g_tsaPrmtFlash->bCols);
+    (*(undefined2 *)(_stk + 0x18)) = CONCAT11(_refptr_g_tsaPrmtFlash->bCols,_refptr_g_tsaPrmtFlash->bRows);
   }
-  for (sVar1 = 0; sVar1 < (short)(local_28 & 0xff); sVar1 = (local_28 & 0xff) + sVar1 + -1) {
-    local_38 = CONCAT22(sVar1,sVar1);
-    Thenar_FeatureExtractionUnit(param_1,param_2,local_38,local_18,local_28);
+  for (sVar1 = 0; sVar1 < (short)((*(undefined2 *)(_stk + 0x18)) & 0xff); sVar1 = ((*(undefined2 *)(_stk + 0x18)) & 0xff) + sVar1 + -1) {
+    (*(undefined4 *)(_stk + 0x8)) = CONCAT22(sVar1,sVar1);
+    Thenar_FeatureExtractionUnit(param_1,param_2,(*(undefined4 *)(_stk + 0x8)),(*(undefined2 *)(_stk + 0x28)),(*(undefined2 *)(_stk + 0x18)));
   }
   return;
 }
@@ -343,92 +336,88 @@ void Thenar_FeatureExtraction(undefined8 param_1,undefined2 param_2)
 undefined8 * Thenar_UpdateDetectFeature(undefined8 *param_1)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x28]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x30];
   ushort uVar1;
-  undefined8 local_28;
-  undefined4 local_20;
-  ushort local_1c;
-  ushort local_e;
-  ushort local_c;
-  ushort local_a;
   
-  local_28 = 0;
-  local_20 = 0xffff0000;
-  local_1c = 0xffff;
-  local_a = 0xffff;
-  local_c = 0xffff;
-  for (local_e = 0; local_e < *(byte *)(*(longlong *)_refptr_g_touchesPtr + 0x130);
-      local_e = local_e + 1) {
+  (*(undefined8 *)(_stk + 0x8)) = 0;
+  (*(undefined4 *)(_stk + 0x10)) = 0xffff0000;
+  (*(ushort *)(_stk + 0x14)) = 0xffff;
+  (*(ushort *)(_stk + 0x26)) = 0xffff;
+  (*(ushort *)(_stk + 0x24)) = 0xffff;
+  for ((*(ushort *)(_stk + 0x22)) = 0; (*(ushort *)(_stk + 0x22)) < *(byte *)(*(longlong *)_refptr_g_touchesPtr + 0x130);
+      (*(ushort *)(_stk + 0x22)) = (*(ushort *)(_stk + 0x22)) + 1) {
     if ((short)((short)((ulonglong)
                         ((longlong)(*(short *)(_refptr_g_tsaPrmtDynamic + 0x44) * 5) * 0x2aaaaaab)
                        >> 0x20) - (*(short *)(_refptr_g_tsaPrmtDynamic + 0x44) >> 0xf)) <=
-        *(short *)((longlong)(int)(uint)local_e * 10 + *(longlong *)_refptr_g_touchesPtr + 0x70)) {
-      if (*(char *)((longlong)(int)(uint)local_e * 10 + *(longlong *)_refptr_g_touchesPtr + 0x6e) ==
+        *(short *)((longlong)(int)(uint)(*(ushort *)(_stk + 0x22)) * 10 + *(longlong *)_refptr_g_touchesPtr + 0x70)) {
+      if (*(char *)((longlong)(int)(uint)(*(ushort *)(_stk + 0x22)) * 10 + *(longlong *)_refptr_g_touchesPtr + 0x6e) ==
           '\0') {
-        if (local_28._4_2_ <
+        if ((*(uint16_t *)((uint8_t *)&(*(undefined8 *)(_stk + 0x8)) + 4)) <
             *(ushort *)
-             ((longlong)(int)(uint)local_e * 10 + *(longlong *)_refptr_g_touchesPtr + 0x6a)) {
-          local_28 = CONCAT26(local_e,CONCAT24(*(undefined2 *)
-                                                ((longlong)(int)(uint)local_e * 10 +
+             ((longlong)(int)(uint)(*(ushort *)(_stk + 0x22)) * 10 + *(longlong *)_refptr_g_touchesPtr + 0x6a)) {
+          (*(undefined8 *)(_stk + 0x8)) = CONCAT26((*(ushort *)(_stk + 0x22)),CONCAT24(*(undefined2 *)
+                                                ((longlong)(int)(uint)(*(ushort *)(_stk + 0x22)) * 10 +
                                                  *(longlong *)_refptr_g_touchesPtr + 0x6a),
-                                               (undefined4)local_28));
+                                               (undefined4)(*(undefined8 *)(_stk + 0x8))));
         }
       }
-      else if ((ushort)local_28 <
+      else if ((ushort)(*(undefined8 *)(_stk + 0x8)) <
                *(ushort *)
-                ((longlong)(int)(uint)local_e * 10 + *(longlong *)_refptr_g_touchesPtr + 0x6a)) {
-        local_28._0_4_ =
-             CONCAT22(local_e,*(undefined2 *)
-                               ((longlong)(int)(uint)local_e * 10 +
+                ((longlong)(int)(uint)(*(ushort *)(_stk + 0x22)) * 10 + *(longlong *)_refptr_g_touchesPtr + 0x6a)) {
+        (*(uint32_t *)((uint8_t *)&(*(undefined8 *)(_stk + 0x8)) + 0)) =
+             CONCAT22((*(ushort *)(_stk + 0x22)),*(undefined2 *)
+                               ((longlong)(int)(uint)(*(ushort *)(_stk + 0x22)) * 10 +
                                 *(longlong *)_refptr_g_touchesPtr + 0x6a));
       }
-      if (*(ushort *)((longlong)(int)(uint)local_e * 10 + *(longlong *)_refptr_g_touchesPtr + 0x6a)
+      if (*(ushort *)((longlong)(int)(uint)(*(ushort *)(_stk + 0x22)) * 10 + *(longlong *)_refptr_g_touchesPtr + 0x6a)
           < 6) {
-        if (*(char *)((longlong)(int)(uint)local_e * 10 + *(longlong *)_refptr_g_touchesPtr + 0x6e)
+        if (*(char *)((longlong)(int)(uint)(*(ushort *)(_stk + 0x22)) * 10 + *(longlong *)_refptr_g_touchesPtr + 0x6e)
             == '\0') {
-          local_20._0_2_ = CONCAT11(local_20._1_1_ + '\x01',(char)local_20);
+          (*(uint16_t *)((uint8_t *)&(*(undefined4 *)(_stk + 0x10)) + 0)) = CONCAT11((*(uint8_t *)((uint8_t *)&(*(undefined4 *)(_stk + 0x10)) + 1)) + '\x01',(char)(*(undefined4 *)(_stk + 0x10)));
         }
         else {
-          local_20 = CONCAT31(local_20._1_3_,(char)local_20 + '\x01');
+          (*(undefined4 *)(_stk + 0x10)) = CONCAT31((*(uint32_t *)((uint8_t *)&(*(undefined4 *)(_stk + 0x10)) + 1) & 0xffffff),(char)(*(undefined4 *)(_stk + 0x10)) + '\x01');
         }
       }
-      if (*(char *)((longlong)(int)(uint)local_e * 10 + *(longlong *)_refptr_g_touchesPtr + 0x6e) ==
+      if (*(char *)((longlong)(int)(uint)(*(ushort *)(_stk + 0x22)) * 10 + *(longlong *)_refptr_g_touchesPtr + 0x6e) ==
           '\0') {
-        if (local_c == 0xffff) {
-          local_c = local_e;
+        if ((*(ushort *)(_stk + 0x24)) == 0xffff) {
+          (*(ushort *)(_stk + 0x24)) = (*(ushort *)(_stk + 0x22));
         }
         else {
-          uVar1 = (*(short *)((longlong)(int)(short)local_c * 10 + *(longlong *)_refptr_g_touchesPtr
+          uVar1 = (*(short *)((longlong)(int)(short)(*(ushort *)(_stk + 0x24)) * 10 + *(longlong *)_refptr_g_touchesPtr
                              + 0x68) -
-                  *(short *)((longlong)(int)(short)local_c * 10 + *(longlong *)_refptr_g_touchesPtr
+                  *(short *)((longlong)(int)(short)(*(ushort *)(_stk + 0x24)) * 10 + *(longlong *)_refptr_g_touchesPtr
                             + 0x6a)) -
-                  *(short *)((longlong)(int)(uint)local_e * 10 + *(longlong *)_refptr_g_touchesPtr +
+                  *(short *)((longlong)(int)(uint)(*(ushort *)(_stk + 0x22)) * 10 + *(longlong *)_refptr_g_touchesPtr +
                             0x68);
-          if (local_1c <= uVar1) {
-            uVar1 = local_1c;
+          if ((*(ushort *)(_stk + 0x14)) <= uVar1) {
+            uVar1 = (*(ushort *)(_stk + 0x14));
           }
-          local_1c = uVar1;
+          (*(ushort *)(_stk + 0x14)) = uVar1;
         }
       }
-      else if (local_a == 0xffff) {
-        local_a = local_e;
+      else if ((*(ushort *)(_stk + 0x26)) == 0xffff) {
+        (*(ushort *)(_stk + 0x26)) = (*(ushort *)(_stk + 0x22));
       }
       else {
-        uVar1 = (*(short *)((longlong)(int)(short)local_a * 10 + *(longlong *)_refptr_g_touchesPtr +
+        uVar1 = (*(short *)((longlong)(int)(short)(*(ushort *)(_stk + 0x26)) * 10 + *(longlong *)_refptr_g_touchesPtr +
                            0x68) -
-                *(short *)((longlong)(int)(short)local_a * 10 + *(longlong *)_refptr_g_touchesPtr +
+                *(short *)((longlong)(int)(short)(*(ushort *)(_stk + 0x26)) * 10 + *(longlong *)_refptr_g_touchesPtr +
                           0x6a)) -
-                *(short *)((longlong)(int)(uint)local_e * 10 + *(longlong *)_refptr_g_touchesPtr +
+                *(short *)((longlong)(int)(uint)(*(ushort *)(_stk + 0x22)) * 10 + *(longlong *)_refptr_g_touchesPtr +
                           0x68);
-        if (local_20._2_2_ <= uVar1) {
-          uVar1 = local_20._2_2_;
+        if ((*(uint16_t *)((uint8_t *)&(*(undefined4 *)(_stk + 0x10)) + 2)) <= uVar1) {
+          uVar1 = (*(uint16_t *)((uint8_t *)&(*(undefined4 *)(_stk + 0x10)) + 2));
         }
-        local_20 = CONCAT22(uVar1,(undefined2)local_20);
+        (*(undefined4 *)(_stk + 0x10)) = CONCAT22(uVar1,(undefined2)(*(undefined4 *)(_stk + 0x10)));
       }
     }
   }
-  *param_1 = local_28;
-  *(undefined4 *)(param_1 + 1) = local_20;
-  *(ushort *)((longlong)param_1 + 0xc) = local_1c;
+  *param_1 = (*(undefined8 *)(_stk + 0x8));
+  *(undefined4 *)(param_1 + 1) = (*(undefined4 *)(_stk + 0x10));
+  *(ushort *)((longlong)param_1 + 0xc) = (*(ushort *)(_stk + 0x14));
   return param_1;
 }
 
@@ -471,7 +460,7 @@ void Thenar_FeatureExtractionUnit
   byte local_b;
   ushort local_a;
   
-  local_a = (param_4 >> 8) * (param_5._1_1_ - 1) + param_3 * (param_4 & 0xff);
+  local_a = (param_4 >> 8) * ((*(uint8_t *)((uint8_t *)&param_5 + 1)) - 1) + param_3 * (param_4 & 0xff);
   local_b = *(byte *)(*(longlong *)_refptr_g_touchesPtr + 0x130);
   if ((local_a < param_2) && (local_b < 0x14)) {
     local_10 = 0;
@@ -480,7 +469,7 @@ void Thenar_FeatureExtractionUnit
     local_18 = 0;
     sVar1 = *(short *)(_refptr_g_tsaPrmtDynamic + 0x44) / 2;
     bVar4 = (int)param_3 != (byte)param_5 - 1;
-    local_res18 = CONCAT22(param_5._1_1_ - 1,param_3);
+    local_res18 = CONCAT22((*(uint8_t *)((uint8_t *)&param_5 + 1)) - 1,param_3);
     while (-1 < local_res18) {
       if (0x13 < local_b) {
         local_b = local_b - 1;
@@ -526,7 +515,7 @@ void Thenar_FeatureExtractionUnit
           }
           local_18 = *(short *)(param_1 + (ulonglong)local_a * 2);
           *(short *)((longlong)(int)(local_b - 1) * 10 + *(longlong *)_refptr_g_touchesPtr + 0x68) =
-               local_res18._2_2_;
+               (*(uint16_t *)((uint8_t *)&local_res18 + 2));
           *(bool *)((longlong)(int)(local_b - 1) * 10 + *(longlong *)_refptr_g_touchesPtr + 0x6e) =
                bVar4;
           local_14 = uVar3;
@@ -566,14 +555,14 @@ void Thenar_FeatureExtractionUnit
             }
             local_18 = *(short *)(param_1 + (ulonglong)local_a * 2);
             *(short *)((longlong)(int)(local_b - 1) * 10 + *(longlong *)_refptr_g_touchesPtr + 0x68)
-                 = local_res18._2_2_;
+                 = (*(uint16_t *)((uint8_t *)&local_res18 + 2));
             *(bool *)((longlong)(int)(local_b - 1) * 10 + *(longlong *)_refptr_g_touchesPtr + 0x6e)
                  = bVar4;
           }
         }
       }
       local_a = local_a - (param_4 >> 8);
-      local_res18 = CONCAT22(local_res18._2_2_ + -1,(undefined2)local_res18);
+      local_res18 = CONCAT22((*(uint16_t *)((uint8_t *)&local_res18 + 2)) + -1,(undefined2)local_res18);
     }
     *(byte *)(*(longlong *)_refptr_g_touchesPtr + 0x130) = local_b;
   }
@@ -618,7 +607,7 @@ short Thenar_FeatureGradient
       sVar2 = local_e + sStackX_1a + -1;
       uVar3 = sVar2 * (param_4 >> 8) + (param_4 & 0xff) * sVar1;
       if ((((-1 < sVar1) && (sVar1 < (short)(ushort)(byte)param_5)) && (-1 < sVar2)) &&
-         ((sVar2 < (short)(ushort)param_5._1_1_ && (uVar3 < param_2)))) {
+         ((sVar2 < (short)(ushort)(*(uint8_t *)((uint8_t *)&param_5 + 1)) && (uVar3 < param_2)))) {
         local_a = local_a + *(short *)(param_1 + (ulonglong)uVar3 * 2) *
                             local_28[(longlong)(int)local_e * 3 + (longlong)(int)local_c];
       }

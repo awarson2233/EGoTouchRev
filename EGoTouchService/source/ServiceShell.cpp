@@ -4,6 +4,7 @@
 #include "Logger.h"
 
 #include <powersetting.h>
+#include <powrprof.h>
 
 namespace Service {
 
@@ -17,7 +18,70 @@ struct ServiceShell::Impl {
     HPOWERNOTIFY hDisplayNotify = nullptr;
     HPOWERNOTIFY hLidNotify = nullptr;
     HPOWERNOTIFY hSuspendNotify = nullptr;
+
+    // 控制台模式没有 SCM 句柄，改用回调式注册
+    HPOWERNOTIFY hConsoleDisplayNotify = nullptr;
+    HPOWERNOTIFY hConsoleLidNotify = nullptr;
+    HPOWERNOTIFY hConsoleSuspendResume = nullptr;
+    DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS consoleSubscribe{};
 };
+
+namespace {
+
+// GUID_CONSOLE_DISPLAY_STATE: 0=off, 1=on, 2=dimmed
+constexpr GUID kDisplayGuid =
+    {0x6fe69556, 0x704a, 0x47a0, {0x8f, 0x24, 0xc2, 0x8d, 0x93, 0x6f, 0xda, 0x47}};
+// GUID_LIDSWITCH_STATE_CHANGE
+constexpr GUID kLidGuid =
+    {0xba3e0f4d, 0xb817, 0x4094, {0xa2, 0xd1, 0xd5, 0x63, 0x79, 0xe6, 0xa0, 0xf3}};
+// GUID_SYSTEM_AWAYMODE (away mode / connected standby)
+constexpr GUID kAwayGuid =
+    {0x98a7f580, 0x01f7, 0x48aa, {0x9c, 0x0f, 0x44, 0x35, 0x2c, 0x29, 0xe5, 0xc0}};
+
+void SignalEvent(Host::SystemStateNamedEventId id) {
+    (void)Host::SystemStateMonitor::SignalNamedEvent(id);
+}
+
+// 服务模式（SERVICE_CONTROL_POWEREVENT）与控制台模式（注册回调）共用的电源事件翻译
+void DispatchPowerEvent(const char* source, DWORD evtType, const POWERBROADCAST_SETTING* pbs) {
+    switch (evtType) {
+    case PBT_APMSUSPEND:
+        LOG_NOTICE("Service", "Power", source, "PBT_APMSUSPEND");
+        SignalEvent(Host::SystemStateNamedEventId::PbtApmSuspend);
+        return;
+    case PBT_APMRESUMEAUTOMATIC:
+        LOG_NOTICE("Service", "Power", source, "PBT_APMRESUMEAUTOMATIC");
+        SignalEvent(Host::SystemStateNamedEventId::PbtApmResumeAutomatic);
+        return;
+    case PBT_APMRESUMESUSPEND:
+        LOG_NOTICE("Service", "Power", source, "PBT_APMRESUMESUSPEND");
+        SignalEvent(Host::SystemStateNamedEventId::PbtApmResumeSuspend);
+        return;
+    case PBT_POWERSETTINGCHANGE:
+        break;
+    default:
+        return;
+    }
+
+    if (pbs == nullptr || pbs->DataLength < sizeof(DWORD)) return;
+    const DWORD state = *reinterpret_cast<const DWORD*>(pbs->Data);
+    if (pbs->PowerSetting == kDisplayGuid) {
+        LOG_NOTICE("Service", "Power", source, "GUID_CONSOLE_DISPLAY_STATE = {} (0=off, 1=on, 2=dimmed)", state);
+        SignalEvent(state >= 1 ? Host::SystemStateNamedEventId::MonitorConsoleDisplayOn
+                               : Host::SystemStateNamedEventId::MonitorConsoleDisplayOff);
+    } else if (pbs->PowerSetting == kLidGuid) {
+        LOG_NOTICE("Service", "Power", source, "GUID_LIDSWITCH_STATE = {} (1=open, 0=closed)", state);
+        SignalEvent(state == 1 ? Host::SystemStateNamedEventId::MonitorLidOn
+                               : Host::SystemStateNamedEventId::MonitorLidOff);
+    }
+}
+
+ULONG CALLBACK ConsolePowerCallback(PVOID, ULONG type, PVOID setting) {
+    DispatchPowerEvent("Console", type, static_cast<const POWERBROADCAST_SETTING*>(setting));
+    return ERROR_SUCCESS;
+}
+
+} // namespace
 
 static ServiceShell s_instance;
 
@@ -67,10 +131,6 @@ DWORD WINAPI ServiceShell::SvcCtrlHandlerEx(
         DWORD ctrl, DWORD evtType, LPVOID evtData, LPVOID ctx) {
     auto* s = static_cast<ServiceShell*>(ctx);
 
-    auto signalEvent = [](Host::SystemStateNamedEventId id) {
-        return Host::SystemStateMonitor::SignalNamedEvent(id);
-    };
-
     switch (ctrl) {
     case SERVICE_CONTROL_STOP:
     case SERVICE_CONTROL_SHUTDOWN:
@@ -80,58 +140,9 @@ DWORD WINAPI ServiceShell::SvcCtrlHandlerEx(
         s->ReportStatus(SERVICE_STOP_PENDING, 5000);
         return NO_ERROR;
 
-    case SERVICE_CONTROL_POWEREVENT: {
-        if (evtType == PBT_APMSUSPEND) {
-            LOG_INFO("Service", __func__, "Power", "PBT_APMSUSPEND");
-            signalEvent(Host::SystemStateNamedEventId::PbtApmSuspend);
-            return NO_ERROR;
-        }
-
-        if (evtType == PBT_APMRESUMEAUTOMATIC) {
-            LOG_INFO("Service", __func__, "Power", "PBT_APMRESUMEAUTOMATIC");
-            signalEvent(Host::SystemStateNamedEventId::PbtApmResumeAutomatic);
-            return NO_ERROR;
-        }
-
-        if (evtType == PBT_APMRESUMESUSPEND) {
-            LOG_INFO("Service", __func__, "Power", "PBT_APMRESUMESUSPEND");
-            signalEvent(Host::SystemStateNamedEventId::PbtApmResumeSuspend);
-            return NO_ERROR;
-        }
-
-        if (evtType != PBT_POWERSETTINGCHANGE || !evtData)
-            return NO_ERROR;
-        auto* pbs = static_cast<POWERBROADCAST_SETTING*>(evtData);
-
-        // GUID_CONSOLE_DISPLAY_STATE: 0=off, 1=on, 2=dimmed
-        static const GUID kDisplayGuid =
-            {0x6fe69556, 0x704a, 0x47a0,
-             {0x8f, 0x24, 0xc2, 0x8d, 0x93, 0x6f, 0xda, 0x47}};
-        // GUID_LIDSWITCH_STATE_CHANGE
-        static const GUID kLidGuid =
-            {0xba3e0f4d, 0xb817, 0x4094,
-             {0xa2, 0xd1, 0xd5, 0x63, 0x79, 0xe6, 0xa0, 0xf3}};
-
-        if (pbs->PowerSetting == kDisplayGuid && pbs->DataLength >= 4) {
-            DWORD state = *reinterpret_cast<DWORD*>(pbs->Data);
-            LOG_INFO("Service", __func__, "Power", "GUID_CONSOLE_DISPLAY_STATE = {}", state);
-            if (state >= 1) {
-                signalEvent(Host::SystemStateNamedEventId::MonitorConsoleDisplayOn);
-            } else {
-                signalEvent(Host::SystemStateNamedEventId::MonitorConsoleDisplayOff);
-            }
-        }
-        else if (pbs->PowerSetting == kLidGuid && pbs->DataLength >= 4) {
-            DWORD state = *reinterpret_cast<DWORD*>(pbs->Data);
-            LOG_INFO("Service", __func__, "Power", "GUID_LIDSWITCH_STATE = {} (1=open, 0=closed)", state);
-            if (state == 1) {
-                signalEvent(Host::SystemStateNamedEventId::MonitorLidOn);
-            } else {
-                signalEvent(Host::SystemStateNamedEventId::MonitorLidOff);
-            }
-        }
+    case SERVICE_CONTROL_POWEREVENT:
+        DispatchPowerEvent("Service", evtType, static_cast<const POWERBROADCAST_SETTING*>(evtData));
         return NO_ERROR;
-    }
 
     case SERVICE_CONTROL_INTERROGATE:
         return NO_ERROR;
@@ -177,8 +188,10 @@ void ServiceShell::RunAsConsole() {
         return;
     }
 
+    RegisterConsolePowerNotifications();
     LOG_INFO("Service", __func__, "Running", "Service running in console mode. Press Ctrl+C to stop.");
     WaitForStop();
+    UnregisterConsolePowerNotifications();
     m_impl->host.Stop();
     LOG_INFO("Service", __func__, "Stopped", "Console mode stopped.");
 }
@@ -225,19 +238,6 @@ void ServiceShell::WaitForStop() {
 void ServiceShell::RegisterPowerNotifications() {
     if (!m_impl->statusHandle) return;
 
-    // GUID_CONSOLE_DISPLAY_STATE
-    static const GUID kDisplayGuid =
-        {0x6fe69556, 0x704a, 0x47a0,
-         {0x8f, 0x24, 0xc2, 0x8d, 0x93, 0x6f, 0xda, 0x47}};
-    // GUID_LIDSWITCH_STATE_CHANGE
-    static const GUID kLidGuid =
-        {0xba3e0f4d, 0xb817, 0x4094,
-         {0xa2, 0xd1, 0xd5, 0x63, 0x79, 0xe6, 0xa0, 0xf3}};
-    // GUID_SYSTEM_AWAYMODE (away mode / connected standby)
-    static const GUID kAwayGuid =
-        {0x98a7f580, 0x01f7, 0x48aa,
-         {0x9c, 0x0f, 0x44, 0x35, 0x2c, 0x29, 0xe5, 0xc0}};
-
     m_impl->hDisplayNotify = RegisterPowerSettingNotification(
         m_impl->statusHandle, &kDisplayGuid, DEVICE_NOTIFY_SERVICE_HANDLE);
     m_impl->hLidNotify = RegisterPowerSettingNotification(
@@ -245,7 +245,38 @@ void ServiceShell::RegisterPowerNotifications() {
     m_impl->hSuspendNotify = RegisterPowerSettingNotification(
         m_impl->statusHandle, &kAwayGuid, DEVICE_NOTIFY_SERVICE_HANDLE);
 
-    LOG_INFO("Service", __func__, "Power", "Registered PBT notifications (display={}, lid={}, away={}).", m_impl->hDisplayNotify != nullptr, m_impl->hLidNotify != nullptr, m_impl->hSuspendNotify != nullptr);
+    LOG_NOTICE("Service", __func__, "Power", "Registered PBT notifications (display={}, lid={}, away={}).", m_impl->hDisplayNotify != nullptr, m_impl->hLidNotify != nullptr, m_impl->hSuspendNotify != nullptr);
+}
+
+void ServiceShell::RegisterConsolePowerNotifications() {
+    m_impl->consoleSubscribe.Callback = &ConsolePowerCallback;
+    m_impl->consoleSubscribe.Context = nullptr;
+    HANDLE recipient = &m_impl->consoleSubscribe;
+
+    const DWORD displayErr = PowerSettingRegisterNotification(
+        &kDisplayGuid, DEVICE_NOTIFY_CALLBACK, recipient, &m_impl->hConsoleDisplayNotify);
+    const DWORD lidErr = PowerSettingRegisterNotification(
+        &kLidGuid, DEVICE_NOTIFY_CALLBACK, recipient, &m_impl->hConsoleLidNotify);
+    m_impl->hConsoleSuspendResume = RegisterSuspendResumeNotification(recipient, DEVICE_NOTIFY_CALLBACK);
+
+    LOG_NOTICE("Service", __func__, "Power",
+               "Registered console power callbacks (display err={}, lid err={}, suspend/resume={}).",
+               displayErr, lidErr, m_impl->hConsoleSuspendResume != nullptr);
+}
+
+void ServiceShell::UnregisterConsolePowerNotifications() {
+    if (m_impl->hConsoleDisplayNotify) {
+        PowerSettingUnregisterNotification(m_impl->hConsoleDisplayNotify);
+        m_impl->hConsoleDisplayNotify = nullptr;
+    }
+    if (m_impl->hConsoleLidNotify) {
+        PowerSettingUnregisterNotification(m_impl->hConsoleLidNotify);
+        m_impl->hConsoleLidNotify = nullptr;
+    }
+    if (m_impl->hConsoleSuspendResume) {
+        UnregisterSuspendResumeNotification(m_impl->hConsoleSuspendResume);
+        m_impl->hConsoleSuspendResume = nullptr;
+    }
 }
 
 void ServiceShell::UnregisterPowerNotifications() {

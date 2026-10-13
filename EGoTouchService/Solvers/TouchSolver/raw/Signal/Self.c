@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: Self_Process @ 6ba6aea8
 // ============================================================================
@@ -165,12 +167,12 @@ void Self_GetPropertyDim(int param_1)
   if (param_1 == 1) {
     local_b = 0;
     local_9 = _refptr_g_tsaPrmtFlash->bCols;
-    local_18 = (int *)&_refptr_g_tsaPrpt->field_0x22c;
+    local_18 = (int *)((uint8_t *)_refptr_g_tsaPrpt + 0x22c);
   }
   else {
     local_b = _refptr_g_tsaPrmtFlash->bCols;
     local_9 = _refptr_g_tsaPrmtFlash->bRows;
-    local_18 = (int *)&_refptr_g_tsaPrpt->field_0x250;
+    local_18 = (int *)((uint8_t *)_refptr_g_tsaPrpt + 0x250);
   }
   *local_18 = -0x80000000;
   local_18[2] = 0x7fffffff;

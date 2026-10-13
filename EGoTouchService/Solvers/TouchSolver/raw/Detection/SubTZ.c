@@ -7,55 +7,48 @@
 void SubTZ_Process(longlong param_1)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0xca]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0xd0];
   byte bVar1;
   uchar uVar2;
   undefined1 uVar3;
   int iVar4;
   undefined8 in_stack_ffffffffffffff18;
   undefined4 uVar5;
-  undefined1 local_ca;
-  byte local_c9;
-  undefined1 local_c8 [158];
-  short local_2a;
-  ushort local_28;
-  byte local_25;
-  int local_24;
-  byte local_1d;
-  int local_1c;
   
                     /* 0x3e646  1459  SubTZ_Process */
-  local_1c = -0x80000000;
-  memcpy(local_c8,_refptr_g_list,0x98);
+  (*(int *)(_stk + 0xb4)) = -0x80000000;
+  memcpy(((undefined1 *)(_stk + 0x8)),_refptr_g_list,0x98);
   *(undefined **)_refptr_g_ptrAccess = _refptr_g_subTZAccess;
-  local_24 = memset_s(&g_subTZ,0x2d8,0,0x2d8);
-  if (local_24 != 0) {
+  (*(int *)(_stk + 0xac)) = memset_s(&g_subTZ,0x2d8,0,0x2d8);
+  if ((*(int *)(_stk + 0xac)) != 0) {
     in_stack_ffffffffffffff18 = 0;
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
                       "../../src/Alg/TouchZone/SubTouchZone/SubTouchZone.c",0x188,"rc == EOK");
     HardwareAnalyzer_SetSoftException();
   }
-  for (local_1d = 0; uVar5 = (undefined4)((ulonglong)in_stack_ffffffffffffff18 >> 0x20),
-      local_1d < *(byte *)(param_1 + 0x2b2); local_1d = local_1d + 1) {
-    local_25 = *(byte *)(param_1 + 0x2b9 + (longlong)(int)(uint)local_1d);
-    local_28 = (ushort)(*_refptr_g_peaksPtr)[(longlong)(int)(uint)local_25 * 0x14 + 0x15].bPeakCount
-               + (ushort)(*_refptr_g_peaksPtr)[(longlong)(int)(uint)local_25 * 0x14 + 0x16].
+  for ((*(byte *)(_stk + 0xb3)) = 0; uVar5 = (undefined4)((ulonglong)in_stack_ffffffffffffff18 >> 0x20),
+      (*(byte *)(_stk + 0xb3)) < *(byte *)(param_1 + 0x2b2); (*(byte *)(_stk + 0xb3)) = (*(byte *)(_stk + 0xb3)) + 1) {
+    (*(byte *)(_stk + 0xab)) = *(byte *)(param_1 + 0x2b9 + (longlong)(int)(uint)(*(byte *)(_stk + 0xb3)));
+    (*(ushort *)(_stk + 0xa8)) = (ushort)(*_refptr_g_peaksPtr)[(longlong)(int)(uint)(*(byte *)(_stk + 0xab)) * 0x14 + 0x15].bPeakCount
+               + (ushort)(*_refptr_g_peaksPtr)[(longlong)(int)(uint)(*(byte *)(_stk + 0xab)) * 0x14 + 0x16].
                          bPeakCount * (ushort)_refptr_g_tsaPrmtFlash->bCols;
-    if (*(char *)((ulonglong)local_28 + *(longlong *)_refptr_g_tsaBufSubTZ) == '\0') {
+    if (*(char *)((ulonglong)(*(ushort *)(_stk + 0xa8)) + *(longlong *)_refptr_g_tsaBufSubTZ) == '\0') {
       *(undefined8 *)_refptr_g_tsaBufTemp = *(undefined8 *)_refptr_g_tsaBufDif;
       if ((*(uint *)(param_1 + 4) & 0x1000000) == 0) {
-        local_2a = SubTz_GetSignalThresh(param_1,_refptr_g_tsaBufTemp);
+        (*(short *)(_stk + 0xa6)) = SubTz_GetSignalThresh(param_1,_refptr_g_tsaBufTemp);
         in_stack_ffffffffffffff18 =
-             CONCAT44(uVar5,(uint)(*_refptr_g_peaksPtr)[(longlong)(int)(uint)local_25 * 0x14 + 0x16]
+             CONCAT44(uVar5,(uint)(*_refptr_g_peaksPtr)[(longlong)(int)(uint)(*(byte *)(_stk + 0xab)) * 0x14 + 0x16]
                                   .bPeakCount);
         SubTZ_PeakBasedTraversal
-                  (param_1,&DAT_6bbc8688 + (longlong)(int)(uint)g_subTZ * 0x48,(int)local_2a,
-                   (*_refptr_g_peaksPtr)[(longlong)(int)(uint)local_25 * 0x14 + 0x15].bPeakCount,
+                  (param_1,&DAT_6bbc8688 + (longlong)(int)(uint)g_subTZ * 0x48,(int)(*(short *)(_stk + 0xa6)),
+                   (*_refptr_g_peaksPtr)[(longlong)(int)(uint)(*(byte *)(_stk + 0xab)) * 0x14 + 0x15].bPeakCount,
                    in_stack_ffffffffffffff18);
       }
       else {
-        bVar1 = (*_refptr_g_peaksPtr)[(longlong)(int)(uint)local_25 * 0x14 + 0x16].bPeakCount;
-        uVar2 = (*_refptr_g_peaksPtr)[(longlong)(int)(uint)local_25 * 0x14 + 0x15].bPeakCount;
-        uVar3 = GripFilter_IsPeakAbsGrip(local_25);
+        bVar1 = (*_refptr_g_peaksPtr)[(longlong)(int)(uint)(*(byte *)(_stk + 0xab)) * 0x14 + 0x16].bPeakCount;
+        uVar2 = (*_refptr_g_peaksPtr)[(longlong)(int)(uint)(*(byte *)(_stk + 0xab)) * 0x14 + 0x15].bPeakCount;
+        uVar3 = GripFilter_IsPeakAbsGrip((*(byte *)(_stk + 0xab)));
         in_stack_ffffffffffffff18 = CONCAT44(uVar5,(uint)bVar1);
         SubTZ_GripBasedTraversal
                   (param_1,&DAT_6bbc8688 + (longlong)(int)(uint)g_subTZ * 0x48,uVar3,uVar2,
@@ -66,14 +59,14 @@ void SubTZ_Process(longlong param_1)
         SubTZ_Centroid(&DAT_6bbc8688 + (longlong)(int)(uint)g_subTZ * 0x48);
         SubTZ_GetAxis(&DAT_6bbc8688 + (longlong)(int)(uint)g_subTZ * 0x48);
         SubTZ_PeakInfoRetrieval
-                  (*(undefined8 *)_refptr_g_tsaBufSubTZ,&g_pkAccessedFlagSubTZ,&local_c9,&local_ca);
-        if (local_c9 == 0x14) {
-          local_c9 = local_25;
+                  (*(undefined8 *)_refptr_g_tsaBufSubTZ,&g_pkAccessedFlagSubTZ,&(*(byte *)(_stk + 0x7)),&(*(undefined1 *)(_stk + 0x6)));
+        if ((*(byte *)(_stk + 0x7)) == 0x14) {
+          (*(byte *)(_stk + 0x7)) = (*(byte *)(_stk + 0xab));
         }
-        (&DAT_6bbc868a)[(longlong)(int)(uint)g_subTZ * 0x48] = local_c9;
-        (&DAT_6bbc868b)[(longlong)(int)(uint)g_subTZ * 0x48] = local_ca;
-        if ((local_c9 != 0x14) && (iVar4 = Peak_GetZ9(local_c9), local_1c < iVar4)) {
-          local_1c = Peak_GetZ9(local_c9);
+        (&DAT_6bbc868a)[(longlong)(int)(uint)g_subTZ * 0x48] = (*(byte *)(_stk + 0x7));
+        (&DAT_6bbc868b)[(longlong)(int)(uint)g_subTZ * 0x48] = (*(undefined1 *)(_stk + 0x6));
+        if (((*(byte *)(_stk + 0x7)) != 0x14) && (iVar4 = Peak_GetZ9((*(byte *)(_stk + 0x7))), (*(int *)(_stk + 0xb4)) < iVar4)) {
+          (*(int *)(_stk + 0xb4)) = Peak_GetZ9((*(byte *)(_stk + 0x7)));
           DAT_6bbc8682 = g_subTZ;
         }
         TZ_SeparateZoneRegretProcess(param_1,&DAT_6bbc8688 + (longlong)(int)(uint)g_subTZ * 0x48);
@@ -88,7 +81,7 @@ void SubTZ_Process(longlong param_1)
   if ((*(uint *)(param_1 + 4) & 0x1000000) == 0) {
     SubTZ_Filter(param_1);
   }
-  memcpy(_refptr_g_list,local_c8,0x98);
+  memcpy(_refptr_g_list,((undefined1 *)(_stk + 0x8)),0x98);
   *(undefined **)_refptr_g_ptrAccess = _refptr_g_tzAccess;
   return;
 }
@@ -102,26 +95,24 @@ void SubTZ_PeakBasedTraversal
                (undefined8 param_1,undefined8 param_2,short param_3,byte param_4,ushort param_5)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0xd8]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0xe0];
   ulonglong uVar1;
   char cVar2;
-  undefined1 local_d8 [204];
-  undefined1 local_c;
-  undefined1 local_b;
-  ushort local_a;
   
-  PosnSpecial_Init(local_d8,100);
+  PosnSpecial_Init(((undefined1 *)(_stk + 0x8)),100);
   SubTZ_UnitInit(param_2);
-  local_a = (ushort)param_4 + (param_5 & 0xff) * (ushort)_refptr_g_tsaPrmtFlash->bCols;
-  PosnSpecial_Put(local_a);
+  (*(ushort *)(_stk + 0xd6)) = (ushort)param_4 + (param_5 & 0xff) * (ushort)_refptr_g_tsaPrmtFlash->bCols;
+  PosnSpecial_Put((*(ushort *)(_stk + 0xd6)));
   while( true ) {
     cVar2 = PosnSpecial_IsEmpty();
     if (cVar2 != '\0') break;
-    local_a = PosnSpecial_Get();
-    uVar1 = (ulonglong)local_a % (ulonglong)(longlong)(int)(uint)_refptr_g_tsaPrmtFlash->bCols;
-    local_b = (undefined1)uVar1;
-    local_c = (undefined1)
-              ((ulonglong)local_a / (ulonglong)(longlong)(int)(uint)_refptr_g_tsaPrmtFlash->bCols);
-    SubTZ_TraversalNeighbors(param_1,param_2,(int)param_3,uVar1,local_c);
+    (*(ushort *)(_stk + 0xd6)) = PosnSpecial_Get();
+    uVar1 = (ulonglong)(*(ushort *)(_stk + 0xd6)) % (ulonglong)(longlong)(int)(uint)_refptr_g_tsaPrmtFlash->bCols;
+    (*(undefined1 *)(_stk + 0xd5)) = (undefined1)uVar1;
+    (*(undefined1 *)(_stk + 0xd4)) = (undefined1)
+              ((ulonglong)(*(ushort *)(_stk + 0xd6)) / (ulonglong)(longlong)(int)(uint)_refptr_g_tsaPrmtFlash->bCols);
+    SubTZ_TraversalNeighbors(param_1,param_2,(int)param_3,uVar1,(*(undefined1 *)(_stk + 0xd4)));
   }
   return;
 }
@@ -236,26 +227,24 @@ void SubTZ_GripBasedTraversal
                )
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0xd8]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0xe0];
   ulonglong uVar1;
   char cVar2;
-  undefined1 local_d8 [204];
-  undefined1 local_c;
-  undefined1 local_b;
-  ushort local_a;
   
-  PosnSpecial_Init(local_d8,100);
+  PosnSpecial_Init(((undefined1 *)(_stk + 0x8)),100);
   SubTZ_UnitInit(param_2);
-  local_a = (ushort)param_4 + (param_5 & 0xff) * (ushort)_refptr_g_tsaPrmtFlash->bCols;
-  PosnSpecial_Put(local_a);
+  (*(ushort *)(_stk + 0xd6)) = (ushort)param_4 + (param_5 & 0xff) * (ushort)_refptr_g_tsaPrmtFlash->bCols;
+  PosnSpecial_Put((*(ushort *)(_stk + 0xd6)));
   while( true ) {
     cVar2 = PosnSpecial_IsEmpty();
     if (cVar2 != '\0') break;
-    local_a = PosnSpecial_Get();
-    uVar1 = (ulonglong)local_a % (ulonglong)(longlong)(int)(uint)_refptr_g_tsaPrmtFlash->bCols;
-    local_b = (undefined1)uVar1;
-    local_c = (undefined1)
-              ((ulonglong)local_a / (ulonglong)(longlong)(int)(uint)_refptr_g_tsaPrmtFlash->bCols);
-    SubTZ_TraversalGripNeighbors(param_1,param_2,param_3,uVar1,local_c);
+    (*(ushort *)(_stk + 0xd6)) = PosnSpecial_Get();
+    uVar1 = (ulonglong)(*(ushort *)(_stk + 0xd6)) % (ulonglong)(longlong)(int)(uint)_refptr_g_tsaPrmtFlash->bCols;
+    (*(undefined1 *)(_stk + 0xd5)) = (undefined1)uVar1;
+    (*(undefined1 *)(_stk + 0xd4)) = (undefined1)
+              ((ulonglong)(*(ushort *)(_stk + 0xd6)) / (ulonglong)(longlong)(int)(uint)_refptr_g_tsaPrmtFlash->bCols);
+    SubTZ_TraversalGripNeighbors(param_1,param_2,param_3,uVar1,(*(undefined1 *)(_stk + 0xd4)));
   }
   return;
 }
@@ -441,81 +430,74 @@ void SubTZ_TraversalGripNeighbors
                (longlong param_1,short *param_2,char param_3,byte param_4,byte param_5)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x38]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x40];
   char cVar1;
-  char local_38 [16];
-  char local_28 [10];
-  short local_1e;
-  bool local_1b;
-  ushort local_1a;
-  longlong local_18;
-  byte local_e;
-  byte local_d;
-  uint local_c;
   
-  memcpy(local_28,"\x01\x01\x01",4);
-  local_28[4] = 0xff;
-  local_28[5] = 0xff;
-  local_28[6] = 0xff;
-  local_28[7] = 0;
-  local_28[8] = 0;
-  local_38[0] = -1;
-  local_38[1] = 0;
-  local_38[2] = 1;
-  local_38[3] = 1;
-  local_38[4] = 1;
-  local_38[5] = 0;
-  local_38[6] = 0xff;
-  local_38[7] = 0xff;
-  local_38[8] = 0;
-  local_18 = *(longlong *)_refptr_g_subTZAccess;
-  local_d = param_4;
-  local_e = param_5;
-  local_c = 0;
+  memcpy(((char *)(_stk + 0x18)),"\x01\x01\x01",4);
+  ((char *)(_stk + 0x18))[4] = 0xff;
+  ((char *)(_stk + 0x18))[5] = 0xff;
+  ((char *)(_stk + 0x18))[6] = 0xff;
+  ((char *)(_stk + 0x18))[7] = 0;
+  ((char *)(_stk + 0x18))[8] = 0;
+  ((char *)(_stk + 0x8))[0] = -1;
+  ((char *)(_stk + 0x8))[1] = 0;
+  ((char *)(_stk + 0x8))[2] = 1;
+  ((char *)(_stk + 0x8))[3] = 1;
+  ((char *)(_stk + 0x8))[4] = 1;
+  ((char *)(_stk + 0x8))[5] = 0;
+  ((char *)(_stk + 0x8))[6] = 0xff;
+  ((char *)(_stk + 0x8))[7] = 0xff;
+  ((char *)(_stk + 0x8))[8] = 0;
+  (*(longlong *)(_stk + 0x28)) = *(longlong *)_refptr_g_subTZAccess;
+  (*(byte *)(_stk + 0x33)) = param_4;
+  (*(byte *)(_stk + 0x32)) = param_5;
+  (*(uint *)(_stk + 0x34)) = 0;
   do {
-    if (8 < local_c) {
+    if (8 < (*(uint *)(_stk + 0x34))) {
       return;
     }
-    if ((local_d < _refptr_g_tsaPrmtFlash->bCols) && (local_e < _refptr_g_tsaPrmtFlash->bRows)) {
-      local_1a = (ushort)local_d + (ushort)local_e * (ushort)_refptr_g_tsaPrmtFlash->bCols;
-      local_1b = *(char *)(local_18 + (ulonglong)local_1a) == '\0';
-      if (local_1b) {
+    if (((*(byte *)(_stk + 0x33)) < _refptr_g_tsaPrmtFlash->bCols) && ((*(byte *)(_stk + 0x32)) < _refptr_g_tsaPrmtFlash->bRows)) {
+      (*(ushort *)(_stk + 0x26)) = (ushort)(*(byte *)(_stk + 0x33)) + (ushort)(*(byte *)(_stk + 0x32)) * (ushort)_refptr_g_tsaPrmtFlash->bCols;
+      (*(bool *)(_stk + 0x25)) = *(char *)((*(longlong *)(_stk + 0x28)) + (ulonglong)(*(ushort *)(_stk + 0x26))) == '\0';
+      if ((*(bool *)(_stk + 0x25))) {
         if (param_3 == '\0') {
-          if (*(char *)((ulonglong)local_1a + *(longlong *)_refptr_g_tsaBufTzZone) ==
+          if (*(char *)((ulonglong)(*(ushort *)(_stk + 0x26)) + *(longlong *)_refptr_g_tsaBufTzZone) ==
               *(char *)(param_1 + 0x35e)) {
-            if (*(char *)((ulonglong)local_1a + *(longlong *)_refptr_g_tsaBufGripStage) != '\x01')
+            if (*(char *)((ulonglong)(*(ushort *)(_stk + 0x26)) + *(longlong *)_refptr_g_tsaBufGripStage) != '\x01')
             goto LAB_6ba7e404;
-            TZ_TryExtraMergePeak(param_1,local_d,local_e);
+            TZ_TryExtraMergePeak(param_1,(*(byte *)(_stk + 0x33)),(*(byte *)(_stk + 0x32)));
           }
         }
-        else if (*(char *)((ulonglong)local_1a + *(longlong *)_refptr_g_tsaBufGripStage) == '\x01')
+        else if (*(char *)((ulonglong)(*(ushort *)(_stk + 0x26)) + *(longlong *)_refptr_g_tsaBufGripStage) == '\x01')
         {
 LAB_6ba7e404:
-          local_1e = *(short *)(*(longlong *)_refptr_g_tsaBufTemp + (ulonglong)local_1a * 2);
+          (*(short *)(_stk + 0x22)) = *(short *)(*(longlong *)_refptr_g_tsaBufTemp + (ulonglong)(*(ushort *)(_stk + 0x26)) * 2);
           param_2[2] = param_2[2] + 1;
-          if (*param_2 < local_1e) {
-            *param_2 = local_1e;
+          if (*param_2 < (*(short *)(_stk + 0x22))) {
+            *param_2 = (*(short *)(_stk + 0x22));
           }
-          if (0 < local_1e) {
-            SubTZ_UpdateUnit(param_2,(int)local_1e,local_d,local_e);
+          if (0 < (*(short *)(_stk + 0x22))) {
+            SubTZ_UpdateUnit(param_2,(int)(*(short *)(_stk + 0x22)),(*(byte *)(_stk + 0x33)),(*(byte *)(_stk + 0x32)));
           }
-          if (*(short *)(*(longlong *)_refptr_g_tsaBufDif + (ulonglong)local_1a * 2) < 0) {
+          if (*(short *)(*(longlong *)_refptr_g_tsaBufDif + (ulonglong)(*(ushort *)(_stk + 0x26)) * 2) < 0) {
             cVar1 = -1;
           }
           else {
             cVar1 = '\x01';
           }
-          *(char *)((ulonglong)local_1a + local_18) =
+          *(char *)((ulonglong)(*(ushort *)(_stk + 0x26)) + (*(longlong *)(_stk + 0x28))) =
                (*(char *)(*(longlong *)_refptr_g_ptrAccess + 9) + '\x01') * cVar1;
-          SubTZ_SetExtraFlag(local_1a,(int)local_1e,param_2);
-          if (local_c != 0) {
-            PosnSpecial_Put(local_1a);
+          SubTZ_SetExtraFlag((*(ushort *)(_stk + 0x26)),(int)(*(short *)(_stk + 0x22)),param_2);
+          if ((*(uint *)(_stk + 0x34)) != 0) {
+            PosnSpecial_Put((*(ushort *)(_stk + 0x26)));
           }
         }
       }
     }
-    local_d = param_4 + local_28[local_c];
-    local_e = param_5 + local_38[local_c];
-    local_c = local_c + 1;
+    (*(byte *)(_stk + 0x33)) = param_4 + ((char *)(_stk + 0x18))[(*(uint *)(_stk + 0x34))];
+    (*(byte *)(_stk + 0x32)) = param_5 + ((char *)(_stk + 0x8))[(*(uint *)(_stk + 0x34))];
+    (*(uint *)(_stk + 0x34)) = (*(uint *)(_stk + 0x34)) + 1;
   } while( true );
 }
 

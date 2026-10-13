@@ -40,6 +40,8 @@ public:
     void SetEnabled(bool v);
     bool IsEnabled() const { return m_enabled.load(std::memory_order_relaxed); }
     void FlushTouchAllUp();
+    /// 停止出帧时调用：在场的手指全部抬起，在场的笔回到中性（出界）报告。
+    void FlushAllUp();
 
     void SetTransposeEnabled(bool v) {
         m_transpose.store(v, std::memory_order_relaxed);

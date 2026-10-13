@@ -2007,61 +2007,57 @@ bool HardwareAnalyzer_IsSensorOverRawDeltaLimit(byte param_1,byte param_2)
 undefined1 HardwareAnalyzer_IsSensorBrokenByDifZ8(byte param_1,byte param_2)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x24]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x30];
   char cVar1;
   uint uVar2;
   uint uVar3;
-  uint local_24;
-  int local_20;
-  byte local_19 [5];
-  int local_14;
-  uint local_10;
-  undefined1 local_9;
   
-  local_9 = 0;
-  local_19[0] = 0;
-  local_20 = 0;
+  (*(undefined1 *)(_stk + 0x27)) = 0;
+  ((byte *)(_stk + 0x17))[0] = 0;
+  (*(int *)(_stk + 0x10)) = 0;
   uVar3 = (uint)*(short *)((ulonglong)
                            ((uint)param_1 + (uint)param_2 * (uint)_refptr_g_tsaPrmtFlash->bCols &
                            0xffff) * 2 + *(longlong *)_refptr_g_tsaBufDif);
   uVar2 = (int)uVar3 >> 0x1f;
-  local_14 = (uVar3 ^ uVar2) - uVar2;
-  local_24 = 0;
-  if ((short)_refptr_g_tsaPrmtFlash->wPeakFilterReferenceThreshold < local_14) {
-    HardwareAnalyzer_Z8InfoUpdate(param_1 - 1,param_2 - 1,local_19,&local_24,&local_20);
-    HardwareAnalyzer_Z8InfoUpdate(param_1 - 1,param_2,local_19,&local_24,&local_20);
-    HardwareAnalyzer_Z8InfoUpdate(param_1 - 1,param_2 + 1,local_19,&local_24,&local_20);
-    HardwareAnalyzer_Z8InfoUpdate(param_1,param_2 - 1,local_19,&local_24,&local_20);
-    HardwareAnalyzer_Z8InfoUpdate(param_1,param_2 + 1,local_19,&local_24,&local_20);
-    HardwareAnalyzer_Z8InfoUpdate(param_1 + 1,param_2 - 1,local_19,&local_24,&local_20);
-    HardwareAnalyzer_Z8InfoUpdate(param_1 + 1,param_2,local_19,&local_24,&local_20);
-    HardwareAnalyzer_Z8InfoUpdate(param_1 + 1,param_2 + 1,local_19,&local_24,&local_20);
-    if (local_19[0] == 0) {
-      local_10 = 0;
+  (*(int *)(_stk + 0x1c)) = (uVar3 ^ uVar2) - uVar2;
+  (*(uint *)(_stk + 0xc)) = 0;
+  if ((short)_refptr_g_tsaPrmtFlash->wPeakFilterReferenceThreshold < (*(int *)(_stk + 0x1c))) {
+    HardwareAnalyzer_Z8InfoUpdate(param_1 - 1,param_2 - 1,((byte *)(_stk + 0x17)),&(*(uint *)(_stk + 0xc)),&(*(int *)(_stk + 0x10)));
+    HardwareAnalyzer_Z8InfoUpdate(param_1 - 1,param_2,((byte *)(_stk + 0x17)),&(*(uint *)(_stk + 0xc)),&(*(int *)(_stk + 0x10)));
+    HardwareAnalyzer_Z8InfoUpdate(param_1 - 1,param_2 + 1,((byte *)(_stk + 0x17)),&(*(uint *)(_stk + 0xc)),&(*(int *)(_stk + 0x10)));
+    HardwareAnalyzer_Z8InfoUpdate(param_1,param_2 - 1,((byte *)(_stk + 0x17)),&(*(uint *)(_stk + 0xc)),&(*(int *)(_stk + 0x10)));
+    HardwareAnalyzer_Z8InfoUpdate(param_1,param_2 + 1,((byte *)(_stk + 0x17)),&(*(uint *)(_stk + 0xc)),&(*(int *)(_stk + 0x10)));
+    HardwareAnalyzer_Z8InfoUpdate(param_1 + 1,param_2 - 1,((byte *)(_stk + 0x17)),&(*(uint *)(_stk + 0xc)),&(*(int *)(_stk + 0x10)));
+    HardwareAnalyzer_Z8InfoUpdate(param_1 + 1,param_2,((byte *)(_stk + 0x17)),&(*(uint *)(_stk + 0xc)),&(*(int *)(_stk + 0x10)));
+    HardwareAnalyzer_Z8InfoUpdate(param_1 + 1,param_2 + 1,((byte *)(_stk + 0x17)),&(*(uint *)(_stk + 0xc)),&(*(int *)(_stk + 0x10)));
+    if (((byte *)(_stk + 0x17))[0] == 0) {
+      (*(uint *)(_stk + 0x20)) = 0;
     }
     else {
-      local_10 = local_24 / local_19[0];
+      (*(uint *)(_stk + 0x20)) = (*(uint *)(_stk + 0xc)) / ((byte *)(_stk + 0x17))[0];
     }
-    if (local_20 * 10 < local_14) {
+    if ((*(int *)(_stk + 0x10)) * 10 < (*(int *)(_stk + 0x1c))) {
       cVar1 = AFE_IsRawUnifiedToTargetValue();
       if (cVar1 == '\0') {
-        local_9 = 1;
+        (*(undefined1 *)(_stk + 0x27)) = 1;
       }
       else {
-        local_10 = *(ushort *)
+        (*(uint *)(_stk + 0x20)) = *(ushort *)
                     ((ulonglong)
                      ((uint)param_1 + (uint)param_2 * (uint)_refptr_g_tsaPrmtFlash->bCols & 0xffff)
-                     * 2 + *(longlong *)_refptr_g_tsaBufRaw) - local_10;
-        uVar2 = (int)local_10 >> 0x1f;
-        if (local_14 / 2 < (int)((uVar2 ^ local_10) - uVar2)) {
-          local_9 = 1;
+                     * 2 + *(longlong *)_refptr_g_tsaBufRaw) - (*(uint *)(_stk + 0x20));
+        uVar2 = (int)(*(uint *)(_stk + 0x20)) >> 0x1f;
+        if ((*(int *)(_stk + 0x1c)) / 2 < (int)((uVar2 ^ (*(uint *)(_stk + 0x20))) - uVar2)) {
+          (*(undefined1 *)(_stk + 0x27)) = 1;
         }
       }
     }
   }
   else {
-    local_9 = 0;
+    (*(undefined1 *)(_stk + 0x27)) = 0;
   }
-  return local_9;
+  return (*(undefined1 *)(_stk + 0x27));
 }
 
 

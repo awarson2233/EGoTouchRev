@@ -145,12 +145,11 @@ undefined8 TSAMS_IsNewSafeBaselineAvailable(void)
 // Function: TSAMS_GetDifPtr @ 6ba91631
 // ============================================================================
 
-void TSAMS_GetDifPtr(void)
+undefined8 TSAMS_GetDifPtr(void)
 
 {
                     /* 0x51631  1583  TSAMS_GetDifPtr */
-  TSAFold_GridZoomOutRemap(*(undefined8 *)_refptr_g_tsaBufDif,0,2,0);
-  return;
+  return TSAFold_GridZoomOutRemap(*(undefined8 *)_refptr_g_tsaBufDif,0,2,0);
 }
 
 
@@ -241,12 +240,11 @@ undefined8 TSAMS_GetPreCMFDifPtr(void)
 // Function: TSAMS_GetPreFilteredDifPtr @ 6ba916d7
 // ============================================================================
 
-void TSAMS_GetPreFilteredDifPtr(void)
+undefined8 TSAMS_GetPreFilteredDifPtr(void)
 
 {
                     /* 0x516d7  1587  TSAMS_GetPreFilteredDifPtr */
-  TSAMS_GetPreCMFDifPtr();
-  return;
+  return (undefined8)TSAMS_GetPreCMFDifPtr();
 }
 
 

@@ -214,28 +214,28 @@ void TSARTPrmt_SyncWithTTPrmt(void)
 undefined8 TSARTPrmt_SetKeyValueWithReturn(longlong param_1,undefined4 param_2)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x11]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x20];
   int iVar1;
   undefined8 uVar2;
   undefined4 local_res10 [6];
-  undefined1 local_11;
-  int *local_10;
   
                     /* 0xfdde9  1668  TSARTPrmt_SetKeyValueWithReturn */
-  local_10 = (int *)0x0;
+  (*(int * *)(_stk + 0x10)) = (int *)0x0;
   if (param_1 == 0) {
     uVar2 = 1;
   }
   else {
     local_res10[0] = param_2;
-    iVar1 = TSARTPrmt_GetKeyIndex(param_1,&local_11);
+    iVar1 = TSARTPrmt_GetKeyIndex(param_1,&(*(undefined1 *)(_stk + 0xf)));
     if (iVar1 == 0) {
-      local_10 = (int *)TSARTPrmt_GetAddrOfIndexedKey(local_11);
-      TSARTPrmt_CopyMember(local_res10,local_10);
-      if (local_10[2] < *local_10) {
-        *local_10 = local_10[2];
+      (*(int * *)(_stk + 0x10)) = (int *)TSARTPrmt_GetAddrOfIndexedKey((*(undefined1 *)(_stk + 0xf)));
+      TSARTPrmt_CopyMember(local_res10,(*(int * *)(_stk + 0x10)));
+      if ((*(int * *)(_stk + 0x10))[2] < *(*(int * *)(_stk + 0x10))) {
+        *(*(int * *)(_stk + 0x10)) = (*(int * *)(_stk + 0x10))[2];
       }
-      if (*local_10 < local_10[3]) {
-        *local_10 = local_10[3];
+      if (*(*(int * *)(_stk + 0x10)) < (*(int * *)(_stk + 0x10))[3]) {
+        *(*(int * *)(_stk + 0x10)) = (*(int * *)(_stk + 0x10))[3];
       }
       uVar2 = 0;
     }

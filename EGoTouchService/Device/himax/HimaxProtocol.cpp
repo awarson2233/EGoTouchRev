@@ -97,7 +97,7 @@ namespace Himax {
     /**
      * @brief 构造函数，打开设备句柄并初始化
      * @param path 设备路径
-     * @param type 设备类型 (Master/Slave/Interrupt)
+     * @param type 设备类型 (Master/Slave)
      */
     HalDevice::HalDevice(const wchar_t* path, DeviceType type) : m_handle(INVALID_HANDLE_VALUE), m_lastError(0), m_type(type) {
         m_xfer_buffer.reserve(0x4000 + 32);
@@ -115,23 +115,9 @@ namespace Himax {
             m_lastError = GetLastError();
         }
 
-        m_ov.hEvent = CreateEvent(nullptr, true, false, nullptr);
-        if (m_ov.hEvent == nullptr) {
-            m_lastError = GetLastError();
-            if (m_handle != INVALID_HANDLE_VALUE) {
-                CloseHandle(m_handle);
-                m_handle = INVALID_HANDLE_VALUE;
-            }
-            return;
-        }
-
         m_syncEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
         if (m_syncEvent == nullptr) {
             m_lastError = GetLastError();
-            if (m_ov.hEvent != nullptr) {
-                CloseHandle(m_ov.hEvent);
-                m_ov.hEvent = nullptr;
-            }
             if (m_handle != INVALID_HANDLE_VALUE) {
                 CloseHandle(m_handle);
                 m_handle = INVALID_HANDLE_VALUE;
@@ -152,14 +138,6 @@ namespace Himax {
      * @brief 析构函数，关闭句柄
      */
     HalDevice::~HalDevice() {
-        if (IsValid()) {
-            CancelIoEx(m_handle, nullptr);
-            (void)DrainInterruptOverlapped(INFINITE);
-        }
-        if (m_ov.hEvent) {
-            CloseHandle(m_ov.hEvent);
-            m_ov.hEvent = nullptr;
-        }
         if (m_syncEvent) {
             CloseHandle(m_syncEvent);
             m_syncEvent = nullptr;
@@ -187,12 +165,16 @@ namespace Himax {
      * @param retLen 实际返回长度
      * @return bool 是否成功
      */
+    ChipResult<> HalDevice::IoctlOnce(DWORD code, const void* in, uint32_t inLen, void* out, uint32_t outLen, uint32_t* retLen) {
+        return PerformSyncIo(m_handle, m_syncEvent, m_lastError, [&](OVERLAPPED* pov, LPDWORD pBytes) {
+            return DeviceIoControl(m_handle, code, (LPVOID)in, inLen, out, outLen, pBytes, pov);
+        }, ChipError::CommunicationError, 0, false, (DWORD*)retLen);
+    }
+
     ChipResult<> HalDevice::Ioctl(DWORD code, const void* in, uint32_t inLen, void* out, uint32_t outLen, uint32_t* retLen) {
         ChipResult<> result = std::unexpected(ChipError::InternalError);
         for (int cnt = 0; cnt < 10; cnt++) {
-            result = PerformSyncIo(m_handle, m_syncEvent, m_lastError, [&](OVERLAPPED* pov, LPDWORD pBytes) {
-                return DeviceIoControl(m_handle, code, (LPVOID)in, inLen, out, outLen, pBytes, pov);
-            }, ChipError::CommunicationError, 0, false, (DWORD*)retLen);
+            result = IoctlOnce(code, in, inLen, out, outLen, retLen);
             if (result) break;
             // If the I/O was cancelled via CancelIoEx, do not retry.
             if (m_lastError == ERROR_OPERATION_ABORTED) break;
@@ -212,78 +194,6 @@ namespace Himax {
             return ReadFile(m_handle, buffer, len, pBytes, pov);
         }, ChipError::CommunicationError);
     }
-
-    /**
-     * @brief 等待设备中断触发
-     * @return bool 是否成功触发
-     */
-    ChipResult<> HalDevice::WaitInterrupt() {
-        if (!IsValid() || !m_ov.hEvent) {
-            m_lastError = ERROR_INVALID_HANDLE;
-            return std::unexpected(ChipError::CommunicationError);
-        }
-
-        if (m_ovPending && !DrainInterruptOverlapped(0)) {
-            m_lastError = ERROR_IO_INCOMPLETE;
-            return std::unexpected(ChipError::CommunicationError);
-        }
-
-        ResetEvent(m_ov.hEvent);
-
-        DWORD bytesReturned = 0;
-        BOOL res = DeviceIoControl(
-            m_handle,
-            SPI_IOCTL_WAIT_INT,
-            nullptr, 0,
-            nullptr, 0,
-            &bytesReturned, &m_ov
-        );
-
-        if (res) {
-            ResetEvent(m_ov.hEvent);
-            m_lastError = 0;
-            return {};
-        }
-        if (GetLastError() != ERROR_IO_PENDING) {
-            m_lastError = GetLastError();
-            return std::unexpected(ChipError::CommunicationError);
-        }
-        m_ovPending = true;
-
-        DWORD waitResult = WaitForSingleObject(m_ov.hEvent, 200);
-
-        if (waitResult != WAIT_OBJECT_0) {
-            const DWORD waitError = (waitResult == WAIT_FAILED) ? GetLastError() : ERROR_TIMEOUT;
-            CancelIoEx(m_handle, &m_ov);
-            if (!DrainInterruptOverlapped(1000)) {
-                // Keep m_ovPending set so the next wait/close path cannot reuse
-                // or release the OVERLAPPED storage before the cancelled I/O completes.
-                m_lastError = ERROR_IO_INCOMPLETE;
-                return std::unexpected(ChipError::Timeout);
-            }
-            m_lastError = waitError;
-            return std::unexpected(ChipError::Timeout);
-        }
-
-        BOOL ok = GetOverlappedResult(m_handle, &m_ov, &bytesReturned, FALSE);
-        if (!ok) {
-            const DWORD err = GetLastError();
-            if (err == ERROR_IO_INCOMPLETE) {
-                m_lastError = err;
-                return std::unexpected(ChipError::CommunicationError);
-            }
-            m_lastError = err;
-        }
-        m_ovPending = false;
-        if (!ok) {
-            return std::unexpected(ChipError::CommunicationError);
-        }
-
-        ResetEvent(m_ov.hEvent);
-        m_lastError = 0;
-        return {};
-    }
-
 
     /**
      * @brief 通过总线读取数据
@@ -378,7 +288,9 @@ namespace Himax {
      * @return bool 是否成功
      */
     ChipResult<> HalDevice::GetFrame(void* buffer, uint32_t outLen, uint32_t *retLen){
-        return Ioctl(SPI_IOCTL_GET_FRAME, NULL, 0, buffer, outLen, retLen);
+        // 只发一次（与 SpiModule!SpiGetFrame 一致）：等多久由驱动的 SetTimeOut 决定，
+        // 读不到帧之后怎么重试是 Chip::GetFrame 的事，这里再重试会把超时放大十倍
+        return IoctlOnce(SPI_IOCTL_GET_FRAME, NULL, 0, buffer, outLen, retLen);
     }
 
     /**
@@ -439,42 +351,19 @@ namespace Himax {
         return m_lastError;
     }
 
-    bool HalDevice::DrainInterruptOverlapped(DWORD waitMs) {
-        if (!m_ovPending) {
-            return true;
-        }
-        if (!IsValid() || !m_ov.hEvent) {
-            return false;
-        }
-
-        const DWORD waitResult = WaitForSingleObject(m_ov.hEvent, waitMs);
-        if (waitResult != WAIT_OBJECT_0) {
-            return false;
-        }
-
-        DWORD bytesReturned = 0;
-        if (!GetOverlappedResult(m_handle, &m_ov, &bytesReturned, FALSE)) {
-            const DWORD err = GetLastError();
-            if (err == ERROR_IO_INCOMPLETE) {
-                return false;
-            }
-        }
-
-        m_ovPending = false;
-        ResetEvent(m_ov.hEvent);
-        return true;
-    }
-
     bool HalDevice::IsTimeoutError() const {
         return m_lastError == WAIT_TIMEOUT ||
                m_lastError == ERROR_TIMEOUT ||
                m_lastError == ERROR_SEM_TIMEOUT;
     }
 
-    void HalDevice::CancelPendingIo() {
+    bool HalDevice::IsCancelledError() const {
+        return m_lastError == ERROR_OPERATION_ABORTED;
+    }
+
+    void HalDevice::RequestCancel() noexcept {
         if (m_handle != INVALID_HANDLE_VALUE) {
             CancelIoEx(m_handle, NULL);
-            (void)DrainInterruptOverlapped(INFINITE);
         }
     }
 

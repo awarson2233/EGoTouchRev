@@ -26,7 +26,9 @@ struct ValidationResult;
 }
 
 #include "himax/HimaxChip.h"
+#include "himax/PanelPowerWatcher.h"
 #include "TouchSolver/TouchPipeline.h"
+#include "TouchSolver/TsaCore/TsaCoreSolver.h"
 #include "vhf/VhfReporter.h"
 #include "StylusSolver/StylusPipeline.h"
 
@@ -89,20 +91,46 @@ struct PenButtonAction {
 enum class result { error, timeout };
 using ThreadResult = std::expected<void, result>;
 
+/// Worker 的阶段。只有 worker 线程会改它（Start 之前与 Stop join 之后除外）；
+/// 外部线程通过 PowerInputs 表达意图，由 worker 计算目标并完成迁移。
 enum class workerState {
-    suspend  = -2,   // 屏幕关闭/合盖 → worker 暂停（线程保留，等待唤醒）
-    quit     = -1,   // 服务终止/系统关机 → worker 线程退出
-    ready    =  0,   // 初始就绪
-    streaming,       // 正在采帧
-    recover,         // 恢复中
+    suspend  = -2,   // 待机：链路已静默（取消读帧、关中断通道），等待亮屏
+    quit     = -1,   // 终止：worker 线程退出
+    ready    =  0,   // 建链：等面板上电 → 检查总线 → Chip::Init
+    streaming,       // 取帧
+    recover,         // 建链失败后的退避重试（与 ready 同一段逻辑，单独列出便于观察）
+    hold,            // 灭屏宽限：停止取帧但保留链路，宽限内亮屏且面板没断电则直接继续取帧
 };
 
-/// 停止原因（替代原来的 m_stopReq + m_shutdownReq 双 flag）
-enum class StopReason : uint8_t {
-    None = 0,
-    ScreenOff,   // DisplayOff / LidOff → 进入 suspend
-    Shutdown,    // 系统关机 / Stop() → 进入 quit
+/// 宿主电源输入（电平）。外部线程只写这里，worker 每轮读一次快照、算目标阶段。
+struct PowerInputs {
+    bool displayOn = true;
+    bool lidOpen = true;
+    bool systemSuspended = false;
+    bool shutdown = false;
+    /// 面板电源真值（SPB 驱动的 ACPI bit0）。Windows 的显示事件只是宿主的意图，TDDI 的触摸部分
+    /// 跟着这一位上下电；内屏单独断电时没有任何 Windows 事件，只能从这里看到。
+    bool panelOn = true;
+    /// 面板电源位每掉一次 +1（灭屏宽限期靠它判断面板有没有断过电）。
+    uint64_t panelDrops = 0;
+    /// 每个可能让面板 / SPB 链路断电的事件（灭屏、合盖、系统休眠、系统唤醒、面板断电）+1。
+    /// worker 只在「链路自上次证明以来没有经历过这类事件」时才继续取帧。
+    uint64_t downEpoch = 0;
+    /// 任一输入变化 +1，用于唤醒等待中的 worker。
+    uint64_t revision = 0;
+    std::chrono::steady_clock::time_point displayOffAt{};
+    std::chrono::steady_clock::time_point displayOnAt{};
 };
+
+/// 由 PowerInputs 推出的目标。
+enum class PowerTarget : uint8_t {
+    Quit,
+    Standby,
+    Hold,      // 只因灭屏，且还在宽限期内
+    Active,
+};
+
+const char* ToString(PowerTarget t) noexcept;
 
 const char* ToString(workerState s) noexcept;
 
@@ -268,6 +296,7 @@ public:
     bool IsShutdownRequested() const;
     bool IsRunning() const { return m_running.load(); }
     bool IsSuspended() const { return m_state.load() == workerState::suspend; }
+    PowerInputs GetPowerInputs() const;
 
     // Auto/Manual 模式
     void SetAutoMode(bool enabled) { m_autoMode.store(enabled); }
@@ -304,6 +333,9 @@ public:
     void SetVhfTransposeEnabled(bool enabled);
     bool IsVhfTransposeEnabled() const;
     void SetMasterParserOnlyMode(bool enabled);
+    /// 手指解算器切换：true 用 TsaCoreSolver（反编译的 TSACore），false 用 TouchPipeline。
+    void SetTsaCoreSolverEnabled(bool enabled);
+    bool IsTsaCoreSolverEnabled() const;
 
     /// 注入 BT MCU 压感值（由 PenBridge 线程写入，StylusPipeline 帧内读取）
     void IngestBtMcuPressure(uint16_t p);
@@ -357,12 +389,30 @@ private:
     void ReplayPenStateAfterChipInit();
     void DispatchPenButtonAction(const PenButtonAction& action, const char* source);
 
-    // ── Worker 状态处理（每个状态一个入口，Worker 只做调度） ──
-    void OnReady();              // ready → 尝试 auto init
-    void OnStreaming();          // streaming → 采帧 + 处理
-    void OnRecover();            // recover → 重试恢复
-    void OnSuspend();            // suspend → 屏幕关闭，暂停等待唤醒
-    bool OnQuit();               // quit → 清理并退出
+    // ── Worker 状态机 ──
+    // 每轮：读输入快照 → ComputeTarget → 按目标与当前阶段做一步。阶段迁移只走
+    // TransitionTo，离开 / 进入取帧的动作集中在 LeaveStreaming / EnterStreaming。
+    PowerTarget ComputeTarget(const PowerInputs& in,
+                              std::chrono::steady_clock::time_point now) const;
+    void StepStandby(const PowerInputs& in);
+    void StepHold(const PowerInputs& in);
+    void StepActive(const PowerInputs& in);
+    void StepBringUp(const PowerInputs& in);
+    void OnStreaming();
+    bool OnQuit();
+
+    void TransitionTo(workerState next, const char* reason);
+    void EnterStandby(const char* reason);
+    void BeginBringUp(const char* reason, workerState phase);
+    void EnterStreaming(const PowerInputs& in);
+    void LeaveStreaming(const char* reason);
+    void ExecuteSolverAfeActions(const Solvers::Tsa::AfeActionList& actions);
+    /// 等到输入变化或超时。返回 true 表示输入变了。
+    bool WaitForInputs(std::chrono::milliseconds timeout);
+    void UpdateInputs(const char* why, const std::function<bool(PowerInputs&)>& mutate,
+                      bool interruptFrameRead);
+    /// 记一次面板电源读数（监听线程的中断通知、worker 的轮询都走这里）。读不到时不改电平。
+    void NotePanelPower(std::optional<bool> panelOn, const char* source);
 
     struct QueuedCommand {
         uint64_t id = 0;
@@ -387,7 +437,38 @@ private:
 
     void SetState(workerState newState);
     std::atomic<workerState> m_state{workerState::quit};
-    std::atomic<StopReason> m_stopReason{StopReason::None};
+
+    // 外部输入（受 m_mu 保护）与 worker 私有的链路记账
+    PowerInputs m_inputs{};
+    std::condition_variable m_inputsCv;
+    uint64_t m_seenRevision = 0;
+    struct LinkState {
+        uint64_t provenEpoch = 0;        // 上次证明链路完好时的 downEpoch
+        uint64_t holdPanelDrops = 0;     // 进入灭屏宽限期时的 panelDrops
+        int bringUpAttempts = 0;         // 连续建链失败次数
+        std::chrono::steady_clock::time_point nextAttemptAt{};
+        std::chrono::steady_clock::time_point busWaitSince{};   // 开始等总线就绪的时刻
+        // 最近一次记入日志的探测结果，只在变化时再记
+        bool probeLogged = false;
+        bool lastIoOk = false;
+        uint8_t lastBusMaster = 0;
+        uint8_t lastBusSlave = 0;
+        int lastPanel = -1;              // -1 读不到，0 断电，1 上电
+    } m_link{};
+
+    // 状态机心跳：worker 每 30 s 记一行，证明自己活着、停在哪、为什么
+    struct Heartbeat {
+        std::chrono::steady_clock::time_point next{};
+        uint32_t frames = 0;         // 取到的帧（含 IDLE 帧）
+        uint32_t idleFrames = 0;     // 其中 IC 自报 IDLE 的帧
+        uint32_t noData = 0;         // 没有可用数据的轮次（无效帧 / 读被取消）
+        uint32_t sos = 0;            // 芯片层判 SOS、整体重启链路的次数
+        int64_t maxReadMs = 0;
+    } m_hb{};
+
+    void NoteLinkProbe(const Himax::Chip::BusProbe& probe, std::optional<bool> panel, const char* where);
+    void MaybeHeartbeat(PowerTarget target, const PowerInputs& in);
+    std::string DescribeInputs(const PowerInputs& in) const;
 
     RuntimePenState m_penState{};
     mutable std::mutex m_penStateMu;
@@ -397,28 +478,24 @@ private:
     std::atomic<bool> m_autoMode{false};
     std::atomic<bool> m_stylusVhfEnabled{true};
     std::atomic<bool> m_masterParserOnly{false};
+    std::atomic<bool> m_useTsaCoreSolver{EGOTOUCH_TOUCH_SOLVER_TSACORE != 0};
     std::atomic<PenButtonMode> m_penButtonMode{PenButtonMode::OemCustom};
     std::atomic<PenButtonRoute> m_penButtonRoute{PenButtonRoute::VhfOnly};
     std::atomic<bool> m_penButtonRouteExplicit{false};
     SyntheticPenButtonInjector m_synthPenButton;
     Himax::Chip m_chip;
+    Himax::PanelPowerWatcher m_panelWatcher;
     Solvers::TouchPipeline m_touchPipeline;
+    Solvers::Tsa::TsaCoreSolver m_tsaCoreSolver;
     Solvers::StylusPipeline m_stylusPipeline;
     mutable std::mutex m_pipelineMu;
     VhfReporter m_vhfReporter;
     uint8_t m_recoverCount = 0;
-    std::atomic<bool> m_needSuspendDeinit{false};
 
-    // GetFrame 连续非Timeout失败计数（容忍 AFE 命令后的短暂 bus 异常）
-    static constexpr int kMaxConsecutiveFrameErrors = 3;
-    int m_consecutiveFrameErrors = 0;
 
     mutable std::mutex m_mu;
     StaticQueue<QueuedCommand, 16> m_cmdQueue{};
     bool m_acceptExternalAfeCommands = false;
-    bool m_displayOffSuspendPending = false;
-    std::chrono::steady_clock::time_point m_displayOffSuspendDeadline{};
-    std::atomic<bool> m_systemSuspendObserved{false};
 
     mutable std::mutex m_workerHookMu;
     std::function<void()> m_workerHookForTesting;
@@ -426,7 +503,6 @@ private:
     std::array<HistoryEntry, kMaxHistoryItems> m_history{};
     size_t m_historyWriteIdx = 0;
     size_t m_historyCount = 0;
-    std::array<std::chrono::steady_clock::time_point, 16> m_lastEventByType{};
     uint64_t m_lastCmdId = 0;
     std::string m_lastNote;
     std::atomic<uint64_t> m_nextCmdId{1};

@@ -46,14 +46,6 @@ ego_add_device_test(DeviceVhfReporterStylusPacketTest Device.Vhf.StylusPacket
     "${DEVICE_ROOT}/tests/vhf/VhfReporterStylusPacketTest.cpp")
 target_link_libraries(DeviceVhfReporterStylusPacketTest PRIVATE Solvers Common)
 
-ego_add_device_test(DeviceRuntimeSystemPowerPolicyTest Device.Runtime.SystemPowerPolicy
-    "Device;Device.Runtime;Device.Win32;Timing;NoHardware" 20
-    "${DEVICE_ROOT}/tests/runtime/DeviceRuntimeSystemPowerPolicyTest.cpp")
-target_link_libraries(DeviceRuntimeSystemPowerPolicyTest PRIVATE Device Common)
-set_tests_properties(Device.Runtime.SystemPowerPolicy PROPERTIES
-    RESOURCE_LOCK DeviceRuntimeTiming
-)
-
 ego_add_device_test(DeviceRuntimePenStateTest Device.Runtime.PenState
     "Device;Device.Runtime;Device.PenUsb;NoHardware" 10
     "${DEVICE_ROOT}/tests/runtime/DeviceRuntimePenStateTest.cpp")

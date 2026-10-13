@@ -502,12 +502,13 @@ byte AFE_IsAllFreqNoisy(void)
 undefined8 AFE_GetNextScanRateIndex(byte *param_1,char *param_2)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x9]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x10];
   ushort uVar1;
   char cVar2;
   undefined2 uVar3;
   int iVar4;
   undefined8 uVar5;
-  byte local_9;
   
                     /* 0xed8a1  13  AFE_GetNextScanRateIndex */
   *param_1 = 0;
@@ -541,21 +542,21 @@ undefined8 AFE_GetNextScanRateIndex(byte *param_1,char *param_2)
                 }
                 else {
                   *param_2 = '\0';
-                  local_9 = 0;
-                  AFE_GetTargetScanRateIndex(DAT_6bca3a8c >> 1,&local_9);
+                  (*(byte *)(_stk + 0x7)) = 0;
+                  AFE_GetTargetScanRateIndex(DAT_6bca3a8c >> 1,&(*(byte *)(_stk + 0x7)));
                   uVar1 = *(ushort *)
                            (*(longlong *)(*(longlong *)(_refptr_g_thpAFEStruct + 8) + 0x20) +
-                           (ulonglong)local_9 * 2);
+                           (ulonglong)(*(byte *)(_stk + 0x7)) * 2);
                   if ((uint)uVar1 + (uint)uVar1 == (uint)DAT_6bca3a8c) {
                     *param_2 = '\x01';
-                    *param_1 = local_9;
+                    *param_1 = (*(byte *)(_stk + 0x7));
                   }
                   if ((DAT_6bca3a8c == 0x78) &&
-                     (AFE_GetTargetScanRateIndex(0x41,&local_9),
+                     (AFE_GetTargetScanRateIndex(0x41,&(*(byte *)(_stk + 0x7))),
                      *(short *)(*(longlong *)(*(longlong *)(_refptr_g_thpAFEStruct + 8) + 0x20) +
-                               (ulonglong)local_9 * 2) == 0x41)) {
+                               (ulonglong)(*(byte *)(_stk + 0x7)) * 2) == 0x41)) {
                     *param_2 = '\x01';
-                    *param_1 = local_9;
+                    *param_1 = (*(byte *)(_stk + 0x7));
                   }
                   if (*param_2 == '\0') {
                     AFE_GetTargetScanRateIndex(DAT_6bca3a8c,param_1);
@@ -1650,7 +1651,8 @@ undefined8 AFE_IsCoreTouchDetected(void)
 
 char AFE_IsFreqShiftDone(void)
 {
-  return 1;
+                    /* 0xecf6f  33  AFE_IsFreqShiftDone */
+  return AFE_ScanIsFreqShiftDone();
 }
 
 

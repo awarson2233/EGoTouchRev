@@ -69,23 +69,22 @@ Image_IsWhiteInNeighbor
 void Image_Dilation(void *param_1,int param_2,int param_3,undefined4 param_4,undefined4 param_5)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x2668]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x2670];
   int iVar1;
-  short local_2668 [4906];
-  errno_t local_14;
-  undefined8 local_10;
   
                     /* 0x2511d  891  Image_Dilation */
-  local_10 = 0x6ba65128;
-  local_14 = memcpy_s(local_2668,0x2648,param_1,(longlong)param_3 * (longlong)param_2 * 2);
-  if (local_14 != 0) {
+  (*(undefined8 *)(_stk + 0x2660)) = 0x6ba65128;
+  (*(errno_t *)(_stk + 0x265c)) = memcpy_s(((short *)(_stk + 0x8)),0x2648,param_1,(longlong)param_3 * (longlong)param_2 * 2);
+  if ((*(errno_t *)(_stk + 0x265c)) != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/Alg/Misc/TSA_Misc.c",
                       0x107,"rc == EOK");
     HardwareAnalyzer_SetSoftException();
   }
   for (int col = 0; col < param_2; col++) {
     for (int row = 0; row < param_3; row++) {
-      if ((local_2668[col + row * param_2] == 0) &&
-         (Image_IsWhiteInNeighbor(local_2668, param_2, param_3, col, row, param_4, param_5) != 0)) {
+      if ((((short *)(_stk + 0x8))[col + row * param_2] == 0) &&
+         (Image_IsWhiteInNeighbor(((short *)(_stk + 0x8)), param_2, param_3, col, row, param_4, param_5) != 0)) {
         *(undefined2 *)((longlong)param_1 + (longlong)(col + row * param_2) * 2) = 1;
       }
     }
@@ -103,23 +102,21 @@ void Image_Dilation(void *param_1,int param_2,int param_3,undefined4 param_4,und
 void Image_Erosion(void *param_1,int param_2,int param_3,undefined4 param_4,undefined4 param_5)
 
 {
-  short local_2668 [4906];
-  errno_t local_14;
-  undefined8 local_10;
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x2668]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x2670];
   
                     /* 0x252ac  892  Image_Erosion */
-  local_10 = 0x6ba652b7;
-  local_14 = memcpy_s(local_2668,0x2648,param_1,(longlong)param_3 * (longlong)param_2 * 2);
-  if (local_14 != 0) {
+  (*(undefined8 *)(_stk + 0x2660)) = 0x6ba652b7;
+  (*(errno_t *)(_stk + 0x265c)) = memcpy_s(((short *)(_stk + 0x8)),0x2648,param_1,(longlong)param_3 * (longlong)param_2 * 2);
+  if ((*(errno_t *)(_stk + 0x265c)) != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/Alg/Misc/TSA_Misc.c",
                       0x11f,"rc == EOK");
     HardwareAnalyzer_SetSoftException();
   }
-  for (int col = 0; col < param_2; col++) {
-    for (int row = 0; row < param_3; row++) {
-      if ((local_2668[col + row * param_2] == 0) &&
-         (Image_IsWhiteInNeighbor(local_2668, param_2, param_3, col, row, param_4, param_5) != 0)) {
-        *(undefined2 *)((longlong)param_1 + (longlong)(col + row * param_2) * 2) = 1;
+  for (int row = 0; row < param_3; row++) {
+    for (int col = 0; col < param_2; col++) {
+      if (((short *)(_stk + 0x8))[col + row * param_2] == 0) {
+        Image_ClearNeighbor((longlong)param_1, param_2, param_3, col, row, param_4, param_5);
       }
     }
   }
@@ -194,24 +191,24 @@ void Image_CrossErosionDim2(longlong param_1,longlong param_2,uint param_3,int p
 void Image_CrossErosion(void *param_1,int param_2,int param_3,int param_4,int param_5)
 
 {
+  /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x2658]..）：被调方会越过单个局部变量访问相邻字段 */
+  _Alignas(16) uint8_t _stk[0x2660];
   errno_t eVar1;
-  undefined1 local_2658 [9800];
-  undefined8 uStack_10;
   
                     /* 0x25625  890  Image_CrossErosion */
-  uStack_10 = 0x6ba65630;
-  eVar1 = memcpy_s(local_2658,0x2648,param_1,(longlong)param_3 * (longlong)param_2 * 2);
-  uStack_10 = CONCAT44(eVar1,(undefined4)uStack_10);
+  (*(undefined8 *)(_stk + 0x2650)) = 0x6ba65630;
+  eVar1 = memcpy_s(((undefined1 *)(_stk + 0x8)),0x2648,param_1,(longlong)param_3 * (longlong)param_2 * 2);
+  (*(undefined8 *)(_stk + 0x2650)) = CONCAT44(eVar1,(undefined4)(*(undefined8 *)(_stk + 0x2650)));
   if (eVar1 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/Alg/Misc/TSA_Misc.c",
                       0x173,"rc == EOK");
     HardwareAnalyzer_SetSoftException();
   }
   if (param_4 != 0) {
-    Image_CrossErosionDim1(param_1,local_2658,param_2,param_3);
+    Image_CrossErosionDim1(param_1,((undefined1 *)(_stk + 0x8)),param_2,param_3);
   }
   if (param_5 != 0) {
-    Image_CrossErosionDim2(param_1,local_2658,param_2,param_3);
+    Image_CrossErosionDim2(param_1,((undefined1 *)(_stk + 0x8)),param_2,param_3);
   }
   return;
 }

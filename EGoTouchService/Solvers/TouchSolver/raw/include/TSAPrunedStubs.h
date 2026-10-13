@@ -50,7 +50,8 @@ typedef uint64_t uint6;
 typedef uint64_t uint7;
 typedef long double float10;
 typedef long double unkbyte10;
-typedef void (*code)();
+// Ghidra 的 code 是函数类型（不是函数指针）：(*(code *)p)(...) 即调用地址 p 处的函数
+typedef void code();
 typedef uint32_t TSA_FeatureFlags;
 typedef uint32_t TSA_SystemFlags;
 #ifndef _ERRNO_T_DEFINED
@@ -248,8 +249,6 @@ static inline bool SafeBaseline_IsSignalStable() { return (bool)0; } // pruned (
 static inline void SafeBaseline_Process() {  } // pruned (SafeBaseline.c)
 static inline uint SafeBaseline_ScreenOnWithPhoneHeldInHandProcess() { return (uint)0; } // pruned (SafeBaseline.c)
 static inline void SafeBaseline_SetBuf(undefined8 param_1) {  } // pruned (SafeBaseline.c)
-static inline void Self_Process() {  } // pruned (Self.c)
-static inline void Self_Reset() {  } // pruned (Self.c)
 static inline undefined8 SensorData_AntiTouchStageTimeout() { return (undefined8)0; } // pruned (SensorData.c)
 static inline undefined8 SensorData_IsAntiTouchStage() { return (undefined8)0; } // pruned (SensorData.c)
 static inline void SensorGesture_ClearExternally(uint param_1) {  } // pruned (SensorGesture.c)
@@ -301,9 +300,6 @@ static inline byte SS_TouchLength(longlong param_1,byte param_2,int param_3) { r
 static inline char SS_TouchValid(byte param_1) { (void)param_1; return 0; } // pruned (SS.c)
 static inline void StrPrintf_Backup() {  } // pruned (StrPrintf.c)
 static inline void StrPrintf_Retore() {  } // pruned (StrPrintf.c)
-static inline void Thenar_ProcessInfoByDif() {  } // pruned (Thenar.c)
-static inline void Thenar_UnitCopy(undefined1 *param_1,undefined1 *param_2) {  } // pruned (Thenar.c)
-static inline bool Thenar_UpdateExternalInfo() { return (bool)0; } // pruned (Thenar.c)
 static inline ushort TSAFold_Dim1PosOutRemap(ushort param_1,ushort param_2) { return param_1; } // pruned (TSAFold.c)
 static inline ushort TSAFold_Dim2PosOutRemap(ushort param_1,ushort param_2) { return param_1; } // pruned (TSAFold.c)
 static inline undefined4 TSAFold_GetCurrState() { return (undefined4)0; } // pruned (TSAFold.c)
@@ -346,15 +342,7 @@ static inline void BigData_Init(void) {}
 static inline void CMFPca_Free(void) {}
 static inline uint8_t CMFPca_Malloc(void) { return 1; }
 static inline void CMFRemap_Free(void) {}
-static inline void CMFRemap_Init(void) {
-    // Crucial for W273AS2700 so CMFRemap_IsNeedRemap() returns 0:
-    extern uint8_t g_cmfRemapNumRxCombine;
-    extern uint16_t g_cmfRemapTxNum;
-    extern uint16_t g_cmfRemapRxNum;
-    g_cmfRemapNumRxCombine = 1;
-    g_cmfRemapTxNum = 60;
-    g_cmfRemapRxNum = 40;
-}
+void CMFRemap_Init(void);   // Core/TSAPrunedImpl.c
 static inline void CMFRemap_InitMapIdxBySlotTable(void *a, ...) { (void)a; }
 static inline uint8_t CMFRemap_Malloc(void) { return 1; }
 static inline void Context_Init(void) {}
@@ -395,7 +383,7 @@ static inline void SS_Init(void) {}
 static inline void* SS_GetPreUnifiedBL(void) { return NULL; }
 static inline void SafeBaseline_Free(void) {}
 static inline void* SafeBaseline_GetBuf(int b) { return NULL; }
-static inline void SafeBaseline_Init(void *a, ...) { (void)a; }
+static inline void SafeBaseline_Init(char a) { (void)a; }
 static inline uint8_t SafeBaseline_IsPushed(void) { return 0; }
 static inline uint8_t SafeBaseline_Malloc(void) { return 1; }
 static inline void SensorData_Init(void) {}
@@ -407,12 +395,7 @@ static inline uint32_t SideTouch_GetRingLogPostFrameNum(void) { return 0; }
 static inline uint32_t SideTouch_GetRingLogPreFrameNum(void) { return 0; }
 static inline void SideTouch_Init(void) {}
 static inline uint8_t SideTouch_IsBaselineOK(void) { return 1; }
-static inline uint8_t SideTouch_Malloc(void) {
-    extern uint64_t g_tsaBufTzSide;
-    extern void* TSA_MallocAndInit(uint size);
-    g_tsaBufTzSide = (uint64_t)TSA_MallocAndInit(2400);
-    return 1;
-}
+bool SideTouch_Malloc(void);   // Core/TSAPrunedImpl.c
 static inline void SideTouch_SetPressure(int p) {}
 static inline void SignalDisparity_Init(void) {}
 static inline void SmartCover_Init(void) {}
@@ -420,8 +403,8 @@ static inline void SmartCover_SetRange(int r, ...) {}
 static inline void StrPrintf_Init(void (*p)(const char*)) {}
 static inline void StrPrintf_FlushProcess(void) {}
 static inline void TSAFold_Init(void) {}
-static inline uint64_t TSAFold_GridZoomOutRemap(uint64_t buf, int a, int b, int c) { return 0; }
-static inline void TSAFold_LineZoomOutRemap(void *buf, ...) {}
+static inline uint64_t TSAFold_GridZoomOutRemap(uint64_t buf, int a, int b, int c) { return buf; }
+static inline void* TSAFold_LineZoomOutRemap(void *buf, ...) { return buf; }
 static inline void TSAFold_PrmtSetDim1Res(uint16_t res) {}
 static inline void TSAFold_PrmtSetDim2Res(uint16_t res) {}
 static inline void TSAFold_PrmtSetResScale(int scale) {}
@@ -436,7 +419,6 @@ static inline void TSAWrapper_Process(void) {}
 static inline float TSAWrapper_GetTouchXVelocity(int id) { return 0.0f; }
 static inline float TSAWrapper_GetTouchYVelocity(int id) { return 0.0f; }
 static inline void TSA_ASAProcess(uint32_t flags, ...) {}
-static inline void Thenar_Init(void) {}
 static inline void UDFPEvent_Init(void) {}
 static inline void VirtualKey_SetAODRingState(uint8_t state) {}
 static inline void LinearTestInit(void) {}
