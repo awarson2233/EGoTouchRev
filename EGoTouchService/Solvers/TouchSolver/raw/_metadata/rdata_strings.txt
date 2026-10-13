@@ -1,0 +1,1931 @@
+0x6bb51000 : Huawei Secure C V100R001C01SPC010B002
+0x6bb51040 : 0123456789ABCDEFX
+0x6bb51060 : 0123456789abcdefx
+0x6bb51400 : 0123456789ABCDEFX
+0x6bb51420 : 0123456789abcdefx
+0x6bb518e0 : Baseline_Compensation
+0x6bb51900 : ../../src/Alg/Baseline/BaselineIIR.c
+0x6bb5194d : rc == EOK
+0x6bb51960 : ../../src/Alg/Baseline/BaselineReset.c
+0x6bb519ad : rc == EOK
+0x6bb519b8 : TSAConstPrmt(sys, rxNum) <= TSA_MAX_DIM
+0x6bb51a10 : ../../src/Alg/Baseline/BaselineStateMachine.c
+0x6bb51a65 : rc == EOK
+0x6bb51ac4 : BLSM_Process
+0x6bb51ae0 : ../../src/Alg/CMF/CMF.c
+0x6bb51b1d : rc == EOK
+0x6bb51b29 : preCMFDiff.csv
+0x6bb51b40 : CMF_Process
+0x6bb51b50 : ../../src/Alg/CMF/CMFRemap.c
+0x6bb51b95 : coefAverage != 0
+0x6bb51bf8 : line == g_cmfRemapNumRxCombine
+0x6bb51c18 : g_cmfRemapMapRxNum < CMF_MAX_ELELEMENT_COUNT
+0x6bb51c48 : g_cmfRemapMapTxNum < CMF_MAX_ELELEMENT_COUNT
+0x6bb51c78 : g_cmfRemapMapRxNum * g_cmfRemapMapTxNum <= TSA_MAX_SENSOR_NUM
+0x6bb51cb6 : rc == EOK
+0x6bb51cc0 : ../../src/Alg/CMF/CMF_Pca.c
+0x6bb51d08 : TSAPrmtCmfPca(cmfPca, cmfPcaConstrain)[pcaDegree - 1] > 1e-12
+0x6bb51d46 : rc == EOK
+0x6bb51fc6 : noiseLevel = %d
+0x6bb51fe0 : Exception_Process
+0x6bb52000 : Exception_CheckChargerNoiseInRxLines
+0x6bb52040 : ../../src/Alg/Filter/IIRFilter/AIIR_Filter.c
+0x6bb52098 : (((INT32U)TSAConstPrmt(aiir, scaledCoefToDeltaRatio)) * (TSAPrmt(aiir, heavyDelta) - TSAPrmt(aiir, lightDelta))) < INT16U_MAX
+0x6bb52130 : RxLineFilter_Process
+0x6bb52150 : ../../src/Alg/Filter/SigSumFilter/SigSumFilter_Process.c
+0x6bb521b5 : rc == EOK
+0x6bb521d0 : SigSumFilter_Process
+0x6bb521f8 : ../../src/Alg/GridIIR/GridIIR.c
+0x6bb5223d : rc == EOK
+0x6bb52250 : GridIIR_Process
+0x6bb52268 : ../../src/Alg/IDTracking/IDT.c
+0x6bb522b0 : TouchesPrpt(num) <= TSA_MAX_TOUCH_NUM
+0x6bb522d8 : PrevTouchesPrpt(num) <= TSA_MAX_TOUCH_NUM
+0x6bb52303 : IDT: ACC(%d) too large...
+0x6bb5231d : dim2Len >= dim1Len
+0x6bb52330 : dim2Idx != HM_INVALID_MAP
+0x6bb5234a : rc == EOK
+0x6bb52354 : IDT_Process
+0x6bb523b0 : ../../src/Alg/Misc/TSA_Misc.c
+0x6bb523f5 : rc == EOK
+0x6bb52400 : ../../src/Alg/Peak/PeakData.c
+0x6bb52445 : rc == EOK
+0x6bb52450 : PeaksPrpt(num) <= TSA_MAX_PEAK_NUM
+0x6bb52474 : Peak Buffer Overflow!!!
+0x6bb52491 : PeakZnFailed(pkDim1:%d, pkDim2:%d, pkZn:%d, znThold:%d)
+0x6bb524c9 : P115
+0x6bb524d3 : Peak_Process
+0x6bb524e0 : ../../src/Alg/Peak/PrevPeakData.c
+0x6bb5252d : rc == EOK
+0x6bb52540 : ../../src/Alg/Rawdata/Rawdata.c
+0x6bb52585 : rc == EOK
+0x6bb525a0 : Rawdata_Process
+0x6bb525b0 : ../../src/Alg/SelfData/SelfData.c
+0x6bb525fd : rc == EOK
+0x6bb52610 : ../../src/Alg/TPSensor/TPSensor.c
+0x6bb5265d : rc == EOK
+0x6bb52678 : ../../src/Alg/TPSensor/TPSensor_NotchCorrect.c
+0x6bb526cd : rc == EOK
+0x6bb526e0 : NotchCorrect_Process
+0x6bb52700 : ../../src/Alg/Touch/PrevTouchData.c
+0x6bb5274d : preIdx < TSA_MAX_TOUCH_NUM
+0x6bb52768 : curIdx < TSA_MAX_TOUCH_NUM
+0x6bb52783 : rc == EOK
+0x6bb52790 : PrevTouchesPrpt(num) <= TSA_MAX_TOUCH_NUM
+0x6bb527c0 : PrevTouchPrpt(preIdx, historyBuffer.num) <= PREVTOUCH_HISTORY_BUFFER_SIZE
+0x6bb52810 : ../../src/Alg/Touch/TouchData.c
+0x6bb52855 : rc == EOK
+0x6bb5285f : B206
+0x6bb52864 : B20Y
+0x6bb52869 : P116
+0x6bb5286e : P150
+0x6bb52873 : W169
+0x6bb52878 : W189
+0x6bb5287d : preIdx < TSA_MAX_TOUCH_NUM
+0x6bb52898 : curIdx < TSA_MAX_TOUCH_NUM
+0x6bb528b8 : TouchesPrpt(num) <= TSA_MAX_TOUCH_NUM
+0x6bb528f0 : TouchAction_Process
+0x6bb52938 : ../../src/Alg/TouchEvent/TE_Process.c
+0x6bb52985 : rc == EOK
+0x6bb529fb : TE_Process
+0x6bb52a88 : ../../src/Alg/TouchMode/TouchMode_Process.c
+0x6bb52ae0 : prevModeUnit.mode < TOUCH_MODE_NUM
+0x6bb52b08 : nextModeUnit.mode < TOUCH_MODE_NUM
+0x6bb52b30 : TouchMode_Process
+0x6bb52b90 : TouchReport_Process
+0x6bb52bb5 : ../../src/Alg/TouchSize/TS.c
+0x6bb52c00 : sigSum <= (TDIFS_MAX >> (TS_UNIT_PER_SIG_MM2_SCALE_SHIFTER))
+0x6bb52c3d : TS_Process
+0x6bb52c50 : P116
+0x6bb52c55 : P150
+0x6bb52c5a : P186
+0x6bb52c5f : P172
+0x6bb52c64 : P173
+0x6bb52c70 : ../../src/Alg/TouchZone/SubTouchZone/SubTouchZone.c
+0x6bb52ccd : rc == EOK
+0x6bb52cf0 : ../../src/Alg/TouchZone/TZ_Common.c
+0x6bb52d3d : rc == EOK
+0x6bb52d4f : C../../src/Alg/TouchZone/TZ_DFS.c
+0x6bb52da0 : !((pk0Idx == PEAK_INVALID_IDX) || (pk1Idx == PEAK_INVALID_IDX))
+0x6bb52de0 : TZ_IsLO ssIsLo=%d, exception=%d, area=%d, shapeRatio=%d
+0x6bb52e28 : ../../src/Alg/TouchZone/TZ_PeakBasedTraversal.c
+0x6bb52e7d : rc == EOK
+0x6bb52e90 : TZ_PeakBasedTraversal
+0x6bb52eb0 : TZ_PeakBasedTraversalSimple
+0x6bb52f00 : ../../src/Alg/TouchZone/TZ_ShapeDebounce.c
+0x6bb52f55 : tchIdx != TOUCH_INVALID_IDX
+0x6bb52f88 : ../../src/Alg/TouchZone/TZ_StateMachine.c
+0x6bb52fdd : rc == EOK
+0x6bb52fe9 : TZ_SSLoProcess count1=%d,count2=%d,ssLo=%d,count1SD=%d,count2SD=%d,ssLoSD=%d
+0x6bb53036 : isFatFingerSD = %d
+0x6bb53049 : TZ_UnitProcess
+0x6bb53060 : TZ_PeakBasedProcess
+0x6bb53074 : TZ_Process
+0x6bb53080 : ../../src/App/TSA_Buffer.c
+0x6bb530c5 : rc == EOK
+0x6bb530d0 : ../../src/App/TSA_Common.c
+0x6bb53120 : ../../src/App/TSA_Console.c
+0x6bb53165 : rc == EOK
+0x6bb5316f : dbEnterIDLE
+0x6bb5317b : sigMult
+0x6bb53183 : sigMultSD
+0x6bb5318d : accThold
+0x6bb53196 : sigRatioToDirectReport
+0x6bb531ad : maxClickSuppressDistance
+0x6bb531c6 : clickDuration
+0x6bb531d4 : clickSuppressDistance
+0x6bb531ea : volumeSideEnabled
+0x6bb531fc : volumeActiveAreaStart
+0x6bb53212 : volumeActiveAreaEnd
+0x6bb53226 : volumeGreenAreaStart
+0x6bb5323b : volumeGreenAreaEnd
+0x6bb5324e : HIMA
+0x6bb53253 : distToEnterGloveMode
+0x6bb53275 : DFLT000000
+0x6bb53280 :     DataPtr == NULL!
+0x6bb53295 : ../../src/App/TSA_MSProc.c
+0x6bb532d5 : rc == EOK
+0x6bb532e3 : PreRaw
+0x6bb532ea : PreUnifiedRaw
+0x6bb532f8 : PreDiff
+0x6bb53300 : DIFF
+0x6bb53305 : PreUnifiedDiff
+0x6bb53314 : PreHWRaw
+0x6bb5331d : Raw2RawDiff
+0x6bb53329 : Raw2RawDiffAftCMF
+0x6bb5333b : Raw2RawDiff2
+0x6bb53348 : Raw2RawDiff3
+0x6bb53355 : PreCMFDiff
+0x6bb53360 : AftSSCMFDiff
+0x6bb5336d : AftSSChargerNFilterDiff
+0x6bb53385 : CommonModeNoise
+0x6bb53395 : AftCMFDiff
+0x6bb533a0 : CMFDraftNeighborDistance
+0x6bb533b9 : CMFNeighborDistance
+0x6bb533cd : AftPcaFilterDif
+0x6bb533dd : CMFWeight
+0x6bb533e7 : CMFDraftWeight
+0x6bb533f6 : AftDim1CMFDiff
+0x6bb53405 : OneOrderDiffRx
+0x6bb53414 : TwoOrderDiffRx
+0x6bb53423 : PreNotchCorrectDiff
+0x6bb53437 : AftNotchCorrectDiff
+0x6bb5344b : GridIIRDif
+0x6bb53459 : Baseline
+0x6bb53462 : NormalBaseline
+0x6bb53471 : CMFRemap
+0x6bb5347a : CMFRemapBack
+0x6bb53487 : TZFlag
+0x6bb5348e : DistanceMap
+0x6bb5349a : AfterDilate
+0x6bb534a6 : AfterErode
+0x6bb534b1 : ProxDif
+0x6bb534b9 : ProxIIRRaw
+0x6bb534c4 : ProxZnDif
+0x6bb534ce : ProxBaseline
+0x6bb534db : ProxTZ
+0x6bb534e2 : SideTZ
+0x6bb534e9 : SideTouch
+0x6bb534f3 : SafeBaseline
+0x6bb53500 : DifSafeBL2Raw
+0x6bb5350e : DifSafeBL2RawCMF
+0x6bb5351f : DifSafeBL2BL
+0x6bb5352c : DifSafeBL2BLCMF
+0x6bb5353c : MaxSigDown
+0x6bb53547 : MinSigOff
+0x6bb53551 : TouchOnTime
+0x6bb5355d : TouchRptTime
+0x6bb5356a : TouchOffTime
+0x6bb53577 : SilentTouchNum
+0x6bb53586 : tzID
+0x6bb5358b : TzZone
+0x6bb53592 : subTZ
+0x6bb53598 : GripRegion
+0x6bb535a3 : gripStage
+0x6bb535ad : gripTime
+0x6bb535b6 : gripTimeOff
+0x6bb535c2 : HandGestureBaseline
+0x6bb535d6 : HandGestureDif
+0x6bb535e5 : HandTZ
+0x6bb535ec : HandArea
+0x6bb535f5 : HandTZPrev
+0x6bb53600 : HandTime
+0x6bb53609 : tzAge(In ms)
+0x6bb53616 : oriTX1
+0x6bb5361d : oriTX2
+0x6bb53624 : peakTX1
+0x6bb5362c : peakTX2
+0x6bb53634 : NoPressTable
+0x6bb53641 : NoPressTableShortTerm
+0x6bb53657 : NoPressTableTx2
+0x6bb53667 : NoPressTableTx2ShortTerm
+0x6bb53680 : NoPressSafeTable
+0x6bb53691 : Unknown
+0x6bb53699 : TiedGridHandDim1
+0x6bb536aa : TiedGridHandDim2
+0x6bb536bb : TiedGridOriTx1Dim1
+0x6bb536ce : TiedGridOriTx1Dim2
+0x6bb536e1 : TiedGridOriTx2Dim1
+0x6bb536f4 : TiedGridOriTx2Dim2
+0x6bb53707 : TiedGridTraceDenoiseTx1Dim1
+0x6bb53723 : TiedGridTraceDenoiseTx1Dim2
+0x6bb5373f : TiedGridTraceDenoiseTx2Dim1
+0x6bb5375b : TiedGridTraceDenoiseTx2Dim2
+0x6bb53777 : TiedGridPalmDenoiseTx1Dim1
+0x6bb53792 : TiedGridPalmDenoiseTx1Dim2
+0x6bb537ad : TiedGridPalmDenoiseTx2Dim1
+0x6bb537c8 : TiedGridPalmDenoiseTx2Dim2
+0x6bb53950 : TSA_MSInitCommon
+0x6bb53961 : TSA_MSInit
+0x6bb53970 : TSA_MSInitProject
+0x6bb53982 : TSA_MSReset
+0x6bb5398e : TSA_MSProcess
+0x6bb539a1 : *Stylus*...
+0x6bb539ad : DISABLE STYLUS!
+0x6bb539bd :   status:%4d
+0x6bb539ca :   tx1_freq:%4d
+0x6bb539d9 :   tx2_freq:%4d
+0x6bb539e8 :   btn:%4d
+0x6bb539f2 :   press:%4d
+0x6bb53a01 : StylusAFT: Pen Enter Withdrawn
+0x6bb53a20 : STYLUS FRAME NULL!!
+0x6bb53a35 : ASA WANT TP FREQ SHIFT!!
+0x6bb53a4f : ASA WANT BT FREQ SHIFT!!
+0x6bb53a68 : ../../src/App/TSA_Main.c
+0x6bb53aad : rc == EOK
+0x6bb53ab7 : TSA Set DMD type = %d
+0x6bb53ace : Error:frame == NULL!
+0x6bb53ae3 : not support
+0x6bb53c58 : TSA_DMD_NONE
+0x6bb53c65 : TSA_DMD_RF_NOISE
+0x6bb53c76 : TSA_DMD_RAW_JUMP
+0x6bb53c87 : TSA_DMD_SENSOR_BROKEN
+0x6bb53c9d : TSA_DMD_ASSERTED
+0x6bb53cae : TSA_DMD_OTHER
+0x6bb53cbc : TSA_DMD_RAW_OVER_LIMIT
+0x6bb53cd3 : TSA_DMD_UNDER_WATER
+0x6bb53ce7 : TSA_DMD_CALIBRATION
+0x6bb53cfb : TSA_DMD_ALG_TIME_OUT
+0x6bb53d10 : TSA_DMD_FORCE_EXIT_IDLE
+0x6bb53d28 : TSA_DMD_LOW_SENSITIVITY
+0x6bb53d40 : TSA_DMD_LOW_TEMPERATURE
+0x6bb53d58 : TSA_DMD_FRAME_TIMEOUT
+0x6bb53d6e : TSA_DMD_THENAR_LONG_PRESS
+0x6bb53d88 : TSA_DMD_ABNORMAL_TOUCH
+0x6bb53d9f : TSA_DMD_NOISY
+0x6bb53dad : TSA_DMD_PROXIMITY_ON_TIME_OUT
+0x6bb53dd0 : TSA_DMD_PROXIMITY_OFF_TIME_OUT
+0x6bb53def : TSA_DMD_SIDE_TOUCH
+0x6bb53e02 : TSA_DMD_AFE_RAW_ABNORMAL
+0x6bb53e1b : TSA_DMD_ALGO_EXP1
+0x6bb53e2d : TSA_DMD_HOPPING_RAWJUMP
+0x6bb53e45 : TSA_DMD_LINE_DATA_RAWJUMP
+0x6bb53e5f : TSA_DMD_AS_BL_TIMEOUT
+0x6bb53e78 : TSA_DMD_AS_ABNORMAL_MODE_SWITCH
+0x6bb53e98 : TSA_DMD_AS_ABNORMAL_FREQ_HOP
+0x6bb53eb5 : TSA_DMD_AS_LARGE_NOISE
+0x6bb53ecc : TSA_DMD_AS_LARGE_NOISE2
+0x6bb53ee4 : TSA_DMD_SIDETOUCH_EXCP1
+0x6bb53efc : TSA_DMD_SIDETOUCH_EXCP2
+0x6bb53f14 : TSA_DMD_SIDETOUCH_EXCP3
+0x6bb53f2c : Unsupported DMD num
+0x6bb53f40 : TSA_EVENT_NONE
+0x6bb53f50 : TSA_EVENT_PHONE_HELD_ON_LEFT_HAND
+0x6bb53f78 : TSA_EVENT_PHONE_HELD_ON_RIGHT_HAND
+0x6bb53fa0 : TSA_EVENT_THENAR_LONG_PRESS_ON_LEFT
+0x6bb53fc8 : TSA_EVENT_THENAR_LONG_PRESS_ON_RIGHT
+0x6bb53fed : TSA_EVENT_PHONE_UNDER_WATER
+0x6bb54009 : TSA_EVENT_PHONE_OUTOF_WATER
+0x6bb54025 : TSA_EVENT_PROXIMITY_DETECTED
+0x6bb54048 : TSA_EVENT_PROXIMITY_PICK_UP_GESTURE_DETECTED
+0x6bb54078 : TSA_EVENT_PROXIMITY_PUT_DOWN_GESTURE_DETECTED
+0x6bb540a6 : TSA_EVENT_LEFT_VOLUME_TRIGGER
+0x6bb540c8 : TSA_EVENT_RIGHT_VOLUME_TRIGGER
+0x6bb540e7 : TSA_EVENT_VOLUME_UP
+0x6bb540fb : TSA_EVENT_VOLUME_DOWN
+0x6bb54111 : TSA_EVENT_VOLUME_MUTE
+0x6bb54127 : TSA_EVENT_POWER_DOUBLE_CLICK
+0x6bb54148 : Unsupported TSA Event enumerator
+0x6bb54169 : TSA_MOUSE_GESTURE_NONE
+0x6bb54180 : TSA_MOUSE_GESTURE_CLICK
+0x6bb54198 : TSA_MOUSE_GESTURE_DOUBLE_CLICK
+0x6bb541b7 : TSA_MOUSE_GESTURE_LONG_PRESS
+0x6bb541d4 : TSA_MOUSE_GESTURE_DRAG
+0x6bb541eb : TSA_MOUSE_GESTURE_BACK
+0x6bb54208 : TSA_MOUSE_GESTURE_MIDDLE_CLICK
+0x6bb54228 : TSA_MOUSE_GESTURE_ON_LEFT_CLICK_REGION
+0x6bb54250 : TSA_MOUSE_GESTURE_ON_RIGHT_CLICK_REGION
+0x6bb54278 : TSA_MOUSE_GESTURE_SCROLL_UP
+0x6bb54294 : TSA_MOUSE_GESTURE_SCROLL_DOWN
+0x6bb542b2 : TSA_MOUSE_GESTURE_SCROLL_LEFT
+0x6bb542d0 : TSA_MOUSE_GESTURE_SCROLL_RIGHT
+0x6bb542f0 : TSA_MOUSE_GESTURE_SWIPE_UP_AND_HOLD
+0x6bb54318 : TSA_MOUSE_GESTURE_SWIPE_DOWN_AND_HOLD
+0x6bb5433e : TSA_MOUSE_GESTURE_SWIPE_RIGHT
+0x6bb5435c : TSA_MOUSE_GESTURE_SWIPE_LEFT
+0x6bb54379 : TSA_MOUSE_GESTURE_SWIPE_UP
+0x6bb54394 : TSA_MOUSE_GESTURE_SWIPE_DOWN
+0x6bb543b8 : TSA_MOUSE_GESTURE_DOUBLE_SWIPE_UP
+0x6bb543e0 : TSA_MOUSE_GESTURE_DOUBLE_SWIPE_DOWN
+0x6bb54408 : TSA_MOUSE_GESTURE_DOUBLE_SWIPE_LEFT
+0x6bb54430 : TSA_MOUSE_GESTURE_DOUBLE_SWIPE_RIGHT
+0x6bb54458 : TSA_MOUSE_GESTURE_DOUBLE_SWIPE_UP_AND_HOLD
+0x6bb54488 : TSA_MOUSE_GESTURE_DOUBLE_SWIPE_DOWN_AND_HOLD
+0x6bb544b5 : TSA_MOUSE_GESTURE_PINCH
+0x6bb544cd : TSA_MOUSE_GESTURE_SPREAD
+0x6bb544e6 : TSA_MOUSE_GESTURE_ROTATE
+0x6bb54500 : TSA_MOUSE_GESTURE_TRIPLE_SWIPE_LEFT
+0x6bb54528 : TSA_MOUSE_GESTURE_TRIPLE_SWIPE_RIGHT
+0x6bb54550 : TSA_MOUSE_GESTURE_TRIPLE_CLICKS
+0x6bb54570 : TSA_MOUSE_GESTURE_ROTATE_AND_SPREAD
+0x6bb54598 : TSA_MOUSE_GESTURE_ROTATE_AND_PINCH
+0x6bb545ea : IN STYLUS 3S DELAY TO IDLE!
+0x6bb54606 : THP/DFT/TSACore
+0x6bb54616 : TL_develop_gaokun
+0x6bb54628 : Windows
+0x6bb54630 : P167
+0x6bb54635 : W157
+0x6bb5463a : TSA_DEFAULT
+0x6bb54646 : volumeSideEnabled
+0x6bb54661 : AppLog: 
+0x6bb5466b :  TSA buffer malloc fail!
+0x6bb54695 : TSA_GetPrpt
+0x6bb546b0 : TSA_DUMP
+0x6bb546b9 : ../../src/App/TSA_Static.c
+0x6bb546fd : rc == EOK
+0x6bb54710 : proxConfig
+0x6bb5471b : ALPS491000
+0x6bb54726 : ALPS491600
+0x6bb54740 : ../../src/Common/TSA_Malloc.c
+0x6bb54785 : rc == EOK
+0x6bb547d1 : AnimationProcess startX=%ld,startY=%ld,curX=%ld,curY=%ld
+0x6bb54811 : AnimationProcess diffX=%ld,diffY=%ld
+0x6bb548d0 : ../../src/Extension/ASA/Alg/calibration/calibration_linear_test.c
+0x6bb5493d : rc == EOK
+0x6bb54948 : LTLog sig 
+0x6bb54953 : %d, 
+0x6bb54959 : LTLog x 
+0x6bb54963 : LTLog y 
+0x6bb5496d : LTLog startIdx %d, endIdx %d
+0x6bb5498b : LTLog diif 
+0x6bb54998 : LTLog avg %d
+0x6bb549a5 : , %d
+0x6bb549d5 : %.4f,
+0x6bb549e1 : LTLog line maxD[pre,aft]: %.4f, %.4f
+0x6bb54a09 : LTLog line std[pre,aft]: %.4f, %.4f
+0x6bb54a31 : LTLog maxDx[pre,aft,1-N]: %.4f,%.4f, ,
+0x6bb54a59 : LTLog maxDy[pre,aft,1-N]: %.4f,%.4f, ,
+0x6bb54a81 : LTLog stdx[pre,aft,1-N]: %.4f,%.4f, ,
+0x6bb54aa9 : LTLog stdy[pre,aft,1-N]: %.4f,%.4f, ,
+0x6bb54ad0 : LTLog COOR FRAME NO: 
+0x6bb54aeb : LTLog COOR BUF X: 
+0x6bb54aff : LTLog COOR BUF Y: 
+0x6bb54b13 : LTLog cc: 
+0x6bb54b41 : LTLog g_asaCalibLineBuffCnt %d, start %d
+0x6bb54b6b : LTLog xPieceLen: %d,%d,%d
+0x6bb54b86 : LTLog xPre: 
+0x6bb54b94 : LTLog xAft: 
+0x6bb54ba2 : LTLog x aft TEST %d dif: 
+0x6bb54bbd : LTLog yPre: 
+0x6bb54bcb : LTLog yAft: 
+0x6bb54bd9 : LTLog y aft TEST %d dif: 
+0x6bb54bf4 : LTLog linePre: 
+0x6bb54c05 : LTLog lineAft: 
+0x6bb54c16 : UpdateLTBuf %d,%d,%d,%d,%d
+0x6bb54c32 : LinearTestProc cnt,%d,%d,%d
+0x6bb54c81 : OemInfoCfgInit! %d, %d
+0x6bb54c99 : data block size is oversize! over whole table memory
+0x6bb54ccf : data block size is oversize!
+0x6bb54ced : Load Oem size is oversize!
+0x6bb54d09 : Calib status error!
+0x6bb54d1e : Oem head Ofst not match!
+0x6bb54d38 : Load head num is oversize!
+0x6bb54d54 : Load ptr size is oversize!
+0x6bb54d70 : check sum not match!
+0x6bb54d89 : Calibration version of tsa is old, impossible!
+0x6bb54db9 : Projcet ID mismatch!
+0x6bb54dcf : hwver mismatch!
+0x6bb54de0 : Dim1 Length mismatch!
+0x6bb54df7 : Dim2 Length mismatch!
+0x6bb54e11 : OEM table data block num is larger than tsa!
+0x6bb54e41 : OEM table MAJOR_VERSION different, incompatible!
+0x6bb54e79 : OEM table data Block parsing error!
+0x6bb54ed9 : PositionOffsetCalibrationProc: %d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d 
+0x6bb54f1d : %d-%d-%d-%d-%d-%d-%d 
+0x6bb54f38 : max g_positionOffsetCalLineNum:%d,%d
+0x6bb54f81 : SignalNormalizeCalibrationStart %d
+0x6bb54fa9 : SignalNormalizeCalibrationProc,%d,%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, 
+0x6bb55015 : Wrong line number!
+0x6bb5502b :  %d, %d
+0x6bb5503f : %d,%d,%d
+0x6bb5508c : %d, 
+0x6bb550d9 : SignalNormalizeCalibrationEnd
+0x6bb55110 : PositionOffsetCalibration
+0x6bb5512a : SignalNormalizeCalibration
+0x6bb55145 : linearTest
+0x6bb55150 : GenerateCalibrationBinFile
+0x6bb5516b : SaveCalibrationTable
+0x6bb55180 : GetPositionOffsetCalibrationLineIdx
+0x6bb551a8 : GetPositionOffsetCalibrationTotalLineNum
+0x6bb551d1 : GetLCDCoordinateOf
+0x6bb551e4 : GetLineTestResult
+0x6bb551f6 : GetCalibrationStatus
+0x6bb5520b : GetSignalNormalizeLineOffset
+0x6bb55264 : ASACalibration_GetTableLen
+0x6bb55280 : ASACalibration_GetTablePtr
+0x6bb5529c : ASACalibration_Load 
+0x6bb552b1 : %d, 
+0x6bb552b9 : ASACalibration_SetAfeHwVer:%s 
+0x6bb552e0 : ,%d,%d,%d
+0x6bb552eb : PATTERN: %d,%d
+0x6bb552fa : ,%d,%d,%d,%d
+0x6bb55307 : ,%d,%d
+0x6bb5530e : ,%d,%d,%d,%d,%d
+0x6bb55321 : IIR: Speed[ %d,%d,%d ] Coef[ %d ]
+0x6bb55349 : LOCK: flag[ %d,%d ] thold[ %d,%d ] offset[ %d,%d ]
+0x6bb55381 : LineFit: %d,fY,%d,A,%f,B,%f,dis,%d,maxdis,%d,lasedis,%d,cnt,%d, 
+0x6bb553c8 : cur fY,%d,A,%f,B,%f,dis,%d,maxdis,%d,lasedis,%d, 
+0x6bb553fa : pre,%d,%d,aft,%d,%d, 
+0x6bb55431 : CoorRevies: bfr[ %4d,%4d ]
+0x6bb5544c :  limit[ %4d,%4d ]
+0x6bb5545e :  avg[ %4d,%4d ] bufCnt %d
+0x6bb55479 : Stylus up !!!, CoorReviseInit!
+0x6bb554b1 : SSWITCH to %d,presatus,%d,trigger,%d,cnt,%d,%d,signal,%d,press,%d,time,%lld,%lld,%lld
+0x6bb55510 : ../../src/Extension/ASA/Alg/no_press_ink/asa_no_press_ink.c
+0x6bb55575 : rc == EOK
+0x6bb55581 :  RESET TILT PRMT ----NPI SIGNAL ABNORMAL COMPENSATION TILT PRMT !!!
+0x6bb555c9 :  curSignal < 80% max signal in ShortTermTable !!!
+0x6bb55601 :  curSignal < 70% max signal in Table !!!
+0x6bb55631 :  TEMP;loc %d, cur buf[ %d,%d,%d,%d,%d ], using sig[ %d,%d,%d,%d,%d ]
+0x6bb55678 : ,compensationtilt %d,cursig %d
+0x6bb55698 : ,maxsigInShortTerm %d, table [ %d,%d,%d,%d ]
+0x6bb556c5 : ,tilt [ %d, %d, %d ]
+0x6bb556da : ,scal [ %d ]
+0x6bb556e7 : ,tttx2 [ %d,%d,%d,%d ], 
+0x6bb55705 : DownCont++ %d
+0x6bb55714 : maxSignalInPreparePeriod %d
+0x6bb55731 : maxSignalInTable %d
+0x6bb55746 : preparePeriodCount %d
+0x6bb5575d : g_asaStatic.abnormal %d
+0x6bb55779 : HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+0x6bb557a0 : TILT NEED UPDATE!
+0x6bb557b9 : last coef [ %d ] , cur coef [ %d ]
+0x6bb557dd : NoPressInk: pos:
+0x6bb557ee : %d [ %d ],
+0x6bb557fa : NoPressInk: tiltc: %d, %d
+0x6bb55815 : DIFFFF:%d,%d,%d!
+0x6bb55827 : tx2 signal already record!
+0x6bb55849 : NPI SIGNAL ABNORMAL OVERF1SIGJUMPLIMIT,%d,%d,
+0x6bb55879 : NPI SIGNAL ABNORMAL OVERF10SIGJUMPLIMIT,%d,%d,
+0x6bb558a9 : NPI SIGNAL ABNORMAL PALM COUPLING NOISE,%d,
+0x6bb558d9 : NPI SIGNAL ABNORMAL TILT OFFSET,%d,%d,
+0x6bb55901 : NPI SIGNAL ABNORMAL TILT OFFSET2,%d,%d,%d
+0x6bb55931 : TILT not learned,and out of learned range!
+0x6bb55961 : NoPressInk: EnterT: %8d, ExitT: %8d,
+0x6bb55988 : tx1: %d, %d, %d, tx2: %d, %d, %d,
+0x6bb559aa : abnormal, %d
+0x6bb559c1 : ASA freq shift:TP start!!,at %lld
+0x6bb559e9 : ASA freq shift:BT start!!,at %lld
+0x6bb55a0c : ASA freq shift:TP Done!!
+0x6bb55a26 : ASA freq shift:BT Done!!
+0x6bb55a41 :  HPP3_BtPenFreqShiftingDebounceTimeOut:%lld,%lld,%lld,%lld,%lld
+0x6bb55a89 : ASA freq shift:TPIC request freq shift with new freq tx1:%4d, tx2:%4d
+0x6bb55ad1 : ASA freq shift:TP and BT Done!!
+0x6bb55af2 : ASA freq shift:shifting!!
+0x6bb55b0d : BT:State: %d
+0x6bb55b1a : , Tx1: %4d, Tx2:%4d
+0x6bb55b2e : , Press_Buf: %4d,%4d,%4d,%4d
+0x6bb55b51 : ASA freq shift:state %d, cur %d, %d, next %d, %d, target %d, %d, %d, %d
+0x6bb55ba1 : ASA freq shift:TPIC support freq num: %d
+0x6bb55bca : ,are: 
+0x6bb55bd1 :  %4d:
+0x6bb55bd7 : %4d,
+0x6bb55bdc :  TP BT freq illegal!
+0x6bb55bf1 : TP BT freq NOT match!
+0x6bb55c07 : BT freq NOT switch!
+0x6bb55c1c : Start:%lld
+0x6bb55c27 : ,tpStart:%lld
+0x6bb55c35 : ,btStart:%lld
+0x6bb55c43 : ,tpDone:%lld
+0x6bb55c50 : ,btDone:%lld
+0x6bb55c5d : ,done:%lld
+0x6bb55c69 :  bypass cur frame!!!!
+0x6bb55c80 :  F1 noise large!!!!
+0x6bb55c95 :  F2 noise large!!!!
+0x6bb55caa : lastSignal %d,%d,%d,%d,%d,
+0x6bb55cc9 :  Noisy need 10ms debounce:%lld,%lld,%lld
+0x6bb55cf9 : [warnning]:signal ratio abnormal!
+0x6bb55d21 : [warnning]:cur signal is too small abnormal!
+0x6bb55d51 : [warnning]:coor jump abnormal!
+0x6bb55d71 : noise,coorjump %d,%d,signal,%d,%d
+0x6bb55da0 : ,NO,TOUCH,
+0x6bb55dab : ,ALL,POSITIVE,
+0x6bb55dba : ,floating,TOUCH
+0x6bb55dca : ,NO-100,SIGNAL,
+0x6bb55dda : ,-100,SIGNAL,
+0x6bb55de9 : T111 self: 
+0x6bb55df5 : %6d, 
+0x6bb55dfc : T111 stylus: 
+0x6bb55e0a : ,bySig,%d,iir,%d,ratio,%f
+0x6bb55e24 : ,final,%d,
+0x6bb55e31 : PCD: ss_ab_type[ 0x%x,0x%x ],
+0x6bb55e4f : sig[ %d,%d ], sigdiff,%d
+0x6bb55e68 : ,tx_ss %d,%d,%d, r_ss,%d,%d,%d
+0x6bb55e87 : ,DIRECT %d,%d
+0x6bb55ea1 :  Stylus Frame PEAK overflow!!!
+0x6bb55ec0 : ../../src/Extension/ASA/Alg/peak/asa_peaks.c
+0x6bb55f15 : rc == EOK
+0x6bb5601a : UUUU%?
+0x6bb56031 :  EDGE SIGNAL TOO LOW, BL PRESS NOT ZERO!!!
+0x6bb56061 :  SIGNAL TOO LOW, BL PRESS NOT ZERO!!!
+0x6bb56089 : PRESS: cnt,%d,using,%d,iir,%d,%d,press,%d,%d,%d,%d
+0x6bb560c1 : FakePressAddNum=%d, FakePress=%d
+0x6bb56100 : ../../src/Extension/ASA/Alg/raw/asa_raw.c
+0x6bb56155 : rc == EOK
+0x6bb56160 :  rawsum:%d,f1f2:%d
+0x6bb56181 :  ASA TX2 signal:%4d
+0x6bb56196 :  signalRatio:%4d
+0x6bb561a8 :  lenLimit:%4d
+0x6bb561b7 : TILT:
+0x6bb561bd : d[ %d,%d ]
+0x6bb561c8 : d[%d,%d,%d ]
+0x6bb561d5 :  dIir[ %d,%d ]
+0x6bb561e4 :  t[ %d,%d ]
+0x6bb561f0 :  |d|:%d
+0x6bb561f8 :  dAftLimit[ %d,%d ]
+0x6bb5620c :  tAftLimit[ %d,%d ]
+0x6bb56220 :  tOut[ %d,%d ]
+0x6bb56240 : master
+0x6bb56280 : 0.0.3
+0x6bb562a1 :  PROTOCOL SET ERROR! MUST SELECT ONE PROTOCOL
+0x6bb562d1 :  PROTOCOL SET ERROR! MUST SET PROTOCL
+0x6bb562f8 :  MODE ERROR!
+0x6bb56309 :  STYLUS FRAME TX1 LINE DATA NULL
+0x6bb56331 :  STYLUS FRAME TX2 LINE DATA NULL
+0x6bb56353 : freq shift disable recheck
+0x6bb5636e :     FREQ SHIFTING RELEASE!
+0x6bb5638a :  bypass curFrame:%d
+0x6bb5639e : , rawAbnormal:%d
+0x6bb563af : , cmnAbnormal:%d
+0x6bb563db : dim1: %d
+0x6bb563e4 : dim2: %d
+0x6bb563ed : ,%d,%d,%d,%d
+0x6bb56401 : GridTx1Valid:%4d, GridTx2Valid:%4d
+0x6bb56425 : HW VER IS %d, USING PRMT %d
+0x6bb56459 : TEST X,%d, %d, Prsse:%d,linear:%d,%d,coor_revise:%d,%d,aft_flt:%d,%d,aft_jit:%d,%d,
+0x6bb564ad : sig TX1:%4d, TX2:%4d,
+0x6bb564c3 : tilt x:%4d, y:%4d,
+0x6bb56509 : [BT IN] Press_Buf:%4d,%4d,%4d,%4d
+0x6bb5652c : [BT IN] inkleackage:%4d
+0x6bb56545 : [BT IN] freq:%4d,%4d
+0x6bb5655b : [BT IN] status:%4d
+0x6bb56594 : PreFltTX1
+0x6bb5659e : AftFltTX1
+0x6bb565a8 : PreFltTX2
+0x6bb565b2 : WithBtn
+0x6bb565ba : AftRevise
+0x6bb565c4 : AftPredict
+0x6bb565cf : AftJit
+0x6bb565d6 : repaint
+0x6bb565de : DEFAULT
+0x6bb56640 : ../../src/Extension/AntiFalseTouch/AntiEdgeFalseTouch.c
+0x6bb5669d : rc == EOK
+0x6bb567a0 : ../../src/Extension/AntiFalseTouch/AntiFalseTouch_Process.c
+0x6bb56805 : rc == EOK
+0x6bb56851 :  *AFT Process in*:
+0x6bb56864 :  TouchNum = %d
+0x6bb5687c : ,%d)
+0x6bb56885 :  *AFT Process out*:
+0x6bb568a0 : AFT_FilterAlgoInit
+0x6bb568c0 : MaxSignal
+0x6bb568ca : GhostTouch
+0x6bb568d5 : Grip
+0x6bb568da : Thenar
+0x6bb568e1 : Film
+0x6bb568e8 : ../../src/Extension/BigData/BigData.c
+0x6bb56935 : rc == EOK
+0x6bb56990 : ../../src/Extension/BigData/BigData_Report.c
+0x6bb569e5 : rc == EOK
+0x6bb56b38 : ../../src/Extension/Data/TSA_DataAccess.c
+0x6bb56b8d : rc == EOK
+0x6bb56caf : LineData=
+0x6bb56cb9 : %4d,
+0x6bb56cfc : tx1_line_data=
+0x6bb56d0b : tx2_line_data=
+0x6bb56d1a : AccData=
+0x6bb56d30 : adb shell setenforce 0
+0x6bb56d47 : adb shell tpd framedata on
+0x6bb56d62 : adb shell tpd framedata off
+0x6bb56d80 : adb shell cat /data/vendor/log/thplog/fifo
+0x6bb56dab : adb shell tpd btfdata on
+0x6bb56dc4 : adb shell tpd btfdata off
+0x6bb56de0 : adb shell cat /data/vendor/log/thplog/btf
+0x6bb56e1d : fail to popen
+0x6bb56e2b : time=
+0x6bb56e35 : btf=
+0x6bb56e40 : ../../src/Extension/DataFromComPort/ComPortFormat.c
+0x6bb56e9d : rc == EOK
+0x6bb56eb2 : port.txt
+0x6bb56ebb : open port.txt fail
+0x6bb56f40 : ../../src/Extension/DataFromComPort/DataFromComPort.c
+0x6bb56f9d : rc == EOK
+0x6bb56fb3 : CMD:
+0x6bb56fb8 : ../../src/Extension/DataFromFile/DataFromFile.c
+0x6bb5700d : rc == EOK
+0x6bb57017 : AccData=
+0x6bb57020 : PostureData=
+0x6bb5702d : PostureData = 
+0x6bb5703c : time=[
+0x6bb57043 : irq_time=[
+0x6bb5704e : frame_no=[
+0x6bb57059 : scan_freq=[
+0x6bb57065 : scan_rate=[
+0x6bb57071 : scan_state=[
+0x6bb5707e : status=[
+0x6bb57087 : stylus_scan_freq=[
+0x6bb5709a : stylus_status=[
+0x6bb570aa : stylus_press=[
+0x6bb570b9 : stylus_btn=[
+0x6bb570c6 : interval=[
+0x6bb570d1 : intervalsys=[
+0x6bb570df : ctrlflag=[
+0x6bb570ea : extendCtrl=[
+0x6bb570f7 : feature=[
+0x6bb57101 : scenario=[
+0x6bb5710c : rotate=[
+0x6bb57115 : bt_status=[
+0x6bb57121 : bt_press=[
+0x6bb5712c : scan_rate_all=[
+0x6bb5713c : bt_status=
+0x6bb57147 : bt_freq=[
+0x6bb57151 : bt_ver=[
+0x6bb5715a : stylus_noise=[
+0x6bb57169 : stylus_newfreq=[
+0x6bb5717a : LineData=
+0x6bb57184 : tx1_line_data=
+0x6bb57193 : tx2_line_data=
+0x6bb571a2 : time=
+0x6bb571b0 : ../../src/Extension/DoubleReport/DoubleReport.c
+0x6bb57205 : rc == EOK
+0x6bb57210 : Double Report Trigger: delayUs = %d, TouchNum = %d
+0x6bb5724c : ,%d)
+0x6bb57260 : ../../src/Extension/EventAnalyzer/EventAnalyzer_Process.c
+0x6bb572c5 : rc == EOK
+0x6bb57410 : EventAnalyzer_IsTouchIdChanged
+0x6bb5742f : TOUCH_NUM
+0x6bb57439 : INTERNAL_TOUCH_NUM
+0x6bb5744c : CTRL_FLAG
+0x6bb57456 : SPECIFIC_CTRL_FLAG
+0x6bb57469 : IDLE_STATE
+0x6bb57474 : SPECIFIC_INT_EVENT
+0x6bb57487 : SPECIFIC_EXT_EVENT
+0x6bb5749a : TSA_EVENT
+0x6bb574a4 : LO_NUM
+0x6bb574ab : PROXIMITY_DETECTED
+0x6bb574be : AFE_SCAN_FREQ
+0x6bb574cc : AFE_SCAN_RATE
+0x6bb574da : AFE_WORK_MODE
+0x6bb574e8 : AFE_IDLE_INTERVAL
+0x6bb574fa : AFE_ACTIVE_INTERVAL
+0x6bb5750e : AFE_RAW_ABNORMAL
+0x6bb5751f : WAKE_UP
+0x6bb57527 : CALIBRATION
+0x6bb57533 : POWER_ON
+0x6bb5753c : RESET
+0x6bb57542 : FREQ_SHIFT
+0x6bb5754d : CHARGER_PLUGGED
+0x6bb5755d : FEATURE
+0x6bb57565 : GLOBAL_EXCEPTION
+0x6bb57576 : TOUCH0_EXCEPTION
+0x6bb57587 : SHAPE
+0x6bb5758d : ACTION
+0x6bb57594 : MAX_DIF
+0x6bb5759c : MIN_DIF
+0x6bb575a4 : MAX_RAW
+0x6bb575ac : MIN_RAW
+0x6bb575b4 : ABS_RAW2RAWDif
+0x6bb575c3 : ACTIVE_TO_IDLE_INTERVAL
+0x6bb575db : TIME_STAMP
+0x6bb575e6 : INTERNAL_SIDE_TOUCH_NUM
+0x6bb575fe : UT_BREAKPOINT
+0x6bb5760c : RESERVED01
+0x6bb57617 : STYLUS_FRAME_BYPASS
+0x6bb5762b : AFE_STATUS
+0x6bb57636 : SAFE_BASELINE
+0x6bb57644 : HAND_GESTURE
+0x6bb57651 : FROM_TO
+0x6bb57659 : IN_RANGE
+0x6bb57662 : OUT_RANGE
+0x6bb5766c : CHANGE
+0x6bb57740 : ../../src/Extension/Gesture/Gesture.c
+0x6bb57790 : g_gestureSamples.num == GESTURE_TEMPLATE_SAMPLE_NUM
+0x6bb577c6 : {%4d, %4d}, 
+0x6bb57841 : is2HandGame = %d
+0x6bb57852 :  isVideoMode = %d
+0x6bb57890 : ../../src/Extension/GripFilter/GripFilter_DeadZone.c
+0x6bb578ed : rc == EOK
+0x6bb57900 : ../../src/Extension/GripFilter/GripFilter_Region.c
+0x6bb5795d : rc == EOK
+0x6bb57967 : P212
+0x6bb579c0 : ../../src/Extension/HandGesture/HandGesture.c
+0x6bb57a15 : rc == EOK
+0x6bb57a40 : ../../src/Extension/HardwareAnalyzer/HardwareAnalyzer_Process.c
+0x6bb57aa5 : rc == EOK
+0x6bb57aaf : currHWException[0x%x],
+0x6bb57ac6 : prevHWException[0x%x],
+0x6bb57add : Time[%lld],
+0x6bb57ae9 : Ctrl[0x%x],
+0x6bb57af5 : Feature[0x%x],
+0x6bb57b04 : Exception[0x%x],
+0x6bb57b15 : MaxDif[%d],
+0x6bb57b21 : MinDif[%d],
+0x6bb57b2d : MaxRaw2RawDif[%d],
+0x6bb57b40 : MinRaw2RawDif[%d],
+0x6bb57b53 : TouchNum[%d],
+0x6bb57b61 : LONum[%d],
+0x6bb57b6c : numBrokenSensor[%d]
+0x6bb57b80 : %s[%d],
+0x6bb57b88 : %s[%ld],
+0x6bb57b98 : index < HARDWARE_EXCEPTION_LENGTH
+0x6bb57bba : rawVariation
+0x6bb57bc7 : maxRaw
+0x6bb57bce : minRaw
+0x6bb57bd5 : RawJumpTimeAftWakeUp
+0x6bb57bea : numAfeRawJump
+0x6bb57bf8 : RawUnstableTimeAftWakeUp
+0x6bb57c11 : numAfeRawUnstable
+0x6bb57c23 : touchEllipseRate
+0x6bb57c34 : touchAge
+0x6bb57c3d : MaxSig
+0x6bb57c44 : MinSig
+0x6bb57c4b : NumOverNoise
+0x6bb57c58 : rxNum <= TSA_MAX_DIM
+0x6bb57c6d : RFNoiseValue
+0x6bb57c7a : RFNoiseNum
+0x6bb57c85 : maxContinousNoisyFrameCnt
+0x6bb57c9f : numOverBigNoise
+0x6bb57caf : numOverHTI
+0x6bb57cba : numOverLTI
+0x6bb57cc5 : numOverNoise
+0x6bb57cd7 : activeTimeInterval
+0x6bb57cea : idleTimeInterval
+0x6bb57cfb : ellipseRate
+0x6bb57d07 : isLongTimeRawJumpDetected
+0x6bb57d21 : maxCMFNoiseValue
+0x6bb57d32 : CouplingNoise
+0x6bb57d40 : HIMA
+0x6bb57d45 : envTemp
+0x6bb57d4d : maxDif
+0x6bb57d60 : HardwareAnalyzer_Process
+0x6bb57da0 : ../../src/Extension/HardwareAnalyzer/HardwareAnalyzer_SensorBroken.c
+0x6bb57e0d : rc == EOK
+0x6bb57e17 : maxRaw
+0x6bb57e1e : minRaw
+0x6bb57e25 : BadChannel_IsDMDDetected
+0x6bb57e40 : brokenSensor detected by DIF_Z8
+0x6bb57e60 : brokenSensor isAnySensorBrokenByDif
+0x6bb57ea4 : com.tencent.mm
+0x6bb57eb3 : com.sina.weibo
+0x6bb57ec2 : com.taobao.taobao
+0x6bb57ed4 : com.ss.android.article.news
+0x6bb57ef0 : com.baidu.searchbox
+0x6bb57f05 : AppLog: 
+0x6bb57f0f : HotZone cleared
+0x6bb57fc1 : HotZone Id=%d, Not in the Expand Zone
+0x6bb57fe9 : HotZone Id=%d, Widget:%d#%d#%d#%d, Index:%d#%d, Size:%ddp, ExpandWidget:%d#%d#%d#%d
+0x6bb5803e : HotZone Id=%d, NO Widgets
+0x6bb58059 : HotZone Id=%d, Too close
+0x6bb58073 : HotZone Id=%d, In core area
+0x6bb58091 : HotZone Id=%d, Default not adjust
+0x6bb580b9 : HotZone %s total=%d(+%d), origin=%d(+%d), optimize=%d(+%d)
+0x6bb580f9 : HotZone %s total=%d, origin=%d, optimize=%d
+0x6bb58125 : HotZone, [%lld,%lld]
+0x6bb5813a : [%d,%d,%d,%d]
+0x6bb58160 : ../../src/Extension/Proximity/Proximity.c
+0x6bb581b5 : rc == EOK
+0x6bb581c1 : ProxOnDrvTime
+0x6bb581cf : ProxOnAFETime
+0x6bb581dd : ProxOffDrvTime
+0x6bb581ec : ProxOffAFETime
+0x6bb581fb : ProxOnDuration
+0x6bb58210 : ../../src/Extension/Proximity/ProximityBaseline.c
+0x6bb5826d : rc == EOK
+0x6bb58280 : ../../src/Extension/Proximity/ProximitySelf.c
+0x6bb582d8 : TSAPrmt(sys, dim1Len) < TSAPrmt(sys, dim2Len)
+0x6bb58306 : rc == EOK
+0x6bb58310 : TSAPrmt(prox, tholdSensorAlongYDirection) != 0
+0x6bb583d9 : TRIGGER_EVENTS_TOUCH_DOWN
+0x6bb583f3 : TRIGGER_EVENTS_LIFT_OFF
+0x6bb5840b : TRIGGER_EVENTS_DOWN_OFF
+0x6bb58423 : TRIGGER_EVENTS_SCAN_FREQ
+0x6bb5843c : TRIGGER_EVENTS_SCAN_RATE
+0x6bb58458 : TRIGGER_EVENTS_IDLE_EXIT_BY_TSA
+0x6bb58478 : TRIGGER_EVENTS_CTRL_FLAG
+0x6bb58498 : TRIGGER_EVENTS_TSA_KEY_EVENT_BASELINE_RESET
+0x6bb584c8 : TRIGGER_EVENTS_TSA_KEY_EVENT_RECAL
+0x6bb584f0 : TRIGGER_EVENTS_TSA_KEY_EVENT_ID_TRACKING
+0x6bb58520 : TRIGGER_EVENTS_TSA_KEY_EVENT_CMF
+0x6bb58548 : TRIGGER_EVENTS_TSA_KEY_EVENT_HARDWARE
+0x6bb58570 : TRIGGER_EVENTS_TSA_KEY_EVENT_TOUCH_BY_CMF
+0x6bb585a0 : TRIGGER_EVENTS_TSA_KEY_EVENT_Z8_FAIL
+0x6bb585c8 : TRIGGER_EVENTS_TSA_KEY_EVENT_EXCEPTION
+0x6bb585f0 : TRIGGER_EVENTS_TSA_KEY_EVENT_BASELINE_COMPENSATION
+0x6bb58628 : TRIGGER_EVENTS_TSA_KEY_EVENT_STYLUS_CONFUSED
+0x6bb58658 : TRIGGER_EVENTS_TSA_KEY_EVENT_PROCESS_TIMEOUT
+0x6bb58688 : TRIGGER_EVENTS_TSA_KEY_EVENT_ABNORMAL_TOUCH
+0x6bb586b8 : TRIGGER_EVENTS_TSA_KEY_EVENT_ACTIVE_STYLUS
+0x6bb586e8 : TRIGGER_EVENTS_PROXIMITY_DETECTED
+0x6bb5870a : Unknown event
+0x6bb587c0 : RecordTrigger_Process
+0x6bb587e0 : type=%d,LiftOff=%d,age=%d,Z4=%d,dist=%d,major=%d,minor=%d,ageBD=%d,x=%d,y=%d,prob=%d,thresh=%d 
+0x6bb58840 : ../../src/Extension/RecordTrigger/TouchFeature.c
+0x6bb5889d : rc == EOK
+0x6bb588d0 : ../../src/Extension/SHBVolumeData/SHBVolumeData.c
+0x6bb5892d : rc == EOK
+0x6bb58938 : AppLog: 
+0x6bb58948 : Ring-shbEvent[phone on left hand]
+0x6bb58970 : Ring-shbEvent[phone on right hand]
+0x6bb58998 : Ring-shbEvent[volume trigger on left hand]
+0x6bb589c8 : Ring-shbEvent[volume trigger on right hand]
+0x6bb589f4 : Ring-shbEvent[volume+]
+0x6bb58a0b : Ring-shbEvent[volume-]
+0x6bb58a22 : Ring-shbEvent[volume0]
+0x6bb58a39 : Ring-shbEvent[powerKey]
+0x6bb58a58 : Ring-shbEvent[volume trigger off]
+0x6bb58a7a : Ring-volumeKey[+On]
+0x6bb58a8e : Ring-volumeKey[+Off]
+0x6bb58aa3 : Ring-volumeKey[-On]
+0x6bb58ab7 : Ring-volumeKey[-Off]
+0x6bb58acc : Ring-volumeKey[xOn]
+0x6bb58ae0 : Ring-volumeKey[xOff]
+0x6bb58b01 : Self Signal Null Pointer
+0x6bb58b20 : ../../src/Extension/SS/SS_Process.c
+0x6bb58b6d : rc == EOK
+0x6bb58bb1 : Peak removed by SS(dim1:%d,dim2:%d)
+0x6bb58be0 : ../../src/Extension/SafeBaseline/BaselineQueue/BaselineQueue.c
+0x6bb58c45 : rc == EOK
+0x6bb58c50 : ../../src/Extension/SafeBaseline/SafeBaseline.c
+0x6bb58ca5 : rc == EOK
+0x6bb58d28 : ../../src/Extension/SafeBaseline/SafeBaselineReset.c
+0x6bb58d85 : rc == EOK
+0x6bb58da0 : ../../src/Extension/SensorGesture/SensorGesture.c
+0x6bb58dfd : rc == EOK
+0x6bb58e20 : ../../src/Extension/SideTouch/SideTouch.c
+0x6bb58e75 : rc == EOK
+0x6bb58e7f : AbnormalSideBaselineDetected
+0x6bb58f88 : ../../src/Extension/SideTouch/SideTouch_BaselineReset.c
+0x6bb58fe5 : rc == EOK
+0x6bb59000 : ../../src/Extension/SideTouch/SideTouch_Gesture.c
+0x6bb5905d : rc == EOK
+0x6bb59067 : camera
+0x6bb5906e : VolumeForce
+0x6bb5907a : VolumeTriggerFlick
+0x6bb5908d : VolumeTriggerMove
+0x6bb5909f : VolumeTriggerClickFlick
+0x6bb590b7 : VolumeTriggerForceFlick
+0x6bb590cf : VolumeTouch
+0x6bb590db : VolumeTriggerDoubleFlick
+0x6bb590f4 : VolumeMute
+0x6bb590ff : VolumeOffMove
+0x6bb5910d : PowerOffDoubleClick
+0x6bb59121 : VolumeTriggerDoubleClick
+0x6bb5913a : UnknownTask
+0x6bb59147 : AppLog: 
+0x6bb59150 : Ring-guiEvent2[on]
+0x6bb59163 : Ring-guiEvent2[off]
+0x6bb59177 : Ring-guiEvent[on]
+0x6bb59189 : Ring-guiEvent[off]
+0x6bb591a0 : SIDETOUCH_ACTION_FAILED_MIN_TIME
+0x6bb591c8 : SIDETOUCH_ACTION_FAILED_MAX_TIME
+0x6bb591f0 : SIDETOUCH_ACTION_FAILED_MIN_MOVE
+0x6bb59218 : SIDETOUCH_ACTION_FAILED_MAX_TIME_TO_MOVE
+0x6bb59248 : SIDETOUCH_ACTION_FAILED_MAX_MOVE
+0x6bb59270 : SIDETOUCH_ACTION_FAILED_MIN_TOUCH
+0x6bb59298 : SIDETOUCH_ACTION_FAILED_MAX_TOUCH
+0x6bb592c0 : SIDETOUCH_ACTION_FAILED_MOVE_SPEED
+0x6bb592e8 : SIDETOUCH_ACTION_FAILED_PART_OF_CORE
+0x6bb59310 : SIDETOUCH_ACTION_FAILED_TOUCH_DOWN_OUTOF_AREA
+0x6bb59340 : SIDETOUCH_ACTION_FAILED_IS_SEPARATED_TOUCH
+0x6bb59370 : SIDETOUCH_ACTION_FAILED_IS_EXCLUDED_BY_OFF_DETECTION
+0x6bb593a8 : SIDETOUCH_ACTION_FAILED_IS_EXCLUDED_BY_GLOBAL_ANTI_TRIGGER
+0x6bb593e8 : SIDETOUCH_ACTION_FAILED_IS_EXCLUDED_BY_LOCAL_ANTI_TRIGGER
+0x6bb59428 : SIDETOUCH_ACTION_FAILED_IS_EXCLUDED_DUE_TO_UNSTABLE_SIGNAL
+0x6bb59463 : NONE
+0x6bb594a8 : VolumeGUIOnTimeOut
+0x6bb594bb : VolumeGUIOffTimeOut
+0x6bb594d0 : TouchesPrpt(rptNum) <= TSA_MAX_TOUCH_NUM
+0x6bb594f9 : VolumeSlider
+0x6bb59510 : [TimeOff]%d
+0x6bb5951c : [MaxSig]%d
+0x6bb59527 : [MaxSigRatio]%d
+0x6bb59537 : [MaxTouchRatio]%d
+0x6bb59549 : [TouchTimeRatio]%d
+0x6bb5955c : [AntiTriggerState]%d
+0x6bb59571 : [IsRejected]%d
+0x6bb59580 : [TriggerSensitivity]%d
+0x6bb59598 : ../../src/Extension/SideTouch/SideTouch_Log.c
+0x6bb595ed : rc == EOK
+0x6bb595f7 : TSA_RING
+0x6bb5960c : _VOLUME_SLIDER
+0x6bb59621 : [PrevTouchPrpt(preIdx, failureInfo.failedItem)]%d
+0x6bb59653 : [FailItem]%s
+0x6bb59660 : [FailValue]%d
+0x6bb5966f : RingPrpt:
+0x6bb59679 : [Version]%s_V%d.%d.%d
+0x6bb5968f : [TimeStamp]%ld
+0x6bb5969e : [Task]%s
+0x6bb596a7 : [Gesture]VolumeSlider
+0x6bb596bd : [Gesture]VolumeDoubleFlick
+0x6bb596d8 : [Gesture]VolumeDoubleClick
+0x6bb596f3 : [Gesture]VolumeUnknown
+0x6bb5970a : [ScreenState]ScreenLeft
+0x6bb59722 : [ScreenState]ScreenDown
+0x6bb5973a : [ScreenState]ScreenRight
+0x6bb59753 : [ScreenState]ScreenUp
+0x6bb59769 : [MinTouch]%d
+0x6bb59776 : [MaxTouch]%d
+0x6bb59783 : [StartXPos]%d
+0x6bb59791 : [MinXPos]%d
+0x6bb5979d : [MaxXPos]%d
+0x6bb597a9 : [StartYPos]%d
+0x6bb597b7 : [MinYPos]%d
+0x6bb597c3 : [MaxYPos]%d
+0x6bb597cf : [MinSideRatio]%d
+0x6bb597e0 : [MaxSideRatio]%d
+0x6bb597f1 : [MoveInTime]%d
+0x6bb59800 : [TimeToMove]%d
+0x6bb5980f : [Move]%d
+0x6bb59818 : [Time]%d
+0x6bb59821 : [State]%d
+0x6bb59831 : AppLog: 
+0x6bb59840 : Ring-pressureEvent[volumePressed]
+0x6bb59868 : Ring-pressureEvent[volumeReleased]
+0x6bb59890 : ../../src/Extension/SideTouch/SideTouch_Pressure.c
+0x6bb598ed : rc == EOK
+0x6bb59900 : ../../src/Extension/SideTouch/SideTouch_Report.c
+0x6bb5995d : sideIdx < TSA_MAX_TOUCH_NUM
+0x6bb59979 : gridIdx < TSA_MAX_TOUCH_NUM
+0x6bb599a0 : SideTouch_ReportProcess
+0x6bb599c0 : ../../src/Extension/SideTouch/SideTouch_SHBBaseline.c
+0x6bb59a1d : rc == EOK
+0x6bb59a90 : SmartCover_Process
+0x6bb59e78 : , TSA_RptLONum()=%d
+0x6bb59f59 : StylusAFT: Id=%d, Age: %d out of range, Unsuppressed
+0x6bb59f91 : StylusAFT: Id=%d, (noise level %d is over limit, stylusAFT closed)
+0x6bb5a011 : StylusAFT: Id=%d, withdrawFlag=%d, suppressNum=%d, maxAxisMajor=%d, ellipseRate=%d
+0x6bb5a064 : (Suppressed)
+0x6bb5a071 : (Withdrawn)
+0x6bb5a086 : InvalidCommand
+0x6bb5a095 : InvalidParameter
+0x6bb5a0a6 : CommandDisabled
+0x6bb5a0b8 : ../../src/Extension/TSACommand/TSACommand.c
+0x6bb5a10d : rc == EOK
+0x6bb5a119 : loop < TSA_CMD_PRMT_MAX
+0x6bb5a133 : dumplog
+0x6bb5a13b : logon
+0x6bb5a141 : logoff
+0x6bb5a148 : THP_Log_GhostTouch
+0x6bb5a15b : THP_Log_Commander
+0x6bb5a16d : sensorEnabled
+0x6bb5a17b : sensorRate
+0x6bb5a186 : UnknownTask
+0x6bb5a192 : THP_Ring_ResetSideGesture
+0x6bb5a1ac : THP_Ring_ExposeSideArea
+0x6bb5a1c4 : THP_Ring_MapSideArea
+0x6bb5a1e0 : THP_Ring_MapSideGestureToKeyCode
+0x6bb5a208 : THP_Ring_MapSideGestureToTPEvent
+0x6bb5a229 : THP_Ring_RemoveSideArea
+0x6bb5a241 : THP_Ring_AddSideGesture
+0x6bb5a259 : THP_Ring_SetVolumeGUIInfo
+0x6bb5a273 : THP_Ring_EnterSpecialBeta
+0x6bb5a28d : THP_Ring_ExitSpecialBeta
+0x6bb5a2a6 : THP_Ring_EnterBetaTask
+0x6bb5a2bd : THP_Ring_ExitBetaTask
+0x6bb5a2d3 : THP_Ring_SetGestureTag
+0x6bb5a2ea : %s#%d
+0x6bb5a2f0 : version:3+whole
+0x6bb5a300 : version:3+main
+0x6bb5a30f : version:3+minor
+0x6bb5a31f : %s#%s#%s#%d#%d#%d
+0x6bb5a331 : %s#%d#%d
+0x6bb5a33a : %s#%s
+0x6bb5a340 : AccData
+0x6bb5a348 : AccSensor
+0x6bb5a356 : tp freq:%d,%d, 
+0x6bb5a366 : bt freq:%d,%d, 
+0x6bb5a3a6 : %d#%d
+0x6bb5a3ac : Process:%s start OK! 
+0x6bb5a3c2 : Process:%s end OK! 
+0x6bb5a3da : prmt:%s set %d OK! 
+0x6bb5a3ee : OK! %d
+0x6bb5a3f5 : THP_ASA_GetFreqSupport
+0x6bb5a40c : THP_ASA_GetCurFreq
+0x6bb5a41f : THP_ASA_ForceSetToNewFreq
+0x6bb5a439 : THP_ASA_EnableFreqShift
+0x6bb5a451 : THP_ASA_SetTpPenMatchCode
+0x6bb5a46b : THP_ASA_GetSignalData
+0x6bb5a488 : THP_ASA_TpCalibrationStartProcess
+0x6bb5a4b0 : THP_ASA_TpCalibrationEndProcess
+0x6bb5a4d0 : THP_ASA_TpCalibrationGetInfo
+0x6bb5a4ed : THP_ASA_TpCalibrationSetInfo
+0x6bb5a50a : THP_ASA_EnableCalibrionTable
+0x6bb5a529 : appName:%s,appType=%d,reportLevel=%d
+0x6bb5a54e : THP_IsSupported
+0x6bb5a55e : THP_Ring_
+0x6bb5a568 : THP_Log_
+0x6bb5a571 : THP_SetAppFeature
+0x6bb5a583 : THP_SetXCoreArea
+0x6bb5a594 : THP_GetVersion
+0x6bb5a5a3 : THP_GetBetaGripStatus
+0x6bb5a5b9 : THP_GetState
+0x6bb5a5c6 : THP_GetEvent
+0x6bb5a5d3 : THP_InformUserAppCrash
+0x6bb5a5ea : THP_InformTypingStatus
+0x6bb5a601 : THP_SetFoldState
+0x6bb5a612 : THP_IsProximitySupported
+0x6bb5a62b : THP_EnableFeature
+0x6bb5a63d : THP_DisableFeature
+0x6bb5a650 : THP_GetFeatures
+0x6bb5a660 : THP_EnableScenario
+0x6bb5a673 : THP_DisableScenario
+0x6bb5a687 : THP_GetScenarios
+0x6bb5a698 : THP_GetPhoneHeldHand
+0x6bb5a6ad : THP_IsPhoneUnderWater
+0x6bb5a6c3 : THP_SetEnvironmentTemperature
+0x6bb5a6e1 : THP_GetSupportedGestureList
+0x6bb5a6fd : THP_SetSensorData
+0x6bb5a70f : THP_GetSensorInterval
+0x6bb5a725 : THP_SetAccData
+0x6bb5a734 : THP_GetEnabledSensorGesture
+0x6bb5a750 : THP_SetSensorGesture
+0x6bb5a768 : THP_SetSensorGestureWithTimeStamp
+0x6bb5a78a : THP_SetSupportedSensorGesture
+0x6bb5a7a8 : THP_ResetBaseline
+0x6bb5a7ba : THP_DisableBaselineUpdate
+0x6bb5a7d4 : THP_EnableBaselineUpdate
+0x6bb5a7ed : THP_GetRunTimePrmt
+0x6bb5a800 : THP_SetRunTimePrmt
+0x6bb5a813 : THP_GetTuneTimePrmt
+0x6bb5a827 : THP_SetTuneTimePrmt
+0x6bb5a83b : THP_SetVolumeGUIInfo
+0x6bb5a850 : THP_SetPressureGesture
+0x6bb5a867 : THP_SetVirtualKey
+0x6bb5a879 : THP_ASA_
+0x6bb5a882 : THP_UpdateViewsLocation
+0x6bb5a8a3 : CommandIn: %s
+0x6bb5a8b9 : CommandIn: too long command (%d)!!!
+0x6bb5a8e1 : CommandIn: %s -- (NOTE: THP command disabled)
+0x6bb5a910 : CommandIn: NULL pointer!!!
+0x6bb5a92c : CommandOut: %s
+0x6bb5a940 : TSA_ExecuteCommand
+0x6bb5a960 : ../../src/Extension/TSAFold/TSAFold_Prmt.c
+0x6bb5a9b5 : rc == EOK
+0x6bb5a9c0 : ../../src/Extension/TSAFold/TSAFold_Remap.c
+0x6bb5aa15 : rc == EOK
+0x6bb5aa20 : GLOBAL_EXCEPTION
+0x6bb5aa31 : FEATURE
+0x6bb5aa39 : MAX_SIGNAL
+0x6bb5aa44 : TOUCH_MODE
+0x6bb5aa4f : TOUCH_MODE_STAGE
+0x6bb5aa60 : TOUCH_STATE
+0x6bb5aa6c : TOUCH_SIZE
+0x6bb5aa77 : TOUCH_THOLD
+0x6bb5aa83 : BASELINE_THOLD
+0x6bb5aa92 : TOUCH_ZONE_THOLD
+0x6bb5aaa3 : SIGNAL_SUM
+0x6bb5aaae : TOUCH_Z9
+0x6bb5aab7 : TOUCH_Z4
+0x6bb5aac0 : SENSOR_ORG_RAW
+0x6bb5aacf : SENSOR_PRECMF_RAW
+0x6bb5aae1 : SENSOR_AFTCMF_RAW
+0x6bb5aaf3 : SENSOR_DIFF
+0x6bb5aaff : SENSOR_BASELINE
+0x6bb5ab0f : BASELINE_STAGE
+0x6bb5ab1e : SENSOR_SAFE_BASELINE
+0x6bb5ab33 : DIM1_RAW
+0x6bb5ab3c : DIM1_DIFF
+0x6bb5ab46 : DIM1_BASELINE
+0x6bb5ab54 : DIM2_RAW
+0x6bb5ab5d : DIM2_DIFF
+0x6bb5ab67 : DIM2_BASELINE
+0x6bb5ab75 : WATER_SIZE
+0x6bb5ab80 : TEMP0
+0x6bb5ab86 : TEMP1
+0x6bb5ab8c : TEMP2
+0x6bb5ab92 : TEMP3
+0x6bb5ab98 : MAX_ELLIPSE_RATE
+0x6bb5aba9 : X_POSITION
+0x6bb5abb4 : Y_POSITION
+0x6bb5abbf : X_POSITION_PRE_FILTER
+0x6bb5abd5 : Y_POSITION_PRE_FILTER
+0x6bb5abeb : X_VELOCITY
+0x6bb5abf6 : Y_VELOCITY
+0x6bb5ac01 : X_POS_AFTER_IIR_FILTER
+0x6bb5ac18 : Y_POS_AFTER_IIR_FILTER
+0x6bb5ac2f : Z_VAL
+0x6bb5ac35 : Z_VAL_PREVTOCUR_RATIO
+0x6bb5ac4b : PROX_TOUCH_DOWN_THOLD
+0x6bb5ac61 : PROX_TOUCH_ZONE_THOLD
+0x6bb5ac77 : PROX_LIFT_OFF_THOLD
+0x6bb5ac8b : PROX_IS_TO_RESET_BASELINE
+0x6bb5aca5 : PROX_BASELINE
+0x6bb5acb3 : PROX_RAW
+0x6bb5acbc : SIDE_BASELINE
+0x6bb5acca : xACC
+0x6bb5accf : yACC
+0x6bb5acd4 : zAcc
+0x6bb5acd9 : status
+0x6bb5ace0 : tx1_freq
+0x6bb5ace9 : tx2_freq
+0x6bb5acf2 : afe_press
+0x6bb5acfc : press
+0x6bb5ad02 : bt_connect
+0x6bb5ad0d : bt_freq1
+0x6bb5ad16 : bt_freq2
+0x6bb5ad1f : bt_press1
+0x6bb5ad29 : bt_press2
+0x6bb5ad33 : bt_press3
+0x6bb5ad3d : bt_press4
+0x6bb5ad47 : afe_btn
+0x6bb5ad53 : TX1_Dim1
+0x6bb5ad5c : TX1_Dim2
+0x6bb5ad65 : TX2_Dim1
+0x6bb5ad6e : TX2_Dim2
+0x6bb5ad77 : TX1_Grid
+0x6bb5ad80 : TX2_Grid
+0x6bb5ad89 : NoPressInkEnter
+0x6bb5ad99 : NoPressInkExit
+0x6bb5ada8 : tx1_signal_x
+0x6bb5adb5 : tx1_signal_y
+0x6bb5adc2 : tx2_signal_x
+0x6bb5adcf : tx2_signal_y
+0x6bb5addc : tx1_x_preflt
+0x6bb5ade9 : tx1_y_preflt
+0x6bb5adf6 : tx1_x_Revise
+0x6bb5ae03 : tx1_y_Revise
+0x6bb5ae10 : tx1_x
+0x6bb5ae16 : tx1_y
+0x6bb5ae1c : tx2_x_preflt
+0x6bb5ae29 : tx2_y_preflt
+0x6bb5ae36 : tx2_x
+0x6bb5ae3c : tx2_y
+0x6bb5ae42 : preflt_x_tilt
+0x6bb5ae50 : preflt_y_tilt
+0x6bb5ae5e : x_tilt
+0x6bb5ae65 : y_tilt
+0x6bb5afe0 : ../../src/Extension/TSAWrapper/TSAWrapper.c
+0x6bb5b035 : rc == EOK
+0x6bb5b048 : ../../src/Extension/TSA_AFE/TSA_AFE_Check.c
+0x6bb5b0a0 : TSA_AFE_AUTO_CHECK_FREQ_SHIFT_ABNORMAL
+0x6bb5b1cb : ShiftToAbnormalFreq
+0x6bb5b1e0 : TSA_AFE_AUTO_CHECK_FREQ_SHIFT_PENDING
+0x6bb5b206 : NoFreqShiftDoneflag
+0x6bb5b270 : TSA_AFE_AUTO_IDLE_CHECK_EXIT_ABNORMAL
+0x6bb5b2af : AbnormalExitIdleMode
+0x6bb5b2c8 : TSA_AFE_AUTO_IDLE_CHECK_EXIT_FAILED
+0x6bb5b306 : FailedExitIdleMode
+0x6bb5b341 : Proximity Auto Check: loop(%d), state(%d)
+0x6bb5b371 : timeDurationToExitProximity_AFE(%lld) <= 350 -> failed
+0x6bb5b3a9 : timeDurationToExitProximity(%lld) <= 500 -> failed
+0x6bb5b3e1 : timeDurationToEnterProximity_AFE(%lld) <= 150 -> failed
+0x6bb5b421 : timeDurationToEnterProximity(%lld) <= 250 -> failed
+0x6bb5b459 : maxRawShift(%d) <= 150 -> failed
+0x6bb5b481 : minRawShift(%d) >= -150 -> failed
+0x6bb5b4a9 : Proximity Auto Check Done: FAIL!!!
+0x6bb5b4d1 : Proximity Auto Check Done: PASS!!!
+0x6bb5b4f9 : maxTimeDurationToExitProximity(%lld VS 600), AFEPart(%lld) @%lld
+0x6bb5b541 : maxTimeDurationToEnterProximity(%lld VS 300), AFEPart(%lld) @%lld
+0x6bb5b584 : maxRawShift(%d VS 200) @%lld
+0x6bb5b5a2 : inRawShift(%d VS -200) @%lld
+0x6bb5b5bf : MaxRaw2RawDif_exceed
+0x6bb5b5d9 : MaxRaw2RawDif(%d) > %d -> failed
+0x6bb5b5fa : MinRaw2RawDif_exceed
+0x6bb5b611 : -g_minRaw2RawDif(%d) > %d -> failed
+0x6bb5b635 : FreqShiftLatency_exceed
+0x6bb5b651 : FreqShiftLatency(%lld) > 70 -> failed
+0x6bb5b679 : FreqShiftLatency(%lld) > 50 -> failed
+0x6bb5b6a1 : Freq Shift Auto Checking (%d)
+0x6bb5b6c1 : g_fromRate: %d, g_fromFreq: %d, g_toRate: %d, g_toFreq: %d
+0x6bb5b701 : currRate: %d, currFreq: %d, nextRate: %d, nextFreq: %d
+0x6bb5b739 : maxRaw2RawDif: %d at time: %lld
+0x6bb5b761 : minRaw2RawDif: %d at time: %lld
+0x6bb5b789 : maxNumRaw2RawOverNoise: %d at time: %ld
+0x6bb5b7b9 : maxFreqShiftLatency: %lld at time: %lld
+0x6bb5b7e1 : IDLEEnterTime_exceed
+0x6bb5b7f9 : IDLEEnterTime(%lld) > 200 -> failed
+0x6bb5b821 : IDLEEnterTime(%lld) > 50 -> failed
+0x6bb5b844 : IDLEExitTime_exceed
+0x6bb5b859 : IDLEExitTime(%ld) > 200 -> failed
+0x6bb5b881 : TSAStatic(sys, timeStamp)(%lld)
+0x6bb5b8a2 : timeStampToExitIDLE(%lld)
+0x6bb5b8c1 : IDLEExitTime(%lld) > 50 -> failed
+0x6bb5b8e3 : IDLEIntervalTime_exceed
+0x6bb5b901 : IDLEIntervalTime(%lld) > 2000 -> failed
+0x6bb5b931 : IDLEIntervalTime(%lld) > 1200 -> failed
+0x6bb5b959 : IDLEIntervalTime_TooShort
+0x6bb5b979 : IDLEIntervalTime(%lld) < 500 -> failed
+0x6bb5b9a1 : IDLEIntervalTime(%lld) < 800 -> failed
+0x6bb5b9c9 : Freq Shift Auto Check Done!
+0x6bb5b9e9 : maxRaw2RawDif: %d, g_minRaw2RawDif: %d
+0x6bb5ba11 : maxFreqShiftLatency: %lld 
+0x6bb5ba31 : maxRaw2RawDif(%d) > %d -> failed at time: %lld
+0x6bb5ba61 : -g_minRaw2RawDif(%d) > %d -> failed at time: %lld
+0x6bb5ba99 : maxFreqShiftLatency(%lld) > 70 -> failed at time: %lld
+0x6bb5bad1 : IDLE Auto Checking (%dHz, %dKHz, %d, %d)
+0x6bb5bb01 : maxIDLEEnterTime: %lld at time: %lld
+0x6bb5bb29 : maxIDLEExitTime: %lld at time: %lld
+0x6bb5bb51 : maxIDLEIntervalTime: %lld at time: %lld
+0x6bb5bb81 : minIDLEIntervalTime: %lld at time: %lld
+0x6bb5bbaa : numIDLEAbnormalExt: %d 
+0x6bb5bbc2 : Done
+0x6bb5bbc9 : maxRaw2RawDif: %d, g_minRaw2RawDif: %d, g_maxNumRaw2RawOverNoise: %d, 
+0x6bb5bc11 : maxFreqShiftLatency(%lld) > 50 -> failed at time: %lld
+0x6bb5bc49 : IDLE Auto Check Done!
+0x6bb5bc61 : maxIDLEEnterTime(%lld) > 50 -> failed at time: %lld
+0x6bb5bc99 : maxIDLEExitTime(%lld) > 50 -> failed at time: %lld
+0x6bb5bcd1 : maxIDLEExitTime: %lld at time: %ld
+0x6bb5bcf9 : maxIDLEIntervalTime(%lld) > 1200 -> failed at time: %lld
+0x6bb5bd39 : minIDLEIntervalTime(%lld) < 800 -> failed at time: %lld
+0x6bb5bd97 : CapsIsNull
+0x6bb5bdba : FrameIsNull
+0x6bb5bde8 : InfoIsNull
+0x6bb5be17 : rc == EOK
+0x6bb5be30 : Novatek
+0x6bb5be3c : ALPS491000
+0x6bb5be47 : ALPS491600
+0x6bb5be52 : JHSN
+0x6bb5be58 : ../../src/Extension/TSA_AFE/TSA_AFE_Process.c
+0x6bb5bead : rc == EOK
+0x6bb5beb7 : UnKnown
+0x6bb5bec4 : ALPS491600_P5007_T91
+0x6bb5bed9 : AFE_Process
+0x6bb5bef0 : ../../src/Extension/TSA_AFE/TSA_AFE_Scan.c
+0x6bb5bf45 : rc == EOK
+0x6bb5bf4f : ALPS470800
+0x6bb5bf90 : freqIndex < THP_MAX_SCAN_FREQ_NUMBER_SUPPORTED
+0x6bb5bff0 : g_thpAFEStruct.caps->scan_freq = [
+0x6bb5c050 : g_thpAFEStruct.caps->scan_rate = [
+0x6bb5c0a8 : g_thpAFEStruct.caps->stylus_scan_freq = [
+0x6bb5c0f0 : index < THP_MAX_SCAN_FREQ_NUMBER_SUPPORTED
+0x6bb5c148 : g_thpAFEStruct.caps->num_scan_freq <= THP_MAX_SCAN_FREQ_NUMBER_SUPPORTED
+0x6bb5c198 : g_thpAFEStruct.caps->num_scan_rate > THP_MAX_SCAN_RATE_NUMBER_SUPPORTED
+0x6bb5c1e0 : ../../src/Extension/TSA_AFE/TSA_AFE_Trans.c
+0x6bb5c238 : srcCaps->num_scan_freq <= THP_MAX_SCAN_FREQ_NUMBER_SUPPORTED
+0x6bb5c278 : srcCaps->num_scan_rate <= THP_MAX_SCAN_RATE_NUMBER_SUPPORTED
+0x6bb5c4dc :  tp_algo: area = %d%%
+0x6bb5c4f3 : AppLog: 
+0x6bb5c4fc : TSA_UDFP_EVENT enabled
+0x6bb5c516 : TSA_UDFP_EVENT disabled
+0x6bb5c80d : TSA_UDFP_EVENT_FINGER_DOWN
+0x6bb5c828 : TSA_UDFP_EVENT_FINGER_UP
+0x6bb5c841 : TSA_UDFP_EVENT_HOVER_DOWN
+0x6bb5c85b : TSA_UDFP_EVENT_HOVER_UP
+0x6bb5c8b0 : UDFPEvent_Process
+0x6bb5c900 : ../../src/Extension/VirtualKey/VirtualKey.c
+0x6bb5c955 : rc == EOK
+0x6bb5c960 : AppLog: 
+0x6bb5c969 : Ring-VirtualKey[+On]
+0x6bb5c97e : Ring-VirtualKey[+Off]
+0x6bb5c994 : Ring-VirtualKey[-On]
+0x6bb5c9a9 : Ring-VirtualKey[-Off]
+0x6bb5c9c0 : ../../src/Feature/SignalDisparity/SignalDisparity.c
+0x6bb5ca1d : rc == EOK
+0x6bb5ca30 : SignalDisparity_PostProcess
+0x6bb5ca50 : SignalDisparity_Process
+0x6bb5ca70 : fail to popen
+0x6bb5ca80 : ../../src/Plugin/Context/Context.c
+0x6bb5cacd : rc == EOK
+0x6bb5cbf4 : KeyFrame$
+0x6bb5cc05 : KeyFrame=
+0x6bb5cc10 : ../../src/Plugin/IDE/TSA_IDE.c
+0x6bb5cc58 : g_tsaIdeSurSensor.num < TSAIDE_SENSOR_UNIT_LIMIT
+0x6bb5cc90 : g_tsaIdeSurPoint.num < TSAIDE_POINT_UNIT_LIMIT
+0x6bb5ccc0 : PreFiltTouchNum = %d
+0x6bb5ccde : ,%d)
+0x6bb5cd44 : size of INT8U: 
+0x6bb5cd55 : size of INT8S: 
+0x6bb5cd66 : size of INT16U: 
+0x6bb5cd78 : size of INT16S: 
+0x6bb5cd8a : size of INT32U: 
+0x6bb5cd9c : size of INT32S: 
+0x6bb5cdae : size of INT64U: 
+0x6bb5cdc0 : size of INT64S: 
+0x6bb5cdda : TSA Library Info.............................................................
+0x6bb5ce29 : Version: %d.%d.%d
+0x6bb5ce3c : MaxDim1Supported: %d
+0x6bb5ce52 : MaxDim2Supported: %d
+0x6bb5ce68 : MaxSensorSupported: %d
+0x6bb5ce80 : MaxFingerNumSupported: %d
+0x6bb5ce9b : FingerNumEnabled: %d
+0x6bb5ceb1 : Mutual Scan Raw Data Size: %d
+0x6bb5ced1 : Mutual Scan Raw Data Sign: %d
+0x6bb5cef1 : Mutual Scan Diff Data Size: %d
+0x6bb5cf11 : Mutual Scan Diff Data Sign: %d
+0x6bb5cf31 : Dim1Length: %d
+0x6bb5cf41 : Dim2Length: %d
+0x6bb5cf51 : RxNum: %d
+0x6bb5cf5c : TxNum: %d
+0x6bb5cf67 : Dim1Resolution: %d
+0x6bb5cf7b : Dim2Resolution: %d
+0x6bb5cf8f : XResolution: %d
+0x6bb5cfa0 : YResolution: %d
+0x6bb5cfb1 : ASADim1Resolution: %d
+0x6bb5cfc8 : ASADim2Resolution: %d
+0x6bb5cfe0 : frame=
+0x6bb5cfec : [%08X]
+0x6bb5cff3 : ctrlflag=
+0x6bb5d001 : extendCtrl=
+0x6bb5d00d : feature=
+0x6bb5d016 : [%04X]
+0x6bb5d01d : time=
+0x6bb5d023 : [%lld]
+0x6bb5d02b : VKNum = %d
+0x6bb5d036 :   (%d
+0x6bb5d03c : ,%d)
+0x6bb5d041 :  Vol(%d) Motor(%d)
+0x6bb5d055 : Pressure(%d)
+0x6bb5d063 : SHB(%d, %d, %d, %d)
+0x6bb5d078 : ScanFreq = %d
+0x6bb5d086 :  Noise: 
+0x6bb5d08f : (%d, %d)
+0x6bb5d099 : ScanRate = %d
+0x6bb5d0aa :  TouchNum = %d
+0x6bb5d0b9 :  PrevTouchNum = %d
+0x6bb5d0cc :  PeakNum = %d
+0x6bb5d0da :  GripNum = %d
+0x6bb5d10f : IsHangingPosture = %d
+0x6bb5d126 : PostureLabelEnum = %d
+0x6bb5d13d : OKToIDLE = %d
+0x6bb5d14b :  OKToSideIDLE = %d
+0x6bb5d15e :  activeReason = 0x%x
+0x6bb5d173 :  BLResetFailReason = 0x%x
+0x6bb5d18d :  blStage = %d
+0x6bb5d19c : scenario = %d, 
+0x6bb5d1ac : state = %d, 
+0x6bb5d1b9 : event = %d, 
+0x6bb5d1c6 : extFeature = %d
+0x6bb5d1d6 : sideThenar = %d
+0x6bb5d1e7 : TouchMode = %d, 
+0x6bb5d1f8 :  SafeBLNum = %d, 
+0x6bb5d20a :  SafeBLPush = %d, 
+0x6bb5d21d :  SafeBLReset = %d, 
+0x6bb5d231 :  SafeBLState = %d, 
+0x6bb5d245 :  SafeBLStatus = %d, 
+0x6bb5d25a :  SafeBLPushed = %d, 
+0x6bb5d26f :  SafeBLAbnormal = %d, 
+0x6bb5d286 :  SafeBLtriggerAbnormal = %d, 
+0x6bb5d2a4 :  SafeBLAllowed = %d, 
+0x6bb5d2ba :  numAbnormalShape = %d, 
+0x6bb5d2d3 :  wakeupTimeStamp = %lld, 
+0x6bb5d2ee : TouchThold = %d
+0x6bb5d2fe : BLThold = %d
+0x6bb5d30b : IDLEThold = %d
+0x6bb5d31a :  BLReset = %d
+0x6bb5d329 : HTI = %d
+0x6bb5d332 :  Exception = %d
+0x6bb5d342 :  enabledTHPLog = %d
+0x6bb5d357 : MaxDif = %d, 
+0x6bb5d365 : MinDif = %d, 
+0x6bb5d373 : MaxRaw = %d, 
+0x6bb5d381 : MinRaw = %d
+0x6bb5d391 : CMFSigThold = %d, CMFSigDiffThold = %d
+0x6bb5d3b9 : maxRaw2RawDiff = %d, 
+0x6bb5d3cf : minRaw2RawDiff = %d, 
+0x6bb5d3e5 : numOverNoise = %d, 
+0x6bb5d3fa : numGesture = %d, 
+0x6bb5d40c : enabledGesture = 0x%x, 
+0x6bb5d424 : sideGripRatio = %d
+0x6bb5d438 : sdScale = %d
+0x6bb5d445 :  AllFreqNoisy: %d
+0x6bb5d458 : DMD[0x%x]
+0x6bb5d467 : LargeObjectNum = %d
+0x6bb5d47c : Inrange = %d
+0x6bb5d489 :  Ink = %d
+0x6bb5d493 :  X = %4d
+0x6bb5d49c :  Y = %4d
+0x6bb5d4a5 :  tiltX = %4d
+0x6bb5d4b2 :  tiltY = %4d
+0x6bb5d4bf :  Press = %4d
+0x6bb5d4cc :  BtnNum = %4d
+0x6bb5d4da :  BtnStatus = %4d
+0x6bb5d4eb :  BtnKey = %4d
+0x6bb5d4f9 : /*   
+0x6bb5d4ff : %5d 
+0x6bb5d507 : /*%2d*/
+0x6bb5d50f : %4d, 
+0x6bb5d516 : AppLog: 
+0x6bb5d51f : TSA-Event[phone on left hand]
+0x6bb5d540 : TSA-Event[phone on right hand]
+0x6bb5d560 : TSA-Event[thenar long pressed on left hand]
+0x6bb5d590 : TSA-Event[thenar long pressed on right hand]
+0x6bb5d5bd : TSA-Event[phone under water]
+0x6bb5d5da : TSA-Event[phone outof water]
+0x6bb5d5f8 : TSA-Event[volume trigger on left hand]
+0x6bb5d620 : TSA-Event[volume trigger on right hand]
+0x6bb5d648 : TSA-Event[volume+]
+0x6bb5d65b : TSA-Event[volume-]
+0x6bb5d66e : TSA-Event[volume0]
+0x6bb5d681 : TSA-Event[powerKey]
+0x6bb5d698 : TSA-Event[left volume indicator on]
+0x6bb5d6c0 : TSA-Event[right volume indicator on]
+0x6bb5d6e8 : TSA-Event[left volume indicator off]
+0x6bb5d710 : TSA-Event[right volume indicator off]
+0x6bb5d736 : TSA-Event[volume trigger off]
+0x6bb5d754 : TSA-Event[TP restart]
+0x6bb5d770 : BL reset, type: %d, raw[%d, %d]
+0x6bb5d830 : TSALib.log
+0x6bb5d840 : ../../src/Plugin/Printf/TSA_Printf.c
+0x6bb5d88d : rc == EOK
+0x6bb5d8bd : import sys
+0x6bb5d8d0 : ../../src/Plugin/Python/Python_Runner.c
+0x6bb5d91d : rc == EOK
+0x6bb5d949 : PythonRunnerIntBuf
+0x6bb5d980 : sys.path.append('
+0x6bb5da60 : ../../src/Prmt/TSA_Prmt.c
+0x6bb5daa5 : g_prmtCallBack != NULL
+0x6bb5dabc : DFLT000000
+0x6bb5dac8 : TSA_MAX_DIM1 >= TSAPrmt(sys, dim1Len)
+0x6bb5daf0 : TSA_MAX_DIM2 >= TSAPrmt(sys, dim2Len)
+0x6bb5db18 : TSAPrmt(sys, sensorNum) <= TSA_MAX_SENSOR_NUM
+0x6bb5db50 : RunTimePrmtStruct
+0x6bb5db62 : fingerThold
+0x6bb5db6e : clickSuppressDistance
+0x6bb5db84 : maxClickSuppressDistance
+0x6bb5db9d : sigMult
+0x6bb5dba5 : sigMultNormal
+0x6bb5dbb3 : sigMultSD
+0x6bb5dbbd : accThold
+0x6bb5dbc6 : dbEnterIDLE
+0x6bb5dbd2 : sigRatioToDirectReport
+0x6bb5dbe9 : distToEnterGloveMode
+0x6bb5dbfe : clickDuration
+0x6bb5dc0c : volumeActiveAreaStart
+0x6bb5dc22 : volumeActiveAreaEnd
+0x6bb5dc36 : volumeGreenAreaStart
+0x6bb5dc4b : volumeGreenAreaEnd
+0x6bb5dc5e : volumeSideEnabled
+0x6bb5dc70 : TsaRTPrmtStruct
+0x6bb5dca1 : tuning based on LTI of 4mm finger without film and 5mm finger with film in device floating situation;
+0x6bb5ddb3 : the more threshold is the better click performance and poorer flick performance will be;
+0x6bb5de69 : the more threshold is the better click performance and poorer flick performance will be;
+0x6bb5df2d : the more threshold is the better multi-finger performance and poorer fat-finger performance will be;
+0x6bb5e006 : the more threshold is the better multi-finger performance and poorer fat-finger performance will be;
+0x6bb5e0e0 : the more threshold is the better multi-finger performance and poorer fat-finger performance will be;
+0x6bb5e19d : the more threshold is the better line drawing performance and poorer 2 closed finger tapping performance will be;
+0x6bb5e256 : the more threshold is the better response time but more power will be consumed;
+0x6bb5e312 : the less threshold is the better response time but more sensitive to noise;
+0x6bb5e391 : the less threshold is the easier to enter glove mode and the higher possibility for ghost touch;
+0x6bb5e42c : the less threshold is the easier for move and the higher for better click;
+0x6bb5e480 : TuneTimePrmtStruct
+0x6bb5e493 : gloveThold
+0x6bb5e49e : fingerThold
+0x6bb5e4aa : gloveHTI
+0x6bb5e4b3 : gloveFilterSides
+0x6bb5e4c4 : distToEnterGloveMode
+0x6bb5e4d9 : clickDuration
+0x6bb5e4e7 : clickSuppressDistance
+0x6bb5e4fd : maxClickSuppressDistance
+0x6bb5e516 : flickDistance
+0x6bb5e524 : menuAccessPixelToEdge
+0x6bb5e53a : sensorArch
+0x6bb5e545 : scenarioAntiTouch
+0x6bb5e557 : scenarioProximity
+0x6bb5e569 : sigMultNormal
+0x6bb5e577 : sigMultSD
+0x6bb5e581 : accThold
+0x6bb5e590 : chargerNoiseTholdToHTIPercentage
+0x6bb5e5b1 : chargerHoldTime
+0x6bb5e5c1 : topEdgeCorrectionRatio
+0x6bb5e5d8 : bottomEdgeCorrectionRatio
+0x6bb5e5f2 : leftEdgeCorrectionRatio
+0x6bb5e60a : rightEdgeCorrectionRatio
+0x6bb5e623 : loSizeInMM
+0x6bb5e62e : cmfSigThold
+0x6bb5e63a : cmfSigDiffThold
+0x6bb5e64a : edgeWidthThreshold
+0x6bb5e65d : proxConfig
+0x6bb5e668 : proxSensorAlongYAxis
+0x6bb5e67d : proxTriggerThold
+0x6bb5e68e : proxMinExitThold
+0x6bb5e69f : proxMaxExitThold
+0x6bb5e6b0 : proxBLUpdateSpeed
+0x6bb5e6c2 : proxBLUpdateThold
+0x6bb5e6d4 : proxRatioForMinThold
+0x6bb5e6e9 : proxRatioForTZThold
+0x6bb5e6fd : proxOffPhoneCallScanRate
+0x6bb5e716 : proxOnPhoneCallScanRate
+0x6bb5e72e : proxOffScreenLockScanRate
+0x6bb5e748 : proxOnScreenLockScanRate
+0x6bb5e761 : proxTimeAutoScreenOff
+0x6bb5e777 : volumeGesture
+0x6bb5e785 : volumeFlickUp
+0x6bb5e793 : volumeFlickDown
+0x6bb5e7a3 : volumeStepUp
+0x6bb5e7b0 : volumeStepDown
+0x6bb5e7bf : volumeActiveAreaStart
+0x6bb5e7d5 : volumeActiveAreaEnd
+0x6bb5e7e9 : volumeGreenAreaStart
+0x6bb5e7fe : volumeGreenAreaEnd
+0x6bb5e811 : volumeSideEnabled
+0x6bb5e823 : volumeSensitivityLevel
+0x6bb5e83a : volumeActiveAreaStart2
+0x6bb5e851 : volumeActiveAreaEnd2
+0x6bb5e866 : volumeGreenAreaStart2
+0x6bb5e87c : volumeGreenAreaEnd2
+0x6bb5e890 : volumeSideEnabled2
+0x6bb5e8a3 : volumeActiveAreaStart3
+0x6bb5e8ba : volumeActiveAreaEnd3
+0x6bb5e8cf : volumeGreenAreaStart3
+0x6bb5e8e5 : volumeGreenAreaEnd3
+0x6bb5e8f9 : volumeGreenAreaToMid3
+0x6bb5e90f : volumeSideEnabled3
+0x6bb5e922 : volumeTouchMin
+0x6bb5e931 : volumeTouchMax
+0x6bb5e940 : volumeTimeFlick
+0x6bb5e950 : volumeTimeOnMin
+0x6bb5e960 : volumeTimeOffMin
+0x6bb5e971 : volumeTimeOffMax
+0x6bb5e982 : volumeTimeGUI
+0x6bb5e990 : volumeTimeToAntiTrigger
+0x6bb5e9a8 : volumeForceAreaStart
+0x6bb5e9bd : volumeForceAreaEnd
+0x6bb5e9d0 : volumeForceAreaGap
+0x6bb5e9e3 : volumeForceAreaGapCenter
+0x6bb5e9fc : volumeForceAreaDebounce
+0x6bb5ea14 : volumeForceMoveMax
+0x6bb5ea27 : volumeForceTouchMax
+0x6bb5ea40 : volumeForceSHBReportYPosDebounce
+0x6bb5ea61 : volumeMappingTimeDelay
+0x6bb5ea78 : volumeMuteMinMove
+0x6bb5ea8a : volumeMuteMaxTime
+0x6bb5ea9c : volumeGUIOnTimeOut
+0x6bb5eaaf : volumeGUIOffTimeOut
+0x6bb5eac3 : volumeKeyDebounceTime
+0x6bb5ead9 : powerAreaStart
+0x6bb5eae8 : powerAreaEnd
+0x6bb5eaf5 : powerTouchMax
+0x6bb5eb03 : powerMoveMax
+0x6bb5eb10 : powerTimeOnMin
+0x6bb5eb1f : powerTimeOnMax
+0x6bb5eb2e : powerTimeOffMin
+0x6bb5eb3e : powerTimeOffMax
+0x6bb5eb4e : powerGesture
+0x6bb5eb5b : motorVolumeOnWaveform
+0x6bb5eb71 : motorVolumeOffWaveform
+0x6bb5eb88 : sideTouchXCoreStart
+0x6bb5eb9c : sideTouchXCoreEnd
+0x6bb5ebae : sideTouchMinGripRatio
+0x6bb5ebc4 : sideTouchMidGripRatio
+0x6bb5ebda : sideTouchMaxGripRatio
+0x6bb5ebf0 : sideTouchConfig
+0x6bb5ec00 : sensorEnabled
+0x6bb5ec0e : sensorRate
+0x6bb5ec19 : dim1ClipLow
+0x6bb5ec25 : dim1ClipHigh
+0x6bb5ec32 : dim2ClipLow
+0x6bb5ec3e : dim2ClipHigh
+0x6bb5ec4b : TsaTTPrmtStruct
+0x6bb5eccd : NOTE: if noise bigger than glove threshold, then glove performance will be sacrificed to ensure no ghost touch;
+0x6bb5ed61 : tuning based on LTI of 4mm finger without film and 5mm finger with film in device floating situation;
+0x6bb5ee03 : the higher threshold is the better glove performance but might lead to too sensitive issue for finger;
+0x6bb5eefe : tuning based on performance of status-bar drop down and navigation-bar drop up with finger and glove;
+0x6bb5ef99 : the less threshold is the easier to enter glove mode and the higher possibility for ghost touch;
+0x6bb5effa : obsolete;
+0x6bb5f0b3 : the more threshold is the better click performance and poorer flick performance will be;
+0x6bb5f169 : the more threshold is the better click performance and poorer flick performance will be;
+0x6bb5f294 : the more threshold is the better click performance and poorer flick performance will be;
+0x6bb5f2f0 : Touch panel sensor architecture, could be OnCell(1), Hybrid Incell(2), Full Incell(3);
+0x6bb5f348 : specific in which scenarios that anti-touch feature will be enabled;
+0x6bb5f390 : specific in which scenarios that proximity feature will be enabled;
+0x6bb5f446 : the more threshold is the better multi-finger performance and poorer fat-finger performance will be;
+0x6bb5f520 : the more threshold is the better multi-finger performance and poorer fat-finger performance will be;
+0x6bb5f5dd : the more threshold is the better line drawing performance and poorer 2 closed finger tapping performance will be; 
+0x6bb5f650 : threshold of size in mm to determine larger object;
+0x6bb5f688 : common mode noise threshold for sensors' signal;
+0x6bb5f6c0 : common mode noise threshold for delta signal of neighbouring sensor;
+0x6bb5f708 : percentage to HTI threshold to determine charger noise threshold for hybrid incell;
+0x6bb5f78b : ;the less threshold is, the easier to reach edge
+0x6bb5f7ee : ;the less threshold is, the easier to reach edge
+0x6bb5f84c : ;the less threshold is, the easier to reach edge
+0x6bb5f8ad : ;the less threshold is, the easier to reach edge
+0x6bb5f8e0 : edge width threshold of ewx/ewy for AFT
+0x6bb5f908 : proximity feature configuration;
+0x6bb5f930 : define proximity detection area along Y axis;
+0x6bb5f98d : the bigger threshold is the better to avoid false trigger but the poorer to trigger proximity;
+0x6bb5fa19 : the bigger threshold is the better to exit proximity but the poorer to avoid false proximity exit;
+0x6bb5faa9 : the bigger threshold is the better to exit proximity but the poorer to avoid false proximity exit;
+0x6bb5fb35 : the bigger threshold is the slower to update proximity baseline;
+0x6bb5fb78 : baseline update threshold for proximity;
+0x6bb5fbf3 : the bigger threshold is the better to avoid trigger but the poorer for proximity debounce;
+0x6bb5fc99 : the bigger threshold is the better to avoid false trigger but the poorer to trigger proximity;
+0x6bb5fd29 : either 120 or 60 is selectable to trade off power consumption and touch performance;
+0x6bb5fdb0 : available option [120, 60, 40, 30, 15] to trade off power consumption and proximity performance;
+0x6bb5fe4a : either 120 or 60 is selectable to trade off power consumption and touch performance;
+0x6bb5fed1 : available option [120, 60, 40, 30, 15] to trade off power consumption and proximity performance;
+0x6bb6002b : so that algorithm can detect proximity off once phone is away from face;
+0x6bb60074 : volume gesture set
+0x6bb60087 : power gesture set
+0x6bb60099 : side touch config
+0x6bb600ab : dim1ClipLow parameter
+0x6bb600c1 : dim1ClipHigh parameter
+0x6bb600d8 : dim2ClipLow parameter
+0x6bb600ee : dim2ClipHigh parameter
+0x6bb60110 : ../../src/Tool/PosnList/PosnSpecial/PosnSpecial.c
+0x6bb6016d : rc == EOK
+0x6bb60190 : ../../src/WorkAround/BadChannel/BadChannel.c
+0x6bb601e5 : rc == EOK
+0x6bb60200 : BadChannel_IsDMDDetected
+0x6bb60220 : BadChannel_Detect
+0x6bb60240 : ../../src/WorkAround/BaliSensorBroken/BaliSensorBroken.c
+0x6bb602a5 : rc == EOK
+0x6bb602af : NumBrokenSensor
+0x6bb602bf : BrokenArea:LUDim1
+0x6bb602d1 : LUDim2
+0x6bb602d8 : RDDim1
+0x6bb602df : RDDim2
+0x6bb602f0 : P150
+0x6bb60300 : ../../src/WorkAround/RFNoise/RFNoise.c
+0x6bb6034d : rc == EOK
+0x6bb60360 : inRangeThresh = %d
+0x6bb60379 : Stylus pos overlaps with touch pos, exit stylus status
+0x6bb603b1 : signalX or signal Y too low, exit stylus status
+0x6bb603e9 : peakData:%d, too low, exit stylus status
+0x6bb60419 : idx:%d,pDim1:%d, pDim2:%d, peakDim1:%d, peakDim2:%d
+0x6bb60451 : maxPeak:%d, maxZ4:%d, touchScore:%d
+0x6bb60480 : ../../src/WorkAround/ToeSynaBl/ToeSynaBl.c
+0x6bb604d5 : rc == EOK
+0x6bb604df : P150
+0x6bb604e4 : P186
+0x6bb604e9 : P17392
+0x6bb604f0 : P17292
+0x6bb60540 : Address %p has no image-section
+0x6bb60560 :   VirtualQuery failed for %d bytes at address %p
+0x6bb60598 :   VirtualProtect failed with code 0x%x
+0x6bb60630 : .pdata
+0x6bb60640 : sqrt
+0x6bb6066f : ?sqrtf
+0x6bb60780 : __powi
+0x6bb60803 : inity
+0x6bb609c0 : ABCDEF
+0x6bb609c7 : abcdef
+0x6bb609ce : 0123456789
+0x6bb60a9c : vH7B
+0x6bb60acc : W4vC
+0x6bb60b80 : Argument domain error (DOMAIN)
+0x6bb60b9f : Argument singularity (SIGN)
+0x6bb60bc0 : Overflow range error (OVERFLOW)
+0x6bb60be0 : Partial loss of significance (PLOSS)
+0x6bb60c08 : Total loss of significance (TLOSS)
+0x6bb60c30 : The result is too small to be represented (UNDERFLOW)
+0x6bb60c66 : Unknown error
+0x6bb61cd0 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb61d10 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb61d50 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb61d90 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb61dd0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb61e10 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb61e50 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb61e90 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb61ed0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb61f10 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb61f50 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb61f90 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb61fd0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62010 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62050 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62090 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb620d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62110 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62150 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62190 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb621d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62210 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62250 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62290 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb622d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62310 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62350 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62390 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb623d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62410 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62450 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62490 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb624d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62510 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62550 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62590 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb625d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62610 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62650 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62690 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb626d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62710 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62750 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62790 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb627d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62810 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62850 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62890 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb628d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62910 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62950 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62990 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb629d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62a10 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62a50 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62a90 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62ad0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62b10 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62b50 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62b90 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62bd0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62c10 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62c50 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62c90 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62cd0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62d10 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62d50 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62d90 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62dd0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62e10 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62e50 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62e90 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62ed0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62f10 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62f50 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62f90 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb62fd0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63010 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63050 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63090 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb630d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63110 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63150 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63190 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb631d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63210 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63250 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63290 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb632d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63310 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63350 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63390 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb633d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63410 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63450 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63490 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb634d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63510 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63550 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63590 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb635d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63610 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63650 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63690 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb636d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63710 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63750 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63790 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb637d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63810 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63850 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63890 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb638d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63910 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63950 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63990 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb639d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63a10 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63a50 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63a90 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63ad0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63b10 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63b50 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63b90 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63bd0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63c10 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63c50 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63c90 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63cd0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63d10 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63d50 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63d90 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63dd0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63e10 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63e50 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63e90 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63ed0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63f10 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63f50 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63f90 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb63fd0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64010 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64050 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64090 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb640d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64110 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64150 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64190 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb641d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64210 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64250 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64290 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb642d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64310 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64350 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64390 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb643d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64410 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64450 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64490 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb644d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64510 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64550 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64590 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb645d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64610 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64650 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64690 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb646d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64710 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64750 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64790 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb647d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64810 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64850 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64890 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb648d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64910 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64950 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64990 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb649d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64a10 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64a50 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64a90 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64ad0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64b10 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64b50 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64b90 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64bd0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64c10 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64c50 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64c90 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64cd0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64d10 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64d50 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64d90 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64dd0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64e10 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64e50 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64e90 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64ed0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64f10 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64f50 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64f90 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb64fd0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb65010 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb65050 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb65090 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb650d0 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb65110 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb65150 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb65190 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb651d0 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65210 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65250 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65290 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb652d0 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65310 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65350 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65390 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb653d0 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65410 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65450 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65490 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb654d0 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65510 : GCC: (x86_64-posix-seh-rev1, Built by MinGW-W64 project) 4.9.3
+0x6bb65550 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65590 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb655d0 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65610 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65650 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65690 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb656d0 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65710 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65750 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65790 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb657d0 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65810 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65850 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65890 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb658d0 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65910 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65950 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65990 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb659d0 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65a10 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65a50 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65a90 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65ad0 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65b10 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
+0x6bb65b50 : GCC: (x86_64-posix-seh-rev0, Built by MinGW-W64 project) 4.9.3
