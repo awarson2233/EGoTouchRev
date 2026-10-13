@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: TSAOut_PostProcess @ 6ba6a77a
 // ============================================================================
@@ -149,12 +151,11 @@ void TSAOut_PostProcessBefUDFPUnit(char param_1)
 // Function: TSAOut_DisplayXPos @ 6ba6a241
 // ============================================================================
 
-void TSAOut_DisplayXPos(undefined1 param_1)
+ushort TSAOut_DisplayXPos(undefined1 param_1, ...)
 
 {
                     /* 0x2a241  1615  TSAOut_DisplayXPos */
-  TSAOut_TouchXPosInternal(param_1,1);
-  return;
+  return TSAOut_TouchXPosInternal(param_1,1);
 }
 
 
@@ -162,12 +163,11 @@ void TSAOut_DisplayXPos(undefined1 param_1)
 // Function: TSAOut_Pixel2DisplayDim1 @ 6ba69b0b
 // ============================================================================
 
-void TSAOut_Pixel2DisplayDim1(undefined2 param_1)
+ushort TSAOut_Pixel2DisplayDim1(undefined2 param_1)
 
 {
                     /* 0x29b0b  1620  TSAOut_Pixel2DisplayDim1 */
-  TSAOut_Dim1PosInternal(param_1,1);
-  return;
+  return TSAOut_Dim1PosInternal(param_1,1);
 }
 
 
@@ -198,12 +198,11 @@ uint TSAOut_IntToExtDist(short param_1)
 // Function: TSAOut_Pixel2DisplayDim2 @ 6ba69e95
 // ============================================================================
 
-void TSAOut_Pixel2DisplayDim2(undefined2 param_1)
+ushort TSAOut_Pixel2DisplayDim2(undefined2 param_1)
 
 {
                     /* 0x29e95  1621  TSAOut_Pixel2DisplayDim2 */
-  TSAOut_Dim2PosInternal(param_1,1);
-  return;
+  return TSAOut_Dim2PosInternal(param_1,1);
 }
 
 
@@ -211,12 +210,11 @@ void TSAOut_Pixel2DisplayDim2(undefined2 param_1)
 // Function: TSAOut_Axis @ 6ba6a2e5
 // ============================================================================
 
-void TSAOut_Axis(short param_1)
+ushort TSAOut_Axis(short param_1)
 
 {
                     /* 0x2a2e5  1611  TSAOut_Axis */
-  TSAOut_IntToExtDist((int)param_1);
-  return;
+  return TSAOut_IntToExtDist((int)param_1);
 }
 
 
@@ -420,12 +418,11 @@ undefined2 TSAOut_Dim2PosInternal(ushort param_1,ushort param_2)
 // Function: TSAOut_DisplayYPos @ 6ba6a293
 // ============================================================================
 
-void TSAOut_DisplayYPos(undefined1 param_1)
+ushort TSAOut_DisplayYPos(undefined1 param_1, ...)
 
 {
                     /* 0x2a293  1616  TSAOut_DisplayYPos */
-  TSAOut_TouchYPosInternal(param_1,1);
-  return;
+  return TSAOut_TouchYPosInternal(param_1,1);
 }
 
 
@@ -520,12 +517,11 @@ ulonglong TSAOut_ExtToIntDist(ushort param_1)
 // Function: TSAOut_RptXPos @ 6ba6a264
 // ============================================================================
 
-void TSAOut_RptXPos(undefined1 param_1)
+ushort TSAOut_RptXPos(undefined1 param_1)
 
 {
                     /* 0x2a264  1626  TSAOut_RptXPos */
-  TSAOut_TouchXPosInternal(param_1,*(undefined2 *)&_refptr_g_tsaPrmtFlash->field_0x5a0);
-  return;
+  return TSAOut_TouchXPosInternal(param_1,*(undefined2 *)&_refptr_g_tsaPrmtFlash->field_0x5a0);
 }
 
 
@@ -533,12 +529,11 @@ void TSAOut_RptXPos(undefined1 param_1)
 // Function: TSAOut_RptYPos @ 6ba6a2b6
 // ============================================================================
 
-void TSAOut_RptYPos(undefined1 param_1)
+ushort TSAOut_RptYPos(undefined1 param_1)
 
 {
                     /* 0x2a2b6  1627  TSAOut_RptYPos */
-  TSAOut_TouchYPosInternal(param_1,*(undefined2 *)&_refptr_g_tsaPrmtFlash->field_0x5a0);
-  return;
+  return TSAOut_TouchYPosInternal(param_1,*(undefined2 *)&_refptr_g_tsaPrmtFlash->field_0x5a0);
 }
 
 

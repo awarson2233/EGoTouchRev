@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: Peak_Process @ 6ba68c4b
 // ============================================================================
@@ -707,16 +709,15 @@ byte Peak_GetIdxBySig(short param_1)
 // Function: Peak_GetSquareDistance @ 6ba66c86
 // ============================================================================
 
-void Peak_GetSquareDistance(byte param_1,byte param_2)
+int Peak_GetSquareDistance(byte param_1,byte param_2)
 
 {
                     /* 0x26c86  966  Peak_GetSquareDistance */
-  Sensor_GetSquareDistance
+  return Sensor_GetSquareDistance
             (g_pPeaks[(longlong)(int)(uint)param_1 * 0x14 + 0x15].bPeakCount,
              g_pPeaks[(longlong)(int)(uint)param_1 * 0x14 + 0x16].bPeakCount,
              g_pPeaks[(longlong)(int)(uint)param_2 * 0x14 + 0x15].bPeakCount,
              g_pPeaks[(longlong)(int)(uint)param_2 * 0x14 + 0x16].bPeakCount);
-  return;
 }
 
 
@@ -1093,15 +1094,14 @@ undefined1 Peak_IsInNxNBox(undefined1 param_1,undefined1 param_2,undefined1 para
 // Function: Peak_GetDistance @ 6ba66bbd
 // ============================================================================
 
-void Peak_GetDistance(byte param_1,byte param_2)
+byte Peak_GetDistance(byte param_1,byte param_2)
 
 {
                     /* 0x26bbd  961  Peak_GetDistance */
-  Sensor_GetDistance(g_pPeaks[(longlong)(int)(uint)param_1 * 0x14 + 0x15].bPeakCount,
-                     g_pPeaks[(longlong)(int)(uint)param_1 * 0x14 + 0x16].bPeakCount,
-                     g_pPeaks[(longlong)(int)(uint)param_2 * 0x14 + 0x15].bPeakCount,
-                     g_pPeaks[(longlong)(int)(uint)param_2 * 0x14 + 0x16].bPeakCount);
-  return;
+  return (byte)Sensor_GetDistance(g_pPeaks[(longlong)(int)(uint)param_1 * 0x14 + 0x15].bPeakCount,
+                                 g_pPeaks[(longlong)(int)(uint)param_1 * 0x14 + 0x16].bPeakCount,
+                                 g_pPeaks[(longlong)(int)(uint)param_2 * 0x14 + 0x15].bPeakCount,
+                                 g_pPeaks[(longlong)(int)(uint)param_2 * 0x14 + 0x16].bPeakCount);
 }
 
 

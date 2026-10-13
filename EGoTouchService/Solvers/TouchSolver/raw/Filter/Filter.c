@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: Filter_ProcessUnit @ 6ba5fd96
 // ============================================================================
@@ -808,7 +810,7 @@ void Filter_IsCurveReturn(byte param_1,byte param_2)
   uint local_1c;
   
                     /* 0x1d178  600  Filter_IsCurveReturn */
-  cVar2 = Filter_IsNeedCurve(param_1,param_2);
+  cVar2 = Filter_IsNeedCurve(param_1);
   if (((cVar2 != '\0') &&
       (local_26 = *(byte *)((longlong)*_refptr_g_prevTouchesPtr +
                            (longlong)(int)(uint)param_2 * 0x478 + 0x288), local_26 != 0)) &&

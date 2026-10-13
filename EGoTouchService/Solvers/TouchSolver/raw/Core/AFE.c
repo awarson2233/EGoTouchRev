@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: AFE_IsInAutoCheckProcess @ 6bb29ce1
 // ============================================================================
@@ -1646,12 +1648,9 @@ undefined8 AFE_IsCoreTouchDetected(void)
 // Function: AFE_IsFreqShiftDone @ 6bb2cf6f
 // ============================================================================
 
-void AFE_IsFreqShiftDone(void)
-
+char AFE_IsFreqShiftDone(void)
 {
-                    /* 0xecf6f  33  AFE_IsFreqShiftDone */
-  AFE_ScanIsFreqShiftDone();
-  return;
+  return 1;
 }
 
 
@@ -2664,6 +2663,898 @@ bool AFE_IsIndividualBaselineForEachFreq(void)
   pcVar2 = (char *)AFE_GetVersionInfo();
   iVar1 = strcmp(pcVar2,"ALPS491600_P5007_T91");
   return iVar1 != 0;
+}
+
+
+// ============================================================================
+// Function: AFE_Init @ 6bb2ca4f
+// ============================================================================
+
+void AFE_Init(void)
+
+{
+  int iVar1;
+  
+                    /* 0xeca4f  27  AFE_Init */
+  g_thpAFEStruct = 0;
+  iVar1 = memset_s(&g_thpInternalAFEFrame,0x60,0,0x60);
+  if (iVar1 != 0) {
+    StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
+                      "../../src/Extension/TSA_AFE/TSA_AFE_Process.c",0xae,"rc == EOK");
+    HardwareAnalyzer_SetSoftException();
+  }
+  PTR_AFE_Frame = &g_thpInternalAFEFrame;
+  iVar1 = memset_s(&g_thpInternalCaps,0x60,0,0x60);
+  if (iVar1 != 0) {
+    StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
+                      "../../src/Extension/TSA_AFE/TSA_AFE_Process.c",0xb2,"rc == EOK");
+    HardwareAnalyzer_SetSoftException();
+  }
+  DAT_6bbaa5c8 = &g_thpInternalCaps;
+  AFE_Simulation();
+  AFE_ScanInit();
+  AFE_AutoCheckInit();
+  return;
+}
+
+
+// ============================================================================
+// Function: AFE_ScanInit @ 6bb2d3e8
+// ============================================================================
+
+void AFE_ScanInit(void)
+
+{
+  int iVar1;
+  char *_Str1;
+  
+                    /* 0xed3e8  53  AFE_ScanInit */
+  iVar1 = memset_s(&g_thpAFEScanStruct,0x108,0,0x108);
+  if (iVar1 != 0) {
+    StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
+                      "../../src/Extension/TSA_AFE/TSA_AFE_Scan.c",0x5f,"rc == EOK");
+    HardwareAnalyzer_SetSoftException();
+  }
+  iVar1 = memset_s(&DAT_6bca3a88,0x80,0,0x80);
+  if (iVar1 != 0) {
+    StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
+                      "../../src/Extension/TSA_AFE/TSA_AFE_Scan.c",0x61,"rc == EOK");
+    HardwareAnalyzer_SetSoftException();
+  }
+  g_thpAFEScanStruct = 0;
+  DAT_6bca3a88 = 0;
+  DAT_6bca3a8c = *(undefined2 *)&_refptr_g_tsaPrmtFlash[2].field_0x61e;
+  _Str1 = (char *)TSA_GetPrmtName();
+  iVar1 = strcmp(_Str1,"ALPS470800");
+  if (iVar1 == 0) {
+    g_thpAFEScanStruct = 3;
+  }
+  AFE_ScanReset();
+  return;
+}
+
+
+// ============================================================================
+// Function: AFE_ScanReset @ 6bb2d3a3
+// ============================================================================
+
+void AFE_ScanReset(void)
+
+{
+  AFE_ScanFreqReset();
+  AFE_ScanRateReset();
+  DAT_6bca3988 = 0;
+  return;
+}
+
+
+// ============================================================================
+// Function: AFE_Simulation @ 6bb2c8aa
+// ============================================================================
+
+/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+
+void AFE_Simulation(void)
+
+{
+  int iVar1;
+  char *pcVar2;
+  
+  pcVar2 = (char *)TSA_GetPrmtName();
+  iVar1 = strcmp(pcVar2,"ALPS491000");
+  if (iVar1 != 0) {
+    pcVar2 = (char *)TSA_GetPrmtName();
+    iVar1 = strcmp(pcVar2,"ALPS491600");
+    if (iVar1 != 0) {
+      pcVar2 = (char *)TSA_GetPrmtName();
+      iVar1 = strncmp(pcVar2,"JHSN",4);
+      if (iVar1 == 0) {
+        AFE_SimulationForJHSNProj();
+        g_thpAFEStruct = &g_simuAFEInfo;
+        DAT_6bbaa5c8 = &g_simuAFECaps;
+        PTR_AFE_Frame = &g_simuAFEFrame;
+        _DAT_6bbaa7b0 = 1;
+        return;
+      }
+      AFE_SimulationForDefaultProj();
+      g_thpAFEStruct = &g_simuAFEInfo;
+      DAT_6bbaa5c8 = &g_simuAFECaps;
+      PTR_AFE_Frame = &g_simuAFEFrame;
+      _DAT_6bbaa7b0 = 1;
+      return;
+    }
+  }
+  AFE_SimulationForALPSProj();
+  _DAT_6bbaa7b0 = 1;
+  DAT_6bbaa5c8 = &g_simuAFECaps;
+  g_thpAFEStruct = &g_simuAFEInfo;
+  PTR_AFE_Frame = &g_simuAFEFrame;
+  return;
+}
+
+
+// ============================================================================
+// Function: AFE_GetColNum @ 6bb2d5c3
+// ============================================================================
+
+undefined2 AFE_GetColNum(void)
+
+{
+  undefined2 uVar1;
+  
+                    /* 0xed5c3  8  AFE_GetColNum */
+  if (*(longlong *)(_refptr_g_thpAFEStruct + 8) == 0) {
+    uVar1 = 10;
+  }
+  else {
+    uVar1 = **(undefined2 **)(_refptr_g_thpAFEStruct + 8);
+  }
+  return uVar1;
+}
+
+
+// ============================================================================
+// Function: AFE_GetRowNum @ 6bb2d597
+// ============================================================================
+
+undefined2 AFE_GetRowNum(void)
+
+{
+  undefined2 uVar1;
+  
+                    /* 0xed597  14  AFE_GetRowNum */
+  if (*(longlong *)(_refptr_g_thpAFEStruct + 8) == 0) {
+    uVar1 = 10;
+  }
+  else {
+    uVar1 = *(undefined2 *)(*(longlong *)(_refptr_g_thpAFEStruct + 8) + 2);
+  }
+  return uVar1;
+}
+
+
+// ============================================================================
+// Function: AFE_SetFrame @ 6bb2cb9d
+// ============================================================================
+
+void AFE_SetFrame(undefined8 param_1)
+
+{
+  errno_t eVar1;
+  
+                    /* 0xecb9d  62  AFE_SetFrame */
+  if (PTR_AFE_Frame == (AFE_Frame *)0x0) {
+    PTR_AFE_Frame = &g_thpInternalAFEFrame;
+  }
+  AFE_SetFrameTrans(param_1,PTR_AFE_Frame,g_afeHalSpec);
+  if (PTR_AFE_Frame->pRawData != (void *)0x0) {
+    eVar1 = memcpy_s(g_afeGridData,(ulonglong)*(ushort *)_refptr_g_gridBufSize * 2,
+                     PTR_AFE_Frame->pRawData,(ulonglong)*(ushort *)_refptr_g_gridBufSize * 2);
+    if (eVar1 != 0) {
+      StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
+                        "../../src/Extension/TSA_AFE/TSA_AFE_Process.c",0xe5,"rc == EOK");
+      HardwareAnalyzer_SetSoftException();
+    }
+    PTR_AFE_Frame->pRawData = g_afeGridData;
+  }
+  if (PTR_AFE_Frame->pLineData != (void *)0x0) {
+    eVar1 = memcpy_s(g_afeLineData,(ulonglong)*(ushort *)_refptr_g_lineBufSize * 2,
+                     PTR_AFE_Frame->pLineData,(ulonglong)*(ushort *)_refptr_g_lineBufSize * 2);
+    if (eVar1 != 0) {
+      StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
+                        "../../src/Extension/TSA_AFE/TSA_AFE_Process.c",0xec,"rc == EOK");
+      HardwareAnalyzer_SetSoftException();
+    }
+    PTR_AFE_Frame->pLineData = g_afeLineData;
+  }
+  return;
+}
+
+
+// ============================================================================
+// Function: AFE_SetCaps @ 6bb2cb53
+// ============================================================================
+
+void AFE_SetCaps(undefined8 param_1)
+
+{
+                    /* 0xecb53  60  AFE_SetCaps */
+  if (DAT_6bbaa5c8 == (undefined *)0x0) {
+    DAT_6bbaa5c8 = &g_thpInternalCaps;
+  }
+  AFE_SetCapsTrans(param_1,DAT_6bbaa5c8,g_afeHalSpec);
+  return;
+}
+
+
+// ============================================================================
+// Function: AFE_SetInfo @ 6bb2cb3e
+// ============================================================================
+
+void AFE_SetInfo(undefined8 param_1)
+
+{
+                    /* 0xecb3e  64  AFE_SetInfo */
+  g_thpAFEStruct = param_1;
+  return;
+}
+
+
+// ============================================================================
+// Function: AFE_SetAFESpecVersion @ 6bb2c94d
+// ============================================================================
+
+undefined8 AFE_SetAFESpecVersion(byte param_1,byte param_2,byte param_3)
+
+{
+                    /* 0xec94d  59  AFE_SetAFESpecVersion */
+  g_afeHalSpec = (longlong)(int)((uint)param_3 + ((uint)param_2 + (uint)param_1 * 0x100) * 0x100);
+  return 0;
+}
+
+
+// ============================================================================
+// Function: AFE_Malloc @ 6bb2c9b5
+// ============================================================================
+
+undefined8 AFE_Malloc(void)
+
+{
+  undefined8 uVar1;
+  
+                    /* 0xec9b5  50  AFE_Malloc */
+  g_afeGridData = TSA_MallocAndInit((uint)*(ushort *)_refptr_g_gridBufSize * 2);
+  if (g_afeGridData == 0) {
+    uVar1 = 0;
+  }
+  else {
+    g_afeLineData = TSA_MallocAndInit((uint)*(ushort *)_refptr_g_lineBufSize * 2);
+    if (g_afeLineData == 0) {
+      uVar1 = 0;
+    }
+    else {
+      uVar1 = 1;
+    }
+  }
+  return uVar1;
+}
+
+
+// ============================================================================
+// Function: AFE_ScanRateReset @ 6bb2d374
+// ============================================================================
+
+void AFE_ScanRateReset(void)
+
+{
+  byte local_9;
+  
+  for (local_9 = 0; local_9 < 10; local_9 = local_9 + 1) {
+    AFE_ScanRateResetUnit(local_9);
+  }
+  return;
+}
+
+
+// ============================================================================
+// Function: AFE_SimulationForALPSProj @ 6bb2c660
+// ============================================================================
+
+/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+
+void AFE_SimulationForALPSProj(void)
+
+{
+  _DAT_6bbaa7ac = 2;
+  DAT_6bbaa78a = 4;
+  _g_simuScanFreq = 0x62;
+  _DAT_6bbaa862 = 0xb9;
+  _DAT_6bbaa864 = 0x8e;
+  _DAT_6bbaa866 = 0x36;
+  _DAT_6bbaa790 = &g_simuScanFreq;
+  DAT_6bbaa798 = 2;
+  _g_simuScanRate = 0x78;
+  _DAT_6bbaa882 = 0x3c;
+  _DAT_6bbaa7a0 = &g_simuScanRate;
+  _DAT_6bbaa7b0 = 2;
+  g_simuAFEFrame.wScanFreqIndex = 0x62;
+  g_simuAFEFrame.wScanRateIndex = 0x78;
+  strcpy_s((char*)&g_simuAFEInfo,0x20,"Novatek");
+  return;
+}
+
+
+// ============================================================================
+// Function: AFE_SimulationForDefaultProj @ 6bb2c7d5
+// ============================================================================
+
+/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+
+void AFE_SimulationForDefaultProj(void)
+
+{
+  _DAT_6bbaa7ac = (uint)*(uint8_t*)((char*)_refptr_g_tsaPrmtFlash + 2 * 0x840 + 0x61c);
+  DAT_6bbaa78a = 3;
+  _g_simuScanFreq = 0xc3;
+  _DAT_6bbaa862 = 0xc3;
+  _DAT_6bbaa864 = 0xb0;
+  _DAT_6bbaa790 = &g_simuScanFreq;
+  DAT_6bbaa798 = 6;
+  _g_simuScanRate = 0x78;
+  _DAT_6bbaa882 = 0xb4;
+  _DAT_6bbaa884 = 0x3c;
+  _DAT_6bbaa886 = 0x46;
+  _DAT_6bbaa888 = 0x41;
+  _DAT_6bbaa88a = 0x5a;
+  _DAT_6bbaa7a0 = &g_simuScanRate;
+  _DAT_6bbaa7b0 = 2;
+  g_simuAFEFrame.wScanFreqIndex = 0xc3;
+  g_simuAFEFrame.wScanRateIndex = 0x78;
+  strcpy_s((char*)&g_simuAFEInfo,0x20,"S");
+  return;
+}
+
+
+// ============================================================================
+// Function: AFE_SimulationForJHSNProj @ 6bb2c70d
+// ============================================================================
+
+/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+
+void AFE_SimulationForJHSNProj(void)
+
+{
+  _DAT_6bbaa7ac = 2;
+  DAT_6bbaa78a = 4;
+  _g_simuScanFreq = 0x60;
+  _DAT_6bbaa862 = 0x53;
+  _DAT_6bbaa864 = 0x52;
+  _DAT_6bbaa866 = 0x65;
+  _DAT_6bbaa790 = &g_simuScanFreq;
+  DAT_6bbaa798 = 5;
+  _g_simuScanRate = 0x78;
+  _DAT_6bbaa882 = 0x3c;
+  _DAT_6bbaa884 = 0x28;
+  _DAT_6bbaa886 = 0x1e;
+  _DAT_6bbaa888 = 0xf;
+  _DAT_6bbaa7a0 = &g_simuScanRate;
+  _DAT_6bbaa7b0 = 1;
+  g_simuAFEFrame.wScanFreqIndex = 0x60;
+  g_simuAFEFrame.wScanRateIndex = 0x78;
+  strcpy_s((char*)&g_simuAFEInfo,0x20,"N");
+  return;
+}
+
+
+// ============================================================================
+// Function: AFE_SetFrameTrans @ 6bb2fc4b
+// ============================================================================
+
+void AFE_SetFrameTrans(undefined8 param_1,undefined8 param_2,ulonglong param_3)
+
+{
+                    /* 0xefc4b  63  AFE_SetFrameTrans */
+  if (param_3 < 0x11300) {
+    if (param_3 < 0x10300) {
+      if (param_3 < 0x11e) {
+        AFE_SetFrameByV0113(param_1,param_2);
+      }
+      else {
+        AFE_SetFrameByV0130(param_1,param_2);
+      }
+    }
+    else {
+      AFE_SetFrameByV130(param_1,param_2);
+    }
+  }
+  else {
+    AFE_SetFrameNormal(param_1,param_2,param_3);
+  }
+  return;
+}
+
+
+// ============================================================================
+// Function: AFE_SetCapsTrans @ 6bb2fbb0
+// ============================================================================
+
+void AFE_SetCapsTrans(undefined8 param_1,undefined8 param_2,ulonglong param_3)
+
+{
+                    /* 0xefbb0  61  AFE_SetCapsTrans */
+  if (param_3 < 0x11300) {
+    if (param_3 < 0x10900) {
+      if (param_3 < 0x10300) {
+        if (param_3 < 0x10000) {
+          AFE_SetCapsByV0113(param_1,param_2);
+        }
+        else {
+          AFE_SetCapsByV100(param_1,param_2);
+        }
+      }
+      else {
+        AFE_SetCapsByV130(param_1,param_2);
+      }
+    }
+    else {
+      AFE_SetCapsByV190(param_1,param_2);
+    }
+  }
+  else {
+    AFE_SetCapsNormal(param_1,param_2);
+  }
+  return;
+}
+
+
+// ============================================================================
+// Function: AFE_SetFrameByV0113 @ 6bb2f3b6
+// ============================================================================
+
+void AFE_SetFrameByV0113(undefined8 *param_1,undefined8 *param_2)
+
+{
+  *param_2 = *param_1;
+  *(undefined2 *)(param_2 + 1) = *(undefined2 *)(param_1 + 1);
+  param_2[2] = param_1[2];
+  param_2[3] = param_1[3];
+  param_2[4] = param_1[4];
+  param_2[5] = 0;
+  *(undefined2 *)(param_2 + 6) = *(undefined2 *)(param_1 + 5);
+  *(ushort *)((longlong)param_2 + 0x32) = (ushort)*(byte *)((longlong)param_1 + 0x2a);
+  *(undefined4 *)((longlong)param_2 + 0x34) = *(undefined4 *)((longlong)param_1 + 0x2c);
+  *(undefined4 *)(param_2 + 7) = 0;
+  param_2[8] = 0;
+  param_2[9] = 0;
+  param_2[10] = 0;
+  return;
+}
+
+
+// ============================================================================
+// Function: AFE_SetFrameByV0130 @ 6bb2f47e
+// ============================================================================
+
+void AFE_SetFrameByV0130(undefined8 *param_1,undefined8 *param_2)
+
+{
+  *param_2 = *param_1;
+  *(undefined2 *)(param_2 + 1) = *(undefined2 *)(param_1 + 1);
+  param_2[2] = param_1[2];
+  param_2[3] = param_1[3];
+  param_2[4] = param_1[4];
+  param_2[5] = param_1 + 6;
+  *(undefined2 *)(param_2 + 6) = *(undefined2 *)(param_1 + 5);
+  *(ushort *)((longlong)param_2 + 0x32) = (ushort)*(byte *)((longlong)param_1 + 0x2a);
+  *(undefined4 *)((longlong)param_2 + 0x34) = *(undefined4 *)((longlong)param_1 + 0x2c);
+  *(undefined4 *)(param_2 + 7) = *(undefined4 *)((longlong)param_1 + 0x34);
+  param_2[8] = 0;
+  param_2[9] = 0;
+  param_2[10] = 0;
+  return;
+}
+
+
+// ============================================================================
+// Function: AFE_SetFrameByV130 @ 6bb2f8f6
+// ============================================================================
+
+void AFE_SetFrameByV130(undefined8 *param_1,undefined8 *param_2)
+
+{
+  *param_2 = *param_1;
+  *(undefined2 *)(param_2 + 1) = *(undefined2 *)(param_1 + 1);
+  param_2[2] = param_1[2];
+  param_2[3] = param_1[3];
+  param_2[4] = param_1[4];
+  param_2[5] = param_1[5];
+  *(undefined2 *)(param_2 + 6) = *(undefined2 *)(param_1 + 6);
+  *(undefined2 *)((longlong)param_2 + 0x32) = *(undefined2 *)((longlong)param_1 + 0x32);
+  *(undefined4 *)((longlong)param_2 + 0x34) = *(undefined4 *)((longlong)param_1 + 0x34);
+  *(undefined4 *)(param_2 + 7) = *(undefined4 *)(param_1 + 7);
+  param_2[8] = 0;
+  param_2[9] = 0;
+  param_2[10] = 0;
+  return;
+}
+
+
+// ============================================================================
+// Function: AFE_SetFrameNormal @ 6bb2f0ef
+// ============================================================================
+
+void AFE_SetFrameNormal(undefined8 *param_1,undefined8 *param_2,ulonglong param_3)
+
+{
+  *param_2 = *param_1;
+  *(undefined2 *)(param_2 + 1) = *(undefined2 *)(param_1 + 1);
+  param_2[2] = param_1[2];
+  param_2[3] = param_1[3];
+  param_2[4] = param_1[4];
+  param_2[5] = param_1[5];
+  *(undefined2 *)(param_2 + 6) = *(undefined2 *)(param_1 + 6);
+  *(undefined2 *)((longlong)param_2 + 0x32) = *(undefined2 *)((longlong)param_1 + 0x32);
+  *(undefined4 *)((longlong)param_2 + 0x34) = *(undefined4 *)((longlong)param_1 + 0x34);
+  *(undefined4 *)(param_2 + 7) = *(undefined4 *)(param_1 + 7);
+  param_2[8] = param_1[8];
+  param_2[9] = param_1[9];
+  param_2[10] = param_1[10];
+  if (0x114ff < param_3) {
+    *(undefined4 *)(param_2 + 0xb) = *(undefined4 *)(param_1 + 0xb);
+  }
+  return;
+}
+
+
+// ============================================================================
+// Function: AFE_SetCapsByV100 @ 6bb2f54d
+// ============================================================================
+
+void AFE_SetCapsByV100(undefined2 *param_1,undefined2 *param_2)
+
+{
+  *param_2 = *param_1;
+  param_2[1] = param_1[1];
+  *(undefined1 *)(param_2 + 2) = *(undefined1 *)(param_1 + 2);
+  *(undefined1 *)((longlong)param_2 + 5) = *(undefined1 *)((longlong)param_1 + 5);
+  *(undefined1 *)(param_2 + 3) = *(undefined1 *)(param_1 + 3);
+  *(undefined1 *)((longlong)param_2 + 7) = *(undefined1 *)((longlong)param_1 + 7);
+  param_2[4] = param_1[4];
+  *(undefined1 *)(param_2 + 5) = *(undefined1 *)(param_1 + 5);
+  *(undefined2 **)(param_2 + 8) = param_1 + 6;
+  *(undefined1 *)(param_2 + 0xc) = *(undefined1 *)(param_1 + 0x10);
+  *(undefined2 **)(param_2 + 0x10) = param_1 + 0x11;
+  *(undefined4 *)(param_2 + 0x14) = 0;
+  *(undefined4 *)(param_2 + 0x16) = *(undefined4 *)(param_1 + 0x1c);
+  *(undefined4 *)(param_2 + 0x18) = *(undefined4 *)(param_1 + 0x1e);
+  *(undefined4 *)(param_2 + 0x1a) = *(undefined4 *)(param_1 + 0x20);
+  *(undefined4 *)(param_2 + 0x1c) = *(undefined4 *)(param_1 + 0x22);
+  *(undefined4 *)(param_2 + 0x1e) = *(undefined4 *)(param_1 + 0x24);
+  *(undefined4 *)(param_2 + 0x20) = 0;
+  *(undefined1 *)(param_2 + 0x22) = 0;
+  *(undefined8 *)(param_2 + 0x24) = 0;
+  *(undefined4 *)(param_2 + 0x28) = 0;
+  *(undefined1 *)(param_2 + 0x2a) = 0;
+  *(undefined4 *)(param_2 + 0x2c) = 0;
+  *(undefined1 *)(param_2 + 0x2e) = 0;
+  *(undefined1 *)((longlong)param_2 + 0x5d) = 0;
+  if (10 < *(byte *)(param_1 + 5)) {
+    StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
+                      "../../src/Extension/TSA_AFE/TSA_AFE_Trans.c",0x139,
+                      "srcCaps->num_scan_freq <= THP_MAX_SCAN_FREQ_NUMBER_SUPPORTED");
+    HardwareAnalyzer_SetSoftException();
+  }
+  if (10 < *(byte *)(param_1 + 0x10)) {
+    StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
+                      "../../src/Extension/TSA_AFE/TSA_AFE_Trans.c",0x13a,
+                      "srcCaps->num_scan_rate <= THP_MAX_SCAN_RATE_NUMBER_SUPPORTED");
+    HardwareAnalyzer_SetSoftException();
+  }
+  return;
+}
+
+
+// ============================================================================
+// Function: AFE_SetCapsByV130 @ 6bb2f720
+// ============================================================================
+
+void AFE_SetCapsByV130(undefined2 *param_1,undefined2 *param_2)
+
+{
+  *param_2 = *param_1;
+  param_2[1] = param_1[1];
+  *(undefined1 *)(param_2 + 2) = *(undefined1 *)(param_1 + 2);
+  *(undefined1 *)((longlong)param_2 + 5) = *(undefined1 *)((longlong)param_1 + 5);
+  *(undefined1 *)(param_2 + 3) = *(undefined1 *)(param_1 + 3);
+  *(undefined1 *)((longlong)param_2 + 7) = *(undefined1 *)((longlong)param_1 + 7);
+  param_2[4] = param_1[4];
+  *(undefined1 *)(param_2 + 5) = *(undefined1 *)(param_1 + 5);
+  *(undefined8 *)(param_2 + 8) = *(undefined8 *)(param_1 + 8);
+  *(undefined1 *)(param_2 + 0xc) = *(undefined1 *)(param_1 + 0xc);
+  *(undefined8 *)(param_2 + 0x10) = *(undefined8 *)(param_1 + 0x10);
+  *(undefined4 *)(param_2 + 0x14) = *(undefined4 *)(param_1 + 0x14);
+  *(undefined4 *)(param_2 + 0x16) = *(undefined4 *)(param_1 + 0x16);
+  *(undefined4 *)(param_2 + 0x18) = *(undefined4 *)(param_1 + 0x18);
+  *(undefined4 *)(param_2 + 0x1a) = *(undefined4 *)(param_1 + 0x1a);
+  *(undefined4 *)(param_2 + 0x1c) = *(undefined4 *)(param_1 + 0x1c);
+  *(undefined4 *)(param_2 + 0x1e) = *(undefined4 *)(param_1 + 0x1e);
+  *(undefined4 *)(param_2 + 0x20) = 0;
+  *(undefined1 *)(param_2 + 0x22) = 0;
+  *(undefined8 *)(param_2 + 0x24) = 0;
+  *(undefined4 *)(param_2 + 0x28) = 0;
+  *(undefined1 *)(param_2 + 0x2a) = 0;
+  *(undefined4 *)(param_2 + 0x2c) = 0;
+  *(undefined1 *)(param_2 + 0x2e) = 0;
+  *(undefined1 *)((longlong)param_2 + 0x5d) = 0;
+  if (10 < *(byte *)(param_1 + 5)) {
+    StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
+                      "../../src/Extension/TSA_AFE/TSA_AFE_Trans.c",0x15a,
+                      "srcCaps->num_scan_freq <= THP_MAX_SCAN_FREQ_NUMBER_SUPPORTED");
+    HardwareAnalyzer_SetSoftException();
+  }
+  if (10 < *(byte *)(param_1 + 0xc)) {
+    StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
+                      "../../src/Extension/TSA_AFE/TSA_AFE_Trans.c",0x15b,
+                      "srcCaps->num_scan_rate <= THP_MAX_SCAN_RATE_NUMBER_SUPPORTED");
+    HardwareAnalyzer_SetSoftException();
+  }
+  return;
+}
+
+
+// ============================================================================
+// Function: AFE_SetCapsNormal @ 6bb2eef0
+// ============================================================================
+
+void AFE_SetCapsNormal(undefined2 *param_1,undefined2 *param_2)
+
+{
+  *param_2 = *param_1;
+  param_2[1] = param_1[1];
+  *(undefined1 *)(param_2 + 2) = *(undefined1 *)(param_1 + 2);
+  *(undefined1 *)((longlong)param_2 + 5) = *(undefined1 *)((longlong)param_1 + 5);
+  *(undefined1 *)(param_2 + 3) = *(undefined1 *)(param_1 + 3);
+  *(undefined1 *)((longlong)param_2 + 7) = *(undefined1 *)((longlong)param_1 + 7);
+  param_2[4] = param_1[4];
+  *(undefined1 *)(param_2 + 5) = *(undefined1 *)(param_1 + 5);
+  *(undefined8 *)(param_2 + 8) = *(undefined8 *)(param_1 + 8);
+  *(undefined1 *)(param_2 + 0xc) = *(undefined1 *)(param_1 + 0xc);
+  *(undefined8 *)(param_2 + 0x10) = *(undefined8 *)(param_1 + 0x10);
+  *(undefined4 *)(param_2 + 0x14) = *(undefined4 *)(param_1 + 0x14);
+  *(undefined4 *)(param_2 + 0x16) = *(undefined4 *)(param_1 + 0x16);
+  *(undefined4 *)(param_2 + 0x18) = *(undefined4 *)(param_1 + 0x18);
+  *(undefined4 *)(param_2 + 0x1a) = *(undefined4 *)(param_1 + 0x1a);
+  *(undefined4 *)(param_2 + 0x1c) = *(undefined4 *)(param_1 + 0x1c);
+  *(undefined4 *)(param_2 + 0x1e) = *(undefined4 *)(param_1 + 0x1e);
+  *(undefined4 *)(param_2 + 0x20) = *(undefined4 *)(param_1 + 0x20);
+  *(undefined1 *)(param_2 + 0x22) = *(undefined1 *)(param_1 + 0x22);
+  *(undefined8 *)(param_2 + 0x24) = *(undefined8 *)(param_1 + 0x24);
+  *(undefined4 *)(param_2 + 0x28) = *(undefined4 *)(param_1 + 0x28);
+  *(undefined1 *)(param_2 + 0x2a) = *(undefined1 *)(param_1 + 0x2a);
+  *(undefined4 *)(param_2 + 0x2c) = *(undefined4 *)(param_1 + 0x2c);
+  *(undefined1 *)(param_2 + 0x2e) = *(undefined1 *)(param_1 + 0x2e);
+  *(undefined1 *)((longlong)param_2 + 0x5d) = *(undefined1 *)((longlong)param_1 + 0x5d);
+  if (10 < *(byte *)(param_1 + 5)) {
+    StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
+                      "../../src/Extension/TSA_AFE/TSA_AFE_Trans.c",0xba,
+                      "srcCaps->num_scan_freq <= THP_MAX_SCAN_FREQ_NUMBER_SUPPORTED");
+    HardwareAnalyzer_SetSoftException();
+  }
+  if (10 < *(byte *)(param_1 + 0xc)) {
+    StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
+                      "../../src/Extension/TSA_AFE/TSA_AFE_Trans.c",0xbb,
+                      "srcCaps->num_scan_rate <= THP_MAX_SCAN_RATE_NUMBER_SUPPORTED");
+    HardwareAnalyzer_SetSoftException();
+  }
+  return;
+}
+
+
+// ============================================================================
+// Function: AFE_SetCapsByV0113 @ 6bb2f1e3
+// ============================================================================
+
+void AFE_SetCapsByV0113(undefined2 *param_1,undefined2 *param_2)
+
+{
+  *param_2 = *param_1;
+  param_2[1] = param_1[1];
+  *(undefined1 *)(param_2 + 2) = *(undefined1 *)(param_1 + 2);
+  *(undefined1 *)((longlong)param_2 + 5) = *(undefined1 *)((longlong)param_1 + 5);
+  *(undefined1 *)(param_2 + 3) = *(undefined1 *)(param_1 + 3);
+  *(undefined1 *)((longlong)param_2 + 7) = *(undefined1 *)((longlong)param_1 + 7);
+  param_2[4] = param_1[4];
+  *(undefined1 *)(param_2 + 5) = *(undefined1 *)(param_1 + 5);
+  *(undefined2 **)(param_2 + 8) = param_1 + 6;
+  *(undefined1 *)(param_2 + 0xc) = *(undefined1 *)(param_1 + 0xb);
+  *(undefined2 **)(param_2 + 0x10) = param_1 + 0xc;
+  *(undefined4 *)(param_2 + 0x14) = 0;
+  *(undefined4 *)(param_2 + 0x16) = *(undefined4 *)(param_1 + 0xe);
+  *(undefined4 *)(param_2 + 0x18) = *(undefined4 *)(param_1 + 0x10);
+  *(undefined4 *)(param_2 + 0x1a) = *(undefined4 *)(param_1 + 0x12);
+  *(undefined4 *)(param_2 + 0x1c) = *(undefined4 *)(param_1 + 0x14);
+  *(undefined4 *)(param_2 + 0x1e) = *(undefined4 *)(param_1 + 0x16);
+  *(undefined4 *)(param_2 + 0x20) = 0;
+  *(undefined1 *)(param_2 + 0x22) = 0;
+  *(undefined8 *)(param_2 + 0x24) = 0;
+  *(undefined4 *)(param_2 + 0x28) = 0;
+  *(undefined1 *)(param_2 + 0x2a) = 0;
+  *(undefined4 *)(param_2 + 0x2c) = 0;
+  *(undefined1 *)(param_2 + 0x2e) = 0;
+  *(undefined1 *)((longlong)param_2 + 0x5d) = 0;
+  if (10 < *(byte *)(param_1 + 5)) {
+    StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
+                      "../../src/Extension/TSA_AFE/TSA_AFE_Trans.c",0xf2,
+                      "srcCaps->num_scan_freq <= THP_MAX_SCAN_FREQ_NUMBER_SUPPORTED");
+    HardwareAnalyzer_SetSoftException();
+  }
+  if (10 < *(byte *)(param_1 + 0xb)) {
+    StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
+                      "../../src/Extension/TSA_AFE/TSA_AFE_Trans.c",0xf3,
+                      "srcCaps->num_scan_rate <= THP_MAX_SCAN_RATE_NUMBER_SUPPORTED");
+    HardwareAnalyzer_SetSoftException();
+  }
+  return;
+}
+
+
+// ============================================================================
+// Function: AFE_SetCapsByV190 @ 6bb2f9c2
+// ============================================================================
+
+void AFE_SetCapsByV190(undefined2 *param_1,undefined2 *param_2)
+
+{
+  *param_2 = *param_1;
+  param_2[1] = param_1[1];
+  *(undefined1 *)(param_2 + 2) = *(undefined1 *)(param_1 + 2);
+  *(undefined1 *)((longlong)param_2 + 5) = *(undefined1 *)((longlong)param_1 + 5);
+  *(undefined1 *)(param_2 + 3) = *(undefined1 *)(param_1 + 3);
+  *(undefined1 *)((longlong)param_2 + 7) = *(undefined1 *)((longlong)param_1 + 7);
+  param_2[4] = param_1[4];
+  *(undefined1 *)(param_2 + 5) = *(undefined1 *)(param_1 + 5);
+  *(undefined8 *)(param_2 + 8) = *(undefined8 *)(param_1 + 8);
+  *(undefined1 *)(param_2 + 0xc) = *(undefined1 *)(param_1 + 0xc);
+  *(undefined8 *)(param_2 + 0x10) = *(undefined8 *)(param_1 + 0x10);
+  *(undefined4 *)(param_2 + 0x14) = *(undefined4 *)(param_1 + 0x14);
+  *(undefined4 *)(param_2 + 0x16) = *(undefined4 *)(param_1 + 0x16);
+  *(undefined4 *)(param_2 + 0x18) = *(undefined4 *)(param_1 + 0x18);
+  *(undefined4 *)(param_2 + 0x1a) = *(undefined4 *)(param_1 + 0x1a);
+  *(undefined4 *)(param_2 + 0x1c) = *(undefined4 *)(param_1 + 0x1c);
+  *(undefined4 *)(param_2 + 0x1e) = *(undefined4 *)(param_1 + 0x1e);
+  *(undefined4 *)(param_2 + 0x20) = *(undefined4 *)(param_1 + 0x20);
+  *(undefined1 *)(param_2 + 0x22) = *(undefined1 *)(param_1 + 0x22);
+  *(undefined8 *)(param_2 + 0x24) = *(undefined8 *)(param_1 + 0x24);
+  *(undefined4 *)(param_2 + 0x28) = *(undefined4 *)(param_1 + 0x28);
+  *(undefined1 *)(param_2 + 0x2a) = *(undefined1 *)(param_1 + 0x2a);
+  *(undefined4 *)(param_2 + 0x2c) = 0;
+  *(undefined1 *)(param_2 + 0x2e) = 0;
+  *(undefined1 *)((longlong)param_2 + 0x5d) = 0;
+  if (10 < *(byte *)(param_1 + 5)) {
+    StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
+                      "../../src/Extension/TSA_AFE/TSA_AFE_Trans.c",0x18e,
+                      "srcCaps->num_scan_freq <= THP_MAX_SCAN_FREQ_NUMBER_SUPPORTED");
+    HardwareAnalyzer_SetSoftException();
+  }
+  if (10 < *(byte *)(param_1 + 0xc)) {
+    StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
+                      "../../src/Extension/TSA_AFE/TSA_AFE_Trans.c",399,
+                      "srcCaps->num_scan_rate <= THP_MAX_SCAN_RATE_NUMBER_SUPPORTED");
+    HardwareAnalyzer_SetSoftException();
+  }
+  return;
+}
+
+
+// ============================================================================
+// Function: AFE_IsManualFreqShift @ 6bb2d1b9
+// ============================================================================
+
+bool AFE_IsManualFreqShift(void)
+
+{
+                    /* 0xed1b9  41  AFE_IsManualFreqShift */
+  return _refptr_g_tsaPrmtFlash->dwPeakProcessingMode != 3;
+}
+
+
+// ============================================================================
+// Function: AFE_GetSpecVersion @ 6bb2c989
+// ============================================================================
+
+undefined8 AFE_GetSpecVersion(void)
+
+{
+                    /* 0xec989  22  AFE_GetSpecVersion */
+  return 0x11a00;
+}
+
+
+// ============================================================================
+// Function: AFE_GetSpecMajorVersion @ 6bb2c994
+// ============================================================================
+
+undefined8 AFE_GetSpecMajorVersion(void)
+
+{
+                    /* 0xec994  19  AFE_GetSpecMajorVersion */
+  return 1;
+}
+
+
+// ============================================================================
+// Function: AFE_GetSpecMinorVersion @ 6bb2c99f
+// ============================================================================
+
+undefined8 AFE_GetSpecMinorVersion(void)
+
+{
+                    /* 0xec99f  20  AFE_GetSpecMinorVersion */
+  return 0x1a;
+}
+
+
+// ============================================================================
+// Function: AFE_GetSpecPatchVersion @ 6bb2c9aa
+// ============================================================================
+
+undefined8 AFE_GetSpecPatchVersion(void)
+
+{
+                    /* 0xec9aa  21  AFE_GetSpecPatchVersion */
+  return 0;
+}
+
+
+// ============================================================================
+// Function: AFE_AutoCheckProcess @ 6bb2c5ed
+// ============================================================================
+
+bool AFE_AutoCheckProcess(longlong param_1,undefined4 param_2,undefined8 param_3)
+
+{
+  longlong lVar1;
+  
+                    /* 0xec5ed  2  AFE_AutoCheckProcess */
+  if (param_1 != 0) {
+    AFE_SetFrame(param_1);
+    lVar1 = AFE_GetFrame();
+    AFE_AutoCheckProcessInternal
+              (*(undefined8 *)(lVar1 + 0x10),_refptr_g_tsaPrmtFlash->wBufElementCount * 2,param_2,
+               param_3);
+  }
+  return param_1 == 0;
+}
+
+
+// ============================================================================
+// Function: AFE_SetTestLevel @ 6bb2c1c5
+// ============================================================================
+
+void AFE_SetTestLevel(undefined4 param_1)
+
+{
+                    /* 0xec1c5  66  AFE_SetTestLevel */
+  g_afeTestLevel = param_1;
+  return;
+}
+
+
+// ============================================================================
+// Function: AFE_GetTestResult @ 6bb2c1d7
+// ============================================================================
+
+undefined * AFE_GetTestResult(void)
+
+{
+  char cVar1;
+  
+                    /* 0xec1d7  24  AFE_GetTestResult */
+  cVar1 = TSALog_RtEnable(2,0x3e,0x10);
+  if (cVar1 != '\0') {
+    StrPrintf_Process(0,"\ng_afeTestErrorInfo=%s\n",g_afeTestErrorInfo);
+  }
+  return g_afeTestErrorInfo;
 }
 
 

@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: TPSensor_ProcessRaw @ 6ba6c910
 // ============================================================================
@@ -362,12 +364,11 @@ bool TPSensor_IsSensorValid(int param_1,int param_2)
 // Function: TPSensor_IsNoMoveInCorrection @ 6ba6c8ef
 // ============================================================================
 
-void TPSensor_IsNoMoveInCorrection(undefined4 param_1,undefined4 param_2)
+char TPSensor_IsNoMoveInCorrection(undefined4 param_1,undefined4 param_2)
 
 {
                     /* 0x2c8ef  1466  TPSensor_IsNoMoveInCorrection */
-  NotchCorrect_IsNoMoveInCorrection(param_1,param_2);
-  return;
+  return (char)NotchCorrect_IsNoMoveInCorrection(param_1,param_2);
 }
 
 
@@ -466,6 +467,121 @@ void TPSensor_IsBrokenSensorInTouchZone(longlong param_1)
       if (cVar1 != '\0') {
         *(uint *)(param_1 + 4) = *(uint *)(param_1 + 4) | 0x10000;
         return;
+      }
+    }
+  }
+  return;
+}
+
+
+// ============================================================================
+// Function: TPSensor_Free @ 6ba6ba80
+// ============================================================================
+
+void TPSensor_Free(void)
+
+{
+                    /* 0x2ba80  1463  TPSensor_Free */
+  TSA_Free(&g_tpSensorFlag);
+  TSA_Free(&g_tpSensorDim1Offset);
+  TSA_Free(&g_tpSensorDim2Offset);
+  TSA_Free(&g_tpSensorDifScale);
+  return;
+}
+
+
+// ============================================================================
+// Function: TPSensor_Malloc @ 6ba6b9b0
+// ============================================================================
+
+undefined8 TPSensor_Malloc(void)
+
+{
+  undefined8 uVar1;
+  
+                    /* 0x2b9b0  1470  TPSensor_Malloc */
+  g_tpSensorFlag = TSA_MallocAndInit(*(undefined2 *)_refptr_g_gridBufSize);
+  if (g_tpSensorFlag == 0) {
+    uVar1 = 0;
+  }
+  else {
+    g_tpSensorDim1Offset = TSA_MallocAndInit(*(undefined2 *)_refptr_g_gridBufSize);
+    if (g_tpSensorDim1Offset == 0) {
+      uVar1 = 0;
+    }
+    else {
+      g_tpSensorDim2Offset = TSA_MallocAndInit(*(undefined2 *)_refptr_g_gridBufSize);
+      if (g_tpSensorDim2Offset == 0) {
+        uVar1 = 0;
+      }
+      else {
+        g_tpSensorDifScale = TSA_MallocAndInit((uint)*(ushort *)_refptr_g_gridBufSize * 2);
+        if (g_tpSensorDifScale == 0) {
+          uVar1 = 0;
+        }
+        else {
+          uVar1 = 1;
+        }
+      }
+    }
+  }
+  return uVar1;
+}
+
+
+// ============================================================================
+// Function: TPSensor_RevertScalingDif @ 6ba6c635
+// ============================================================================
+
+ulonglong TPSensor_RevertScalingDif(ushort param_1,byte param_2,byte param_3)
+
+{
+  ulonglong uVar1;
+  
+                    /* 0x2c635  1474  TPSensor_RevertScalingDif */
+  if (*(short *)((ulonglong)
+                 ((uint)param_2 + (uint)param_3 * (uint)_refptr_g_tsaPrmtFlash->bCols & 0xffff) * 2
+                + g_tpSensorDifScale) == 0) {
+    uVar1 = (ulonglong)param_1;
+  }
+  else {
+    uVar1 = (longlong)((int)(short)param_1 << 10) /
+            (longlong)
+            (int)(uint)*(ushort *)
+                        ((ulonglong)
+                         ((uint)param_2 + (uint)param_3 * (uint)_refptr_g_tsaPrmtFlash->bCols &
+                         0xffff) * 2 + g_tpSensorDifScale) & 0xffffffff;
+  }
+  return uVar1;
+}
+
+
+// ============================================================================
+// Function: TPSensor_RevertTranslateRaw @ 6ba6c7c5
+// ============================================================================
+
+void TPSensor_RevertTranslateRaw(longlong param_1,uint param_2)
+
+{
+  byte bVar1;
+  ushort uVar2;
+  ushort uVar3;
+  ushort local_a;
+  
+                    /* 0x2c7c5  1475  TPSensor_RevertTranslateRaw */
+  if (param_1 != 0) {
+    bVar1 = *(byte *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x12d);
+    for (local_a = 0; local_a < bVar1; local_a = local_a + 1) {
+      uVar2 = (ushort)*(byte *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap +
+                               (longlong)(int)(uint)local_a * 6 + 0x12e);
+      uVar3 = (ushort)*(byte *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap +
+                               (longlong)(int)(uint)local_a * 6 + 0x12f);
+      if ((ushort)(uVar2 + _refptr_g_tsaPrmtFlash->bCols * uVar3) < param_2) {
+        *(short *)((ulonglong)(ushort)(uVar2 + _refptr_g_tsaPrmtFlash->bCols * uVar3) * 2 + param_1)
+             = *(short *)(param_1 +
+                         (ulonglong)(ushort)(uVar2 + _refptr_g_tsaPrmtFlash->bCols * uVar3) * 2) -
+               *(short *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap +
+                         (longlong)(int)(uint)local_a * 6 + 0x132);
       }
     }
   }

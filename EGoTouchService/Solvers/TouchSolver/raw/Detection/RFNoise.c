@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: RFNoise_CopyPrevRaw2RawDif @ 6bb4463a
 // ============================================================================
@@ -363,6 +365,54 @@ undefined8 RFNoise_IsVariationInRangeUpDown(int param_1,int param_2,byte param_3
     }
   }
   return 0;
+}
+
+
+// ============================================================================
+// Function: RFNoise_Free @ 6bb44483
+// ============================================================================
+
+void RFNoise_Free(void)
+
+{
+                    /* 0x104483  1143  RFNoise_Free */
+  TSA_Free(&g_tsaBufPrevRaw2rawDif);
+  TSA_Free(&g_tsaBufRaw2rawDif2);
+  TSA_Free(&g_tsaBufRaw2rawDif3);
+  return;
+}
+
+
+// ============================================================================
+// Function: RFNoise_Malloc @ 6bb443e0
+// ============================================================================
+
+undefined8 RFNoise_Malloc(void)
+
+{
+  undefined8 uVar1;
+  
+                    /* 0x1043e0  1148  RFNoise_Malloc */
+  g_tsaBufPrevRaw2rawDif = TSA_MallocAndInit((uint)*(ushort *)_refptr_g_gridBufSize * 2);
+  if (g_tsaBufPrevRaw2rawDif == 0) {
+    uVar1 = 0;
+  }
+  else {
+    g_tsaBufRaw2rawDif2 = TSA_MallocAndInit((uint)*(ushort *)_refptr_g_gridBufSize * 2);
+    if (g_tsaBufRaw2rawDif2 == 0) {
+      uVar1 = 0;
+    }
+    else {
+      g_tsaBufRaw2rawDif3 = TSA_MallocAndInit((uint)*(ushort *)_refptr_g_gridBufSize * 2);
+      if (g_tsaBufRaw2rawDif3 == 0) {
+        uVar1 = 0;
+      }
+      else {
+        uVar1 = 1;
+      }
+    }
+  }
+  return uVar1;
 }
 
 

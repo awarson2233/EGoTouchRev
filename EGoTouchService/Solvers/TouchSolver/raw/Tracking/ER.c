@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: ER_Process @ 6ba584b3
 // ============================================================================
@@ -464,7 +466,7 @@ char ER_MoveInCheck(byte param_1,undefined1 param_2)
       local_9 = '\0';
     }
     if (local_9 == '\x01') {
-      ER_MoveInCorrection(param_2,param_1);
+      ER_MoveInCorrection(param_2);
     }
     return local_9;
   }
@@ -666,6 +668,33 @@ undefined2 ER_MMPrmtToPixelPrmt(undefined1 param_1,undefined4 param_2)
     local_a = TSAOut_RevertDim2Pos(sVar1);
   }
   return local_a;
+}
+
+
+// ============================================================================
+// Function: ER_GetFlagMoveInCorrectedButDisabled @ 6ba570f4
+// ============================================================================
+
+undefined1 ER_GetFlagMoveInCorrectedButDisabled(void)
+
+{
+                    /* 0x170f4  541  ER_GetFlagMoveInCorrectedButDisabled */
+  return g_flagMoveInCorrectedButDisabled;
+}
+
+
+// ============================================================================
+// Function: ER_GetLimit @ 6ba57101
+// ============================================================================
+
+ushort ER_GetLimit(void)
+
+{
+  ushort uVar1;
+  
+                    /* 0x17101  542  ER_GetLimit */
+  uVar1 = TS_MMToDisplayPixel(g_erLimit & 0xff);
+  return uVar1 >> 4;
 }
 
 

@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: TouchMode_Process @ 6ba78dde
 // ============================================================================
@@ -418,6 +420,267 @@ undefined1 TouchMode_StylusIsClearanceAreaSatisfied(byte param_1)
     }
   }
   return local_b;
+}
+
+
+// ============================================================================
+// Function: TouchMode_NoObjDetect @ 6ba790ae
+// ============================================================================
+
+void TouchMode_NoObjDetect(undefined4 *param_1,undefined4 *param_2)
+
+{
+  if ((param_1 != (undefined4 *)0x0) && (param_2 != (undefined4 *)0x0)) {
+    *param_1 = 1;
+    *param_2 = 2;
+    if (**(char **)_refptr_g_touchesPtr == *(char *)(*(longlong *)_refptr_g_touchesPtr + 0xd)) {
+      *param_1 = 2;
+      *param_2 = 2;
+    }
+  }
+  return;
+}
+
+
+// ============================================================================
+// Function: TouchMode_NoObjProcess @ 6ba79113
+// ============================================================================
+
+void TouchMode_NoObjProcess(void)
+
+{
+  return;
+}
+
+
+// ============================================================================
+// Function: TouchMode_FingerDetect @ 6ba7911f
+// ============================================================================
+
+void TouchMode_FingerDetect(undefined4 *param_1,undefined4 *param_2)
+
+{
+  byte local_9;
+  
+  if ((param_1 != (undefined4 *)0x0) && (param_2 != (undefined4 *)0x0)) {
+    *param_1 = 1;
+    *param_2 = 1;
+    if (((_refptr_g_tsaPrmtDynamic[0x80] & 2) != 0) &&
+       (((*_refptr_g_tsaStaticPtr)->dwFeatureFlags & 0x1000) == 0)) {
+      for (local_9 = 0; local_9 < **(byte **)_refptr_g_touchesPtr; local_9 = local_9 + 1) {
+        if (((*(uint *)((longlong)(int)(uint)local_9 * 0x168 + *(longlong *)_refptr_g_touchesPtr +
+                       0x1f0) & 0x800) == 0) &&
+           (*(short *)(_refptr_g_tsaPrmtDynamic + 0xc) <=
+            *(short *)(*_refptr_g_peaksPtr +
+                      (longlong)
+                      (int)(uint)*(byte *)((longlong)(int)(uint)local_9 * 0x168 +
+                                           *(longlong *)_refptr_g_touchesPtr + 0x23c) * 0x14 + 0x18)
+           )) {
+          *param_1 = 2;
+          break;
+        }
+      }
+      if (*(int *)&_refptr_g_tsaPrpt[1].field_0x2c != 1) {
+        (*_refptr_g_tsaStaticPtr)[1].field_0xc = 0;
+      }
+      if ((*(int *)&_refptr_g_tsaPrpt[1].field_0x2c != 1) ||
+         (*(int *)&_refptr_g_tsaPrpt[1].field_0x30 != 2)) {
+        if (*(short *)&_refptr_g_tsaPrmtFlash->field_0x5d8 * 3 < *(int *)(*_refptr_g_peaksPtr + 8))
+        {
+          (*_refptr_g_tsaStaticPtr)[1].field_0xc = (*_refptr_g_tsaStaticPtr)[1].field_0xc + '\x01';
+        }
+        else {
+          (*_refptr_g_tsaStaticPtr)[1].field_0xc = 0;
+        }
+      }
+      if (2 < (byte)(*_refptr_g_tsaStaticPtr)[1].field_0xc) {
+        *param_2 = 2;
+        _refptr_g_tsaPrpt[1].field_0x28 = 0;
+      }
+    }
+  }
+  return;
+}
+
+
+// ============================================================================
+// Function: TouchMode_FingerProcess @ 6ba79318
+// ============================================================================
+
+void TouchMode_FingerProcess(undefined8 param_1,int param_2)
+
+{
+  byte local_9;
+  
+  if ((param_2 == 2) || (_refptr_g_tsaPrpt[1].field_0x28 == '\0')) {
+    for (local_9 = 0; local_9 < **(byte **)_refptr_g_touchesPtr; local_9 = local_9 + 1) {
+      if (((*(uint *)((longlong)(int)(uint)local_9 * 0x168 + *(longlong *)_refptr_g_touchesPtr +
+                     0x1f0) & 0x800) != 0) &&
+         ((*_refptr_g_tsaStaticPtr)->bFullIncellSignalDisparity == '\0')) {
+        *(uint *)((longlong)(int)(uint)local_9 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x208)
+             = *(uint *)((longlong)(int)(uint)local_9 * 0x168 + *(longlong *)_refptr_g_touchesPtr +
+                        0x208) | 2;
+      }
+    }
+  }
+  return;
+}
+
+
+// ============================================================================
+// Function: TouchMode_GloveDetect @ 6ba793fe
+// ============================================================================
+
+void TouchMode_GloveDetect(undefined4 *param_1,undefined4 *param_2)
+
+{
+  byte local_9;
+  
+  if ((param_1 != (undefined4 *)0x0) && (param_2 != (undefined4 *)0x0)) {
+    *param_1 = 1;
+    *param_2 = 1;
+    if ((((_refptr_g_tsaPrmtDynamic[0x80] & 4) != 0) &&
+        (((*_refptr_g_tsaStaticPtr)->dwFeatureFlags & 1) != 0)) ||
+       (((((_refptr_g_tsaPrmtDynamic[0x80] & 8) != 0 &&
+          (((*_refptr_g_tsaStaticPtr)->dwFeatureFlags & 0x10) != 0)) ||
+         (((*_refptr_g_tsaStaticPtr)->dwFeatureFlags & FEAT_SMART_COVER) != 0)) ||
+        ((*_refptr_g_tsaStaticPtr)[1].field_0x3 != '\0')))) {
+      if (**(char **)_refptr_g_touchesPtr != *(char *)(*(longlong *)_refptr_g_touchesPtr + 0xd)) {
+        *param_1 = 2;
+      }
+      if (((_refptr_g_tsaPrpt[1].field_0x28 == '\0') ||
+          ((((_refptr_g_tsaPrmtDynamic[0x80] & 4) == 0 ||
+            (((*_refptr_g_tsaStaticPtr)->dwFeatureFlags & 1) == 0)) &&
+           (((_refptr_g_tsaPrmtDynamic[0x80] & 8) == 0 ||
+            (((*_refptr_g_tsaStaticPtr)->dwFeatureFlags & 0x10) == 0)))))) &&
+         ((((*_refptr_g_tsaStaticPtr)->dwFeatureFlags & FEAT_SMART_COVER) == 0 &&
+          ((*_refptr_g_tsaStaticPtr)[1].field_0x3 == '\0')))) {
+        for (local_9 = 0; local_9 < **(byte **)_refptr_g_touchesPtr; local_9 = local_9 + 1) {
+          if (((((_refptr_g_tsaPrmtDynamic[0x80] & 4) != 0) &&
+               (((*_refptr_g_tsaStaticPtr)->dwFeatureFlags & 1) != 0)) &&
+              ((*(uint *)((longlong)(int)(uint)local_9 * 0x168 + *(longlong *)_refptr_g_touchesPtr +
+                         0x1f8) & 4) != 0)) &&
+             ((*(int *)&_refptr_g_tsaPrpt[1].field_0x2c != 1 &&
+              ((*(uint *)((longlong)(int)(uint)local_9 * 0x168 + *(longlong *)_refptr_g_touchesPtr +
+                         0x1f8) & 0x80000) == 0)))) {
+            _refptr_g_tsaPrpt[1].field_0x28 = 1;
+            *param_2 = 2;
+            Touch_CreatePostReport(local_9,5);
+            return;
+          }
+          if (((*_refptr_g_tsaStaticPtr)->dwFeatureFlags & 0x1000) != 0) {
+            _refptr_g_tsaPrpt[1].field_0x28 = 1;
+            *param_2 = 2;
+            return;
+          }
+        }
+      }
+      else {
+        _refptr_g_tsaPrpt[1].field_0x28 = 1;
+        *param_2 = 2;
+      }
+    }
+  }
+  return;
+}
+
+
+// ============================================================================
+// Function: TouchMode_GloveProcess @ 6ba797a7
+// ============================================================================
+
+void TouchMode_GloveProcess(undefined8 param_1,int param_2)
+
+{
+  byte local_9;
+  
+  if (((*_refptr_g_tsaStaticPtr)->dwFeatureFlags & 0x1000) == 0) {
+    if (((((_refptr_g_tsaPrmtDynamic[0x80] & 4) == 0) ||
+         (((*_refptr_g_tsaStaticPtr)->dwFeatureFlags & 1) == 0)) &&
+        (((*_refptr_g_tsaStaticPtr)->dwFeatureFlags & FEAT_SMART_COVER) == 0)) &&
+       ((*_refptr_g_tsaStaticPtr)[1].field_0x3 == '\0')) {
+      TouchMode_StylusSuppression();
+    }
+    else if (param_2 == 1) {
+      for (local_9 = 0; local_9 < **(byte **)_refptr_g_touchesPtr; local_9 = local_9 + 1) {
+        *(uint *)((longlong)(int)(uint)local_9 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x208)
+             = *(uint *)((longlong)(int)(uint)local_9 * 0x168 + *(longlong *)_refptr_g_touchesPtr +
+                        0x208) | 2;
+      }
+    }
+    else {
+      TouchMode_GloveFilter();
+    }
+  }
+  return;
+}
+
+
+// ============================================================================
+// Function: TouchMode_StylusDetect @ 6ba798b8
+// ============================================================================
+
+void TouchMode_StylusDetect(undefined4 *param_1,undefined4 *param_2)
+
+{
+  if ((param_1 != (undefined4 *)0x0) && (param_2 != (undefined4 *)0x0)) {
+    *param_1 = 1;
+    *param_2 = 1;
+  }
+  return;
+}
+
+
+// ============================================================================
+// Function: TouchMode_StylusProcess @ 6ba7991a
+// ============================================================================
+
+void TouchMode_StylusProcess(void)
+
+{
+  return;
+}
+
+
+// ============================================================================
+// Function: TouchMode_GloveFilter @ 6ba796d1
+// ============================================================================
+
+void TouchMode_GloveFilter(void)
+
+{
+  byte local_9;
+  
+  for (local_9 = 0; local_9 < **(byte **)_refptr_g_touchesPtr; local_9 = local_9 + 1) {
+    if (((*(uint *)((longlong)(int)(uint)local_9 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x208
+                   ) & 1) == 0) &&
+       (0x40 < *(byte *)((longlong)(int)(uint)local_9 * 0x168 + *(longlong *)_refptr_g_touchesPtr +
+                        0x1c8))) {
+      *(uint *)((longlong)(int)(uint)local_9 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x208) =
+           *(uint *)((longlong)(int)(uint)local_9 * 0x168 + *(longlong *)_refptr_g_touchesPtr +
+                    0x208) | 2;
+    }
+  }
+  return;
+}
+
+
+// ============================================================================
+// Function: TouchMode_StylusSuppression @ 6ba79ba6
+// ============================================================================
+
+void TouchMode_StylusSuppression(void)
+
+{
+  byte local_9;
+  
+                    /* 0x39ba6  2498  TouchMode_StylusSuppression */
+  for (local_9 = 0; local_9 < **(byte **)_refptr_g_touchesPtr; local_9 = local_9 + 1) {
+    *(uint *)((longlong)(int)(uint)local_9 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x208) =
+         *(uint *)((longlong)(int)(uint)local_9 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x208)
+         | 4;
+  }
+  return;
 }
 
 

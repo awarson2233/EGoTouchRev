@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: TSADynPrmt_PreProcess @ 6bb3d1e7
 // ============================================================================
@@ -126,8 +128,8 @@ void TSADynPrmt_Init(void)
   _DAT_6bcab6b4 = *(undefined8 *)&_refptr_g_tsaPrmtFlash->field_0x618;
   DAT_6bcab70c = _refptr_g_tsaPrmtFlash[1].pDim1PitchMap[0xc];
   DAT_6bcab714 = *(undefined4 *)(_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0xd);
-  DAT_6bcab6da._0_2_ = 2000;
-  DAT_6bcab6d2._6_2_ = 2000;
+  *(short*)TSA_MEM_AT(0x6bcab6daULL) = 2000;
+  *(short*)TSA_MEM_AT(0x6bcab6d8ULL) = 2000;
   TouchThold_Init();
   TSADynPrmt_GetUnderWaterThold();
   TSADynPrmt_SSInit();
@@ -178,12 +180,12 @@ void TSADynPrmt_GetBL(void)
   _DAT_6bcab6c4 = local_c;
   TSADynPrmt_UpdateBfrTch((int)local_a,(int)local_c);
   TSADynPrmt_UpdateStepAftTch((int)local_a,(int)local_c);
-  DAT_6bcab6d2._6_2_ =
+  *(short*)TSA_MEM_AT(0x6bcab6d8ULL) =
        ((ushort)(byte)_refptr_g_tsaPrmtFlash->field_0x38 * 4 +
        (ushort)(byte)_refptr_g_tsaPrmtFlash->field_0x38) * 0x28;
-  DAT_6bcab6da._0_2_ = DAT_6bcab6d2._6_2_;
-  DAT_6bcab6da._2_2_ = _refptr_g_tsaPrmtFlash->wPeakFilterReferenceThreshold;
-  DAT_6bcab6da._4_2_ = -_refptr_g_tsaPrmtFlash->wPeakFilterReferenceThreshold;
+  *(short*)TSA_MEM_AT(0x6bcab6daULL) = *(short*)TSA_MEM_AT(0x6bcab6d8ULL);
+  *(short*)TSA_MEM_AT(0x6bcab6dcULL) = _refptr_g_tsaPrmtFlash->wPeakFilterReferenceThreshold;
+  *(short*)TSA_MEM_AT(0x6bcab6deULL) = -_refptr_g_tsaPrmtFlash->wPeakFilterReferenceThreshold;
   return;
 }
 
@@ -200,7 +202,7 @@ void TSADynPrmt_GetSig(void)
   TSADynPrmt_GetLTI();
   TSADynPrmt_GetMFLTI();
   TSADynPrmt_GetPkThold();
-  TSADynPrmt_GetTZThold(0);
+  TSADynPrmt_GetTZThold();
   TSADynPrmt_GetUnderWaterThold();
   return;
 }
@@ -213,8 +215,8 @@ void TSADynPrmt_GetSig(void)
 void TSADynPrmt_SSInit(void)
 
 {
-  DAT_6bcab6ac._2_2_ = _refptr_g_tsaPrmtFlash->wPeakMode3ThresholdMax;
-  DAT_6bcab6ac._0_2_ = (short)_refptr_g_tsaPrmtFlash->wPeakMode3ThresholdMax / 3;
+  *(short*)TSA_MEM_AT(0x6bcab6aeULL) = _refptr_g_tsaPrmtFlash->wPeakMode3ThresholdMax;
+  *(short*)TSA_MEM_AT(0x6bcab6acULL) = (short)_refptr_g_tsaPrmtFlash->wPeakMode3ThresholdMax / 3;
   return;
 }
 
@@ -289,7 +291,7 @@ void TSADynPrmt_UpdateBfrTch(short param_1,short param_2)
   else if (0xff < local_a) {
     local_a = 0xff;
   }
-  DAT_6bcab6ca._5_1_ = (char)local_a;
+  *(char*)TSA_MEM_AT(0x6bcab6caULL + 5) = (char)local_a;
   if (param_2 < 0) {
     param_2 = param_2 + 0xff;
   }
@@ -300,12 +302,12 @@ void TSADynPrmt_UpdateBfrTch(short param_1,short param_2)
   else if (0xff < local_a) {
     local_a = 0xff;
   }
-  DAT_6bcab6ca._6_1_ = (char)local_a;
-  DAT_6bcab6ca._4_1_ = 1;
+  *(char*)TSA_MEM_AT(0x6bcab6caULL + 6) = (char)local_a;
+  *(char*)TSA_MEM_AT(0x6bcab6caULL + 4) = 1;
   if (((*_refptr_g_tsaStaticPtr)->dwProcessingState & 0x10) != 0) {
-    DAT_6bcab6ca._5_1_ = DAT_6bcab6ca._5_1_ * '\x02';
+    *(char*)TSA_MEM_AT(0x6bcab6caULL + 5) = *(char*)TSA_MEM_AT(0x6bcab6caULL + 5) * '\x02';
   }
-  DAT_6bcab6d2._2_2_ = 0x198;
+  *(short*)TSA_MEM_AT(0x6bcab6d2ULL + 2) = 0x198;
   return;
 }
 
@@ -320,8 +322,8 @@ void TSADynPrmt_UpdateStepAftTch(short param_1,short param_2)
   short local_a;
   
                     /* 0xfca49  1503  TSADynPrmt_UpdateStepAftTch */
-  DAT_6bcab6ca._0_2_ = param_1 + -1;
-  DAT_6bcab6ca._2_2_ = param_2 + -1;
+  *(short*)TSA_MEM_AT(0x6bcab6caULL + 0) = param_1 + -1;
+  *(short*)TSA_MEM_AT(0x6bcab6caULL + 2) = param_2 + -1;
   if (param_1 < 0) {
     param_1 = param_1 + 0x3f;
   }
@@ -332,18 +334,18 @@ void TSADynPrmt_UpdateStepAftTch(short param_1,short param_2)
   else if (0xff < local_a) {
     local_a = 0xff;
   }
-  DAT_6bcab6d2._0_1_ = (char)local_a;
-  DAT_6bcab6ca._7_1_ = 1;
+  *(char*)TSA_MEM_AT(0x6bcab6d2ULL + 0) = (char)local_a;
+  *(char*)TSA_MEM_AT(0x6bcab6caULL + 7) = 1;
   if (((*_refptr_g_tsaStaticPtr)->dwProcessingState & 0x10) != 0) {
     if ((char)DAT_6bcab6d2 < '\0') {
-      DAT_6bcab6d2._0_1_ = -1;
+      *(char*)TSA_MEM_AT(0x6bcab6d2ULL + 0) = -1;
     }
     else {
-      DAT_6bcab6d2._0_1_ = (char)DAT_6bcab6d2 * '\x02';
+      *(char*)TSA_MEM_AT(0x6bcab6d2ULL + 0) = (char)DAT_6bcab6d2 * '\x02';
     }
   }
-  DAT_6bcab6d2._4_1_ = (byte)_refptr_g_tsaPrmtFlash->field_0x38 >> 1;
-  DAT_6bcab6d2._5_1_ = _refptr_g_tsaPrmtFlash->field_0x38;
+  *(char*)TSA_MEM_AT(0x6bcab6d2ULL + 4) = (byte)_refptr_g_tsaPrmtFlash->field_0x38 >> 1;
+  *(char*)TSA_MEM_AT(0x6bcab6d2ULL + 5) = _refptr_g_tsaPrmtFlash->field_0x38;
   return;
 }
 

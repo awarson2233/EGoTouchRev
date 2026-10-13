@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: Rawdata_CMF @ 6ba69381
 // ============================================================================
@@ -149,6 +151,117 @@ int Rawdata_NormalizeGridUnit(ushort param_1)
   }
   return (int)(*(int *)(_refptr_g_tsaPrmtFlashConst + 0x38) * local_c) / 0x3fff +
          *(int *)(_refptr_g_tsaPrmtFlashConst + 0x3c);
+}
+
+
+// ============================================================================
+// Function: Rawdata_Init @ 6ba69300
+// ============================================================================
+
+void Rawdata_Init(void)
+
+{
+                    /* 0x29300  1152  Rawdata_Init */
+  return;
+}
+
+
+// ============================================================================
+// Function: Rawdata_RetrieveBaseline @ 6ba696ed
+// ============================================================================
+
+void Rawdata_RetrieveBaseline
+               (longlong param_1,undefined8 param_2,longlong param_3,undefined8 param_4,
+               longlong param_5, ...)
+
+{
+  char cVar1;
+  ushort uVar2;
+  short sVar3;
+  int local_10;
+  byte local_a;
+  byte local_9;
+  
+                    /* 0x296ed  1157  Rawdata_RetrieveBaseline */
+  if ((param_1 != 0) && (param_3 != 0)) {
+    if (((*_refptr_g_tsaStaticPtr)->dwSystemFlags & FLAG_USE_DIF_BUF_PATH) == 0) {
+      for (local_9 = 0; local_9 < _refptr_g_tsaPrmtFlash->bCols; local_9 = local_9 + 1) {
+        for (local_a = 0; local_a < _refptr_g_tsaPrmtFlash->bRows; local_a = local_a + 1) {
+          uVar2 = (ushort)local_9 + (ushort)local_a * (ushort)_refptr_g_tsaPrmtFlash->bCols;
+          sVar3 = *(short *)(param_3 + (ulonglong)uVar2 * 2);
+          local_10 = (int)sVar3;
+          if ((((*_refptr_g_tsaStaticPtr)->dwFeatureFlags & 0x8000) == 0) ||
+             ((local_9 != 0 && ((uint)local_9 != _refptr_g_tsaPrmtFlash->bCols - 1)))) {
+            sVar3 = TPSensor_RevertScalingDif((int)sVar3,local_9,local_a);
+            local_10 = (int)sVar3;
+            if (param_5 != 0) {
+              sVar3 = CMF_GetNoiseValueFromBuf(param_5,local_9,local_a);
+              local_10 = local_10 + sVar3;
+            }
+          }
+          cVar1 = Rawdata_IsProcessNeeded();
+          if (cVar1 != '\0') {
+            local_10 = (local_10 * 0x3fff) / *(int *)(_refptr_g_tsaPrmtFlashConst + 0x38);
+          }
+          if ((*_refptr_g_tsaStaticPtr)->bField_0x11a == '\0') {
+            sVar3 = (short)local_10 + *(short *)(param_1 + (ulonglong)uVar2 * 2);
+          }
+          else {
+            sVar3 = *(short *)(param_1 + (ulonglong)uVar2 * 2) - (short)local_10;
+          }
+          *(short *)(param_1 + (ulonglong)uVar2 * 2) = sVar3;
+        }
+      }
+    }
+    else {
+      for (local_9 = 0; local_9 < _refptr_g_tsaPrmtFlash->bCols; local_9 = local_9 + 1) {
+        for (local_a = 0; local_a < _refptr_g_tsaPrmtFlash->bRows; local_a = local_a + 1) {
+          *(undefined2 *)
+           (param_1 +
+           (ulonglong)
+           (ushort)((ushort)local_9 + (ushort)local_a * (ushort)_refptr_g_tsaPrmtFlash->bCols) * 2)
+               = 0;
+        }
+      }
+    }
+  }
+  return;
+}
+
+
+// ============================================================================
+// Function: Rawdata_GetUnNormalizedBaseline @ 6ba69937
+// ============================================================================
+
+void Rawdata_GetUnNormalizedBaseline(longlong param_1,undefined4 param_2)
+
+{
+  char cVar1;
+  ushort local_c;
+  byte local_a;
+  byte local_9;
+  
+                    /* 0x29937  1151  Rawdata_GetUnNormalizedBaseline */
+  cVar1 = Rawdata_IsProcessNeeded();
+  if (cVar1 == '\0') {
+    TPSensor_RevertTranslateRaw(param_1,param_2);
+  }
+  else {
+    if (((*_refptr_g_tsaStaticPtr)->dwSystemFlags & FLAG_USE_DIF_BUF_PATH) == 0) {
+      local_c = 0;
+      for (local_a = 0; local_a < _refptr_g_tsaPrmtFlash->bRows; local_a = local_a + 1) {
+        for (local_9 = 0; local_9 < _refptr_g_tsaPrmtFlash->bCols; local_9 = local_9 + 1) {
+          *(short *)(param_1 + (ulonglong)local_c * 2) =
+               (short)((int)(((uint)*(ushort *)(param_1 + (ulonglong)local_c * 2) -
+                             *(int *)(_refptr_g_tsaPrmtFlashConst + 0x3c)) * 0x3fff) /
+                      *(int *)(_refptr_g_tsaPrmtFlashConst + 0x38));
+          local_c = local_c + 1;
+        }
+      }
+    }
+    TPSensor_RevertTranslateRaw(param_1,param_2);
+  }
+  return;
 }
 
 

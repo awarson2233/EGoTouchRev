@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: Exception_CheckUnderWater @ 6ba589c1
 // ============================================================================
@@ -411,6 +413,34 @@ void Exception_ProcessTouchZone(undefined8 param_1)
     HIException_ProcessTouchZone(param_1);
   }
   return;
+}
+
+
+// ============================================================================
+// Function: Exception_Free @ 6ba587e3
+// ============================================================================
+
+void Exception_Free(void)
+
+{
+                    /* 0x187e3  578  Exception_Free */
+  FIException_Free();
+  return;
+}
+
+
+// ============================================================================
+// Function: Exception_Malloc @ 6ba587c0
+// ============================================================================
+
+bool Exception_Malloc(void)
+
+{
+  char cVar1;
+  
+                    /* 0x187c0  583  Exception_Malloc */
+  cVar1 = FIException_Malloc();
+  return cVar1 != '\0';
 }
 
 

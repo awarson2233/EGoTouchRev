@@ -1,20 +1,24 @@
-﻿#pragma once
+#pragma once
 // ============================================================================
 // TSABssMemoryImage.h
 // Contiguous 1.44 MB (.data + .rdata + .bss) Memory Image Mapping
 // Covers VA range 0x6bb4e000 .. 0x6bcad000 (size = 0x15f000 = 1,437,696 bytes)
 // ============================================================================
 #include "TSAPrmtStaticTables.h"
+#ifdef __cplusplus
 #include <cstring>
+#else
+#include <string.h>
+#endif
 
-static constexpr uintptr_t kTsaMemoryImageBaseVA = 0x6bb4e000ULL;
-static constexpr size_t    kTsaMemoryImageSize   = 0x0015f000ULL;
+#define kTsaMemoryImageBaseVA 0x6bb4e000ULL
+#define kTsaMemoryImageSize   0x0015f000ULL
 
-alignas(64) inline uint8_t g_tsaMemoryImage[kTsaMemoryImageSize] = {};
+extern uint8_t g_tsaMemoryImage[kTsaMemoryImageSize];
 
-#define TSA_MEM_AT(va) (g_tsaMemoryImage + ((uintptr_t)(va) - kTsaMemoryImageBaseVA))
-#define TSA_VAR_AT(type, va) (*reinterpret_cast<type*>(TSA_MEM_AT(va)))
-#define TSA_PTR_AT(type, va) (reinterpret_cast<type*>(TSA_MEM_AT(va)))
+#define TSA_MEM_AT(va) ((uint8_t*)(g_tsaMemoryImage + ((uintptr_t)(va) - kTsaMemoryImageBaseVA)))
+#define TSA_VAR_AT(type, va) (*((type*)TSA_MEM_AT(va)))
+#define TSA_PTR_AT(type, va) ((type*)TSA_MEM_AT(va))
 
 // ----------------------------------------------------------------------------
 // 1. Typed _refptr_* Mappings (151 symbols used across active pipeline)
@@ -183,7 +187,7 @@ alignas(64) inline uint8_t g_tsaMemoryImage[kTsaMemoryImageSize] = {};
 #define g_accQueue                                 TSA_VAR_AT(uint8_t, 0x6bbc0e00ULL)
 #define g_accQueueBuff                             TSA_VAR_AT(uint8_t, 0x6bb80700ULL)
 #define g_addedInfo                                TSA_VAR_AT(uint8_t, 0x6bc72cc0ULL)
-#define g_afeTestErrorInfo                         TSA_VAR_AT(uint8_t, 0x6bb4fa38ULL)
+#define g_afeTestErrorInfo                         TSA_VAR_AT(const char*, 0x6bb4fa38ULL)
 #define g_afeTestLevel                             TSA_VAR_AT(uint8_t, 0x6bb4fa30ULL)
 #define g_aftFgInfo                                TSA_VAR_AT(uint8_t, 0x6bc71c80ULL)
 #define g_aftPara                                  TSA_VAR_AT(uint8_t, 0x6bc72000ULL)
@@ -364,7 +368,7 @@ alignas(64) inline uint8_t g_tsaMemoryImage[kTsaMemoryImageSize] = {};
 #define g_preReport                                TSA_VAR_AT(uint8_t, 0x6bbaa1c0ULL)
 #define g_pressureDriftDebounce                    TSA_VAR_AT(uint8_t, 0x6bbbf568ULL)
 #define g_prevASOut                                TSA_VAR_AT(uint8_t, 0x6bc71b40ULL)
-#define g_prevPeaksPtr                             TSA_VAR_AT(uint8_t, 0x6bb4f110ULL)
+#define g_prevPeaksPtr                             (*((uint8_t**)TSA_MEM_AT(0x6bb4f110ULL)))
 #define g_prevTimeStamp                            TSA_VAR_AT(uint8_t, 0x6bbaa480ULL)
 #define g_prevTouchesSide                          TSA_VAR_AT(uint8_t, 0x6bc8f040ULL)
 #define g_prevTouchInvalidID                       TSA_VAR_AT(uint8_t, 0x6bbc68e0ULL)
@@ -422,7 +426,7 @@ alignas(64) inline uint8_t g_tsaMemoryImage[kTsaMemoryImageSize] = {};
 #define g_toeSynaIsExcludeSide                     TSA_VAR_AT(uint8_t, 0x6bbbf5a8ULL)
 #define g_toFreq                                   TSA_VAR_AT(uint8_t, 0x6bbaa445ULL)
 #define g_toRate                                   TSA_VAR_AT(uint8_t, 0x6bbaa444ULL)
-#define g_touchesPtr                               TSA_VAR_AT(uint8_t, 0x6bb4f1d0ULL)
+#define g_touchesPtr                               (*((uint8_t**)TSA_MEM_AT(0x6bb4f1d0ULL)))
 #define g_touchTotal                               TSA_VAR_AT(uint8_t, 0x6bba9ef8ULL)
 #define g_tpSensorBrokenList                       TSA_VAR_AT(uint8_t, 0x6bb80e40ULL)
 #define g_tpSensorDifScale                         TSA_VAR_AT(uint8_t, 0x6bb80e18ULL)
@@ -454,23 +458,23 @@ alignas(64) inline uint8_t g_tsaMemoryImage[kTsaMemoryImageSize] = {};
 #define g_tsaBufTimeDown                           TSA_VAR_AT(uint8_t, 0x6bb81288ULL)
 #define g_tsaBufTimeHand                           TSA_VAR_AT(uint8_t, 0x6bba3518ULL)
 #define g_tsaBufTimeOff                            TSA_VAR_AT(uint8_t, 0x6bb81280ULL)
-#define g_tsaBufTimeRpt                            TSA_VAR_AT(uint8_t, 0x6bb81290ULL)
+#define g_tsaBufTimeRpt                            (*((uint8_t**)TSA_MEM_AT(0x6bb81290ULL)))
 #define g_tsaBufTz                                 TSA_VAR_AT(uint8_t, 0x6bb81318ULL)
 #define g_tsaBufTzHand                             TSA_VAR_AT(uint8_t, 0x6bba3508ULL)
 #define g_tsaBufTzID                               TSA_VAR_AT(uint8_t, 0x6bb813a8ULL)
 #define g_tsaBufTzPrev                             TSA_VAR_AT(uint8_t, 0x6bb81390ULL)
 #define g_tsaBufTzPrevHand                         TSA_VAR_AT(uint8_t, 0x6bba3510ULL)
-#define g_tsaBufTzZone                             TSA_VAR_AT(uint8_t, 0x6bb813a0ULL)
-#define g_tsaBufTzZonePrev                         TSA_VAR_AT(uint8_t, 0x6bb81398ULL)
+#define g_tsaBufTzZone                             (*((uint8_t**)TSA_MEM_AT(0x6bb813a0ULL)))
+#define g_tsaBufTzZonePrev                         (*((uint8_t**)TSA_MEM_AT(0x6bb81398ULL)))
 #define g_tsaDataFlag                              TSA_VAR_AT(uint8_t, 0x6bba0d90ULL)
 #define g_tsaDifBlockPrpt                          TSA_VAR_AT(uint8_t, 0x6bc4a980ULL)
 #define g_tsaIdePreFltRpt                          TSA_VAR_AT(uint8_t, 0x6bca3d80ULL)
 #define g_tsaLogLevel                              TSA_VAR_AT(uint8_t, 0x6bbb57c0ULL)
 #define g_tsaPlot                                  TSA_VAR_AT(uint8_t, 0x6bbaa184ULL)
 #define g_tsaPrmtDynamic                           TSA_VAR_AT(uint8_t, 0x6bcab680ULL)
-#define g_tsaPrmtFlash                             TSA_PTR_AT(TSAFlashPrmt, 0x6bca8a00ULL)
+#define g_tsaPrmtFlash                             (*TSA_PTR_AT(TSAFlashPrmt, 0x6bca8a00ULL))
 #define g_tsaPrmtFlashConst                        TSA_VAR_AT(uint8_t, 0x6bcab600ULL)
-#define g_tsaPrpt                                  TSA_PTR_AT(TSAPrpt, 0x6bc4a640ULL)
+#define g_tsaPrpt                                  (*TSA_PTR_AT(TSAPrpt, 0x6bc4a640ULL))
 #define g_tsaRTPrmt                                TSA_VAR_AT(uint8_t, 0x6bcab780ULL)
 #define g_tsaRTPrmtDefault                         TSA_VAR_AT(uint8_t, 0x6bcab900ULL)
 #define g_tsaStaticPtr                             TSA_VAR_AT(TSAStatic*, 0x6bb4f290ULL)
@@ -781,7 +785,7 @@ alignas(64) inline uint8_t g_tsaMemoryImage[kTsaMemoryImageSize] = {};
 #define DAT_6bc84e22             TSA_VAR_AT(uint8_t, 0x6bc84e22ULL)
 #define DAT_6bc84e24             TSA_VAR_AT(uint8_t, 0x6bc84e24ULL)
 #define DAT_6bc84e28             TSA_VAR_AT(uint8_t, 0x6bc84e28ULL)
-#define DAT_6bc84e30             TSA_VAR_AT(uint8_t, 0x6bc84e30ULL)
+#define DAT_6bc84e30             (*((uint8_t**)TSA_MEM_AT(0x6bc84e30ULL)))
 #define DAT_6bc86ca4             TSA_VAR_AT(uint8_t, 0x6bc86ca4ULL)
 #define DAT_6bc86ca8             TSA_VAR_AT(uint8_t, 0x6bc86ca8ULL)
 #define DAT_6bc86cab             TSA_VAR_AT(uint8_t, 0x6bc86cabULL)
@@ -1550,20 +1554,61 @@ alignas(64) inline uint8_t g_tsaMemoryImage[kTsaMemoryImageSize] = {};
 // ----------------------------------------------------------------------------
 // 4. Memory Image Initialization & Relocation Routine
 // ----------------------------------------------------------------------------
-inline void TSA_MemoryImage_Init() {
-    std::memset(g_tsaMemoryImage, 0, sizeof(g_tsaMemoryImage));
+static inline void TSA_MemoryImage_Init(void) {
+    memset(g_tsaMemoryImage, 0, sizeof(g_tsaMemoryImage));
     // 1. Copy initial .data (0x6bb4f000) and .rdata (0x6bb51000) sections from TSACore.dll
-    std::memcpy(TSA_MEM_AT(0x6bb4f000ULL), kTsaDataSectionInit, sizeof(kTsaDataSectionInit));
-    std::memcpy(TSA_MEM_AT(0x6bb51000ULL), kTsaRdataSectionInit, sizeof(kTsaRdataSectionInit));
-    // 2. Apply all 601 internal .data/.rdata/.bss pointer relocations
-    for (const auto& rel : kTsaInternalRelocs) {
-        *reinterpret_cast<uintptr_t*>(g_tsaMemoryImage + rel.ptrOffset) =
-            reinterpret_cast<uintptr_t>(g_tsaMemoryImage + rel.targetOffset);
+    memcpy(TSA_MEM_AT(0x6bb4f000ULL), kTsaDataSectionInit, sizeof(kTsaDataSectionInit));
+    memcpy(TSA_MEM_AT(0x6bb51000ULL), kTsaRdataSectionInit, sizeof(kTsaRdataSectionInit));
+    // 2. Apply all internal pointer relocations
+    for (size_t i = 0; i < sizeof(kTsaInternalRelocs)/sizeof(kTsaInternalRelocs[0]); ++i) {
+        *(uintptr_t*)(g_tsaMemoryImage + kTsaInternalRelocs[i].ptrOffset) =
+            (uintptr_t)(g_tsaMemoryImage + kTsaInternalRelocs[i].targetOffset);
     }
     // 3. Load W273AS2700 (GaokunHimaxCSOT) static parameter tables into .bss
-    std::memcpy(TSA_MEM_AT(0x6bca8a00ULL), kW273AS2700_FlashPrmt, sizeof(kW273AS2700_FlashPrmt));
-    std::memcpy(TSA_MEM_AT(0x6bcaa2c0ULL), kW273AS2700_CmfPcaPrmt, sizeof(kW273AS2700_CmfPcaPrmt));
-    std::memcpy(TSA_MEM_AT(0x6bca7bc0ULL), kW273AS2700_AsaPrmt, sizeof(kW273AS2700_AsaPrmt));
-    *reinterpret_cast<uintptr_t*>(TSA_MEM_AT(0x6bc4d878ULL)) = reinterpret_cast<uintptr_t>(TSA_MEM_AT(0x6bca7bc0ULL));
-    *reinterpret_cast<uintptr_t*>(TSA_MEM_AT(0x6bc4d880ULL)) = reinterpret_cast<uintptr_t>(TSA_MEM_AT(0x6bca7bc8ULL));
+    memcpy(TSA_MEM_AT(0x6bca8a00ULL), kW273AS2700_FlashPrmt, sizeof(kW273AS2700_FlashPrmt));
+    memcpy(TSA_MEM_AT(0x6bcaa2c0ULL), kW273AS2700_CmfPcaPrmt, sizeof(kW273AS2700_CmfPcaPrmt));
+    memcpy(TSA_MEM_AT(0x6bca7bc0ULL), kW273AS2700_AsaPrmt, sizeof(kW273AS2700_AsaPrmt));
+    *(uintptr_t*)TSA_MEM_AT(0x6bc4d878ULL) = (uintptr_t)TSA_MEM_AT(0x6bca7bc0ULL);
+    *(uintptr_t*)TSA_MEM_AT(0x6bc4d880ULL) = (uintptr_t)TSA_MEM_AT(0x6bca7bc8ULL);
 }
+
+// ----------------------------------------------------------------------------
+// Additional symbols and .rdata strings for active pipeline
+// ----------------------------------------------------------------------------
+#define _refptr_g_tsaBufSSPreUnifiedBaseline        (*((undefined**)TSA_MEM_AT(0x6bc7ad40ULL)))
+#define _refptr_g_tsaLogFlagLogCallBackEnabled      ((undefined1*)TSA_MEM_AT(0x6bca04ecULL))
+#define DAT_6bbaa78a                                (*((undefined1*)TSA_MEM_AT(0x6bbaa78aULL)))
+#define DAT_6bbaa798                                (*((undefined1*)TSA_MEM_AT(0x6bbaa798ULL)))
+#define DAT_6bba3588                                (*((undefined8*)TSA_MEM_AT(0x6bba3588ULL)))
+#define DAT_6bba3788                                (*((undefined1*)TSA_MEM_AT(0x6bba3788ULL)))
+#define DAT_6bba397e                                (*((undefined2*)TSA_MEM_AT(0x6bba397eULL)))
+
+static const char DAT_6bb53aef[] = "U";
+static const char DAT_6bb53af1[] = "NF";
+static const char DAT_6bb53af4[] = "FF";
+static const char DAT_6bb53af7[] = "MF";
+static const char DAT_6bb53afa[] = "SF";
+static const char DAT_6bb53afd[] = "LO";
+static const char DAT_6bb53b18[] = "L";
+static const char DAT_6bb53b1a[] = "F";
+static const char DAT_6bb53b1c[] = "G";
+static const char DAT_6bb53b1e[] = "S";
+static const char DAT_6bb53b20[] = "0";
+static const char DAT_6bb53b22[] = "SDT";
+static const char DAT_6bb53b26[] = "BD";
+static const char DAT_6bb53b29[] = "SD";
+static const char DAT_6bb53b2c[] = "ESD";
+static const char DAT_6bb53b30[] = "TEM";
+static const char DAT_6bb53b34[] = "WT";
+static const char DAT_6bb53b37[] = "WF";
+static const char DAT_6bb53b3a[] = "CA";
+static const char DAT_6bb53b3d[] = "WK";
+static const char DAT_6bb53b40[] = "C";
+static const char DAT_6bb53b42[] = "R";
+static const char DAT_6bb53b44[] = "D";
+static const char DAT_6bb53b46[] = "M";
+static const char DAT_6bb53b48[] = "O";
+static const char DAT_6bb53b4a[] = "DD";
+static const char DAT_6bb53b4d[] = "LD";
+static const char DAT_6bb53b50[] = "OD";
+static const char DAT_6bb58148[] = "\n";

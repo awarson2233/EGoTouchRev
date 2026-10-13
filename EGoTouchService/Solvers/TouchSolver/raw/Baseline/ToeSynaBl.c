@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: ToeSynaBl_GetSidePrpt @ 6bb471b0
 // ============================================================================
@@ -1083,11 +1085,9 @@ LAB_6bb4777b:
 // Function: ToeSynaBl_IsRawChangedSinceBackLightShift @ 6bb46030
 // ============================================================================
 
-void ToeSynaBl_IsRawChangedSinceBackLightShift(undefined1 param_1)
-
+char ToeSynaBl_IsRawChangedSinceBackLightShift(undefined1 param_1)
 {
-  BLReset_IsRawChanged(g_tsaBufRawStoredSinceBackLightShift,param_1,1,1);
-  return;
+  return BLReset_IsRawChanged(g_tsaBufRawStoredSinceBackLightShift,param_1,1,1);
 }
 
 
@@ -1133,11 +1133,9 @@ undefined1 ToeSynaBl_IsWaterDetectedZ8Check(void)
 // Function: ToeSynaBl_IsRawChangedSinceSSNoSignal @ 6bb46062
 // ============================================================================
 
-void ToeSynaBl_IsRawChangedSinceSSNoSignal(undefined1 param_1)
-
+char ToeSynaBl_IsRawChangedSinceSSNoSignal(undefined1 param_1)
 {
-  BLReset_IsRawChanged(g_tsaBufRawStoredSinceDim2SSNoSignal,param_1,1,1);
-  return;
+  return BLReset_IsRawChanged(g_tsaBufRawStoredSinceDim2SSNoSignal,param_1,1,1);
 }
 
 
@@ -1169,6 +1167,56 @@ undefined8 ToeSynaBl_SSIsDim2NoSignal(void)
     local_9 = local_9 + 1;
   }
   return 0;
+}
+
+
+// ============================================================================
+// Function: ToeSynaBl_Free @ 6bb46137
+// ============================================================================
+
+void ToeSynaBl_Free(void)
+
+{
+                    /* 0x106137  2468  ToeSynaBl_Free */
+  TSA_Free(&g_tsaBufRawStoredSinceClothRisk);
+  TSA_Free(&g_tsaBufRawStoredSinceBackLightShift);
+  TSA_Free(&g_tsaBufRawStoredSinceDim2SSNoSignal);
+  return;
+}
+
+
+// ============================================================================
+// Function: ToeSynaBl_Malloc @ 6bb46094
+// ============================================================================
+
+undefined8 ToeSynaBl_Malloc(void)
+
+{
+  undefined8 uVar1;
+  
+                    /* 0x106094  2479  ToeSynaBl_Malloc */
+  g_tsaBufRawStoredSinceClothRisk = TSA_MallocAndInit((uint)*(ushort *)_refptr_g_gridBufSize * 2);
+  if (g_tsaBufRawStoredSinceClothRisk == 0) {
+    uVar1 = 0;
+  }
+  else {
+    g_tsaBufRawStoredSinceBackLightShift =
+         TSA_MallocAndInit((uint)*(ushort *)_refptr_g_gridBufSize * 2);
+    if (g_tsaBufRawStoredSinceBackLightShift == 0) {
+      uVar1 = 0;
+    }
+    else {
+      g_tsaBufRawStoredSinceDim2SSNoSignal =
+           TSA_MallocAndInit((uint)*(ushort *)_refptr_g_gridBufSize * 2);
+      if (g_tsaBufRawStoredSinceDim2SSNoSignal == 0) {
+        uVar1 = 0;
+      }
+      else {
+        uVar1 = 1;
+      }
+    }
+  }
+  return uVar1;
 }
 
 

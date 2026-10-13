@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: Sensor_GetZoneIndex2 @ 6ba672e1
 // ============================================================================
@@ -54,12 +56,9 @@ uint Sensor_GetPosType2(ushort param_1)
 // Function: Sensor_GetPosType @ 6ba67339
 // ============================================================================
 
-void Sensor_GetPosType(byte param_1,byte param_2)
-
+byte Sensor_GetPosType(byte param_1,byte param_2)
 {
-                    /* 0x27339  1289  Sensor_GetPosType */
-  Sensor_GetPosType2((ushort)param_1 + (ushort)param_2 * (ushort)_refptr_g_tsaPrmtFlash->bCols);
-  return;
+  return Sensor_GetPosType2((ushort)param_1 + (ushort)param_2 * (ushort)_refptr_g_tsaPrmtFlash->bCols);
 }
 
 
@@ -67,12 +66,9 @@ void Sensor_GetPosType(byte param_1,byte param_2)
 // Function: Sensor_GetZoneIndex @ 6ba672a6
 // ============================================================================
 
-void Sensor_GetZoneIndex(byte param_1,byte param_2)
-
+byte Sensor_GetZoneIndex(byte param_1,byte param_2)
 {
-                    /* 0x272a6  1293  Sensor_GetZoneIndex */
-  Sensor_GetZoneIndex2((ushort)param_1 + (ushort)param_2 * (ushort)_refptr_g_tsaPrmtFlash->bCols);
-  return;
+  return Sensor_GetZoneIndex2((ushort)param_1 + (ushort)param_2 * (ushort)_refptr_g_tsaPrmtFlash->bCols);
 }
 
 

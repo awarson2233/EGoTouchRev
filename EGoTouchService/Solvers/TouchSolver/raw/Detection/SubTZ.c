@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: SubTZ_Process @ 6ba7e646
 // ============================================================================
@@ -450,7 +452,7 @@ void SubTZ_TraversalGripNeighbors
   byte local_d;
   uint local_c;
   
-  builtin_strncpy(local_28,"\x01\x01\x01",4);
+  memcpy(local_28,"\x01\x01\x01",4);
   local_28[4] = 0xff;
   local_28[5] = 0xff;
   local_28[6] = 0xff;
@@ -610,6 +612,94 @@ void SubTZ_SetExtraFlag(ushort param_1,short param_2,longlong param_3)
 }
 
 
-
 // ============================================================================
 // Function: SubTz_GetSignalThresh @ 6ba7de91
+// ============================================================================
+
+short SubTz_GetSignalThresh(short *param_1,undefined8 *param_2)
+
+{
+  char cVar1;
+  int iVar2;
+  short local_a;
+  
+  cVar1 = TSAStatic_IsAFTModeEnabled();
+  if (cVar1 == '\0') {
+    if ((*(char *)((longlong)param_1 + 0x34b) != '\0') || ((*(uint *)(param_1 + 0x1a8) & 200) != 0))
+    {
+      cVar1 = SignalDisparity_IsSignalCompensated();
+      if ((cVar1 != '\0') &&
+         (((*_refptr_g_tsaStaticPtr)->dwFeatureFlags & FEAT_SIGNAL_DISPARITY_POST) != 0)) {
+        *param_2 = *(undefined8 *)_refptr_g_tsaBufSd;
+        local_a = *(short *)((ulonglong)
+                             ((uint)(*_refptr_g_peaksPtr)
+                                    [(longlong)(int)(uint)*(byte *)(param_1 + 0x15b) * 0x14 + 0x15].
+                                    bPeakCount +
+                              (uint)(*_refptr_g_peaksPtr)
+                                    [(longlong)(int)(uint)*(byte *)(param_1 + 0x15b) * 0x14 + 0x16].
+                                    bPeakCount * (uint)_refptr_g_tsaPrmtFlash->bCols & 0xffff) * 2 +
+                            *(longlong *)_refptr_g_tsaBufSd) / 2;
+        goto LAB_6ba7e26d;
+      }
+    }
+    if ((*(uint *)(param_1 + 2) & 2) == 0) {
+      if (*(int *)(param_1 + 0x1a8) == 8) {
+        iVar2 = (uint)(byte)_refptr_g_tsaPrmtFlash->field_0x820 *
+                (int)*(short *)(*_refptr_g_peaksPtr +
+                               (longlong)(int)(uint)*(byte *)((longlong)param_1 + 0x2b7) * 0x14 +
+                               0x18);
+        if (iVar2 < 0) {
+          iVar2 = iVar2 + 0x7f;
+        }
+        local_a = (short)(iVar2 >> 7);
+      }
+      else if (((((uint)(*_refptr_g_peaksPtr)
+                        [(longlong)(int)(uint)*(byte *)(param_1 + 0x15b) * 0x14 + 0x15].bPeakCount
+                  == _refptr_g_tsaPrmtFlash->bCols - 1) ||
+                ((*_refptr_g_peaksPtr)
+                 [(longlong)(int)(uint)*(byte *)(param_1 + 0x15b) * 0x14 + 0x15].bPeakCount == '\0')
+                ) || ((uint)(*_refptr_g_peaksPtr)
+                            [(longlong)(int)(uint)*(byte *)(param_1 + 0x15b) * 0x14 + 0x16].
+                            bPeakCount == _refptr_g_tsaPrmtFlash->bRows - 1)) ||
+              ((*_refptr_g_peaksPtr)[(longlong)(int)(uint)*(byte *)(param_1 + 0x15b) * 0x14 + 0x16].
+               bPeakCount == '\0')) {
+        iVar2 = (uint)(byte)_refptr_g_tsaPrmtFlash->field_0x81f *
+                (int)*(short *)(*_refptr_g_peaksPtr +
+                               (longlong)(int)(uint)*(byte *)((longlong)param_1 + 0x2b7) * 0x14 +
+                               0x18);
+        if (iVar2 < 0) {
+          iVar2 = iVar2 + 0x7f;
+        }
+        local_a = (short)(iVar2 >> 7);
+      }
+      else {
+        iVar2 = (uint)(byte)_refptr_g_tsaPrmtFlash->field_0x81f *
+                (int)*(short *)(*_refptr_g_peaksPtr +
+                               (longlong)(int)(uint)*(byte *)(param_1 + 0x15b) * 0x14 + 0x18);
+        if (iVar2 < 0) {
+          iVar2 = iVar2 + 0x7f;
+        }
+        local_a = (short)(iVar2 >> 7);
+      }
+    }
+    else {
+      iVar2 = (uint)(byte)_refptr_g_tsaPrmtFlash->field_0x81f *
+              (int)*(short *)(*_refptr_g_peaksPtr +
+                             (longlong)(int)(uint)*(byte *)(param_1 + 0x15b) * 0x14 + 0x18);
+      if (iVar2 < 0) {
+        iVar2 = iVar2 + 0x7f;
+      }
+      local_a = (short)(iVar2 >> 7);
+    }
+  }
+  else {
+    local_a = *param_1;
+  }
+LAB_6ba7e26d:
+  if (local_a < *param_1) {
+    local_a = *param_1;
+  }
+  return local_a;
+}
+
+

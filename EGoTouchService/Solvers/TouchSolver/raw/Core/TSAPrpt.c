@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: TSAPrpt_GetDifPreCMFPrpt @ 6baa13be
 // ============================================================================
@@ -79,6 +81,32 @@ void TSAPrpt_Init(void)
                     /* 0x607c8  1657  TSAPrpt_Init */
   TSA_InitBlockIdx();
   return;
+}
+
+
+// ============================================================================
+// Function: TSAPrpt_Free @ 6baa07ad
+// ============================================================================
+
+void TSAPrpt_Free(void)
+
+{
+                    /* 0x607ad  1655  TSAPrpt_Free */
+  TSA_Free(&g_tsaBlockIdx);
+  return;
+}
+
+
+// ============================================================================
+// Function: TSAPrpt_Malloc @ 6baa076c
+// ============================================================================
+
+bool TSAPrpt_Malloc(void)
+
+{
+                    /* 0x6076c  1658  TSAPrpt_Malloc */
+  g_tsaBlockIdx = TSA_MallocAndInit(*(undefined2 *)_refptr_g_gridBufSize);
+  return g_tsaBlockIdx != 0;
 }
 
 

@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: TSAStatic_PreProcess @ 6baa1bb0
 // ============================================================================
@@ -1175,6 +1177,19 @@ uint TSAStatic_GetSigThold(int param_1)
     uVar1 = (uint)*(ushort *)(_refptr_g_tsaPrmtDynamic + 8);
   }
   return uVar1;
+}
+
+
+// ============================================================================
+// Function: TSAStatic_UpdateExtendCtrlFlags @ 6baa2329
+// ============================================================================
+
+void TSAStatic_UpdateExtendCtrlFlags(undefined8 param_1)
+
+{
+                    /* 0x62329  1716  TSAStatic_UpdateExtendCtrlFlags */
+  *(undefined8 *)&g_tsaStaticPtr->field_0xc8 = param_1;
+  return;
 }
 
 

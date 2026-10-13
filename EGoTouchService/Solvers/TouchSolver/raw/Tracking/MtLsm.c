@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: MtLsm_CalcMatrixB @ 6ba54882
 // ============================================================================
@@ -404,7 +406,7 @@ float MtLsm_GetF(undefined8 param_1,undefined8 param_2)
   Matrix_Rotate(local_78,param_1);
   Matrix_Mul(local_78,local_78,param_2);
   Matrix_Mul(local_78,local_78,param_1);
-  return local_78[0] - _rdata;
+  return local_78[0] - 1.0f;
 }
 
 

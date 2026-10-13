@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: PosnSpecial_Init @ 6bb422b6
 // ============================================================================
@@ -332,6 +334,22 @@ char PosnSpecial_GetPosMarker(void)
     DAT_6bcac4d1 = '\x01';
   }
   return DAT_6bcac4d1;
+}
+
+
+// ============================================================================
+// Function: PosnQueue_Init @ 6bb41e70
+// ============================================================================
+
+void PosnQueue_Init(undefined8 param_1,undefined1 param_2)
+
+{
+                    /* 0x101e70  1008  PosnQueue_Init */
+  g_queue = param_1;
+  DAT_6bbbf528 = param_2;
+  DAT_6bbbf52a = 0;
+  DAT_6bbbf529 = 0;
+  return;
 }
 
 

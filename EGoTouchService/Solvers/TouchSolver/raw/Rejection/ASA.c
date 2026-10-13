@@ -1,3 +1,12 @@
+#include "TSACoreInternal.h"
+
+// ============================================================================
+// Function: ASAStaticInit @ 6bac8481
+// ============================================================================
+
+// ASAStaticInit pruned to TSAPrunedStubs.h
+
+
 // ============================================================================
 // Function: ASA_GetRptInRange @ 6bac757f
 // ============================================================================
@@ -113,22 +122,8 @@ undefined4 ASA_GetBluetoothConnectStatus(void)
 undefined8 ASA_Reset(void)
 
 {
-                    /* 0x84e3b  291  ASA_Reset */
-  ButtonInit();
-  HPP3_FreqShiftInit();
-  PressureInit();
-  RawInit();
-  PeaksInit();
-  GridPeaksInit();
-  CoordinateInit();
-  ReportInit();
-  TiltInit();
-  FilterInit();
-  CoorReviseInit();
-  NoPressInkInit();
-  ASAStaticReset();
+  memset_s(_refptr_g_curASOut,0xec,0,0xec);
   ASACalibration_Init();
-  AnimationInit();
   return 0;
 }
 
@@ -149,7 +144,7 @@ undefined2 ASA_GetDim1PhyRes(void)
 // Function: ASA_SetDim1Len @ 6bac7ffa
 // ============================================================================
 
-void ASA_SetDim1Len(byte param_1)
+void ASA_SetDim1Len(byte param_1, ...)
 
 {
                     /* 0x87ffa  303  ASA_SetDim1Len */
@@ -733,5 +728,42 @@ undefined8 ASA_GetFrameBypass(void)
   }
   return uVar1;
 }
+
+
+// ============================================================================
+// Function: ASA_InitAFEProject @ 6bac4eb9
+// ============================================================================
+
+undefined8 ASA_InitAFEProject(undefined8 param_1,undefined8 param_2)
+
+{
+  ASA_LoadProjectPrmt(param_1,param_2);
+  ASAStaticInit(param_1);
+  ASA_Reset();
+  ASACalibration_Init();
+  return 0;
+}
+
+
+// ============================================================================
+// Function: ASA_InitProjectFromTsa @ 6bac4e99
+// ============================================================================
+
+undefined8 ASA_InitProjectFromTsa(undefined8 param_1)
+
+{
+                    /* 0x84e99  259  ASA_InitProjectFromTsa */
+  ASA_LoadProjectPrmtFromTsa(param_1);
+  return 0;
+}
+
+
+// ============================================================================
+// Function: ASA_LoadProjectPrmt @ 6bac4c75
+// ============================================================================
+
+void ASA_LoadProjectPrmt(undefined8 param_1, void *param_2) { (void)param_1; (void)param_2; }
+void ASA_LoadProjectPrmtFromTsa(longlong param_1) { (void)param_1; }
+void ASA_LoadStylusHWPrmt(byte param_1) { (void)param_1; }
 
 

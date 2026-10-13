@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: TouchReport_Process @ 6ba7be73
 // ============================================================================
@@ -356,7 +358,7 @@ TouchReport_IsHistoryBufferApplied
            (undefined2)local_38;
       *(undefined2 *)
        ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x164) =
-           local_38._2_2_;
+           (undefined2)(local_38 >> 16);
       if ((*(uint *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr +
                     0x1f8) & 8) == 0) {
         *(undefined4 *)

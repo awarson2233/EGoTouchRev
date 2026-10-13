@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: TouchAction_Process @ 6ba7733c
 // ============================================================================
@@ -107,6 +109,18 @@ void TouchAction_Init(void)
 {
                     /* 0x37220  2484  TouchAction_Init */
   return;
+}
+
+
+// ============================================================================
+// Function: TouchAction_IsFlickCheckPassed @ 6ba773d9
+// ============================================================================
+
+bool TouchAction_IsFlickCheckPassed(void)
+
+{
+                    /* 0x373d9  2485  TouchAction_IsFlickCheckPassed */
+  return g_flickTestFailed == '\0';
 }
 
 

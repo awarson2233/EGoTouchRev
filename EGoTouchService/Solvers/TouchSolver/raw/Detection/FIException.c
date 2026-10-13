@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: FIException_CheckChargerNoiseInRxLines @ 6ba59429
 // ============================================================================
@@ -351,6 +353,32 @@ undefined8 FIException_IsAroundSmall(short param_1,short param_2,int param_3,sho
     }
     local_c = local_c + 1;
   } while( true );
+}
+
+
+// ============================================================================
+// Function: FIException_Free @ 6ba593a1
+// ============================================================================
+
+void FIException_Free(void)
+
+{
+                    /* 0x193a1  592  FIException_Free */
+  TSA_Free(&g_reached);
+  return;
+}
+
+
+// ============================================================================
+// Function: FIException_Malloc @ 6ba59360
+// ============================================================================
+
+bool FIException_Malloc(void)
+
+{
+                    /* 0x19360  595  FIException_Malloc */
+  g_reached = TSA_MallocAndInit(*(undefined2 *)_refptr_g_gridBufSize);
+  return g_reached != 0;
 }
 
 

@@ -4,50 +4,75 @@
 // Ghidra Decompiler Primitive Types, Bit-Concatenation Macros, Feature Flags,
 // and Inline No-Op / Pass-Through Stubs for Pruned Modules on W273AS2700
 // ============================================================================
+#ifdef __cplusplus
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
 #include <cmath>
+extern "C" {
+#else
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
+#include <string.h>
+#include <math.h>
+#endif
 
 // ----------------------------------------------------------------------------
 // 1. Ghidra Decompiler Primitive Typedefs
 // ----------------------------------------------------------------------------
-using undefined  = uint8_t;
-using undefined1 = uint8_t;
-using undefined2 = uint16_t;
-using undefined3 = uint32_t;
-using undefined4 = uint32_t;
-using undefined5 = uint64_t;
-using undefined6 = uint64_t;
-using undefined7 = uint64_t;
-using undefined8 = uint64_t;
-using uchar      = uint8_t;
-using ushort     = uint16_t;
-using uint       = uint32_t;
-using ulong      = uint32_t;
-using longlong   = int64_t;
-using ulonglong  = uint64_t;
-using byte       = uint8_t;
-using word       = uint16_t;
-using dword      = uint32_t;
-using qword      = uint64_t;
-using int3       = int32_t;
-using int5       = int64_t;
-using int6       = int64_t;
-using int7       = int64_t;
-using uint3      = uint32_t;
-using uint5      = uint64_t;
-using uint6      = uint64_t;
-using uint7      = uint64_t;
-using float10    = long double;
-using unkbyte10  = long double;
-using code       = void(*)(void);
-using TSA_FeatureFlags = uint32_t;
-using TSA_SystemFlags  = uint32_t;
+typedef uint8_t undefined;
+typedef uint8_t undefined1;
+typedef uint16_t undefined2;
+typedef uint32_t undefined3;
+typedef uint32_t undefined4;
+typedef uint64_t undefined5;
+typedef uint64_t undefined6;
+typedef uint64_t undefined7;
+typedef uint64_t undefined8;
+typedef uint8_t uchar;
+typedef uint16_t ushort;
+typedef uint32_t uint;
+typedef uint32_t ulong;
+typedef int64_t longlong;
+typedef uint64_t ulonglong;
+typedef uint8_t byte;
+typedef uint16_t word;
+typedef uint32_t dword;
+typedef uint64_t qword;
+typedef int32_t int3;
+typedef int64_t int5;
+typedef int64_t int6;
+typedef int64_t int7;
+typedef uint32_t uint3;
+typedef uint64_t uint5;
+typedef uint64_t uint6;
+typedef uint64_t uint7;
+typedef long double float10;
+typedef long double unkbyte10;
+typedef void (*code)();
+typedef uint32_t TSA_FeatureFlags;
+typedef uint32_t TSA_SystemFlags;
 #ifndef _ERRNO_T_DEFINED
 #define _ERRNO_T_DEFINED
-using errno_t = int;
+typedef int errno_t;
 #endif
+
+// Forward declarations for struct and union tags
+typedef union AFE_Frame AFE_Frame;
+typedef struct AFE_Caps AFE_Caps;
+typedef struct AFE_Info AFE_Info;
+typedef struct AsaDataRuntimeV2 AsaDataRuntimeV2;
+typedef struct AsaPrmtFlashPressureRuntime AsaPrmtFlashPressureRuntime;
+typedef struct AsaPrmtStylusPressureRuntime AsaPrmtStylusPressureRuntime;
+typedef struct GMM_Struct GMM_Struct;
+typedef struct Gauss_Struct Gauss_Struct;
+typedef union TouchUnit TouchUnit;
+typedef union TouchPoint TouchPoint;
+typedef union Touch Touch;
+typedef union PrevTouch PrevTouch;
+typedef struct stylusFrame stylusFrame;
+
 
 // ----------------------------------------------------------------------------
 // 2. Ghidra Bit-Concatenation & Truncation Intrinsics + Math Helpers
@@ -55,8 +80,14 @@ using errno_t = int;
 #define CONCAT11(a, b) ((((uint16_t)(uint8_t)(a)) << 8)  | ((uint16_t)(uint8_t)(b)))
 #define CONCAT12(a, b) ((((uint32_t)(uint8_t)(a)) << 16) | ((uint32_t)(uint16_t)(b)))
 #define CONCAT13(a, b) ((((uint32_t)(uint8_t)(a)) << 24) | ((uint32_t)(b) & 0x00FFFFFFu))
+#define CONCAT14(a, b) ((((uint64_t)(uint8_t)(a)) << 32) | ((uint64_t)(uint32_t)(b) & 0xFFFFFFFFULL))
+#define CONCAT15(a, b) ((((uint64_t)(uint8_t)(a)) << 40) | ((uint64_t)(b) & 0xFFFFFFFFFFULL))
+#define CONCAT16(a, b) ((((uint64_t)(uint8_t)(a)) << 48) | ((uint64_t)(b) & 0xFFFFFFFFFFFFULL))
+#define CONCAT17(a, b) ((((uint64_t)(uint8_t)(a)) << 56) | ((uint64_t)(b) & 0xFFFFFFFFFFFFFFULL))
 #define CONCAT21(a, b) ((((uint32_t)(uint16_t)(a)) << 8) | ((uint32_t)(uint8_t)(b)))
 #define CONCAT22(a, b) ((((uint32_t)(uint16_t)(a)) << 16)| ((uint32_t)(uint16_t)(b)))
+#define CONCAT24(a, b) ((((uint64_t)(uint16_t)(a)) << 32)| ((uint64_t)(uint32_t)(b) & 0xFFFFFFFFULL))
+#define CONCAT26(a, b) ((((uint64_t)(uint16_t)(a)) << 48)| ((uint64_t)(b) & 0xFFFFFFFFFFFFULL))
 #define CONCAT31(a, b) ((((uint32_t)(a)) << 8)           | ((uint32_t)(uint8_t)(b)))
 #define CONCAT44(a, b) ((((uint64_t)(uint32_t)(a)) << 32)| ((uint64_t)(uint32_t)(b)))
 #define CONCAT53(a, b) ((((uint64_t)(a)) << 24)          | ((uint64_t)(b) & 0x00FFFFFFULL))
@@ -90,7 +121,7 @@ using errno_t = int;
 // ----------------------------------------------------------------------------
 // 3. W273AS2700 Feature Flag Constants (dwFeatureFlags = 0x01090121)
 // ----------------------------------------------------------------------------
-enum TSA_FeatureFlagBits : uint32_t {
+enum TSA_FeatureFlagBits {
     FEAT_GLOVE_MODE            = 0x00000001u,
     FEAT_SMART_COVER           = 0x00000002u,
     FEAT_CHARGER_BIT2          = 0x00000004u,
@@ -117,33 +148,23 @@ enum TSA_FeatureFlagBits : uint32_t {
 // ----------------------------------------------------------------------------
 static inline errno_t memset_s(void* dest, size_t destMax, int c, size_t count) {
     if (!dest || count > destMax) return -1;
-    std::memset(dest, c, count);
-    return 0;
-}
-static inline errno_t memcpy_s(void* dest, size_t destMax, const void* src, size_t count) {
-    if (!dest || !src || count > destMax) return -1;
-    std::memcpy(dest, src, count);
-    return 0;
-}
-static inline errno_t memmove_s(void* dest, size_t destMax, const void* src, size_t count) {
-    if (!dest || !src || count > destMax) return -1;
-    std::memmove(dest, src, count);
+    memset(dest, c, count);
     return 0;
 }
 static inline errno_t strcpy_s(char* dest, size_t destMax, const char* src) {
     if (!dest || !src || destMax == 0) return -1;
-    std::strncpy(dest, src, destMax);
+    strncpy(dest, src, destMax);
     dest[destMax - 1] = '\0';
     return 0;
 }
 static inline errno_t strncpy_s(char* dest, size_t destMax, const char* src, size_t count) {
     if (!dest || !src || destMax == 0) return -1;
     size_t n = (count < destMax - 1) ? count : (destMax - 1);
-    std::strncpy(dest, src, n);
+    strncpy(dest, src, n);
     dest[n] = '\0';
     return 0;
 }
-static inline void StrPrintf_Process(int, const char*, ...) {}
+static inline void StrPrintf_Process(int level, const char* fmt, ...) {}
 
 // ----------------------------------------------------------------------------
 // 5. Pruned Module Inline Stubs (162 functions called from active code)
@@ -205,7 +226,7 @@ static inline void Posture_UpdatePostureType() {  } // pruned (Posture.c)
 static inline void Proximity_AppendPowerKeyPressedToScreenOnDescription() {  } // pruned (Proximity.c)
 static inline void Proximity_AppendScreenOffTimeOutDescription() {  } // pruned (Proximity.c)
 static inline void Proximity_AppendScreenOnTimeOutDescription() {  } // pruned (Proximity.c)
-static inline uint Proximity_FilterExtraWakeup(uint param_1) { return param_1; } // pruned (Proximity.c)
+static inline uint Proximity_FilterExtraWakeup(uint param_1, ...) { return param_1; } // pruned (Proximity.c)
 static inline undefined2 Proximity_GetNextScanRate() { return (undefined2)0; } // pruned (Proximity.c)
 static inline undefined1 Proximity_IsDetected() { return (undefined1)0; } // pruned (Proximity.c)
 static inline undefined1 Proximity_IsPowerKeyPressedToScreenOn() { return (undefined1)0; } // pruned (Proximity.c)
@@ -277,7 +298,7 @@ static inline undefined8 SS_IsValidForCMF() { return (undefined8)0; } // pruned 
 static inline void SS_Process() {  } // pruned (SS.c)
 static inline void SS_Reset() {  } // pruned (SS.c)
 static inline byte SS_TouchLength(longlong param_1,byte param_2,int param_3) { return (byte)0; } // pruned (SS.c)
-static inline void SS_TouchValid(byte param_1) {  } // pruned (SS.c)
+static inline char SS_TouchValid(byte param_1) { (void)param_1; return 0; } // pruned (SS.c)
 static inline void StrPrintf_Backup() {  } // pruned (StrPrintf.c)
 static inline void StrPrintf_Retore() {  } // pruned (StrPrintf.c)
 static inline void Thenar_ProcessInfoByDif() {  } // pruned (Thenar.c)
@@ -307,3 +328,121 @@ static inline void UDFPEvent_Process() {  } // pruned (UDFPEvent.c)
 static inline ulonglong VirtualKey_GetAction(byte param_1) { return (ulonglong)0; } // pruned (VirtualKey.c)
 static inline undefined2 VirtualKey_GetCode(byte param_1) { return (undefined2)0; } // pruned (VirtualKey.c)
 static inline undefined1 VirtualKey_GetEventNum() { return (undefined1)0; } // pruned (VirtualKey.c)
+
+// ----------------------------------------------------------------------------
+// 6. Additional Pruned Module & Memory Stubs for W273AS2700 Pipeline
+// ----------------------------------------------------------------------------
+static inline void AFT_Init(void) {}
+static inline void ASA_SetAfeHwVer(uint8_t ver) {}
+static inline void ASA_SetDdicSn(void *sn, ...) {}
+static inline void ASA_SetStylusDataType(uint8_t t) {}
+static inline void BaliSensorBroken_Free(void) {}
+static inline void BaliSensorBroken_Init(void) {}
+static inline uint8_t BaliSensorBroken_Malloc(void) { return 1; }
+static inline void BigData_ClearStat() {}
+static inline uint32_t BigData_GetStatLength() { return 0; }
+static inline void* BigData_GetStatPtr() { return NULL; }
+static inline void BigData_Init(void) {}
+static inline void CMFPca_Free(void) {}
+static inline uint8_t CMFPca_Malloc(void) { return 1; }
+static inline void CMFRemap_Free(void) {}
+static inline void CMFRemap_Init(void) {
+    // Crucial for W273AS2700 so CMFRemap_IsNeedRemap() returns 0:
+    extern uint8_t g_cmfRemapNumRxCombine;
+    extern uint16_t g_cmfRemapTxNum;
+    extern uint16_t g_cmfRemapRxNum;
+    g_cmfRemapNumRxCombine = 1;
+    g_cmfRemapTxNum = 60;
+    g_cmfRemapRxNum = 40;
+}
+static inline void CMFRemap_InitMapIdxBySlotTable(void *a, ...) { (void)a; }
+static inline uint8_t CMFRemap_Malloc(void) { return 1; }
+static inline void Context_Init(void) {}
+static inline void Context_Reset(void) {}
+static inline void* Context_ContextCurFrame() { return NULL; }
+static inline void* Context_ContextKeyFrame() { return NULL; }
+static inline void Context_UpdateContextKeyFrame() {}
+static inline void* Context_FrameToData() { return NULL; }
+static inline uint32_t Context_GetMaxSize() { return 0; }
+static inline void DoubleReport_Init(void) {}
+static inline uint32_t DoubleReport_DelayUs(void) { return 0; }
+static inline uint8_t DoubleReport_IsEnabled(void) { return 0; }
+static inline void DoubleReport_SetDaemonStatus(uint8_t s) {}
+static inline uint8_t DoubleReport_Trigger(void) { return 0; }
+static inline void EventAnalyzer_Init(void) {}
+static inline void EventAnalyzer_Reset(void) {}
+static inline uint32_t Gesture_GetCode(void) { return 0; }
+static inline void* Gesture_GetList(void) { return NULL; }
+static inline void Gesture_Init(void) {}
+static inline void HIException_Init(void) {}
+static inline void Matrix_Init(void *a, ...) { (void)a; }
+static inline void NotchCorrect_Init(void) {}
+static inline void Posture_AccProcess() {}
+static inline void Proximity_Init(void) {}
+static inline uint8_t Proximity_IsToDisableFreqShift(void) { return 0; }
+static inline uint8_t Proximity_IsToSuspendAFE(void) { return 0; }
+static inline void RecordTrigger_Init(void) {}
+static inline void RecordTrigger_ClearFlag(void) {}
+static inline void RecordTrigger_Process(void) {}
+static inline uint32_t RecordTrigger_TriggerIndex(void) { return 0; }
+static inline const char* RecordTrigger_GetEventDescription() { return ""; }
+static inline uint32_t RecordTrigger_GetEventOffset(void) { return 0; }
+static inline uint8_t RecordTrigger_IsTriggered2(void) { return 0; }
+static inline void SHBVolumeData_Init(void) {}
+static inline void* SHBVolumeData_GetPointer(void) { return NULL; }
+static inline uint32_t SHBVolumeData_GetSize(void) { return 0; }
+static inline void SS_Init(void) {}
+static inline void* SS_GetPreUnifiedBL(void) { return NULL; }
+static inline void SafeBaseline_Free(void) {}
+static inline void* SafeBaseline_GetBuf(int b) { return NULL; }
+static inline void SafeBaseline_Init(void *a, ...) { (void)a; }
+static inline uint8_t SafeBaseline_IsPushed(void) { return 0; }
+static inline uint8_t SafeBaseline_Malloc(void) { return 1; }
+static inline void SensorData_Init(void) {}
+static inline void SensorData_PostureProcess() {}
+static inline void SensorGesture_Init(void) {}
+static inline void SideTouch_Free(void) {}
+static inline const char* SideTouch_GetRingLogName(void) { return ""; }
+static inline uint32_t SideTouch_GetRingLogPostFrameNum(void) { return 0; }
+static inline uint32_t SideTouch_GetRingLogPreFrameNum(void) { return 0; }
+static inline void SideTouch_Init(void) {}
+static inline uint8_t SideTouch_IsBaselineOK(void) { return 1; }
+static inline uint8_t SideTouch_Malloc(void) {
+    extern uint64_t g_tsaBufTzSide;
+    extern void* TSA_MallocAndInit(uint size);
+    g_tsaBufTzSide = (uint64_t)TSA_MallocAndInit(2400);
+    return 1;
+}
+static inline void SideTouch_SetPressure(int p) {}
+static inline void SignalDisparity_Init(void) {}
+static inline void SmartCover_Init(void) {}
+static inline void SmartCover_SetRange(int r, ...) {}
+static inline void StrPrintf_Init(void (*p)(const char*)) {}
+static inline void StrPrintf_FlushProcess(void) {}
+static inline void TSAFold_Init(void) {}
+static inline uint64_t TSAFold_GridZoomOutRemap(uint64_t buf, int a, int b, int c) { return 0; }
+static inline void TSAFold_LineZoomOutRemap(void *buf, ...) {}
+static inline void TSAFold_PrmtSetDim1Res(uint16_t res) {}
+static inline void TSAFold_PrmtSetDim2Res(uint16_t res) {}
+static inline void TSAFold_PrmtSetResScale(int scale) {}
+static inline void TSAIDE_Init(void) {}
+static inline void TSALog_Init(void) {}
+static inline void TSALog_VersionInfo(void) {}
+static inline void TSAPlot_Init(void) {}
+static inline void TSAPrintf_Init(void) {}
+static inline void TSAPrintf_FlushLogFile(void) {}
+static inline void TSAWrapper_Init(void) {}
+static inline void TSAWrapper_Process(void) {}
+static inline float TSAWrapper_GetTouchXVelocity(int id) { return 0.0f; }
+static inline float TSAWrapper_GetTouchYVelocity(int id) { return 0.0f; }
+static inline void TSA_ASAProcess(uint32_t flags, ...) {}
+static inline void Thenar_Init(void) {}
+static inline void UDFPEvent_Init(void) {}
+static inline void VirtualKey_SetAODRingState(uint8_t state) {}
+static inline void LinearTestInit(void) {}
+static inline void OemInfoCfgInit(void) {}
+static inline void PositionOffsetCalibrationInit(void) {}
+
+#ifdef __cplusplus
+}
+#endif

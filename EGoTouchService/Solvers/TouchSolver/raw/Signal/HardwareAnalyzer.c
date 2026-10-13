@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: HardwareAnalyzer_SetSoftException @ 6baf0124
 // ============================================================================
@@ -2232,6 +2234,54 @@ void HardwareAnalyzer_Z8InfoUpdate
     *param_5 = *param_5 + ((uVar1 ^ uVar2) - uVar2);
   }
   return;
+}
+
+
+// ============================================================================
+// Function: HardwareAnalyzer_Free @ 6baf23ed
+// ============================================================================
+
+void HardwareAnalyzer_Free(void)
+
+{
+                    /* 0xb23ed  859  HardwareAnalyzer_Free */
+  TSA_Free(&g_brokenSensorByDifDebounce);
+  TSA_Free(&g_brokenSensorByDifState);
+  TSA_Free(&g_brokenSensorByDifSensorChecked);
+  return;
+}
+
+
+// ============================================================================
+// Function: HardwareAnalyzer_Malloc @ 6baf2350
+// ============================================================================
+
+undefined8 HardwareAnalyzer_Malloc(void)
+
+{
+  undefined8 uVar1;
+  
+                    /* 0xb2350  868  HardwareAnalyzer_Malloc */
+  g_brokenSensorByDifDebounce = TSA_MallocAndInit(*(undefined2 *)_refptr_g_gridBufSize);
+  if (g_brokenSensorByDifDebounce == 0) {
+    uVar1 = 0;
+  }
+  else {
+    g_brokenSensorByDifState = TSA_MallocAndInit(*(undefined2 *)_refptr_g_gridBufSize);
+    if (g_brokenSensorByDifState == 0) {
+      uVar1 = 0;
+    }
+    else {
+      g_brokenSensorByDifSensorChecked = TSA_MallocAndInit(*(undefined2 *)_refptr_g_gridBufSize);
+      if (g_brokenSensorByDifSensorChecked == 0) {
+        uVar1 = 0;
+      }
+      else {
+        uVar1 = 1;
+      }
+    }
+  }
+  return uVar1;
 }
 
 

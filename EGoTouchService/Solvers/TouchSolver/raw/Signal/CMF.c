@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: CMF_Process @ 6ba4f2c8
 // ============================================================================
@@ -396,9 +398,9 @@ void CMF_SavePreCmfDif(void)
 // Function: CMF_Filter2D @ 6ba54009
 // ============================================================================
 
-void CMF_Filter2D(void)
-
+void CMF_Filter2D(int param_1, int param_2)
 {
+  (void)param_1; (void)param_2;
   longlong lVar1;
   undefined **ppuVar2;
   undefined8 local_68;
@@ -907,8 +909,8 @@ void CMF_Filter2DCore(undefined4 *param_1)
     puVar2 = puVar2 + 1;
   }
   local_735f = *(undefined1 *)(param_1 + 1);
-  local_7398._0_4_ = *param_1;
-  local_7398._4_4_ = *(undefined4 *)((longlong)param_1 + 6);
+  *(uint32_t*)&local_7398 = *param_1;
+  *((uint32_t*)&local_7398 + 1) = *(undefined4 *)((longlong)param_1 + 6);
   local_7368 = *(undefined8 *)(param_1 + 0x14);
   local_7360 = CMFRemap_GetRxSlotNum
                          (local_7368,*(undefined2 *)(param_1 + 0xb),local_739c,local_7328,
@@ -955,9 +957,7 @@ void CMF_Filter2DCore(undefined4 *param_1)
 /* WARNING: Function: ___chkstk_ms replaced with injection: alloca_probe */
 /* WARNING: Removing unreachable block (ram,0x6ba52eef) */
 
-void CMF_InitWeightByNeighbor
-               (ushort param_1,longlong param_2,int param_3,longlong param_4,longlong param_5)
-
+void CMF_InitWeightByNeighbor(ushort param_1,longlong param_2,int param_3,longlong param_4,longlong param_5, ...)
 {
   uint uVar1;
   uint uVar2;
@@ -1206,7 +1206,7 @@ ulonglong CMF_GetAverage(short *param_1,int param_2)
 // Function: CMF_SubtractPreDif @ 6ba53823
 // ============================================================================
 
-undefined4 CMF_SubtractPreDif(longlong param_1,undefined8 param_2,longlong param_3,longlong param_4)
+undefined4 CMF_SubtractPreDif(longlong param_1,undefined8 param_2,longlong param_3,longlong param_4, ...)
 
 {
   ushort uVar1;
@@ -1253,7 +1253,7 @@ undefined4 CMF_SubtractPreDif(longlong param_1,undefined8 param_2,longlong param
 // Function: CMF_AddPreDif @ 6ba53988
 // ============================================================================
 
-void CMF_AddPreDif(longlong param_1,undefined8 param_2,longlong param_3,longlong param_4)
+void CMF_AddPreDif(longlong param_1,undefined8 param_2,longlong param_3,longlong param_4, ...)
 
 {
   ushort uVar1;
@@ -1802,7 +1802,7 @@ void CMF_Filter1DByWholeLine(int *param_1)
 
 /* WARNING: Function: ___chkstk_ms replaced with injection: alloca_probe */
 
-void CMF_Ransac(longlong param_1,uint param_2,int param_3)
+short CMF_Ransac(longlong param_1,uint param_2,int param_3, ...)
 
 {
   longlong lVar1;
@@ -1856,8 +1856,7 @@ void CMF_Ransac(longlong param_1,uint param_2,int param_3)
   uVar3 = local_30 + 1;
   local_48 = puVar4;
   *(undefined8 *)((longlong)auStack_70 + lVar1) = 0x6ba532aa;
-  Misc_FindKthSmallest(puVar4,uVar2,uVar3 >> 1,param_2);
-  return;
+  return (short)Misc_FindKthSmallest(puVar4,uVar2,uVar3 >> 1,param_2);
 }
 
 
@@ -2014,6 +2013,164 @@ void CMF_NoiseStatistics(void)
     }
   }
   return;
+}
+
+
+// ============================================================================
+// Function: CMF_InitWeight @ 6ba5213d
+// ============================================================================
+
+void CMF_InitWeight(short param_1,short param_2,longlong param_3)
+
+{
+  uint uVar1;
+  int iVar2;
+  int iVar3;
+  uint uVar4;
+  short local_428 [256];
+  short local_228 [256];
+  uint local_28;
+  byte local_23;
+  byte local_22;
+  byte local_21;
+  longlong local_20;
+  longlong local_18;
+  uint local_10;
+  byte local_a;
+  byte local_9;
+  
+                    /* 0x1213d  476  CMF_InitWeight */
+  local_18 = *(longlong *)(param_3 + 0x10);
+  local_20 = *(longlong *)(param_3 + 0x40);
+  local_21 = (byte)*(undefined2 *)(param_3 + 0x28);
+  if (_refptr_g_tsaPrmtFlash->bCmfForceDim1Pass == '\0') {
+    local_22 = (byte)*(undefined2 *)(param_3 + 0x2a);
+  }
+  else {
+    local_22 = (byte)*(undefined2 *)(param_3 + 0x28);
+  }
+  if (_refptr_g_tsaPrmtFlash->bCmfForceDim1Pass == '\0') {
+    local_23 = (byte)*(undefined2 *)(param_3 + 0x28);
+  }
+  else {
+    local_23 = (byte)*(undefined2 *)(param_3 + 0x2a);
+  }
+  local_10 = (uint)local_23 * (uint)local_22;
+  while (uVar1 = local_10 - 1, local_10 != 0) {
+    *(undefined2 *)(local_20 + (ulonglong)uVar1 * 2) = 1;
+    local_10 = uVar1;
+  }
+  for (local_a = 0; local_a < local_23; local_a = local_a + 1) {
+    local_228[0] = 0;
+    for (local_9 = 1; local_9 < local_22; local_9 = local_9 + 1) {
+      if (_refptr_g_tsaPrmtFlash->bCmfForceDim1Pass == '\0') {
+        iVar3 = (uint)local_21 * (uint)local_9 + (uint)local_a;
+      }
+      else {
+        iVar3 = (uint)local_21 * (uint)local_a + (uint)local_9;
+      }
+      if (_refptr_g_tsaPrmtFlash->bCmfForceDim1Pass == '\0') {
+        iVar2 = (uint)local_21 * (local_9 - 1) + (uint)local_a;
+      }
+      else {
+        iVar2 = (uint)local_21 * (uint)local_a + (local_9 - 1);
+      }
+      local_228[(int)(uint)local_9] =
+           *(short *)((longlong)iVar3 * 2 + local_18) - *(short *)((longlong)iVar2 * 2 + local_18);
+    }
+    if (local_22 != 0) {
+      local_428[(int)(local_22 - 1)] = 0;
+      local_428[0] = local_428[(int)(local_22 - 1)];
+      for (local_9 = 1; (int)(uint)local_9 < (int)(local_22 - 1); local_9 = local_9 + 1) {
+        local_428[(int)(uint)local_9] =
+             local_228[(int)(local_9 + 1)] - local_228[(int)(uint)local_9];
+      }
+      for (local_9 = 0; local_9 < local_22; local_9 = local_9 + 1) {
+        if (_refptr_g_tsaPrmtFlash->bCmfForceDim1Pass == '\0') {
+          iVar3 = (uint)local_21 * (uint)local_9 + (uint)local_a;
+        }
+        else {
+          iVar3 = (uint)local_21 * (uint)local_a + (uint)local_9;
+        }
+        local_28 = (uint)*(short *)((longlong)iVar3 * 2 + local_18);
+        if (((int)param_1 < (int)(((int)local_28 >> 0x1f ^ local_28) - ((int)local_28 >> 0x1f))) ||
+           (uVar4 = (int)local_428[(int)(uint)local_9] >> 0x1f,
+           (int)param_2 < (int)(((int)local_428[(int)(uint)local_9] ^ uVar4) - uVar4))) {
+          if (_refptr_g_tsaPrmtFlash->bCmfForceDim1Pass == '\0') {
+            iVar3 = (uint)local_21 * (uint)local_9 + (uint)local_a;
+          }
+          else {
+            iVar3 = (uint)local_21 * (uint)local_a + (uint)local_9;
+          }
+          *(undefined2 *)((longlong)iVar3 * 2 + local_20) = 0;
+        }
+      }
+    }
+  }
+  local_10 = uVar1;
+  Image_Erosion(local_20,*(undefined2 *)(param_3 + 0x28),*(undefined2 *)(param_3 + 0x2a),1,1);
+  if (_refptr_g_tsaPrmtFlash->bCmfForceDim1Pass == '\0') {
+    Image_Dilation(local_20,*(undefined2 *)(param_3 + 0x28),*(undefined2 *)(param_3 + 0x2a),0,1);
+  }
+  else {
+    Image_Dilation(local_20,*(undefined2 *)(param_3 + 0x28),*(undefined2 *)(param_3 + 0x2a),1,0);
+  }
+  return;
+}
+
+
+// ============================================================================
+// Function: CMF_Free @ 6ba4d8a8
+// ============================================================================
+
+void CMF_Free(void)
+
+{
+                    /* 0xd8a8  470  CMF_Free */
+  CMFRemap_Free();
+  CMFPca_Free();
+  return;
+}
+
+
+// ============================================================================
+// Function: CMF_Malloc @ 6ba4d880
+// ============================================================================
+
+bool CMF_Malloc(void)
+
+{
+  char cVar1;
+  
+                    /* 0xd880  477  CMF_Malloc */
+  CMFPca_Malloc();
+  cVar1 = CMFRemap_Malloc();
+  return cVar1 != '\0';
+}
+
+
+// ============================================================================
+// Function: CMF_EnablePreCMFDiffLog @ 6ba4d94e
+// ============================================================================
+
+void CMF_EnablePreCMFDiffLog(undefined1 param_1)
+
+{
+                    /* 0xd94e  465  CMF_EnablePreCMFDiffLog */
+  g_preCMFDiffLogEnabled = param_1;
+  return;
+}
+
+
+// ============================================================================
+// Function: CMF_GetNoiseValueFromBuf @ 6ba4d960
+// ============================================================================
+
+short CMF_GetNoiseValueFromBuf()
+
+{
+                    /* 0xd960  473  CMF_GetNoiseValueFromBuf */
+  return 0;
 }
 
 

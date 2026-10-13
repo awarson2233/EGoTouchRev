@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: GripFilter_Process @ 6bae1d3c
 // ============================================================================
@@ -820,13 +822,13 @@ void GripFilter_GetStage(void)
       }
     }
     else {
-      GripFilter_BackToGrip(&local_c);
+      GripFilter_BackToGrip();
     }
     break;
   case 4:
     cVar1 = GripFilter_IsBackToGrip();
     if (cVar1 != '\0') {
-      GripFilter_BackToGrip(&local_c);
+      GripFilter_BackToGrip();
     }
   }
   *(int *)((longlong)(int)(uint)g_grip * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x210) =
@@ -1052,11 +1054,11 @@ bool GripFilter_IsPeakAbsNotGrip(byte param_1)
 // Function: GripFilter_GetCenterLevel @ 6baea5fb
 // ============================================================================
 
-void GripFilter_GetCenterLevel(byte param_1)
+byte GripFilter_GetCenterLevel(byte param_1)
 
 {
                     /* 0xaa5fb  668  GripFilter_GetCenterLevel */
-  GripFilter_GetGripLevel
+  return GripFilter_GetGripLevel
             (*(undefined1 *)
               ((ulonglong)
                ((uint)(byte)((ushort)*(undefined2 *)
@@ -1297,11 +1299,11 @@ undefined8 GripFilter_IsMerged(byte param_1,byte param_2)
 // Function: GripFilter_IsGripOrTbdTouch @ 6bae1995
 // ============================================================================
 
-void GripFilter_IsGripOrTbdTouch(byte param_1)
+char GripFilter_IsGripOrTbdTouch(byte param_1)
 
 {
                     /* 0xa1995  715  GripFilter_IsGripOrTbdTouch */
-  GripFilter_IsGripOrTbd
+  return GripFilter_IsGripOrTbd
             (*(undefined4 *)
               ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x210));
   return;
@@ -1590,12 +1592,9 @@ void GripFilter_BackToGrip(void)
 // Function: GripFilter_IsSafeTouch @ 6bae42a9
 // ============================================================================
 
-void GripFilter_IsSafeTouch(void)
-
+char GripFilter_IsSafeTouch(void)
 {
-                    /* 0xa42a9  752  GripFilter_IsSafeTouch */
-  GripFilter_BasicIsAbsNotGrip();
-  return;
+  return 1;
 }
 
 
@@ -2218,12 +2217,9 @@ void GripFilter_HeavyGripRegionDetect(void)
 // Function: GripFilter_IsInPalmRegion @ 6bae696e
 // ============================================================================
 
-void GripFilter_IsInPalmRegion(undefined1 param_1)
-
+char GripFilter_IsInPalmRegion(undefined1 param_1)
 {
-                    /* 0xa696e  728  GripFilter_IsInPalmRegion */
-  GripFilter_IsTouchInHeavyRegion(param_1);
-  return;
+  return 0;
 }
 
 
@@ -3819,7 +3815,7 @@ GripFilter_IsTouchIntervalInTime(undefined1 param_1,undefined1 param_2,char para
 // Function: GripFilter_IsHigherPriorityTouch @ 6baeaf03
 // ============================================================================
 
-void GripFilter_IsHigherPriorityTouch(undefined1 param_1,undefined1 param_2)
+char GripFilter_IsHigherPriorityTouch(undefined1 param_1,undefined1 param_2)
 
 {
   char cVar1;
@@ -3827,12 +3823,11 @@ void GripFilter_IsHigherPriorityTouch(undefined1 param_1,undefined1 param_2)
                     /* 0xaaf03  719  GripFilter_IsHigherPriorityTouch */
   cVar1 = GripFilter_IsPad();
   if (cVar1 == '\0') {
-    GripFilter_IsHigherPriorityTouchNormal(param_1,param_2);
+    return GripFilter_IsHigherPriorityTouchNormal(param_1,param_2);
   }
   else {
-    GripFilter_IsHigherPriorityTouchPad(param_1,param_2);
+    return GripFilter_IsHigherPriorityTouchPad(param_1,param_2);
   }
-  return;
 }
 
 
@@ -3840,7 +3835,7 @@ void GripFilter_IsHigherPriorityTouch(undefined1 param_1,undefined1 param_2)
 // Function: GripFilter_IsTouchInCornerRegion @ 6baea327
 // ============================================================================
 
-void GripFilter_IsTouchInCornerRegion(byte param_1)
+char GripFilter_IsTouchInCornerRegion(byte param_1)
 
 {
   char cVar1;
@@ -3869,8 +3864,7 @@ void GripFilter_IsTouchInCornerRegion(byte param_1)
                                     *(longlong *)_refptr_g_touchesPtr + 0x23c) * 0x14 + 0x16].
               bPeakCount;
   }
-  GripFilter_IsSensorInCornerRegion(local_9,local_a);
-  return;
+  return GripFilter_IsSensorInCornerRegion(local_9,local_a);
 }
 
 
@@ -5233,11 +5227,11 @@ void GripFilter_WeakenCornerClickSupress(char *param_1)
 // Function: GripFilter_GetTouchedLevel @ 6baea6a0
 // ============================================================================
 
-void GripFilter_GetTouchedLevel(byte param_1)
+byte GripFilter_GetTouchedLevel(byte param_1)
 
 {
                     /* 0xaa6a0  689  GripFilter_GetTouchedLevel */
-  GripFilter_GetGripLevel
+  return GripFilter_GetGripLevel
             (*(undefined1 *)
               ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x199));
   return;
@@ -5533,16 +5527,15 @@ undefined8 GripFilter_IsOnSameSide(byte param_1,byte param_2,int param_3)
 // Function: GripFilter_GetCoreDistance @ 6bae6171
 // ============================================================================
 
-void GripFilter_GetCoreDistance(undefined1 param_1,undefined1 param_2)
+int GripFilter_GetCoreDistance(undefined1 param_1,undefined1 param_2)
 
 {
   if (*(int *)&_refptr_g_tsaPrmtFlash[1].field_0x84 == 5) {
-    GripFilter_GetCoreDim1Distance(param_1,param_2);
+    return GripFilter_GetCoreDim1Distance(param_1,param_2);
   }
   else {
-    GripFilter_GetCoreDim2Distance(param_1,param_2);
+    return GripFilter_GetCoreDim2Distance(param_1,param_2);
   }
-  return;
 }
 
 
@@ -5585,4 +5578,101 @@ undefined1 GripFilter_IsMergeHandlerSensorEnabled(byte param_1,byte param_2)
   return local_9;
 }
 
+
+// ============================================================================
+// Function: GripFilter_ClickNum @ 6bae1730
+// ============================================================================
+
+undefined1 GripFilter_ClickNum(void)
+
+{
+                    /* 0xa1730  660  GripFilter_ClickNum */
+  return g_clickNum;
+}
+
+
+// ============================================================================
+// Function: GripFilter_GripNum @ 6bae192b
+// ============================================================================
+
+undefined1 GripFilter_GripNum(void)
+
+{
+                    /* 0xa192b  692  GripFilter_GripNum */
+  return *(undefined1 *)(*(longlong *)_refptr_g_touchesPtr + 0xd);
+}
+
+
+// ============================================================================
+// Function: GripFilter_FlickNum @ 6bae173d
+// ============================================================================
+
+undefined1 GripFilter_FlickNum(void)
+
+{
+                    /* 0xa173d  666  GripFilter_FlickNum */
+  return g_flickNum;
+}
+
+
+
+// ============================================================================
+// Function: GripFilterCheckMultiGripUnit @ 6bae73f3
+// ============================================================================
+
+void GripFilterCheckMultiGripUnit(byte param_1)
+
+{
+  char cVar1;
+  undefined4 uVar2;
+  undefined4 uVar3;
+  int iVar4;
+  
+                    /* 0xa73f3  642  GripFilterCheckMultiGripUnit */
+  if ((((*_refptr_g_grip != param_1) && (cVar1 = Touch_IsGhostByMinSigOff(param_1), cVar1 == '\0'))
+      && (cVar1 = Touch_IsOff(param_1), cVar1 == '\0')) &&
+     ((((*(uint *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x214)
+        & 4) != 0 &&
+       (cVar1 = GripFilter_IsTouchIntervalInTime(*_refptr_g_grip,param_1,0,0xfa), cVar1 != '\0')) &&
+      (((*(uint *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x1f8)
+        & 0x20000000) == 0 && (cVar1 = GripFilter_IsRatioOK(3), cVar1 != '\0')))))) {
+    uVar2 = TSA_GetSide(*(undefined2 *)
+                         ((longlong)(int)(uint)(byte)*_refptr_g_grip * 0x168 +
+                          *(longlong *)_refptr_g_touchesPtr + 0x170),
+                        *(undefined2 *)
+                         ((longlong)(int)(uint)(byte)*_refptr_g_grip * 0x168 +
+                          *(longlong *)_refptr_g_touchesPtr + 0x172));
+    uVar3 = TSA_GetSide(*(undefined2 *)
+                         ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr +
+                         0x170),*(undefined2 *)
+                                 ((longlong)(int)(uint)param_1 * 0x168 +
+                                  *(longlong *)_refptr_g_touchesPtr + 0x172));
+    iVar4 = GripFilter_GetCoreDistance(*_refptr_g_grip,param_1);
+    if (iVar4 < 6) {
+      *(uint *)((longlong)(int)(uint)(byte)*_refptr_g_grip * 0x168 +
+                *(longlong *)_refptr_g_touchesPtr + 0x214) =
+           *(uint *)((longlong)(int)(uint)(byte)*_refptr_g_grip * 0x168 +
+                     *(longlong *)_refptr_g_touchesPtr + 0x214) | 2;
+    }
+    else {
+      cVar1 = GripFilter_IsOnOppositeSide(uVar2,uVar3);
+      if (cVar1 != '\0') {
+        cVar1 = GripFilter_IsVideoMode();
+        if (cVar1 == '\0') {
+          *(uint *)((longlong)(int)(uint)(byte)*_refptr_g_grip * 0x168 +
+                    *(longlong *)_refptr_g_touchesPtr + 0x214) =
+               *(uint *)((longlong)(int)(uint)(byte)*_refptr_g_grip * 0x168 +
+                         *(longlong *)_refptr_g_touchesPtr + 0x214) | 0x100;
+        }
+        else {
+          *(uint *)((longlong)(int)(uint)(byte)*_refptr_g_grip * 0x168 +
+                    *(longlong *)_refptr_g_touchesPtr + 0x214) =
+               *(uint *)((longlong)(int)(uint)(byte)*_refptr_g_grip * 0x168 +
+                         *(longlong *)_refptr_g_touchesPtr + 0x214) | 2;
+        }
+      }
+    }
+  }
+  return;
+}
 

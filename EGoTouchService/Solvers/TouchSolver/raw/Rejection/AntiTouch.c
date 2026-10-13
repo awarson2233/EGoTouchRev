@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: AntiTouch_Process @ 6bad7bbb
 // ============================================================================
@@ -759,6 +761,36 @@ undefined8 AntiTouch_IsTouchCloseToUdfpArea(byte param_1)
                                     *(undefined2 *)
                                      ((longlong)(int)(uint)param_1 * 0x168 +
                                       *(longlong *)_refptr_g_touchesPtr + 0x172)), iVar1 != 0)))) {
+    return 1;
+  }
+  return 0;
+}
+
+
+// ============================================================================
+// Function: AntiTouch_GetMaxTouchPeakIdx @ 6bad6633
+// ============================================================================
+
+undefined1 AntiTouch_GetMaxTouchPeakIdx(void)
+
+{
+                    /* 0x96633  335  AntiTouch_GetMaxTouchPeakIdx */
+  return g_antiTouchMaxTouchPkIdx;
+}
+
+
+// ============================================================================
+// Function: AntiTouch_IsRptDebounce @ 6bad7b8f
+// ============================================================================
+
+undefined8 AntiTouch_IsRptDebounce(void)
+
+{
+  char cVar1;
+  
+                    /* 0x97b8f  337  AntiTouch_IsRptDebounce */
+  cVar1 = TSAStatic_IsAFTModeEnabled();
+  if ((cVar1 != '\0') && (cVar1 = BLSM_IsReset(), cVar1 == '\0')) {
     return 1;
   }
   return 0;

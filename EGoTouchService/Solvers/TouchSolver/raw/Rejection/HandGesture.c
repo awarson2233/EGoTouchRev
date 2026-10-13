@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: HandGesture_Process @ 6baef9fc
 // ============================================================================
@@ -480,7 +482,7 @@ void HandGesture_TouchProcess(void)
   (*_refptr_g_tsaStaticPtr)->dwSpecialControlFlags = local_1c;
   eVar6 = memcpy_s(*(void **)_refptr_g_tsaBufDif,0x2648,local_26b8,
                    (ulonglong)_refptr_g_tsaPrmtFlash->wBufElementCount * 2);
-  _local_20 = CONCAT44(local_1c,eVar6);
+  (void)CONCAT44(local_1c,eVar6);
   if (eVar6 != 0) {
     StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n",
                       "../../src/Extension/HandGesture/HandGesture.c",0x1cf,"rc == EOK");
@@ -816,7 +818,7 @@ HandGesture_IsDistInValid
 // Function: HandGesture_IsAngleValid @ 6baeeb8b
 // ============================================================================
 
-void HandGesture_IsAngleValid(void)
+char HandGesture_IsAngleValid(void)
 
 {
   short sVar1;
@@ -825,8 +827,7 @@ void HandGesture_IsAngleValid(void)
                                     DAT_6bc86cac),
                         (int)(short)(*(short *)(*(longlong *)_refptr_g_touchesPtr + 0x164) -
                                     DAT_6bc86cae));
-  HandGesture_IsAngleCorelated((int)-sVar1,(int)DAT_6bc86cb0);
-  return;
+  return HandGesture_IsAngleCorelated((int)-sVar1,(int)DAT_6bc86cb0);
 }
 
 
@@ -961,7 +962,7 @@ short HandGesture_AngleFormat1(short param_1)
 // Function: HandGesture_AngleFormat2 @ 6baeeaf5
 // ============================================================================
 
-void HandGesture_AngleFormat2(short param_1)
+short HandGesture_AngleFormat2(short param_1)
 
 {
   short local_res8;
@@ -972,8 +973,76 @@ void HandGesture_AngleFormat2(short param_1)
   else {
     local_res8 = param_1 + -0x5a;
   }
-  HandGesture_AngleFormat1((int)local_res8);
+  return (short)HandGesture_AngleFormat1((int)local_res8);
+}
+
+
+// ============================================================================
+// Function: HandGesture_Free @ 6baedd66
+// ============================================================================
+
+void HandGesture_Free(void)
+
+{
+                    /* 0xadd66  847  HandGesture_Free */
+  TSA_Free(&g_tsaBufHandGestureBL);
+  TSA_Free(&g_tsaBufHandGestureDif);
+  TSA_Free(&g_tsaBufAreaHand);
+  TSA_Free(&g_tsaBufTzHand);
+  TSA_Free(&g_tsaBufTzPrevHand);
+  TSA_Free(&g_tsaBufTimeHand);
   return;
+}
+
+
+// ============================================================================
+// Function: HandGesture_Malloc @ 6baedc30
+// ============================================================================
+
+undefined8 HandGesture_Malloc(void)
+
+{
+  undefined8 uVar1;
+  
+                    /* 0xadc30  854  HandGesture_Malloc */
+  g_tsaBufHandGestureBL = TSA_MallocAndInit((uint)*(ushort *)_refptr_g_gridBufSize * 2);
+  if (g_tsaBufHandGestureBL == 0) {
+    uVar1 = 0;
+  }
+  else {
+    g_tsaBufHandGestureDif = TSA_MallocAndInit((uint)*(ushort *)_refptr_g_gridBufSize * 2);
+    if (g_tsaBufHandGestureDif == 0) {
+      uVar1 = 0;
+    }
+    else {
+      g_tsaBufAreaHand = TSA_MallocAndInit(*(undefined2 *)_refptr_g_gridBufSize);
+      if (g_tsaBufAreaHand == 0) {
+        uVar1 = 0;
+      }
+      else {
+        g_tsaBufTzHand = TSA_MallocAndInit(*(undefined2 *)_refptr_g_gridBufSize);
+        if (g_tsaBufTzHand == 0) {
+          uVar1 = 0;
+        }
+        else {
+          g_tsaBufTzPrevHand = TSA_MallocAndInit(*(undefined2 *)_refptr_g_gridBufSize);
+          if (g_tsaBufTzPrevHand == 0) {
+            uVar1 = 0;
+          }
+          else {
+            g_tsaBufTimeHand = TSA_MallocAndInit((uint)*(ushort *)_refptr_g_gridBufSize * 2);
+            if (g_tsaBufTimeHand == 0) {
+              uVar1 = 0;
+            }
+            else {
+              uVar1 = 1;
+            }
+          }
+        }
+      }
+    }
+  }
+  return uVar1;
 }
 
 

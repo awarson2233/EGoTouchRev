@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: TSAPrmt_PreProcess @ 6bb3bab7
 // ============================================================================
@@ -96,6 +98,77 @@ void TSAPrmt_Reset(void)
   TSADynPrmt_Init();
   TSAPrmt_Validate();
   return;
+}
+
+
+// ============================================================================
+// Function: TSAPrmt_FlashPrmtLoadProject @ 6bb3b759
+// ============================================================================
+
+undefined8 TSAPrmt_FlashPrmtLoadProject(undefined8 param_1)
+
+{
+  (void)param_1;
+  memcpy(&g_tsaPrmtFlash, kW273AS2700_FlashPrmt, sizeof(kW273AS2700_FlashPrmt));
+  memcpy(_refptr_g_tsaPrmtFlashCmfPca, kW273AS2700_CmfPcaPrmt, sizeof(kW273AS2700_CmfPcaPrmt));
+  memcpy(_refptr_g_tsaPrmtFlashAsa, kW273AS2700_AsaPrmt, sizeof(kW273AS2700_AsaPrmt));
+  return 1;
+}
+
+
+// ============================================================================
+// Function: TSAPrmt_Init @ 6bb3b90d
+// ============================================================================
+
+bool TSAPrmt_Init(void)
+
+{
+  char cVar1;
+  
+                    /* 0xfb90d  1648  TSAPrmt_Init */
+  cVar1 = TSAPrmt_FlashPrmtLoadProject(0);
+  if (cVar1 != '\0') {
+    TSAPrmt_ReInit();
+  }
+  return cVar1 != '\0';
+}
+
+
+// ============================================================================
+// Function: TSAPrmt_LoadProject @ 6bb3b93a
+// ============================================================================
+
+undefined8 TSAPrmt_LoadProject(longlong param_1)
+
+{
+  char cVar1;
+  int iVar2;
+  undefined8 uVar3;
+  char *_Str1;
+  
+                    /* 0xfb93a  1649  TSAPrmt_LoadProject */
+  if (param_1 == 0) {
+    uVar3 = 0;
+  }
+  else {
+    cVar1 = TSAPrmt_FlashPrmtLoadProject(param_1);
+    if (cVar1 == '\0') {
+      uVar3 = 0;
+    }
+    else {
+      _Str1 = (char *)TSAPrmt_GetProjectName();
+      iVar2 = strcmp(_Str1,"DFLT000000");
+      if (iVar2 == 0) {
+        g_tsaPrmtFlash.bCols = AFE_GetColNum();
+        g_tsaPrmtFlash.bRows = AFE_GetRowNum();
+        g_tsaPrmtFlash.wBufElementCount =
+             (ushort)g_tsaPrmtFlash.bCols * (ushort)g_tsaPrmtFlash.bRows;
+      }
+      TSAPrmt_ReInit();
+      uVar3 = 1;
+    }
+  }
+  return uVar3;
 }
 
 

@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: Touch_Clean @ 6ba6f49c
 // ============================================================================
@@ -463,12 +465,11 @@ void Touch_ProcessAftTouchEvent(void)
 // Function: Touch_IsOff @ 6ba74ab5
 // ============================================================================
 
-void Touch_IsOff(byte param_1)
+char Touch_IsOff(byte param_1)
 
 {
                     /* 0x34ab5  2539  Touch_IsOff */
-  Touch_IsOffEvent(*(undefined4 *)(g_touchesPtr + (longlong)(int)(uint)param_1 * 0x168 + 0x21c));
-  return;
+  return Touch_IsOffEvent(*(undefined4 *)(g_touchesPtr + (longlong)(int)(uint)param_1 * 0x168 + 0x21c));
 }
 
 
@@ -853,9 +854,9 @@ void Touch_Init(void)
 // Function: Touch_CreatePostReport @ 6ba76a03
 // ============================================================================
 
-void Touch_CreatePostReport(byte param_1)
-
+void Touch_CreatePostReport(byte param_1, byte param_2)
 {
+  (void)param_2;
   ushort uVar1;
   ushort uVar2;
   byte bVar3;
@@ -984,8 +985,7 @@ short Touch_GetDistToLogicEdge(int param_1,short param_2,short param_3)
 // Function: Touch_GetSQDistPixelToEdge @ 6ba7329a
 // ============================================================================
 
-void Touch_GetSQDistPixelToEdge(short param_1,short param_2,short param_3,short param_4)
-
+int Touch_GetSQDistPixelToEdge(short param_1,short param_2,short param_3,short param_4)
 {
   short local_c;
   short local_a;
@@ -1074,7 +1074,7 @@ undefined1 Touch_IsSideOverCore(byte param_1,byte param_2)
 // Function: Touch_IsCoreOffInSide @ 6ba715a8
 // ============================================================================
 
-undefined1 Touch_IsCoreOffInSide(undefined1 param_1)
+undefined1 Touch_IsCoreOffInSide(undefined1 param_1, ...)
 
 {
   char cVar1;
@@ -1759,7 +1759,7 @@ void Touch_SetEdgeFlag(byte param_1)
 // Function: Touch_SetSuppressFlag @ 6ba72ffb
 // ============================================================================
 
-void Touch_SetSuppressFlag(void)
+void Touch_SetSuppressFlag(byte param_1, ...)
 
 {
   return;
@@ -2007,12 +2007,11 @@ void Touch_UnitUpdateMaxMin(byte param_1,byte param_2)
 // Function: Touch_IsGrip @ 6ba742be
 // ============================================================================
 
-void Touch_IsGrip(undefined1 param_1)
+char Touch_IsGrip(undefined1 param_1)
 
 {
                     /* 0x342be  2538  Touch_IsGrip */
-  GripFilter_IsGripTouch(param_1);
-  return;
+  return GripFilter_IsGripTouch(param_1);
 }
 
 
@@ -2020,7 +2019,7 @@ void Touch_IsGrip(undefined1 param_1)
 // Function: Touch_GetPostReportLength @ 6ba76958
 // ============================================================================
 
-uint Touch_GetPostReportLength(int param_1,int param_2,int param_3,int param_4)
+uint Touch_GetPostReportLength(int param_1,int param_2,int param_3,int param_4, ...)
 
 {
   ushort uVar1;
@@ -2335,7 +2334,7 @@ void Touch_SetVolatileFlagTouchAxisAbnormal(byte param_1,byte param_2)
 // Function: Touch_NeedNextEdgeLowThresh @ 6ba6fe70
 // ============================================================================
 
-undefined1 Touch_NeedNextEdgeLowThresh(byte param_1)
+undefined1 Touch_NeedNextEdgeLowThresh(byte param_1, ...)
 
 {
   char cVar1;
@@ -2392,7 +2391,7 @@ LAB_6ba6ffed:
 // Function: Touch_SetVolatileFlagFingerZFailed @ 6ba700e1
 // ============================================================================
 
-void Touch_SetVolatileFlagFingerZFailed(byte param_1)
+void Touch_SetVolatileFlagFingerZFailed(byte param_1, ...)
 
 {
   int local_c;
@@ -2875,7 +2874,7 @@ void Touch_SetPersistFlagMoveOverFlickDistance(byte param_1,byte param_2)
 // Function: Touch_IsFarAwayFromCornerCompareToStartPoint @ 6ba74aef
 // ============================================================================
 
-bool Touch_IsFarAwayFromCornerCompareToStartPoint(byte param_1)
+bool Touch_IsFarAwayFromCornerCompareToStartPoint(byte param_1, ...)
 
 {
   return *(int *)(g_touchesPtr + (longlong)(int)(uint)param_1 * 0x168 + 0x1d4) / 2 <=
@@ -2955,15 +2954,14 @@ undefined8 Touch_IsGhostByMinSigOff(byte param_1)
 // Function: Touch_GetSQDistMMInBetween @ 6ba73515
 // ============================================================================
 
-void Touch_GetSQDistMMInBetween(byte param_1,byte param_2)
+ushort Touch_GetSQDistMMInBetween(byte param_1,byte param_2)
 
 {
                     /* 0x33515  2527  Touch_GetSQDistMMInBetween */
-  Touch_GetSQDistMM(*(undefined2 *)(g_touchesPtr + (longlong)(int)(uint)param_1 * 0x168 + 0x162),
-                    *(undefined2 *)(g_touchesPtr + (longlong)(int)(uint)param_1 * 0x168 + 0x164),
-                    *(undefined2 *)(g_touchesPtr + (longlong)(int)(uint)param_2 * 0x168 + 0x162),
-                    *(undefined2 *)(g_touchesPtr + (longlong)(int)(uint)param_2 * 0x168 + 0x164));
-  return;
+  return Touch_GetSQDistMM(*(undefined2 *)(g_touchesPtr + (longlong)(int)(uint)param_1 * 0x168 + 0x162),
+                           *(undefined2 *)(g_touchesPtr + (longlong)(int)(uint)param_1 * 0x168 + 0x164),
+                           *(undefined2 *)(g_touchesPtr + (longlong)(int)(uint)param_2 * 0x168 + 0x162),
+                           *(undefined2 *)(g_touchesPtr + (longlong)(int)(uint)param_2 * 0x168 + 0x164));
 }
 
 

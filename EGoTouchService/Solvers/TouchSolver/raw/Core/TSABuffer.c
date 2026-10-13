@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: TSABuffer_PreProcess @ 6ba8f37f
 // ============================================================================
@@ -119,7 +121,7 @@ void TSABuffer_TZIDProcess(void)
             ((longlong)(int)(uint)local_19 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x154);
     }
   }
-  local_128[0]._0_1_ = 0;
+  ((char*)local_128)[0] = 0;
   local_1c = _refptr_g_tsaPrmtFlash->wBufElementCount;
   while( true ) {
     uVar1 = local_1c;
@@ -545,7 +547,7 @@ void TSABuffer_GripTimeProcess(void)
     if (sVar2 < *(short *)(g_tsaBufDif + (ulonglong)local_1a * 2)) {
       puVar1 = (undefined2 *)(g_tsaBufGripTime + (ulonglong)local_1a * 2);
       sVar3 = TSABuffer_GetNextTime((int)*(short *)(g_tsaBufGripTime + (ulonglong)local_1a * 2));
-      uVar4 = _text(0,(int)sVar3);
+      uVar4 = MAX(0,(int)sVar3);
       *puVar1 = uVar4;
     }
     else {
@@ -553,6 +555,487 @@ void TSABuffer_GripTimeProcess(void)
     }
   }
   return;
+}
+
+
+// ============================================================================
+// Function: TSAMem_InitProject @ 6baa065d
+// ============================================================================
+
+bool TSAMem_InitProject(void)
+
+{
+  byte bVar1;
+  char cVar2;
+  
+                    /* 0x6065d  1609  TSAMem_InitProject */
+  TSAMem_Free();
+  *(ushort *)_refptr_g_gridBufSize = _refptr_g_tsaPrmtFlash->wBufElementCount;
+  *(short *)_refptr_g_gridMapBufSize =
+       (short)(((uint)*(ushort *)_refptr_g_gridBufSize * 2 + (uint)*(ushort *)_refptr_g_gridBufSize)
+              / 2);
+  *(ushort *)_refptr_g_lineBufSize =
+       (ushort)_refptr_g_tsaPrmtFlash->bCols + (ushort)_refptr_g_tsaPrmtFlash->bRows;
+  bVar1 = _refptr_g_tsaPrmtFlash->bCols;
+  if (_refptr_g_tsaPrmtFlash->bCols <= _refptr_g_tsaPrmtFlash->bRows) {
+    bVar1 = _refptr_g_tsaPrmtFlash->bRows;
+  }
+  *(ushort *)_refptr_g_maxDimSize = (ushort)bVar1;
+  cVar2 = TSAMem_Malloc();
+  if (cVar2 == '\0') {
+    StrPrintf_Process(0,"\nAppLog: ");
+    StrPrintf_Process(1,"\n TSA buffer malloc fail!");
+  }
+  return cVar2 != '\0';
+}
+
+
+// ============================================================================
+// Function: TSAMem_Free @ 6baa0608
+// ============================================================================
+
+void TSAMem_Free(void)
+
+{
+  RFNoise_Free();
+  HandGesture_Free();
+  ToeSynaBl_Free();
+  HardwareAnalyzer_Free();
+  SafeBaseline_Free();
+  BadChannel_Free();
+  BaliSensorBroken_Free();
+  TSAPrpt_Free();
+  SideTouch_Free();
+  TSABuffer_Free();
+  TPSensor_Free();
+  CMF_Free();
+  Exception_Free();
+  TZ_Free();
+  return;
+}
+
+
+// ============================================================================
+// Function: TSAMem_Malloc @ 6baa04f0
+// ============================================================================
+
+undefined8 TSAMem_Malloc(void)
+
+{
+  char cVar1;
+  undefined8 uVar2;
+  
+  cVar1 = RFNoise_Malloc();
+  if (cVar1 == '\0') {
+    uVar2 = 0;
+  }
+  else {
+    cVar1 = HandGesture_Malloc();
+    if (cVar1 == '\0') {
+      uVar2 = 0;
+    }
+    else {
+      cVar1 = ToeSynaBl_Malloc();
+      if (cVar1 == '\0') {
+        uVar2 = 0;
+      }
+      else {
+        cVar1 = HardwareAnalyzer_Malloc();
+        if (cVar1 == '\0') {
+          uVar2 = 0;
+        }
+        else {
+          cVar1 = SafeBaseline_Malloc();
+          if (cVar1 == '\0') {
+            uVar2 = 0;
+          }
+          else {
+            cVar1 = BadChannel_Malloc();
+            if (cVar1 == '\0') {
+              uVar2 = 0;
+            }
+            else {
+              cVar1 = BaliSensorBroken_Malloc();
+              if (cVar1 == '\0') {
+                uVar2 = 0;
+              }
+              else {
+                cVar1 = TSAPrpt_Malloc();
+                if (cVar1 == '\0') {
+                  uVar2 = 0;
+                }
+                else {
+                  cVar1 = SideTouch_Malloc();
+                  if (cVar1 == '\0') {
+                    uVar2 = 0;
+                  }
+                  else {
+                    cVar1 = TSABuffer_Malloc();
+                    if (cVar1 == '\0') {
+                      uVar2 = 0;
+                    }
+                    else {
+                      cVar1 = TPSensor_Malloc();
+                      if (cVar1 == '\0') {
+                        uVar2 = 0;
+                      }
+                      else {
+                        cVar1 = CMF_Malloc();
+                        if (cVar1 == '\0') {
+                          uVar2 = 0;
+                        }
+                        else {
+                          cVar1 = Exception_Malloc();
+                          if (cVar1 == '\0') {
+                            uVar2 = 0;
+                          }
+                          else {
+                            cVar1 = TZ_Malloc();
+                            if (cVar1 == '\0') {
+                              uVar2 = 0;
+                            }
+                            else {
+                              cVar1 = AFE_Malloc();
+                              if (cVar1 == '\0') {
+                                uVar2 = 0;
+                              }
+                              else {
+                                uVar2 = 1;
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return uVar2;
+}
+
+
+// ============================================================================
+// Function: TSABuffer_Free @ 6ba8df9f
+// ============================================================================
+
+void TSABuffer_Free(void)
+
+{
+                    /* 0x4df9f  1477  TSABuffer_Free */
+  TSA_Free(&g_tsaBufGridIIRDif);
+  TSA_Free(&g_tsaBufBlNormal);
+  TSA_Free(&g_tsaBufBlGrid);
+  g_tsaBufBl = 0;
+  TSA_Free(&g_tsaBufTzGrid);
+  g_tsaBufTz = 0;
+  TSA_Free(&g_tsaBufSd);
+  TSA_Free(&g_tsaBufSSChargerNFilterDif);
+  TSA_Free(&g_tsaBufRawStoredSinceSSNoSignal);
+  TSA_Free(&g_tsaBufRawStoredSinceMutualSSNotMatch);
+  TSA_Free(&g_tsaBufTzPrev);
+  TSA_Free(&g_tsaBufTzZonePrev);
+  TSA_Free(&g_tsaBufTzZone);
+  TSA_Free(&g_tsaBufTzID);
+  TSA_Free(&g_tsaBufSubTZ);
+  TSA_Free(&g_tsaBufTimeOff);
+  TSA_Free(&g_tsaBufTimeDown);
+  TSA_Free(&g_tsaBufTimeRpt);
+  TSA_Free(&g_tsaBufMinSigOff);
+  TSA_Free(&g_tsaBufGripStage);
+  TSA_Free(&g_tsaBufGripTime);
+  TSA_Free(&g_tsaBufGripTimeOff);
+  TSA_Free(&g_tsaBufGripRegion);
+  TSA_Free(&g_tsaBufMaxSigDown);
+  TSA_Free(&g_tsaBufSilentTouchNum);
+  TSA_Free(&g_tsaBufPreCMFDif);
+  TSA_Free(&g_tsaBufPreDif);
+  TSA_Free(&g_tsaBufPreHWRaw);
+  TSA_Free(&g_tsaBufRaw2rawDif);
+  TSA_Free(&g_tsaBufRaw2rawDifAftCMF);
+  TSA_Free(&g_tsaBufCommonModeNoise);
+  TSA_Free(&g_tsaBufRawCapture);
+  TSA_Free(&g_tsaBufRawCaptureNextSide);
+  TSA_Free(&g_tsaBufTzAge);
+  TSA_Free(&g_tsaBufCleanBaseline);
+  TSA_Free(&g_tsaBufPreUnnormalizedRaw);
+  TSA_Free(&g_tsaBufPreCMFRawGrid);
+  TSA_Free(&g_tsaBufRawGrid);
+  TSA_Free(&g_tsaBufDifGrid);
+  return;
+}
+
+
+// ============================================================================
+// Function: TSABuffer_Malloc @ 6ba8d7f6
+// ============================================================================
+
+undefined8 TSABuffer_Malloc(void)
+
+{
+  undefined8 uVar1;
+  
+                    /* 0x4d7f6  1481  TSABuffer_Malloc */
+  g_tsaBufGridIIRDif = TSA_MallocAndInit((uint)g_gridBufSize * 2);
+  if (g_tsaBufGridIIRDif == 0) {
+    uVar1 = 0;
+  }
+  else {
+    g_tsaBufBlNormal = TSA_MallocAndInit((uint)g_gridBufSize * 2);
+    if (g_tsaBufBlNormal == 0) {
+      uVar1 = 0;
+    }
+    else {
+      g_tsaBufBlGrid = TSA_MallocAndInit((uint)g_gridBufSize * 2);
+      if (g_tsaBufBlGrid == 0) {
+        uVar1 = 0;
+      }
+      else {
+        g_tsaBufBl = g_tsaBufBlGrid;
+        g_tsaBufTzGrid = TSA_MallocAndInit(g_gridBufSize);
+        if (g_tsaBufTzGrid == 0) {
+          uVar1 = 0;
+        }
+        else {
+          g_tsaBufTz = g_tsaBufTzGrid;
+          g_tsaBufSd = TSA_MallocAndInit((uint)g_gridBufSize * 2);
+          if (g_tsaBufSd == 0) {
+            uVar1 = 0;
+          }
+          else {
+            g_tsaBufSSChargerNFilterDif = TSA_MallocAndInit((uint)g_gridBufSize * 2);
+            if (g_tsaBufSSChargerNFilterDif == 0) {
+              uVar1 = 0;
+            }
+            else {
+              g_tsaBufRawStoredSinceSSNoSignal = TSA_MallocAndInit((uint)g_gridBufSize * 2);
+              if (g_tsaBufRawStoredSinceSSNoSignal == 0) {
+                uVar1 = 0;
+              }
+              else {
+                g_tsaBufRawStoredSinceMutualSSNotMatch = TSA_MallocAndInit((uint)g_gridBufSize * 2);
+                if (g_tsaBufRawStoredSinceMutualSSNotMatch == 0) {
+                  uVar1 = 0;
+                }
+                else {
+                  g_tsaBufTzPrev = TSA_MallocAndInit(g_gridBufSize);
+                  if (g_tsaBufTzPrev == 0) {
+                    uVar1 = 0;
+                  }
+                  else {
+                    g_tsaBufTzZonePrev = TSA_MallocAndInit(g_gridBufSize);
+                    if (g_tsaBufTzZonePrev == 0) {
+                      uVar1 = 0;
+                    }
+                    else {
+                      g_tsaBufTzZone = TSA_MallocAndInit(g_gridBufSize);
+                      if (g_tsaBufTzZone == 0) {
+                        uVar1 = 0;
+                      }
+                      else {
+                        g_tsaBufTzID = TSA_MallocAndInit(g_gridBufSize);
+                        if (g_tsaBufTzID == 0) {
+                          uVar1 = 0;
+                        }
+                        else {
+                          g_tsaBufSubTZ = TSA_MallocAndInit(g_gridBufSize);
+                          if (g_tsaBufSubTZ == 0) {
+                            uVar1 = 0;
+                          }
+                          else {
+                            g_tsaBufTimeOff = TSA_MallocAndInit((uint)g_gridBufSize * 2);
+                            if (g_tsaBufTimeOff == 0) {
+                              uVar1 = 0;
+                            }
+                            else {
+                              g_tsaBufTimeDown = TSA_MallocAndInit((uint)g_gridBufSize * 2);
+                              if (g_tsaBufTimeDown == 0) {
+                                uVar1 = 0;
+                              }
+                              else {
+                                g_tsaBufTimeRpt = TSA_MallocAndInit((uint)g_gridBufSize * 2);
+                                if (g_tsaBufTimeRpt == 0) {
+                                  uVar1 = 0;
+                                }
+                                else {
+                                  g_tsaBufMinSigOff = TSA_MallocAndInit((uint)g_gridBufSize * 2);
+                                  if (g_tsaBufMinSigOff == 0) {
+                                    uVar1 = 0;
+                                  }
+                                  else {
+                                    g_tsaBufGripStage = TSA_MallocAndInit(g_gridBufSize);
+                                    if (g_tsaBufGripStage == 0) {
+                                      uVar1 = 0;
+                                    }
+                                    else {
+                                      g_tsaBufGripTime = TSA_MallocAndInit((uint)g_gridBufSize * 2);
+                                      if (g_tsaBufGripTime == 0) {
+                                        uVar1 = 0;
+                                      }
+                                      else {
+                                        g_tsaBufGripTimeOff =
+                                             TSA_MallocAndInit((uint)g_gridBufSize * 2);
+                                        if (g_tsaBufGripTimeOff == 0) {
+                                          uVar1 = 0;
+                                        }
+                                        else {
+                                          g_tsaBufGripRegion = TSA_MallocAndInit(g_gridBufSize);
+                                          if (g_tsaBufGripRegion == 0) {
+                                            uVar1 = 0;
+                                          }
+                                          else {
+                                            g_tsaBufMaxSigDown =
+                                                 TSA_MallocAndInit((uint)g_gridBufSize * 2);
+                                            if (g_tsaBufMaxSigDown == 0) {
+                                              uVar1 = 0;
+                                            }
+                                            else {
+                                              g_tsaBufSilentTouchNum =
+                                                   TSA_MallocAndInit(g_gridBufSize);
+                                              if (g_tsaBufSilentTouchNum == 0) {
+                                                uVar1 = 0;
+                                              }
+                                              else {
+                                                g_tsaBufPreCMFDif =
+                                                     TSA_MallocAndInit((uint)g_gridBufSize * 2);
+                                                if (g_tsaBufPreCMFDif == 0) {
+                                                  uVar1 = 0;
+                                                }
+                                                else {
+                                                  g_tsaBufPreDif =
+                                                       TSA_MallocAndInit((uint)g_gridBufSize * 2);
+                                                  if (g_tsaBufPreDif == 0) {
+                                                    uVar1 = 0;
+                                                  }
+                                                  else {
+                                                    g_tsaBufPreHWRaw =
+                                                         TSA_MallocAndInit((uint)g_gridBufSize * 2);
+                                                    if (g_tsaBufPreHWRaw == 0) {
+                                                      uVar1 = 0;
+                                                    }
+                                                    else {
+                                                      g_tsaBufRaw2rawDif =
+                                                           TSA_MallocAndInit((uint)g_gridBufSize * 2
+                                                                            );
+                                                      if (g_tsaBufRaw2rawDif == 0) {
+                                                        uVar1 = 0;
+                                                      }
+                                                      else {
+                                                        g_tsaBufRaw2rawDifAftCMF =
+                                                             TSA_MallocAndInit((uint)g_gridBufSize *
+                                                                               2);
+                                                        if (g_tsaBufRaw2rawDifAftCMF == 0) {
+                                                          uVar1 = 0;
+                                                        }
+                                                        else {
+                                                          g_tsaBufCommonModeNoise =
+                                                               TSA_MallocAndInit((uint)
+                                                  g_gridMapBufSize * 2);
+                                                  if (g_tsaBufCommonModeNoise == 0) {
+                                                    uVar1 = 0;
+                                                  }
+                                                  else {
+                                                    g_tsaBufRawCapture =
+                                                         TSA_MallocAndInit((uint)g_gridBufSize * 2);
+                                                    if (g_tsaBufRawCapture == 0) {
+                                                      uVar1 = 0;
+                                                    }
+                                                    else {
+                                                      g_tsaBufRawCaptureNextSide =
+                                                           TSA_MallocAndInit((uint)g_gridBufSize * 2
+                                                                            );
+                                                      if (g_tsaBufRawCaptureNextSide == 0) {
+                                                        uVar1 = 0;
+                                                      }
+                                                      else {
+                                                        g_tsaBufTzAge =
+                                                             TSA_MallocAndInit((uint)g_gridBufSize *
+                                                                               2);
+                                                        if (g_tsaBufTzAge == 0) {
+                                                          uVar1 = 0;
+                                                        }
+                                                        else {
+                                                          g_tsaBufCleanBaseline =
+                                                               TSA_MallocAndInit((uint)g_gridBufSize
+                                                                                 * 2);
+                                                          if (g_tsaBufCleanBaseline == 0) {
+                                                            uVar1 = 0;
+                                                          }
+                                                          else {
+                                                            g_tsaBufPreUnnormalizedRaw =
+                                                                 TSA_MallocAndInit((uint)
+                                                  g_gridBufSize * 2);
+                                                  if (g_tsaBufPreUnnormalizedRaw == 0) {
+                                                    uVar1 = 0;
+                                                  }
+                                                  else {
+                                                    g_tsaBufRawGrid =
+                                                         TSA_MallocAndInit((uint)g_gridBufSize * 2);
+                                                    if (g_tsaBufRawGrid == 0) {
+                                                      uVar1 = 0;
+                                                    }
+                                                    else {
+                                                      g_tsaBufRaw = g_tsaBufRawGrid;
+                                                      g_tsaBufPreCMFRawGrid =
+                                                           TSA_MallocAndInit((uint)g_gridBufSize * 2
+                                                                            );
+                                                      if (g_tsaBufPreCMFRawGrid == 0) {
+                                                        uVar1 = 0;
+                                                      }
+                                                      else {
+                                                        g_tsaBufPreCMFRaw = g_tsaBufPreCMFRawGrid;
+                                                        g_tsaBufDifGrid =
+                                                             TSA_MallocAndInit((uint)
+                                                  g_gridMapBufSize * 2);
+                                                  if (g_tsaBufDifGrid == 0) {
+                                                    uVar1 = 0;
+                                                  }
+                                                  else {
+                                                    uVar1 = 1;
+                                                    g_tsaBufDif = g_tsaBufDifGrid;
+                                                  }
+                                                  }
+                                                  }
+                                                  }
+                                                  }
+                                                  }
+                                                  }
+                                                  }
+                                                  }
+                                                  }
+                                                  }
+                                                  }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return uVar1;
 }
 
 

@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: TouchThold_ToeUseSpecialThold @ 6ba7cd8f
 // ============================================================================
@@ -232,10 +234,6 @@ short TouchThold_BasedOnExperience(short param_1)
 
 
 // ============================================================================
-// Function: TouchThold_GetTouchDownThold @ 6ba7cca5
-// ============================================================================
-// DECOMPILATION FAILED OR TIMED OUT
-// ============================================================================
 // Function: TouchThold_GetPeakThold @ 6ba7cee9
 // ============================================================================
 
@@ -387,6 +385,37 @@ undefined8 TouchThold_SOFInSmartCoverMode(void)
     uVar1 = 0;
   }
   return uVar1;
+}
+
+
+// ============================================================================
+// Function: TouchThold_GetTouchDownThold @ 6ba7cca5
+// ============================================================================
+
+short TouchThold_GetTouchDownThold(short param_1)
+
+{
+  short local_2;
+  short sMax;
+  short sCfg;
+
+  local_2 = param_1;
+  if (_refptr_g_tsaPrmtFlash->dwPeakProcessingMode == 3) {
+    if (((*_refptr_g_tsaStaticPtr)->dwFeatureFlags & 0x1000) == 0) {
+      sMax = (short)_refptr_g_tsaPrpt->wBoundaryPositive;
+      sCfg = (short)_refptr_g_tsaPrmtFlash->wPeakMode3ThresholdMax;
+      if (sCfg < sMax) {
+        local_2 = sCfg / 3;
+      }
+      else {
+        local_2 = sMax / 3;
+      }
+    }
+    if (local_2 < param_1) {
+      return param_1;
+    }
+  }
+  return local_2;
 }
 
 

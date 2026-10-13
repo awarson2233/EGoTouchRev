@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: TZ_Process @ 6ba8c9f0
 // ============================================================================
@@ -2176,7 +2178,7 @@ void TZ_GetProperty(longlong param_1)
     if ((*(uint *)(param_1 + 4) & 0x1000000) == 0) {
       TZ_VPProcess(param_1);
       if ((*(uint *)(param_1 + 4) & 0x40) != 0) {
-        TZ_VirtualPeakInfoRetrieval(param_1);
+        TZ_VirtualPeakInfoRetrieval();
       }
     }
   }
@@ -3430,18 +3432,16 @@ void TZ_VPProcess(longlong param_1)
 // Function: TZ_CalcGripRatio @ 6ba7fa1a
 // ============================================================================
 
-void TZ_CalcGripRatio(undefined4 param_1,undefined8 param_2,undefined4 *param_3,undefined2 param_4,
-                     undefined2 param_5)
+byte TZ_CalcGripRatio(undefined4 param_1,undefined8 param_2,undefined4 *param_3,undefined2 param_4, undefined2 param_5)
 
 {
   *param_3 = 0;
   if (_refptr_g_tsaPrmtFlash->field_0x1a == '\0') {
-    TZ_CalcGripRatioDim1OnShortAxis(param_1,param_2,param_3,param_4,param_5);
+    return TZ_CalcGripRatioDim1OnShortAxis(param_1,param_2,param_3,param_4,param_5);
   }
   else {
-    TZ_CalcGripRatioDim1OnLongAxis(param_1,param_2,param_3,param_4,param_5);
+    return TZ_CalcGripRatioDim1OnLongAxis(param_1,param_2,param_3,param_4,param_5);
   }
-  return;
 }
 
 
@@ -3793,7 +3793,7 @@ bool TZ_IsAbsFFMinorAxis(byte param_1)
 // Function: TZ_JudgeFFOrNF @ 6ba8d1ed
 // ============================================================================
 
-undefined4 TZ_JudgeFFOrNF(void)
+undefined4 TZ_JudgeFFOrNF()
 
 {
   undefined4 local_c;
@@ -4241,11 +4241,10 @@ void TZ_GetCircleRate(longlong param_1)
 // Function: TZ_GetEllipseRate @ 6ba86fe1
 // ============================================================================
 
-void TZ_GetEllipseRate(longlong param_1)
+undefined2 TZ_GetEllipseRate(longlong param_1)
 
 {
-  TZ_GetERInernal(param_1 + 0x4e,(int)*(short *)(param_1 + 0x2a6));
-  return;
+  return TZ_GetERInernal(param_1 + 0x4e,(int)*(short *)(param_1 + 0x2a6));
 }
 
 
@@ -4758,7 +4757,7 @@ bool TZ_IsClearSignalGapAlongDim2(byte param_1,byte param_2,byte param_3,byte pa
 // Function: TZ_LogDbShape @ 6ba832d0
 // ============================================================================
 
-void TZ_LogDbShape(void)
+void TZ_LogDbShape()
 
 {
   return;
@@ -5511,7 +5510,7 @@ undefined2 TZ_GetPrevAge(byte param_1)
 // Function: TZ_GetSigTholdForVPA @ 6ba8d519
 // ============================================================================
 
-undefined2 TZ_GetSigTholdForVPA(void)
+undefined2 TZ_GetSigTholdForVPA()
 
 {
   return *(undefined2 *)(_refptr_g_tsaPrmtDynamic + 8);
@@ -5895,7 +5894,7 @@ undefined4 TZ_GetShapeBaseOnCentToMinPkRatio(longlong param_1)
 // Function: TZ_GetShapeBaseOnMinorAxis @ 6ba8cfd5
 // ============================================================================
 
-undefined4 TZ_GetShapeBaseOnMinorAxis(ushort param_1)
+undefined4 TZ_GetShapeBaseOnMinorAxis(ushort param_1, ...)
 
 {
   undefined4 local_c;
@@ -5965,7 +5964,7 @@ undefined4 TZ_GetShapeBaseOnCentralSensor(longlong param_1)
 // Function: TZ_GetSigTholdForMergePeak @ 6ba83afc
 // ============================================================================
 
-ushort TZ_GetSigTholdForMergePeak(void)
+ushort TZ_GetSigTholdForMergePeak()
 
 {
   return _refptr_g_tsaPrmtFlash->wPeakMode3ThresholdMax;
@@ -6630,6 +6629,32 @@ float TZ_BiCubicInter4x4(int *param_1,float *param_2,longlong param_3)
     local_18 = local_18 + 4;
   }
   return local_10;
+}
+
+
+// ============================================================================
+// Function: TZ_Free @ 6ba85723
+// ============================================================================
+
+void TZ_Free(void)
+
+{
+                    /* 0x45723  2365  TZ_Free */
+  TSA_Free(&g_tzBuffer);
+  return;
+}
+
+
+// ============================================================================
+// Function: TZ_Malloc @ 6ba856e0
+// ============================================================================
+
+bool TZ_Malloc(void)
+
+{
+                    /* 0x456e0  2429  TZ_Malloc */
+  g_tzBuffer = TSA_MallocAndInit((uint)*(ushort *)_refptr_g_gridBufSize * 2);
+  return g_tzBuffer != 0;
 }
 
 

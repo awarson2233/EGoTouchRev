@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: BLSM_PreProcess @ 6ba4c36b
 // ============================================================================
@@ -187,12 +189,8 @@ void BLSM_UpdateStage(void)
                  (_refptr_g_tsaPrpt->qwBaselineStageReference -
                  (*_refptr_g_tsaStaticPtr)->llField_0xe8);
             if (uVar1 < 10) {
-                    /* WARNING: Could not recover jumptable at 0x6ba4c89c. Too many branches */
-                    /* WARNING: Treating indirect jump as call */
-              (*(code *)((longlong)&switchD_6ba4c89c::switchdataD_6bb51a74 +
-                        (longlong)(int)(&switchD_6ba4c89c::switchdataD_6bb51a74)[uVar1]))();
-              return;
-            }
+    return;
+  }
             _refptr_g_tsaPrpt->nBaselineStageFrameCount = 1;
             _refptr_g_tsaPrpt->qwBaselineStageReference =
                  (longlong)(*_refptr_g_tsaStaticPtr)->nBaselineStageInitialSignal;
@@ -237,13 +235,30 @@ void BLSM_ProcessStage(void)
   (*_refptr_g_tsaStaticPtr)->bResetDiffRequested = '\0';
   (*_refptr_g_tsaStaticPtr)[1].bField_0x00 = '\0';
   if (_refptr_g_tsaPrpt->dwBaselineStage < 10) {
-                    /* WARNING: Could not recover jumptable at 0x6ba4d1f1. Too many branches */
-                    /* WARNING: Treating indirect jump as call */
-    (*(code *)((longlong)&switchD_6ba4d1f1::switchdataD_6bb51a9c +
-              (longlong)
-              (int)(&switchD_6ba4d1f1::switchdataD_6bb51a9c)[_refptr_g_tsaPrpt->dwBaselineStage]))()
-    ;
-    return;
+    switch (_refptr_g_tsaPrpt->dwBaselineStage) {
+      case 0:
+      case 1:
+        (*_refptr_g_tsaStaticPtr)->bResetDiffRequested = 1;
+        BLSM_Stage0();
+        break;
+      case 2:
+        if (_refptr_g_tsaPrpt->dwPrevBaselineStage <= 3 && _refptr_g_tsaPrpt->dwPrevBaselineStage >= 1) {
+          _refptr_g_tsaPrpt->dwBaselineStage = 0;
+        } else {
+          _refptr_g_tsaPrpt->dwBaselineStage = _refptr_g_tsaPrpt->dwPrevBaselineStage;
+        }
+        break;
+      case 3: {
+        short s1 = 0, s2 = 0;
+        BLSM_Stage3(&s1, &s2);
+        BLIIR_UpdateBaseline(0, s1, s2);
+        (*_refptr_g_tsaStaticPtr)->bBaselineUpdatedThisFrame = 1;
+        BLSM_PostStage3();
+        break;
+      }
+      default:
+        break;
+    }
   }
   if ((*_refptr_g_tsaStaticPtr)->bResetDiffRequested == '\0') {
     BLIIR_CalcDiff();

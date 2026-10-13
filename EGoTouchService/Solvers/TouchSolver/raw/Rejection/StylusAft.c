@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: StylusAft_PostProcessUnit @ 6bb223ef
 // ============================================================================
@@ -908,13 +910,12 @@ undefined8 StylusAft_InFanArea(undefined4 param_1,undefined4 param_2)
 // Function: StylusAft_DistBetweenPoints @ 6bb20d54
 // ============================================================================
 
-void StylusAft_DistBetweenPoints(int param_1,int param_2,int param_3,int param_4)
+int StylusAft_DistBetweenPoints(int param_1,int param_2,int param_3,int param_4)
 
 {
                     /* 0xe0d54  1437  StylusAft_DistBetweenPoints */
-  StylusAft_Sqrt((param_4 - param_2) * (param_4 - param_2) +
+  return StylusAft_Sqrt((param_4 - param_2) * (param_4 - param_2) +
                  (param_3 - param_1) * (param_3 - param_1));
-  return;
 }
 
 
@@ -939,6 +940,27 @@ int StylusAft_Sqrt(uint param_1)
     }
   }
   return local_10;
+}
+
+
+// ============================================================================
+// Function: StylusAft_Init @ 6bb208d0
+// ============================================================================
+
+void StylusAft_Init(void)
+
+{
+                    /* 0xe08d0  1444  StylusAft_Init */
+  g_lastStylusTimeStamp = 0;
+  g_lastStylusX = 0;
+  g_lastStylusY = 0;
+  g_lastTiltX = 0;
+  g_lastTiltY = 0;
+  g_lastPalmTimeStamp = 0;
+  g_lastPalmX = 0;
+  g_lastPalmY = 0;
+  *_refptr_g_btPenStatus = 0;
+  return;
 }
 
 

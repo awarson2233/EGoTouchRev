@@ -4,8 +4,33 @@
 // Auto-generated static parameter tables (W273AS2700 / GaokunHimaxCSOT)
 // and exact PE .data / .rdata initial images + struct layouts from TSACore.dll
 // ============================================================================
+#ifdef __cplusplus
 #include <cstdint>
 #include <cstddef>
+#else
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
+#include <assert.h>
+#define alignas _Alignas
+#define constexpr const
+#endif
+
+// Forward typedefs for C compatibility
+typedef union TSAFlashPrmt TSAFlashPrmt;
+typedef union TSAStatic TSAStatic;
+typedef union TSAPrpt TSAPrpt;
+typedef union PrevTouchArray PrevTouchArray;
+typedef union AsaFlashPrmt_t AsaFlashPrmt_t;
+typedef struct AsaGroupInfo_t AsaGroupInfo_t;
+typedef union AsaPrmt_t AsaPrmt_t;
+typedef union AsaStylusPrmt_t AsaStylusPrmt_t;
+typedef union AsaStatic_t AsaStatic_t;
+typedef union AsaOut_t AsaOut_t;
+typedef union AsaData_t AsaData_t;
+typedef union AsaNoPressPara_t AsaNoPressPara_t;
+typedef struct PeakTable_t PeakTable_t;
+typedef struct TsaInternalRelocEntry TsaInternalRelocEntry;
 
 #pragma pack(push, 1)
 
@@ -943,7 +968,7 @@ static_assert(sizeof(TSAPrpt) == 0x2bc, "TSAPrpt size must be 0x2bc");
 // ----------------------------------------------------------------------------
 union AFE_Frame {
     uint8_t raw[0x60];
-    struct { uint32_t dwUnixTimeSec; uint32_t nUnixTimeSubSec; uint16_t wScanIndex; uint16_t _pad0a[3]; void* pRawData; void* pLineData; uint64_t qwReserved_20; uint64_t qwReserved_28; uint16_t wScanFreqIndex; uint16_t wScanRateIndex; uint32_t dwFlags; uint32_t dwGesture; uint32_t _pad3c; void* pStylusData; uint64_t qwReserved_48; uint64_t qwReserved_50; uint32_t dwReserved_58; uint32_t _pad5c; };
+    struct { union { uint32_t dwUnixTimeSec; uint32_t nUnixTimeSec; }; uint32_t nUnixTimeSubSec; uint16_t wScanIndex; uint16_t _pad0a[3]; void* pRawData; void* pLineData; uint64_t qwReserved_20; uint64_t qwReserved_28; uint16_t wScanFreqIndex; uint16_t wScanRateIndex; uint32_t dwFlags; uint32_t dwGesture; uint32_t _pad3c; void* pStylusData; uint64_t qwReserved_48; uint64_t qwReserved_50; uint32_t dwReserved_58; uint32_t _pad5c; };
 };
 
 struct PeakTable_t { uint8_t bPeakCount; };

@@ -1,3 +1,5 @@
+#include "TSACoreInternal.h"
+
 // ============================================================================
 // Function: BadChannel_Init @ 6bb42b6c
 // ============================================================================
@@ -273,6 +275,32 @@ void BadChannel_SetDebounce(ushort param_1)
   }
   *(undefined1 *)((ulonglong)local_res8 + g_badChannelDebounce) = 0x78;
   return;
+}
+
+
+// ============================================================================
+// Function: BadChannel_Free @ 6bb42b51
+// ============================================================================
+
+void BadChannel_Free(void)
+
+{
+                    /* 0x102b51  382  BadChannel_Free */
+  TSA_Free(&g_badChannelDebounce);
+  return;
+}
+
+
+// ============================================================================
+// Function: BadChannel_Malloc @ 6bb42b10
+// ============================================================================
+
+bool BadChannel_Malloc(void)
+
+{
+                    /* 0x102b10  385  BadChannel_Malloc */
+  g_badChannelDebounce = TSA_MallocAndInit(*(undefined2 *)_refptr_g_gridBufSize);
+  return g_badChannelDebounce != 0;
 }
 
 
