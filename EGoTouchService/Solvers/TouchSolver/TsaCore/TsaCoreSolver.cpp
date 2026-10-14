@@ -88,7 +88,8 @@ void TsaCoreSolver::ApplyPenSession() noexcept {
 
 // StylusSolver 的坐标是面板原始行列方向、每个节点 1024 单位；TSACore 用的是驱动倒序后的方向，
 // 量程是显示像素（ASA 的 FitToLcdScreen：像素 = 分辨率 × 坐标 / 节点数 / 1024，夹在 [0, 分辨率 − 1]）。
-// 两个轴都倒过来，倾角因此取反。
+// 两个轴都倒过来。倾角不用取反：ASA 的 TiltProcess 在倒序坐标系里按 TX2 − TX1 的坐标差算倾角，
+// StylusSolver 在原始坐标系里按 TX1 − TX2 算，翻转与相减次序正好抵消，两者数值相同。
 StylusReport TsaCoreSolver::MakeStylusReport(const StylusFrameData& stylus) noexcept {
     StylusReport report;
     const auto& out = stylus.output;
@@ -103,8 +104,8 @@ StylusReport TsaCoreSolver::MakeStylusReport(const StylusFrameData& stylus) noex
     report.tipDown = out.tipDown;
     report.x = toPixel(out.point.x, Frame::kRxCount, TsaHostShim::kXRes);
     report.y = toPixel(out.point.y, Frame::kTxCount, TsaHostShim::kYRes);
-    report.tiltX = static_cast<int16_t>(-out.point.tiltX);
-    report.tiltY = static_cast<int16_t>(-out.point.tiltY);
+    report.tiltX = out.point.tiltX;
+    report.tiltY = out.point.tiltY;
     report.pressure = out.tipDown ? out.pressure : 0;
     return report;
 }
