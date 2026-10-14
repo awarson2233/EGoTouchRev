@@ -35,6 +35,27 @@ static_assert(offsetof(CmfThold, amp) == 0x000);
 static_assert(offsetof(CmfThold, grad) == 0x002);
 static_assert(offsetof(CmfThold, gameExtra) == 0x004);
 
+/// 质心边缘修正的一段：触点尺寸不超过 maxSizeMm 时用这一段，把边缘信号比在 ln 表上的位置换算成补偿量。
+struct CtdEdgeSegment {
+    uint8_t maxSizeMm;
+    uint8_t reserved001[0x1];
+    uint8_t lnLowIdx;  // 补偿区间两端在 ln 表里的下标
+    uint8_t lnHighIdx;
+};
+static_assert(sizeof(CtdEdgeSegment) == 0x004);
+static_assert(offsetof(CtdEdgeSegment, maxSizeMm) == 0x000);
+static_assert(offsetof(CtdEdgeSegment, lnLowIdx) == 0x002);
+static_assert(offsetof(CtdEdgeSegment, lnHighIdx) == 0x003);
+
+/// 质心边缘修正的分段表（一个边缘一张）。
+struct CtdEdgePrmt {
+    uint8_t segmentNum;
+    CtdEdgeSegment segment[4];
+};
+static_assert(sizeof(CtdEdgePrmt) == 0x011);
+static_assert(offsetof(CtdEdgePrmt, segmentNum) == 0x000);
+static_assert(offsetof(CtdEdgePrmt, segment) == 0x001);
+
 /// g_tsaPrmtFlash：机型参数表（W273AS2700 由 Prmt::LoadProject 装入）。原厂按 0x840 字节分成三段，这里按整块的偏移排布。
 /// 调参表（TtPrmt）与运行时参数（RtPrmt）每帧把各自的当前值写回其中的对应字段，名字取自它们的键名与说明。
 struct FlashPrmt {
@@ -104,15 +125,9 @@ struct FlashPrmt {
     uint8_t largeObjectSizeMm;  // 判为大物体的尺寸
     uint8_t reserved837[0x1];
     uint32_t aftEdgeWidthThold;  // AFT 的 ewx / ewy 边缘宽度门限
-    uint8_t reserved83C[0x8];
-    uint8_t ctdEdgeTholdDim2Near;  // 质心边缘修正门限：Dim2 首端
-    uint8_t reserved845[0x10];
-    uint8_t ctdEdgeTholdDim2Far;
-    uint8_t reserved856[0x10];
-    uint8_t ctdEdgeTholdDim1Near;
-    uint8_t reserved867[0x10];
-    uint8_t ctdEdgeTholdDim1Far;
-    uint8_t reserved878[0x12];
+    uint8_t reserved83C[0x4];
+    CtdEdgePrmt ctdEdge[4];  // 质心边缘修正：Dim1 首端、Dim1 末端、Dim2 首端、Dim2 末端
+    uint8_t reserved884[0x6];
     uint16_t accThold;  // 两触点连线的加速度门限
     uint8_t reserved88C[0x2];
     AiirPrmt aiir[3];
@@ -292,10 +307,7 @@ static_assert(offsetof(FlashPrmt, sigMultNormal) == 0x81F);
 static_assert(offsetof(FlashPrmt, sigMultSD) == 0x820);
 static_assert(offsetof(FlashPrmt, largeObjectSizeMm) == 0x836);
 static_assert(offsetof(FlashPrmt, aftEdgeWidthThold) == 0x838);
-static_assert(offsetof(FlashPrmt, ctdEdgeTholdDim2Near) == 0x844);
-static_assert(offsetof(FlashPrmt, ctdEdgeTholdDim2Far) == 0x855);
-static_assert(offsetof(FlashPrmt, ctdEdgeTholdDim1Near) == 0x866);
-static_assert(offsetof(FlashPrmt, ctdEdgeTholdDim1Far) == 0x877);
+static_assert(offsetof(FlashPrmt, ctdEdge) == 0x840);
 static_assert(offsetof(FlashPrmt, accThold) == 0x88A);
 static_assert(offsetof(FlashPrmt, aiir) == 0x88E);
 static_assert(offsetof(FlashPrmt, field8A0) == 0x8A0);
@@ -591,8 +603,9 @@ static_assert(offsetof(DynamicPrmt, skipZ8CheckOnInnerEdge) == 0x096);
 
 /// g_tsaPrmtRam：运行中由各模块按场景改写的参数。
 struct RamPrmt {
-    uint8_t ctdEdgeTable[0x16];  // CTD 的边缘补偿分段表（CTD 尚未改写，按字节访问）
-    AiirPrmt aiir;               // Filter 按触点状态从机型参数里选一组写入
+    CtdEdgePrmt ctdEdge;  // CTD 按触点所在的边缘从机型参数里选一张写入
+    uint8_t reserved011[0x5];
+    AiirPrmt aiir;        // Filter 按触点状态从机型参数里选一组写入
 };
 static_assert(sizeof(RamPrmt) == 0x1C);
 static_assert(offsetof(RamPrmt, aiir) == 0x16);
