@@ -1,7 +1,7 @@
 #include "Alg/Filter/IirFilter.h"
 
 #include "Common/Assert.h"
-#include "Prmt/RamPrmt.h"
+#include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::Iir {
 

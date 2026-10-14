@@ -76,13 +76,14 @@ flowchart TB
 
 回放只能验证被执行到的代码。`Compare-Reference.ps1 -Coverage` 用插桩构建跑同一套录制与场景，在 `build/tsa-coverage` 下给出按文件和按函数的覆盖率：当前约 61% 的函数、54% 的行被执行到；`Tracking/MtLsm.c`、`Detection/Image.c`、`Tracking/HotZoneAdjust.c`、`Signal/BadChannel.c` 等几乎完全没有执行。
 
-没有被执行到的代码靠两样东西保证：一是改写规则本身（第 5 节）只做与输入无关的等价变换；二是差分对拍——把参考提交里的旧 C 函数用 `-D名字=Old_名字` 改名编译，与当前库链进同一个程序，用大量随机输入加边界值同时调用新旧两个版本比较返回值和状态。纯函数（数学、滤波、距离换算）改写后都过一遍对拍。
+没有被执行到的代码靠两样东西保证：一是改写规则本身（第 5 节）只做与输入无关的等价变换；二是差分对拍——把参考提交里的旧 C 函数用 `-D名字=Old_名字` 改名编译，与当前库链进同一个程序，用大量随机输入加边界值同时调用新旧两个版本比较返回值和状态。纯函数（数学、滤波、距离换算）改写后都过一遍对拍。读写全局状态的函数用有状态对拍：驱动经 `TsaHostShim::Initialize` 做真实初始化（缓冲、参数表、表指针都就位），每轮把触点表、峰表、`TSAStatic`、`TSA_Prpt`、动态参数和网格缓冲随机化，然后对每个函数恢复本轮状态、先跑旧版本、记下整块内存镜像与网格缓冲，再恢复、跑新版本，比较返回值、镜像和缓冲。随机化要按字节偏向 0 与小值、坐标集中在一簇附近，否则多字节字段几乎总是落在阈值的同一侧，分支覆盖不到；对拍的灵敏度用人为改一个边界（如 `dim2Span < 4` 改成 `< 5`）确认能被抓到。
 
 ### 4. 目录、命名与过渡期接口
 
 - 目录：[TsaCore/src](/EGoTouchService/Solvers/TouchSolver/TsaCore/src) 下按原厂源码树组织：`Alg/`（算法模块，如 `Alg/Filter`、`Alg/Touch`、`Alg/IDTracking`）、`App/`（主流程、Static、Buffer）、`Common/`、`Extension/`（GripFilter、HardwareAnalyzer、AFE 等）、`Prmt/`、`Tool/`、`WorkAround/`。原厂文件名未知的按函数前缀归入对应模块。
 - 命名空间：根是 `Solvers::Tsa::Core`，原函数名前缀变成子命名空间（`IIR_Process` → `Iir::Process`，`TSAMath_ATan2` → `Math::ATan2`），函数名保持原厂语义，便于和反编译对照；每个函数定义上方一行注释记原名和地址（`// IDT_Process @ 0x6ba6...`）。
-- 风格与仓库其余 C++ 一致：类型与函数 PascalCase，变量与字段 camelCase，常量 `kName`，注释中文。头文件只放声明与类型，不包含 raw 的头文件（raw 头里有上千个地址宏）。改写后的代码调用尚未改写的 raw 函数时，在 .cpp 里按原签名做 `extern "C"` 声明。
+- 风格与仓库其余 C++ 一致：类型与函数 PascalCase，变量与字段 camelCase，常量 `kName`，注释中文。头文件只放声明与类型，不包含 raw 的头文件（raw 头里有上千个地址宏）。改写后的代码调用尚未改写的 raw 函数时，统一经 [Legacy/RawApi.h](/EGoTouchService/Solvers/TouchSolver/TsaCore/src/Legacy/RawApi.h) 里按原签名的 `extern "C"` 声明，按 raw 源文件分组；某个模块改写完成后从中删掉它的条目。raw 把返回值截断成 `char` 或 `int` 再判断的，调用处同样截断。
+- 一个原厂源文件可以按职责拆成几个文件，例如 `TouchData.c` 拆成触点表维护 [Touch.cpp](/EGoTouchService/Solvers/TouchSolver/TsaCore/src/Alg/Touch/Touch.cpp) 与不涉及状态的距离 / 时间换算 [TouchGeometry.cpp](/EGoTouchService/Solvers/TouchSolver/TsaCore/src/Alg/Touch/TouchGeometry.cpp)；只在本文件内调用的原函数放进匿名命名空间，不再导出。
 - 转发函数：放在 .cpp 末尾的「过渡期」段，签名与 raw 的 `TSAFuncDecls.h` 声明逐字一致（含返回类型的 `char` 等），只做参数转换后调用新函数。原 raw 文件在改写完成的同一提交里删除。
 
 ### 5. 改写规则（不动算法细节的边界）
@@ -99,7 +100,8 @@ flowchart TB
 
 - 每个读写的位宽与符号：raw 用 `short` 读一个 `uint16_t` 字段，改写后也要 `static_cast<int16_t>`；`(char)` 截断、`& 0xffff` 掩码、`>> 0x1f` 取符号这类操作保留语义。
 - 除法与移位的取整方向（Ghidra 把有符号除法展开成「负数先加偏置再右移」，改写成 `/` 时要确认是向零取整）。
-- 有副作用的表达式的求值顺序、函数调用的次数与顺序（同一个查询在 raw 里调用两次就调用两次）。
+- 有副作用的表达式的求值顺序、函数调用的次数与顺序（同一个查询在 raw 里调用两次就调用两次）。C++ 不规定 `a < b` 两侧的求值顺序，两个调用出现在同一表达式里时拆成语句。
+- raw 不检查的下标照样不检查：例如新按下的触点历史下标为 `kNoTouch`，raw 仍按这个下标读写历史表第 20 个单元，落在表尾之后的内存上，改写后同样访问（触点表都是所在结构的末尾数组，编译器按柔性数组对待）。
 - 浮点运算的顺序与精度（`float` / `double` 不互换，不合并常量）。
 - 阈值、循环边界、提前返回、对超界索引的钳位。
 
