@@ -71,6 +71,10 @@ static_assert(sizeof(Table) == 0x2D8);
 static_assert(offsetof(Table, unit) == 0x08);
 
 [[nodiscard]] inline Table& Global() noexcept { return Image::At<Table>(0x6bbc8680); }
+/// 第 i 个子区域。原代码不检查下标是否超过 kMaxUnitNum，这里按地址取，越界时的内存行为与原代码一致。
+[[nodiscard]] inline Unit& UnitAt(uint32_t i) noexcept { return Image::At<Unit>(0x6bbc8688 + i * sizeof(Unit)); }
+/// g_pkAccessedFlagSubTZ：已归入某个子区域的峰（峰表下标的位图），TZ 每帧清零。
+[[nodiscard]] inline uint32_t& PeakAccessed() noexcept { return Image::At<uint32_t>(0x6bbc8958); }
 
 /// 对一个 TZ 区域拆分子区域，结果写入 Global()。
 void Process(TouchZoneUnit& zone);

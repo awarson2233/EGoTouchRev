@@ -16,6 +16,7 @@ void TSACoreRaw_LoadProjectTables(void);
 
 // Common/MISC.c
 int Misc_SqrtUint32(uint32_t value);
+double SinXDivX(double x);
 
 // Core/AFE.c
 uint32_t AFE_IsRawJump(void);
@@ -45,6 +46,7 @@ uint64_t TSA_SideToDimEdge(int side);
 bool TSA_IsPossibleUnderWater(void);
 void* TSA_MallocAndInit(uint32_t size);
 void TSA_Free(int64_t* ptr);
+uint32_t TSA_GetSide(uint16_t dim1, uint16_t dim2);
 
 // Core/TSAOut.c
 uint16_t TSAOut_DisplayXPos(uint8_t idx, ...);
@@ -68,6 +70,8 @@ bool TSAStatic_IsFreqShiftDone(void);
 uint64_t TSAStatic_IsProximityEnabled(void);
 uint8_t TSAStatic_IsSignalReverted(void);
 uint32_t TSAStatic_IsAFTModeEnabled(void);
+uint32_t TSAStatic_GetSigThold(int mode);
+uint8_t TSAStatic_IsAllFreqNoisy(void);
 
 // Baseline/BLIIR.c
 void BLIIR_CalcDiffCommon(int16_t* difOut, int16_t* raw, int16_t* baseline);
@@ -79,14 +83,6 @@ uint8_t BLReset_Status(void);
 // Baseline/PressureDrift.c
 uint64_t PressureDrift_Detect(uint8_t dim1, uint8_t dim2);
 
-// Detection/TZ.c
-void TZ_GetExceptionRatio(void* zone);
-void TZ_GetAxisInternal(double m0, double m1Dim1, double m1Dim2, double m2Dim1Dim2, double m2Dim1, double m2Dim2,
-                        uint16_t* majorAxis, uint16_t* minorAxis, int8_t* angle);
-void TZ_SeparateZoneRegretProcess(void* zone, void* subZone);
-void TZ_TryExtraMergePeak(void* zone, uint8_t dim1, uint8_t dim2);
-uint8_t TZ_GetAutoCentToMinPkRatio(void* zone, uint8_t peakA, uint8_t peakB);
-
 // Rejection/AntiTouch.c
 void AntiTouch_Report(void);
 
@@ -96,15 +92,21 @@ bool GripFilter_IsGripTouch(uint8_t idx);
 uint64_t GripFilter_IsGripOrTbd(int32_t gripStage);
 bool GripFilter_IsPeakAbsGrip(uint8_t peakIdx);
 bool GripFilter_IsToCancelIDMapping(uint8_t curIdx, uint8_t prevIdx);
+uint64_t GripFilter_IsGrip(int32_t gripStage);
+bool GripFilter_IsPeakAbsNotGrip(uint8_t peakIdx);
+uint32_t GripFilter_GetTrackingThold(void);
+uint8_t GripFilter_IsMergeHandlerSensorEnabled(uint8_t dim1, uint8_t dim2);
 
 // Rejection/Thenar.c
 void Thenar_UnitCopy(uint8_t* dst, uint8_t* src);
 
 // Signal/CMF.c
+uint32_t CMF_GetCmfMethod(void);
 int16_t CMF_GetNoiseValue(uint8_t dim1, uint8_t dim2);
 
 // Signal/TPSensor.c
 char TPSensor_IsNoMoveInCorrection(uint32_t dim1, uint32_t dim2);
+void TPSensor_IsBrokenSensorInTouchZone(void* zone);
 
 // Signal/HardwareAnalyzer.c
 void HardwareAnalyzer_ReportToTSA(void);

@@ -85,9 +85,9 @@ struct FlashPrmt {
     uint8_t reserved000[0x18];
     uint8_t displayXAxis;  // 与 dim1Axis 相等时 Dim1 是显示的 X 方向
     uint8_t dim1Axis;
-    uint8_t reserved01A[0x1];
+    uint8_t dim1OnLongAxis;  // 非 0 时 Dim1 沿屏幕长边（TZ 的握持比按长轴算）
     uint8_t sensorPitchX16;  // 传感器间距（1/16 mm）；ConstPrmt 由它推导像素与 mm 的换算
-    uint8_t reserved01C[0x1];
+    uint8_t sensorPitch2X16;  // Dim2 方向的传感器间距（1/16 mm）
     uint8_t dim1Len;  // 列数
     uint8_t dim2Len;  // 行数
     uint8_t reserved01F[0xD];
@@ -141,19 +141,27 @@ struct FlashPrmt {
     uint32_t cmfMethodNormal;  // CMF 方法：常态 / 智能皮套（1 为 SOF）
     uint32_t cmfMethodSmartCover;
     uint8_t noisyTouchDownDebounce;  // 触点处的共模噪声大于 500 或小于 -400 时按下防抖的最少帧数；0 为不启用
-    uint8_t reserved819[0x5];
+    uint8_t reserved819[0x3];
+    int16_t gripModeSigThold;  // gripFlags 0x4 时 TZ 的区域遍历门限
     uint8_t sigMult;  // 触点区域遍历门限相对峰值的比例（/128）：默认
     uint8_t sigMultNormal;  // 设备接地
     uint8_t sigMultSD;  // 设备悬浮
-    uint8_t reserved821[0x12];
+    uint8_t reserved821[0x7];
+    int32_t absFfZ9;  // TZ：区域中心 Z9 超过它判为大手指
+    uint16_t ffMaxMajorMm;  // TZ：长轴不到它且不贴边时判为大手指
+    uint16_t absFfMinorMm;  // TZ：短轴超过它判为大手指
+    uint8_t absFfCentToMinPkRatio;  // TZ：质心到最小峰的信号比超过它判为大手指
+    uint8_t mfCentToMinPkRatioLow;  // TZ：质心到最小峰的信号比低于它判为多指
+    uint8_t peakFilterCentToMinPkRatio;  // TZ：相距不到 3 格的两峰之间的质心到最小峰信号比超过它时去掉较弱的峰
     uint8_t mfCentToMinPkRatio;  // 质心到最小峰的信号比低于它判为多指（TZ 形状判定、SubTZ 多指判定）
     uint8_t reserved834[0x2];
     uint8_t largeObjectSizeMm;  // 判为大物体的尺寸
     uint8_t reserved837[0x1];
     uint32_t aftEdgeWidthThold;  // AFT 的 ewx / ewy 边缘宽度门限
-    uint8_t reserved83C[0x4];
+    uint32_t gripFlags;  // TZ 的握持 / 遍历模式开关（kGrip*）
     CtdEdgePrmt ctdEdge[4];  // 质心边缘修正：Dim1 首端、Dim1 末端、Dim2 首端、Dim2 末端
-    uint8_t reserved884[0x4];
+    int16_t centroidSigOffsetDim1;  // gripFlags 0x400 时，TZ 质心权重先减去的信号量
+    int16_t centroidSigOffsetDim2;
     uint8_t idtSnapDistMm;  // IDT：位移、预测位移都在此距离内且帧龄超过 5 的历史触点直接吸附（代价置为极小）
     uint8_t reserved889[0x1];
     uint16_t accThold;  // 两触点连线的加速度门限
@@ -161,7 +169,11 @@ struct FlashPrmt {
     AiirPrmt aiir[3];
     uint8_t field8A0;
     uint8_t field8A1;
-    uint8_t reserved8A2[0x57];
+    uint8_t reserved8A2[0x17];
+    uint8_t gripPeakEdgeDist;  // 峰到边缘的距离超过它不算握持峰；也是握持合并峰的搜索半径
+    uint16_t gripTimeInterval;  // 握持格与非握持格的按下时间差超过它才拆分区域
+    uint16_t maxNotGripTime;  // 非握持峰的握持时间不超过它才看椭圆度
+    uint8_t reserved8BE[0x3B];
     uint8_t defaultSizeMm;  // 尚无尺寸的触点的默认尺寸（mm）；DynPrmt 初值
     uint8_t reserved8FA[0x2];
     uint32_t defaultTouchAction;  // 新触点默认的 TouchAction；也是 DynPrmt 初值块（0x8fc..0x90c）的开头
@@ -306,7 +318,9 @@ struct FlashPrmt {
 static_assert(sizeof(FlashPrmt) == 0x1890);
 static_assert(offsetof(FlashPrmt, displayXAxis) == 0x018);
 static_assert(offsetof(FlashPrmt, dim1Axis) == 0x019);
+static_assert(offsetof(FlashPrmt, dim1OnLongAxis) == 0x01A);
 static_assert(offsetof(FlashPrmt, sensorPitchX16) == 0x01B);
+static_assert(offsetof(FlashPrmt, sensorPitch2X16) == 0x01C);
 static_assert(offsetof(FlashPrmt, dim1Len) == 0x01D);
 static_assert(offsetof(FlashPrmt, dim2Len) == 0x01E);
 static_assert(offsetof(FlashPrmt, sensorNum) == 0x02C);
@@ -345,18 +359,31 @@ static_assert(offsetof(FlashPrmt, field62C) == 0x62C);
 static_assert(offsetof(FlashPrmt, cmfMethodNormal) == 0x810);
 static_assert(offsetof(FlashPrmt, cmfMethodSmartCover) == 0x814);
 static_assert(offsetof(FlashPrmt, noisyTouchDownDebounce) == 0x818);
+static_assert(offsetof(FlashPrmt, gripModeSigThold) == 0x81C);
 static_assert(offsetof(FlashPrmt, sigMult) == 0x81E);
 static_assert(offsetof(FlashPrmt, sigMultNormal) == 0x81F);
 static_assert(offsetof(FlashPrmt, sigMultSD) == 0x820);
+static_assert(offsetof(FlashPrmt, absFfZ9) == 0x828);
+static_assert(offsetof(FlashPrmt, ffMaxMajorMm) == 0x82C);
+static_assert(offsetof(FlashPrmt, absFfMinorMm) == 0x82E);
+static_assert(offsetof(FlashPrmt, absFfCentToMinPkRatio) == 0x830);
+static_assert(offsetof(FlashPrmt, mfCentToMinPkRatioLow) == 0x831);
+static_assert(offsetof(FlashPrmt, peakFilterCentToMinPkRatio) == 0x832);
 static_assert(offsetof(FlashPrmt, mfCentToMinPkRatio) == 0x833);
 static_assert(offsetof(FlashPrmt, largeObjectSizeMm) == 0x836);
 static_assert(offsetof(FlashPrmt, aftEdgeWidthThold) == 0x838);
+static_assert(offsetof(FlashPrmt, gripFlags) == 0x83C);
 static_assert(offsetof(FlashPrmt, ctdEdge) == 0x840);
+static_assert(offsetof(FlashPrmt, centroidSigOffsetDim1) == 0x884);
+static_assert(offsetof(FlashPrmt, centroidSigOffsetDim2) == 0x886);
 static_assert(offsetof(FlashPrmt, idtSnapDistMm) == 0x888);
 static_assert(offsetof(FlashPrmt, accThold) == 0x88A);
 static_assert(offsetof(FlashPrmt, aiir) == 0x88E);
 static_assert(offsetof(FlashPrmt, field8A0) == 0x8A0);
 static_assert(offsetof(FlashPrmt, field8A1) == 0x8A1);
+static_assert(offsetof(FlashPrmt, gripPeakEdgeDist) == 0x8B9);
+static_assert(offsetof(FlashPrmt, gripTimeInterval) == 0x8BA);
+static_assert(offsetof(FlashPrmt, maxNotGripTime) == 0x8BC);
 static_assert(offsetof(FlashPrmt, defaultSizeMm) == 0x8F9);
 static_assert(offsetof(FlashPrmt, defaultTouchAction) == 0x8FC);
 static_assert(offsetof(FlashPrmt, clickDuration) == 0x900);

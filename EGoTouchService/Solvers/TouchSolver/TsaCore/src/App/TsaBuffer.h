@@ -25,7 +25,7 @@ struct TsaBufferTable {
     void* difGrid;
     void* preCmfRawGrid;
     void* cleanBaseline;
-    void* tzAge;
+    uint16_t* tzAge;  // 每格所在握持区域的年龄（gripFlags 0x200）
     void* rawCapture;
     void* rawCaptureNextSide;
     int16_t* dif;  // 当前帧 Dif
@@ -48,13 +48,13 @@ struct TsaBufferTable {
     void* rawStoredSinceSsNoSignal;
     void* rawStoredSinceMutualSsNotMatch;
     int8_t* tzPrev;  // 上一帧的区域图
-    void* tzZonePrev;
+    uint8_t* tzZonePrev;  // 上一帧的 tzZone
     uint8_t* tzZone;  // 每格所属区域的编码基数（TouchZoneUnit::mapTag），只记强信号格
-    void* tzId;
+    int8_t* tzId;  // 每格上一帧所属触点的 ID
     int8_t* subTz;  // SubTZ 的遍历标记：(编码 + 1) × Dif 符号，0 为未访问
     uint8_t* gripStage;  // 每格的握持阶段，1 为握持
-    void* gripTime;
-    void* gripTimeOff;
+    int16_t* gripTime;  // 每格进入握持以来的时间
+    int16_t* gripTimeOff;
     uint8_t* gripRegion;
 };
 static_assert(sizeof(TsaBufferTable) == 0x158);

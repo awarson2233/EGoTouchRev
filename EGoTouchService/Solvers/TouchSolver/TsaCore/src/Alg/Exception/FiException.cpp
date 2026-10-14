@@ -7,6 +7,7 @@
 #include "Alg/Peak/PeakData.h"
 #include "Alg/Touch/PrevTouch.h"
 #include "Alg/Touch/TouchData.h"
+#include "Alg/TouchZone/TouchZone.h"
 #include "Alg/TouchZone/TouchZoneData.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
@@ -20,7 +21,6 @@ namespace {
 
 constexpr uint16_t kAbnormalBaselineRatio = 200;  // exceptionRatio[0] 超过它（且区域吃掉全帧的峰）判基线异常
 constexpr uint32_t kMinAxisRatioX10 = 20;         // 湿手指要求长轴 / 短轴 ≥ 2
-constexpr uint32_t kNoWetFingerFlag = 0x20;       // TouchZoneUnit::flags 带这一位的区域不判湿手指
 constexpr int kQueueSize = 16;
 
 ExceptionState& State() { return Static().fiException; }
@@ -94,7 +94,7 @@ int16_t CountWaterCell(uint8_t prevIdx, uint8_t slot, int16_t count, int16_t low
 
 // FIException_CheckWetFinger @ 0x6ba59919
 // 区域对应的历史触点先把当前位置推进轨迹队列，再沿整条轨迹数水膜格（Dif 在 sigPeakPositive 的
-// 两个百分比之间、周围没有更大信号的格）。水膜格够多、形状够长、且区域没有 kNoWetFingerFlag 时判湿手指。
+// 两个百分比之间、周围没有更大信号的格）。水膜格够多、形状够长、且区域不贴屏幕边时判湿手指。
 bool IsWetFinger(TouchZoneUnit& zone) {
     const uint8_t prevIdx = zone.prevIdx;
     if (prevIdx >= kNoTouch) return false;
@@ -115,7 +115,7 @@ bool IsWetFinger(TouchZoneUnit& zone) {
     zone.waterCells = water;
 
     const uint32_t axisRatioX10 = zone.minorMm != 0 ? zone.majorMm * 10u / zone.minorMm : 0;
-    return water >= fl.wetFingerMinWaterCells && axisRatioX10 >= kMinAxisRatioX10 && (zone.flags & kNoWetFingerFlag) == 0;
+    return water >= fl.wetFingerMinWaterCells && axisRatioX10 >= kMinAxisRatioX10 && (zone.flags & kZoneOnBorder) == 0;
 }
 
 // FIException_DebounceTouchZone @ 0x6ba59471
@@ -170,7 +170,7 @@ void Init() {
 // 全局已检出噪声时区域直接记为噪声；否则依次判基线异常、湿手指，再消抖。区域异常并入本帧检出的异常。
 void ProcessTouchZone(TouchZoneUnit& zone) {
     State().wetFinger = 0;
-    TZ_GetExceptionRatio(&zone);
+    TouchZone::GetExceptionRatio(zone);
     if (State().detected == Exception::kNoiseLevel2) {
         zone.exceptionType |= Exception::kNoiseLevel2;
         zone.detectedException = Exception::kNoiseLevel2;

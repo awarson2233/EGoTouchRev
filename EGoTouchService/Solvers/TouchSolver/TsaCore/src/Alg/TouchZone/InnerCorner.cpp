@@ -37,8 +37,3 @@ void Process(TouchZoneUnit& zone, uint8_t dim1, uint8_t dim2) {
 }
 
 }  // namespace Solvers::Tsa::Core::InnerCorner
-
-// raw TZ 还在调用的入口
-extern "C" void TouchZone_InnerCornerHandler(void* zone, uint8_t dim1, uint8_t dim2) {
-    Solvers::Tsa::Core::InnerCorner::Process(*static_cast<Solvers::Tsa::Core::TouchZoneUnit*>(zone), dim1, dim2);
-}

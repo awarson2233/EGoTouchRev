@@ -8,6 +8,7 @@
 #include "Alg/Peak/PeakData.h"
 #include "Alg/Touch/TouchData.h"
 #include "Alg/TouchSize/TouchSize.h"
+#include "Alg/TouchZone/TouchZone.h"
 #include "Alg/TouchZone/TouchZoneData.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
@@ -37,11 +38,6 @@ constexpr std::array<Offset, 9> kNeighbors = {{{0, 0}, {1, -1}, {1, 0}, {1, 1}, 
 
 /// g_tsaBufTemp：遍历读信号的缓冲，每次遍历前指向 Dif。
 int16_t*& SigBuf() { return Image::At<int16_t*>(0x6bc2e788); }
-/// g_pkAccessedFlagSubTZ：已归入某个子区域的峰（峰表下标的位图），TZ 每帧清零。
-uint32_t& PeakAccessed() { return Image::At<uint32_t>(0x6bbc8958); }
-
-/// 第 i 个子区域。原代码不检查 count 是否超过 kMaxUnitNum，这里按地址取，越界时的内存行为与原代码一致。
-Unit& UnitAt(uint8_t i) { return Image::At<Unit>(0x6bbc8688 + i * sizeof(Unit)); }
 
 // SubTZ_UnitInit @ 0x6ba7d2e0
 void InitUnit(Unit& u) {
@@ -144,7 +140,7 @@ void GrowByGrip(TouchZoneUnit& zone, Unit& u, bool absGrip, uint8_t dim1, uint8_
         } else {
             if (buf.tzZone[cell] != zone.mapTag) return;
             if (buf.gripStage[cell] == kGripStage) {
-                TZ_TryExtraMergePeak(&zone, d1, d2);
+                TouchZone::TryExtraMergePeak(zone, d1, d2);
                 return;
             }
         }
@@ -197,9 +193,9 @@ void Centroid(Unit& u) {
 
 // SubTZ_GetAxis @ 0x6ba7f1cc
 void Axis(Unit& u) {
-    TZ_GetAxisInternal(u.sigSum, u.momentDim1, u.momentDim2, static_cast<double>(u.momentDim1Dim2),
-                       static_cast<double>(u.momentDim1Sq), static_cast<double>(u.momentDim2Sq), &u.majorAxis,
-                       &u.minorAxis, &u.angle);
+    TouchZone::AxisFromMoments(u.sigSum, u.momentDim1, u.momentDim2, static_cast<double>(u.momentDim1Dim2),
+                               static_cast<double>(u.momentDim1Sq), static_cast<double>(u.momentDim2Sq), &u.majorAxis,
+                               &u.minorAxis, &u.angle);
     u.majorMm = static_cast<uint8_t>(TouchSize::PixelToMm(u.majorAxis));
     u.minorMm = static_cast<uint8_t>(TouchSize::PixelToMm(u.minorAxis));
 }
@@ -248,7 +244,7 @@ void Filter(TouchZoneUnit& zone) {
         if ((halfPeak < u.maxSig && eighthSum < u.sigSum) || IsGrip(u)) {
             ++valid;
             if (i == t.maxZ9Idx) continue;
-            const uint8_t ratio = TZ_GetAutoCentToMinPkRatio(&zone, u.peakIdx, UnitAt(t.maxZ9Idx).peakIdx);
+            const uint8_t ratio = TouchZone::CentToMinPkRatio(zone, u.peakIdx, UnitAt(t.maxZ9Idx).peakIdx);
             t.maxCentToMinPkRatio = std::max(t.maxCentToMinPkRatio, ratio);
         } else {
             if (u.maxSig <= halfPeak) u.flags |= kWeakPeak;
@@ -296,7 +292,7 @@ void Process(TouchZoneUnit& zone) {
                 t.maxZ9Idx = t.count;
             }
         }
-        TZ_SeparateZoneRegretProcess(&zone, &u);
+        TouchZone::SeparateZoneRegret(zone, u);
         if (t.maxCellCount < u.cellCount) {
             t.maxCellCount = u.cellCount;
             t.maxCellIdx = t.count;
@@ -321,10 +317,3 @@ bool IsMultiFinger() {
 uint8_t GetNumAftFilter() { return Global().numAftFilter; }
 
 }  // namespace Solvers::Tsa::Core::SubTouchZone
-
-// raw TZ 还在调用的入口
-extern "C" void SubTZ_Process(void* zone) {
-    Solvers::Tsa::Core::SubTouchZone::Process(*static_cast<Solvers::Tsa::Core::TouchZoneUnit*>(zone));
-}
-extern "C" bool SubTZ_IsMF(void) { return Solvers::Tsa::Core::SubTouchZone::IsMultiFinger(); }
-extern "C" uint8_t SubTZ_GetNumAftFilter(void) { return Solvers::Tsa::Core::SubTouchZone::GetNumAftFilter(); }

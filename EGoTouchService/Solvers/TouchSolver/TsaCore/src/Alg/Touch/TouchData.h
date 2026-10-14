@@ -86,7 +86,8 @@ struct TouchUnit {
     uint8_t field057;
     uint8_t field058;
     uint8_t field059;
-    uint8_t reserved05A[0x4];
+    int16_t maxMinSigOff;  // 来源区域里各格 minSigOff 的最大值
+    int16_t field05C;
     int16_t field05E;
     int16_t z9;  // 峰周围九宫格的信号和
     int16_t smoothZ9;  // (前一帧 smoothZ9·7 + z9) / 8
@@ -152,7 +153,7 @@ struct TouchUnit {
     uint16_t field0F8;
     uint16_t trustFrames;  // 报点且准入上报后的累计帧数
     uint8_t peakIdx;  // 对应的峰
-    uint8_t reserved0FD[0x1];
+    uint8_t sdcPeakIdx;  // 来源区域里切换 Dif 前峰值最大的峰（g_peaksBeforeSwitchDifBuffer 下标）
     uint16_t field0FE;
     uint16_t sqDistMmFromPrev;  // 与上一帧位置的距离平方（mm²）
     uint16_t sqAccMmFromPrev;  // 位移减去上一帧位移后的平方（mm²）
@@ -175,7 +176,10 @@ struct TouchUnit {
     int16_t iirField066;
     uint16_t iirField068;
     uint16_t iirField06A;
-    uint8_t reserved12E[0xB];
+    uint8_t reserved12E[0x2];
+    int32_t zoneEdgeSumDim1;  // 来源区域在 Dim1 两条逻辑边上的信号和
+    int32_t zoneEdgeSumDim2;
+    uint8_t reserved138[0x1];
     int8_t field139;
     uint8_t reserved13A[0x2];
     uint32_t field13C;
@@ -183,9 +187,11 @@ struct TouchUnit {
     uint8_t reserved141[0x1];
     uint8_t field142;
     uint8_t field143;
-    uint8_t reserved144[0x3];
+    uint8_t reserved144[0x1];
+    uint8_t insideDim1;  // 质心所在格（不在区域核心时为 dim1Len / dim2Len）
+    uint8_t insideDim2;
     uint8_t prevIdx;  // 匹配到的历史触点下标，kNoTouch 表示新按下
-    uint8_t reserved148[0x2];
+    uint16_t waterCells;  // 来源区域的水膜格数
     uint16_t field14A;
     uint8_t zoneIdx;  // 来源区域
     uint8_t reserved14D[0x3];
@@ -232,6 +238,8 @@ static_assert(offsetof(TouchUnit, field056) == 0x056);
 static_assert(offsetof(TouchUnit, field057) == 0x057);
 static_assert(offsetof(TouchUnit, field058) == 0x058);
 static_assert(offsetof(TouchUnit, field059) == 0x059);
+static_assert(offsetof(TouchUnit, maxMinSigOff) == 0x05A);
+static_assert(offsetof(TouchUnit, field05C) == 0x05C);
 static_assert(offsetof(TouchUnit, field05E) == 0x05E);
 static_assert(offsetof(TouchUnit, z9) == 0x060);
 static_assert(offsetof(TouchUnit, smoothZ9) == 0x062);
@@ -294,6 +302,7 @@ static_assert(offsetof(TouchUnit, maxEdgeDistDim2) == 0x0F6);
 static_assert(offsetof(TouchUnit, field0F8) == 0x0F8);
 static_assert(offsetof(TouchUnit, trustFrames) == 0x0FA);
 static_assert(offsetof(TouchUnit, peakIdx) == 0x0FC);
+static_assert(offsetof(TouchUnit, sdcPeakIdx) == 0x0FD);
 static_assert(offsetof(TouchUnit, field0FE) == 0x0FE);
 static_assert(offsetof(TouchUnit, sqDistMmFromPrev) == 0x100);
 static_assert(offsetof(TouchUnit, sqAccMmFromPrev) == 0x102);
@@ -315,12 +324,17 @@ static_assert(offsetof(TouchUnit, iirAxisRatioX16) == 0x127);
 static_assert(offsetof(TouchUnit, iirField066) == 0x128);
 static_assert(offsetof(TouchUnit, iirField068) == 0x12A);
 static_assert(offsetof(TouchUnit, iirField06A) == 0x12C);
+static_assert(offsetof(TouchUnit, zoneEdgeSumDim1) == 0x130);
+static_assert(offsetof(TouchUnit, zoneEdgeSumDim2) == 0x134);
 static_assert(offsetof(TouchUnit, field139) == 0x139);
 static_assert(offsetof(TouchUnit, field13C) == 0x13C);
 static_assert(offsetof(TouchUnit, field140) == 0x140);
 static_assert(offsetof(TouchUnit, field142) == 0x142);
 static_assert(offsetof(TouchUnit, field143) == 0x143);
+static_assert(offsetof(TouchUnit, insideDim1) == 0x145);
+static_assert(offsetof(TouchUnit, insideDim2) == 0x146);
 static_assert(offsetof(TouchUnit, prevIdx) == 0x147);
+static_assert(offsetof(TouchUnit, waterCells) == 0x148);
 static_assert(offsetof(TouchUnit, field14A) == 0x14A);
 static_assert(offsetof(TouchUnit, zoneIdx) == 0x14C);
 static_assert(offsetof(TouchUnit, field150) == 0x150);
@@ -369,7 +383,8 @@ struct PrevTouchUnit {
     uint8_t field057;
     uint8_t field058;
     uint8_t field059;
-    uint8_t reserved05A[0x4];
+    int16_t maxMinSigOff;  // 来源区域里各格 minSigOff 的最大值
+    int16_t field05C;
     int16_t field05E;
     int16_t z9;  // 峰周围九宫格的信号和
     int16_t smoothZ9;  // (前一帧 smoothZ9·7 + z9) / 8
@@ -435,7 +450,7 @@ struct PrevTouchUnit {
     uint16_t field0F8;
     uint16_t trustFrames;  // 报点且准入上报后的累计帧数
     uint8_t peakIdx;  // 对应的峰
-    uint8_t reserved0FD[0x1];
+    uint8_t sdcPeakIdx;  // 来源区域里切换 Dif 前峰值最大的峰（g_peaksBeforeSwitchDifBuffer 下标）
     uint16_t field0FE;
     uint16_t sqDistMmFromPrev;  // 与上一帧位置的距离平方（mm²）
     uint16_t sqAccMmFromPrev;  // 位移减去上一帧位移后的平方（mm²）
@@ -458,7 +473,10 @@ struct PrevTouchUnit {
     int16_t iirField066;
     uint16_t iirField068;
     uint16_t iirField06A;
-    uint8_t reserved12E[0xB];
+    uint8_t reserved12E[0x2];
+    int32_t zoneEdgeSumDim1;  // 来源区域在 Dim1 两条逻辑边上的信号和
+    int32_t zoneEdgeSumDim2;
+    uint8_t reserved138[0x1];
     int8_t field139;
     uint8_t reserved13A[0x2];
     uint32_t field13C;
@@ -572,6 +590,8 @@ static_assert(offsetof(PrevTouchUnit, field056) == 0x056);
 static_assert(offsetof(PrevTouchUnit, field057) == 0x057);
 static_assert(offsetof(PrevTouchUnit, field058) == 0x058);
 static_assert(offsetof(PrevTouchUnit, field059) == 0x059);
+static_assert(offsetof(PrevTouchUnit, maxMinSigOff) == 0x05A);
+static_assert(offsetof(PrevTouchUnit, field05C) == 0x05C);
 static_assert(offsetof(PrevTouchUnit, field05E) == 0x05E);
 static_assert(offsetof(PrevTouchUnit, z9) == 0x060);
 static_assert(offsetof(PrevTouchUnit, smoothZ9) == 0x062);
@@ -634,6 +654,7 @@ static_assert(offsetof(PrevTouchUnit, maxEdgeDistDim2) == 0x0F6);
 static_assert(offsetof(PrevTouchUnit, field0F8) == 0x0F8);
 static_assert(offsetof(PrevTouchUnit, trustFrames) == 0x0FA);
 static_assert(offsetof(PrevTouchUnit, peakIdx) == 0x0FC);
+static_assert(offsetof(PrevTouchUnit, sdcPeakIdx) == 0x0FD);
 static_assert(offsetof(PrevTouchUnit, field0FE) == 0x0FE);
 static_assert(offsetof(PrevTouchUnit, sqDistMmFromPrev) == 0x100);
 static_assert(offsetof(PrevTouchUnit, sqAccMmFromPrev) == 0x102);
@@ -655,6 +676,8 @@ static_assert(offsetof(PrevTouchUnit, iirAxisRatioX16) == 0x127);
 static_assert(offsetof(PrevTouchUnit, iirField066) == 0x128);
 static_assert(offsetof(PrevTouchUnit, iirField068) == 0x12A);
 static_assert(offsetof(PrevTouchUnit, iirField06A) == 0x12C);
+static_assert(offsetof(PrevTouchUnit, zoneEdgeSumDim1) == 0x130);
+static_assert(offsetof(PrevTouchUnit, zoneEdgeSumDim2) == 0x134);
 static_assert(offsetof(PrevTouchUnit, field139) == 0x139);
 static_assert(offsetof(PrevTouchUnit, field13C) == 0x13C);
 static_assert(offsetof(PrevTouchUnit, field140) == 0x140);
