@@ -2,6 +2,7 @@
 
 #include <utility>
 
+#include "Alg/IDTracking/IdTracking.h"
 #include "Alg/Touch/TouchData.h"
 #include "Alg/TouchThold/TouchThold.h"
 #include "App/TsaBuffer.h"
@@ -80,7 +81,7 @@ void IdTracking() {
         touches.unit[i].rawPos.dim2 = static_cast<uint16_t>(peaks.entry[i].dim2 * 0x100 + 0x80);
         ++touches.count;
     }
-    IDT_Process(1);
+    IdTracking::Process(true);
     for (uint8_t i = 0; i < touches.count && i != kMaxTouchNum; ++i) peaks.entry[i].id = touches.unit[i].id;
 }
 

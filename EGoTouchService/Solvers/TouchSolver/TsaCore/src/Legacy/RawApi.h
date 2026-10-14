@@ -75,6 +75,8 @@ void AntiTouch_Report(void);
 char GripFilter_IsGripOrTbdTouch(uint8_t idx);
 bool GripFilter_IsGripTouch(uint8_t idx);
 uint64_t GripFilter_IsGripOrTbd(int32_t gripStage);
+bool GripFilter_IsPeakAbsGrip(uint8_t peakIdx);
+bool GripFilter_IsToCancelIDMapping(uint8_t curIdx, uint8_t prevIdx);
 
 // Rejection/Thenar.c
 void Thenar_UnitCopy(uint8_t* dst, uint8_t* src);
@@ -84,8 +86,5 @@ int16_t CMF_GetNoiseValue(uint8_t dim1, uint8_t dim2);
 
 // Signal/HardwareAnalyzer.c
 void HardwareAnalyzer_ReportToTSA(void);
-
-// Tracking/IDT.c
-void IDT_Process(uint8_t useStrictAccCheck);
 
 }  // extern "C"

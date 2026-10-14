@@ -128,7 +128,9 @@ struct FlashPrmt {
     uint32_t aftEdgeWidthThold;  // AFT 的 ewx / ewy 边缘宽度门限
     uint8_t reserved83C[0x4];
     CtdEdgePrmt ctdEdge[4];  // 质心边缘修正：Dim1 首端、Dim1 末端、Dim2 首端、Dim2 末端
-    uint8_t reserved884[0x6];
+    uint8_t reserved884[0x4];
+    uint8_t idtSnapDistMm;  // IDT：位移、预测位移都在此距离内且帧龄超过 5 的历史触点直接吸附（代价置为极小）
+    uint8_t reserved889[0x1];
     uint16_t accThold;  // 两触点连线的加速度门限
     uint8_t reserved88C[0x2];
     AiirPrmt aiir[3];
@@ -310,6 +312,7 @@ static_assert(offsetof(FlashPrmt, sigMultSD) == 0x820);
 static_assert(offsetof(FlashPrmt, largeObjectSizeMm) == 0x836);
 static_assert(offsetof(FlashPrmt, aftEdgeWidthThold) == 0x838);
 static_assert(offsetof(FlashPrmt, ctdEdge) == 0x840);
+static_assert(offsetof(FlashPrmt, idtSnapDistMm) == 0x888);
 static_assert(offsetof(FlashPrmt, accThold) == 0x88A);
 static_assert(offsetof(FlashPrmt, aiir) == 0x88E);
 static_assert(offsetof(FlashPrmt, field8A0) == 0x8A0);
