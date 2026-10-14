@@ -12,6 +12,7 @@ namespace {
 // TSACore 保存 AfeHostStruct 的指针并在运行期反复读取，三个结构体因此放在静态存储里。
 constinit AfeCaps g_caps{};
 constinit AfeFrame g_frame{};
+constinit StylusFrame g_stylus{};
 constinit AfeHostStruct g_host{};
 constinit std::atomic<bool> g_claimed{false};
 
@@ -41,6 +42,7 @@ bool TsaHostShim::Initialize() {
     g_caps.scanRate = kScanRateList;
 
     g_frame = {};
+    g_stylus = {};
     g_host = {};
     g_host.info = kAfeInfo;
     g_host.caps = &g_caps;
@@ -64,6 +66,7 @@ bool TsaHostShim::Initialize() {
     m_prevIdle = false;
     m_prevCalibDone = false;
     m_sequence = 0;
+    m_penStatusWord = 0;
     m_requests = {};
     m_initialized = true;
     return true;
@@ -80,7 +83,39 @@ void TsaHostShim::NotifyIdleExit() noexcept {
     m_ctrl |= CtrlFlag::kIdleExit;
 }
 
-void TsaHostShim::ProcessFrame(const uint16_t* rawData, const AfeFrameInfo& info, uint64_t timestampMs) {
+void TsaHostShim::SetPenStatusWord(uint16_t word) noexcept {
+    if (!m_initialized) return;
+    const uint16_t changed = static_cast<uint16_t>(word ^ m_penStatusWord);
+    m_penStatusWord = word;
+
+    // DriverThp::GetStatus：旋转角，然后连着下发两次笔状态（先休眠位、再吸附位）。
+    // 第二次会盖掉第一次，原版就是这样，g_btPenStatus 最终只留下吸附位。
+    const unsigned curStatus = static_cast<unsigned>(word >> PenStatusWord::kCurStatusShift);
+    TSA_SetScreenRotateState(static_cast<int>((word >> PenStatusWord::kRotateShift) & 0x3u));
+    TSA_SetASABluetoothPenStatus(static_cast<uint8_t>(curStatus & 1u));
+    TSA_SetASABluetoothPenStatus(static_cast<uint8_t>(curStatus & 2u));
+
+    // "stylus3" 监听：笔连上时通知一次；断开时原版不调 TSACore，靠 60 s 没有蓝牙包来降级。
+    if ((changed & PenStatusWord::kConnected) != 0 && (word & PenStatusWord::kConnected) != 0) {
+        TSA_SetASABluetoothConnectStatus(1);
+    }
+    // "stylusaft" 监听：防误触模式位的变化翻成场景 32 的开关。
+    if ((changed & PenStatusWord::kTouchMode) != 0) {
+        if ((word & PenStatusWord::kTouchMode) != 0) {
+            TSA_EnableScenario(kScenarioStylusAft);
+        } else {
+            TSA_DisableScenario(kScenarioStylusAft);
+        }
+    }
+}
+
+void TsaHostShim::OnBtPressure(uint16_t p0, uint16_t p1, uint16_t p2, uint16_t p3) noexcept {
+    if (!m_initialized) return;
+    TSA_SetASABluetoothPressure(p0, p1, p2, p3);
+}
+
+void TsaHostShim::ProcessFrame(const uint16_t* rawData, const AfeFrameInfo& info, const AfeStylusInfo& stylus,
+                               const StylusReport& report, uint64_t timestampMs) {
     if (!m_initialized) return;
 
     const bool idle = (info.status & AfeStatus::kIdle) != 0;
@@ -105,6 +140,15 @@ void TsaHostShim::ProcessFrame(const uint16_t* rawData, const AfeFrameInfo& info
     g_frame.scanFreq = info.scanFreq;
     g_frame.scanRate = info.scanRate;
     g_frame.status = info.status;
+
+    // 驱动每帧都给笔帧（没有笔时 status = 6、矩阵为空）。频率 / 压力 / 按键字段只有 ASA 的
+    // 解算本体读取，报告改由 TSAHost_SetStylusReport 送入。
+    g_stylus.tx1 = stylus.tx1;
+    g_stylus.tx2 = stylus.tx2;
+    g_stylus.status = stylus.status;
+    g_frame.stylusData = &g_stylus;
+    const uint32_t reportFlags = report.tipDown ? 2u : (report.inRange ? 1u : 0u);
+    TSAHost_SetStylusReport(reportFlags, report.x, report.y, report.tiltX, report.tiltY, report.pressure);
 
     TSA_ProcessingAFEFrame(&g_frame, m_ctrl, timestampMs);
     m_ctrl &= CtrlFlag::kPersistMask;

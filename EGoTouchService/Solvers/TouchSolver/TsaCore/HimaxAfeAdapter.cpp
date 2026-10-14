@@ -34,6 +34,8 @@ void HimaxAfeAdapter::Reset() noexcept {
     m_freqShiftTarget = 0;
     m_lastScanFreq = 0;
     m_checksumErrors = 0;
+    m_suffix = {};
+    std::memset(m_stylusGrid, 0, sizeof(m_stylusGrid));
 }
 
 void HimaxAfeAdapter::SetChargerPlugged(bool plugged) noexcept {
@@ -161,9 +163,8 @@ AfeFrameInfo HimaxAfeAdapter::Build(const uint8_t* rawPtr, size_t rawLen) noexce
     }
     m_checksumErrors = 0;
 
-    Frame::MasterSuffixView suffix;
-    suffix.LoadFromBytes(rawPtr + Frame::kMasterSuffixOffset);
-    const uint16_t freqSlot = suffix.words[10];
+    m_suffix.LoadFromBytes(rawPtr + Frame::kMasterSuffixOffset);
+    const uint16_t freqSlot = m_suffix.words[10];
 
     uint16_t cells[kCells];
     for (int i = 0; i < kCells; ++i) {
@@ -174,25 +175,98 @@ AfeFrameInfo HimaxAfeAdapter::Build(const uint8_t* rawPtr, size_t rawLen) noexce
     PreprocessRows(cells);
     ApplyGainAndCompress(cells, freqSlot != 0);
 
-    // thp_afe_process_stylus_status
-    uint32_t status = AfeStatus::kFrameValid;
-    if (suffix.words[Frame::MasterWord::kIdleFlag] == 1) status |= AfeStatus::kIdle;
-    if (m_freqShiftInFlight && m_freqShiftTarget == m_lastScanFreq &&
-        suffix.words[Frame::MasterWord::kFreqShiftDone] != 0) {
-        status |= AfeStatus::kFreqShiftDone;
-    }
-    if (suffix.words[Frame::MasterWord::kDiagStatus] == 0xbb) status |= AfeStatus::kCalibDone;
-    if (suffix.words[Frame::MasterWord::kPenF0NoiseCount] > 0x5db ||
-        suffix.words[Frame::MasterWord::kPenF1NoiseCount] > 0x5db) {
-        status |= AfeStatus::kChargerNoise;
-    }
-    if (suffix.words[Frame::MasterWord::kFwResetFlag] != 0) status |= AfeStatus::kSos;
-
+    const uint32_t status = ComposeStatus();
     m_lastScanFreq = kScanFreqTable[freqSlot != 0 ? 1 : 0];
 
     info.valid = true;
     info.status = status;
     info.scanFreq = m_lastScanFreq;
+    return info;
+}
+
+AfeFrameInfo HimaxAfeAdapter::BuildWithoutMaster() const noexcept {
+    AfeFrameInfo info;
+    info.valid = true;
+    info.status = ComposeStatus();
+    info.scanFreq = m_lastScanFreq;
+    info.scanRate = kScanRate;
+    return info;
+}
+
+// thp_afe_process_stylus_status 的 AFE status：本帧有效记 2，其余各位取自缓存的 master suffix。
+uint32_t HimaxAfeAdapter::ComposeStatus() const noexcept {
+    uint32_t status = AfeStatus::kFrameValid;
+    if (m_suffix.words[Frame::MasterWord::kIdleFlag] == 1) status |= AfeStatus::kIdle;
+    if (m_freqShiftInFlight && m_freqShiftTarget == m_lastScanFreq &&
+        m_suffix.words[Frame::MasterWord::kFreqShiftDone] != 0) {
+        status |= AfeStatus::kFreqShiftDone;
+    }
+    if (m_suffix.words[Frame::MasterWord::kDiagStatus] == 0xbb) status |= AfeStatus::kCalibDone;
+    if (m_suffix.words[Frame::MasterWord::kPenF0NoiseCount] > 0x5db ||
+        m_suffix.words[Frame::MasterWord::kPenF1NoiseCount] > 0x5db) {
+        status |= AfeStatus::kChargerNoise;
+    }
+    if (m_suffix.words[Frame::MasterWord::kFwResetFlag] != 0) status |= AfeStatus::kSos;
+    return status;
+}
+
+// thp_compute_checksum16(slave + 5, (339 - 5) / 2)：与 master 同一个判据。
+bool HimaxAfeAdapter::ValidateSlaveChecksum(const uint8_t* slave) noexcept {
+    constexpr int kChecksumStart = 5;
+    constexpr int kChecksumWords = (Frame::kSlaveFrameSize - kChecksumStart) / 2;
+    uint32_t sum = 0;
+    for (int i = 0; i < kChecksumWords; ++i) {
+        sum += LoadWord(slave + kChecksumStart + i * 2);
+    }
+    return (sum & 0xffffu) == 0 && sum != 0;
+}
+
+// thp_unpack_9x9_block_to_matrix：块头两个字是 9×9 窗口中心所在的行、列（各取低字节），
+// 窗口里落在面板内的格子写进整屏矩阵，下标与 master 一样整帧倒序。
+void HimaxAfeAdapter::UnpackStylusBlock(const uint8_t* block, uint16_t* matrix) noexcept {
+    const uint16_t rowWord = LoadWord(block);
+    const uint16_t colWord = LoadWord(block + 2);
+    if (rowWord == 0xff && colWord == 0xff) return;
+
+    const int centerRow = static_cast<int8_t>(rowWord & 0xff);
+    const int centerCol = static_cast<int8_t>(colWord & 0xff);
+    const uint8_t* cell = block + 4;
+    for (int r = 0; r < Frame::kGridDim; ++r) {
+        const int row = centerRow - 4 + r;
+        for (int c = 0; c < Frame::kGridDim; ++c, cell += 2) {
+            const int col = centerCol - 4 + c;
+            const int index = row * kRx + col;
+            if (index < 0 || index >= kCells || col > kRx || row > kTx) continue;
+            matrix[kCells - 1 - index] = LoadWord(cell);
+        }
+    }
+}
+
+AfeStylusInfo HimaxAfeAdapter::BuildStylus(const uint8_t* rawPtr, size_t rawLen) noexcept {
+    // slave 帧里两个块的位置：matrix_header = 7，g_SlaveStylusF1Offset = 173
+    constexpr int kBlock0Offset = Frame::kHeaderBytes;
+    constexpr int kBlock1Offset = Frame::kHeaderBytes + Frame::kBlockWords * 2;
+    // master suffix word24 达到这个值时，驱动把本帧的笔数据换成默认矩阵并按无笔数据上报
+    constexpr int kStylusNoiseWord = 24;
+    constexpr uint16_t kStylusNoiseLimit = 3000;
+
+    AfeStylusInfo info;
+    if (rawPtr == nullptr || rawLen < static_cast<size_t>(Frame::kTotalFrameSize)) return info;
+    const uint8_t* slave = rawPtr + Frame::kSlaveHeaderOffset;
+    if (!ValidateSlaveChecksum(slave)) return info;
+
+    const bool hasSignal =
+        LoadWord(slave + kBlock0Offset) != 0xff || LoadWord(slave + kBlock0Offset + 2) != 0xff;
+    std::memset(m_stylusGrid, 0, sizeof(m_stylusGrid));
+    UnpackStylusBlock(slave + kBlock0Offset, m_stylusGrid);
+    UnpackStylusBlock(slave + kBlock1Offset, m_stylusGrid + kCells);
+
+    if (!hasSignal || !m_stylusConnected || m_suffix.words[kStylusNoiseWord] >= kStylusNoiseLimit) {
+        return info;
+    }
+    info.status = StylusStatus::kActive;
+    info.tx1 = m_stylusGrid;
+    info.tx2 = m_stylusGrid + kCells;
     return info;
 }
 

@@ -38,6 +38,21 @@ uint64_t TSA_GetAFEScanRateIndex(int64_t outIndex);
 uint8_t  TSA_IsOKToEnterIDLEMode(void);
 uint8_t  TSA_IsReCalibNeeded(void);
 
+// 笔会话状态（ApDaemon 在笔状态字变化、蓝牙压力包到达时调用）。
+void     TSA_SetASABluetoothConnectStatus(uint32_t status);
+void     TSA_SetASABluetoothPenStatus(uint8_t status);
+void     TSA_SetASABluetoothPressure(uint16_t p0, uint16_t p1, uint16_t p2, uint16_t p3);
+void     TSA_EnableScenario(uint32_t mask);
+void     TSA_DisableScenario(uint32_t mask);
+void     TSA_SetScreenRotateState(int state);
+uint64_t TSA_InStylusMode(void);
+uint64_t TSA_RptASAInRange(void);
+
+// 宿主桥（raw/Rejection/ASAHostBridge.c）：本帧的笔报告，在 TSA_ProcessingAFEFrame 之前送入。
+// statusFlags：bit0 悬停在场，bit1 书写。坐标是 ASA 坐标系（与 TSACore 的触点同向），量程为显示像素。
+void     TSAHost_SetStylusReport(uint32_t statusFlags, uint16_t x, uint16_t y, int16_t tiltX, int16_t tiltY,
+                                 uint16_t pressure);
+
 }  // extern "C"
 
 namespace Solvers::Tsa {
@@ -57,13 +72,26 @@ struct alignas(8) AfeCaps {
 };
 static_assert(sizeof(AfeCaps) == 0x60);
 
+/// AFE_Frame +0x40 指向的笔帧（驱动的 g_StylusOut），0x20 字节。
+struct alignas(8) StylusFrame {
+    const uint16_t* tx1;        // +0x00  TX1 整屏矩阵；没有笔数据时为空
+    const uint16_t* tx2;        // +0x08
+    uint16_t mainFreq;          // +0x10
+    uint16_t auxFreq;           // +0x12
+    uint16_t pressure;          // +0x14
+    uint8_t  pad16[2];
+    uint32_t buttonBits;        // +0x18
+    uint32_t status;            // +0x1c  StylusStatus
+};
+static_assert(sizeof(StylusFrame) == 0x20);
+
 /// AFE_Frame，TSA_ProcessingAFEFrame 的第一参。
 struct alignas(8) AfeFrame {
     uint32_t timestampSec;      // +0x00
     uint32_t timestampUsec;     // +0x04
     uint16_t sequence;          // +0x08
     uint8_t  pad0a[6];
-    const uint16_t* rawData;    // +0x10  2400 × uint16，0x7ffe 零点
+    const uint16_t* rawData;    // +0x10  2400 × uint16，0x7ffe 零点；驱动跳过 master 的帧为空
     const uint16_t* lineData;   // +0x18  自容数据；本机型未启用，必须为空
     uint64_t q20;
     uint64_t q28;
@@ -72,7 +100,7 @@ struct alignas(8) AfeFrame {
     uint32_t status;            // +0x34
     uint32_t gesture;           // +0x38
     uint8_t  pad3c[4];
-    const void* stylusData;     // +0x40  ASA 已裁剪，保持为空
+    const StylusFrame* stylusData;  // +0x40
     uint64_t q48;
     uint64_t q50;
     uint32_t d58;
