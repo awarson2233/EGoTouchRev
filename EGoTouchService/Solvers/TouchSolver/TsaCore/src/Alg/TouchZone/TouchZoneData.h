@@ -27,7 +27,9 @@ struct TouchZoneUnit {
     uint8_t reserved34D[0x3];
     uint32_t exceptionType;  // 区域异常字（消抖后）
     uint32_t detectedException;  // 本帧检出的区域异常（消抖前）
-    uint8_t reserved358[0x18];
+    uint8_t reserved358[0x14];
+    uint8_t innerCornerSigRatio;  // 峰在内角格时，边缘格相对它的信号比（×16）
+    uint8_t reserved36D[0x3];
 };
 static_assert(sizeof(TouchZoneUnit) == 0x370);
 static_assert(offsetof(TouchZoneUnit, flags) == 0x004);
@@ -41,5 +43,6 @@ static_assert(offsetof(TouchZoneUnit, noiseException) == 0x348);
 static_assert(offsetof(TouchZoneUnit, abnormalBaseline) == 0x34C);
 static_assert(offsetof(TouchZoneUnit, exceptionType) == 0x350);
 static_assert(offsetof(TouchZoneUnit, detectedException) == 0x354);
+static_assert(offsetof(TouchZoneUnit, innerCornerSigRatio) == 0x36C);
 
 }  // namespace Solvers::Tsa::Core
