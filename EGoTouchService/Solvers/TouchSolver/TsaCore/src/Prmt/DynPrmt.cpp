@@ -84,7 +84,7 @@ void GetPkThold() {
 void UpdateNoiseTholdBeforeTouch(int16_t noise, int16_t sideNoise) {
     DynamicPrmt& dyn = PrmtDynamic();
     const TsaPrpt& prpt = Prpt();
-    if (!TouchThold::ToeUseSpecialThold() || prpt.field2E8 != 2 || prpt.field2EC != 2 ||
+    if (!TouchThold::ToeUseSpecialThold() || prpt.touchMode != 2 || prpt.touchModeLevel != 2 ||
         (Static().featureFlags & kFeatSmartCover) != 0) {
         dyn.smallThold = !TouchThold::ToeUseSpecialThold() ? static_cast<int16_t>(noise / 2) : TwoThirds(noise);
         dyn.sideSmallThold = static_cast<int16_t>(sideNoise / 2);

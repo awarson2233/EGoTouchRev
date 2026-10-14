@@ -180,13 +180,13 @@ struct TouchUnit {
     int32_t zoneEdgeSumDim1;  // 来源区域在 Dim1 两条逻辑边上的信号和
     int32_t zoneEdgeSumDim2;
     uint8_t reserved138[0x1];
-    int8_t field139;
+    uint8_t curveTracking;  // Filter：轨迹已稳定移动，开始识别折返
     uint8_t reserved13A[0x2];
-    uint32_t field13C;
-    int8_t field140;
+    uint32_t jitRadius;  // Filter：本帧的抗抖动半径（Q8.8）
+    uint8_t curveReturnFrames;  // Filter：识别到折返后的帧数（到 5 清零）
     uint8_t reserved141[0x1];
-    uint8_t field142;
-    uint8_t field143;
+    uint8_t liftOffJitter;  // Filter：本帧判为抬起中的信号骤降
+    uint8_t liftOffJitterCount;  // 抬起骤降的累计次数（到 11 为止）
     uint8_t reserved144[0x1];
     uint8_t insideDim1;  // 质心所在格（不在区域核心时为 dim1Len / dim2Len）
     uint8_t insideDim2;
@@ -326,11 +326,11 @@ static_assert(offsetof(TouchUnit, iirField068) == 0x12A);
 static_assert(offsetof(TouchUnit, iirField06A) == 0x12C);
 static_assert(offsetof(TouchUnit, zoneEdgeSumDim1) == 0x130);
 static_assert(offsetof(TouchUnit, zoneEdgeSumDim2) == 0x134);
-static_assert(offsetof(TouchUnit, field139) == 0x139);
-static_assert(offsetof(TouchUnit, field13C) == 0x13C);
-static_assert(offsetof(TouchUnit, field140) == 0x140);
-static_assert(offsetof(TouchUnit, field142) == 0x142);
-static_assert(offsetof(TouchUnit, field143) == 0x143);
+static_assert(offsetof(TouchUnit, curveTracking) == 0x139);
+static_assert(offsetof(TouchUnit, jitRadius) == 0x13C);
+static_assert(offsetof(TouchUnit, curveReturnFrames) == 0x140);
+static_assert(offsetof(TouchUnit, liftOffJitter) == 0x142);
+static_assert(offsetof(TouchUnit, liftOffJitterCount) == 0x143);
 static_assert(offsetof(TouchUnit, insideDim1) == 0x145);
 static_assert(offsetof(TouchUnit, insideDim2) == 0x146);
 static_assert(offsetof(TouchUnit, prevIdx) == 0x147);
@@ -477,13 +477,13 @@ struct PrevTouchUnit {
     int32_t zoneEdgeSumDim1;  // 来源区域在 Dim1 两条逻辑边上的信号和
     int32_t zoneEdgeSumDim2;
     uint8_t reserved138[0x1];
-    int8_t field139;
+    uint8_t curveTracking;  // Filter：轨迹已稳定移动，开始识别折返
     uint8_t reserved13A[0x2];
-    uint32_t field13C;
-    int8_t field140;
+    uint32_t jitRadius;  // Filter：本帧的抗抖动半径（Q8.8）
+    uint8_t curveReturnFrames;  // Filter：识别到折返后的帧数（到 5 清零）
     uint8_t reserved141[0x1];
-    uint8_t field142;
-    uint8_t field143;
+    uint8_t liftOffJitter;  // Filter：本帧判为抬起中的信号骤降
+    uint8_t liftOffJitterCount;  // 抬起骤降的累计次数（到 11 为止）
     uint8_t reserved144[0x4];
     uint8_t historyCount;
     uint8_t reserved149[0x7];
@@ -546,12 +546,11 @@ struct PrevTouchUnit {
     int16_t minSigOffAtTouchDown;  // 按下那一格的 g_tsaBufMinSigOff
     int16_t timeOffAtTouchDown;  // 按下那一格的 g_tsaBufTimeOff
     int16_t timeRptAtTouchDown;  // 按下那一格的 g_tsaBufTimeRpt
-    uint8_t field46C;
-    int8_t field46D;
-    uint8_t field46E;
-    uint8_t field46F;
-    int16_t field470;
-    int16_t field472;
+    uint8_t predictAlongDim1;  // Filter：折返沿 Dim1（否则沿 Dim2）
+    uint8_t predictFrames;  // 折返后已外推的帧数，0 为未在外推
+    uint8_t predictTurnFrames;  // 按速度算出的转向帧数（到 12 为止）
+    uint8_t predictForwardFrames;  // 其中继续前冲的帧数（到 2 为止）
+    SPoint predictPos;  // 外推坐标
     uint8_t reserved474[0x4];
 };
 static_assert(sizeof(PrevTouchUnit) == 0x478);
@@ -678,11 +677,11 @@ static_assert(offsetof(PrevTouchUnit, iirField068) == 0x12A);
 static_assert(offsetof(PrevTouchUnit, iirField06A) == 0x12C);
 static_assert(offsetof(PrevTouchUnit, zoneEdgeSumDim1) == 0x130);
 static_assert(offsetof(PrevTouchUnit, zoneEdgeSumDim2) == 0x134);
-static_assert(offsetof(PrevTouchUnit, field139) == 0x139);
-static_assert(offsetof(PrevTouchUnit, field13C) == 0x13C);
-static_assert(offsetof(PrevTouchUnit, field140) == 0x140);
-static_assert(offsetof(PrevTouchUnit, field142) == 0x142);
-static_assert(offsetof(PrevTouchUnit, field143) == 0x143);
+static_assert(offsetof(PrevTouchUnit, curveTracking) == 0x139);
+static_assert(offsetof(PrevTouchUnit, jitRadius) == 0x13C);
+static_assert(offsetof(PrevTouchUnit, curveReturnFrames) == 0x140);
+static_assert(offsetof(PrevTouchUnit, liftOffJitter) == 0x142);
+static_assert(offsetof(PrevTouchUnit, liftOffJitterCount) == 0x143);
 static_assert(offsetof(PrevTouchUnit, historyCount) == 0x148);
 static_assert(offsetof(PrevTouchUnit, history) == 0x150);
 static_assert(offsetof(PrevTouchUnit, queueHead) == 0x334);
@@ -734,12 +733,11 @@ static_assert(offsetof(PrevTouchUnit, field465) == 0x465);
 static_assert(offsetof(PrevTouchUnit, minSigOffAtTouchDown) == 0x466);
 static_assert(offsetof(PrevTouchUnit, timeOffAtTouchDown) == 0x468);
 static_assert(offsetof(PrevTouchUnit, timeRptAtTouchDown) == 0x46A);
-static_assert(offsetof(PrevTouchUnit, field46C) == 0x46C);
-static_assert(offsetof(PrevTouchUnit, field46D) == 0x46D);
-static_assert(offsetof(PrevTouchUnit, field46E) == 0x46E);
-static_assert(offsetof(PrevTouchUnit, field46F) == 0x46F);
-static_assert(offsetof(PrevTouchUnit, field470) == 0x470);
-static_assert(offsetof(PrevTouchUnit, field472) == 0x472);
+static_assert(offsetof(PrevTouchUnit, predictAlongDim1) == 0x46C);
+static_assert(offsetof(PrevTouchUnit, predictFrames) == 0x46D);
+static_assert(offsetof(PrevTouchUnit, predictTurnFrames) == 0x46E);
+static_assert(offsetof(PrevTouchUnit, predictForwardFrames) == 0x46F);
+static_assert(offsetof(PrevTouchUnit, predictPos) == 0x470);
 
 /// 当前帧触点表（g_touchesGrid / g_touchesHand / g_touchesSide，经 g_touchesPtr 选用）。
 struct TouchTable {

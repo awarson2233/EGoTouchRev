@@ -188,59 +188,6 @@ double SinXDivX(double param_1)
 
 
 // ============================================================================
-// Function: JITFilter @ 6ba602c6
-// ============================================================================
-
-void JITFilter(int *param_1,int *param_2,int *param_3)
-
-{
-  uint uVar1;
-  int iVar2;
-  uint uVar3;
-  uint uVar4;
-  uint local_20;
-  uint local_1c;
-  
-                    /* 0x202c6  893  JITFilter */
-  uVar3 = *param_1 - param_1[2];
-  uVar4 = param_1[1] - param_1[3];
-  uVar1 = uVar4 * uVar4 + uVar3 * uVar3;
-  iVar2 = MIN(param_1[5],param_1[4]);
-  param_1[5] = iVar2;
-  iVar2 = Misc_SqrtUint32(uVar1);
-  if (((uint)(param_1[4] * param_1[4]) < uVar1) && (iVar2 != 0)) {
-    local_1c = (int)(param_1[4] * uVar3) / iVar2;
-    if ((int)(((int)local_1c >> 0x1f ^ local_1c) - ((int)local_1c >> 0x1f)) < param_1[5]) {
-      uVar1 = (int)uVar3 >> 0x1f;
-      if ((int)((uVar1 ^ uVar3) - uVar1) < param_1[5]) {
-        local_1c = uVar3;
-      }
-      else {
-        local_1c = (int)(param_1[5] * uVar3) / (int)((uVar1 ^ uVar3) - uVar1);
-      }
-    }
-    *param_2 = *param_1 - local_1c;
-    local_20 = (int)(param_1[4] * uVar4) / iVar2;
-    if ((int)(((int)local_20 >> 0x1f ^ local_20) - ((int)local_20 >> 0x1f)) < param_1[5]) {
-      uVar1 = (int)uVar4 >> 0x1f;
-      if ((int)((uVar1 ^ uVar4) - uVar1) < param_1[5]) {
-        local_20 = uVar4;
-      }
-      else {
-        local_20 = (int)(param_1[5] * uVar4) / (int)((uVar1 ^ uVar4) - uVar1);
-      }
-    }
-    *param_3 = param_1[1] - local_20;
-  }
-  else {
-    *param_2 = param_1[2];
-    *param_3 = param_1[3];
-  }
-  return;
-}
-
-
-// ============================================================================
 // Function: Misc_GetShiftNum @ 6ba64b9c
 // ============================================================================
 

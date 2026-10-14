@@ -98,18 +98,18 @@ int16_t BasedOnExperience(int16_t thold) {
 
 // TouchThold_GetPeakThold @ 0x6ba7cee9
 // 手指模式取 finger 门限（信号失衡时减半）；手套 / 指关节 / 智能皮套 / field3F1 下取手套门限，
-// 但 field2E8 为 1、field2EC 为 2 且动态门限允许（zTholdFlags bit1）时仍按手指处理。
+// 但 touchMode 为 1、touchModeLevel 为 2 且动态门限允许（zTholdFlags bit1）时仍按手指处理。
 int16_t GetPeakThold(int16_t fingerThold, int16_t gloveThold) {
     const TsaPrpt& prpt = Prpt();
     if (!GloveOrKnuckleActive() && !SmartCover() && Static().field3F1 == 0) {
         return HalvePeakThold() ? static_cast<int16_t>(fingerThold / 2) : fingerThold;
     }
-    // 原代码为 (2 >> field2E8) & 1，移位量按 x86 取低 5 位
-    if ((prpt.field2E8 & 0x1f) == 1 && prpt.field2EC == 2 && (PrmtDynamic().zTholdFlags & 2) != 0 && !SmartCover()) {
+    // 原代码为 (2 >> touchMode) & 1，移位量按 x86 取低 5 位
+    if ((prpt.touchMode & 0x1f) == 1 && prpt.touchModeLevel == 2 && (PrmtDynamic().zTholdFlags & 2) != 0 && !SmartCover()) {
         return HalvePeakThold() ? static_cast<int16_t>(fingerThold / 2) : fingerThold;
     }
     if (!SmartCover()) {
-        if (prpt.field2E8 == 2 && prpt.field2EC == 2 && UseHighTholdAtSensitivityMode()) return kSensitivityPeakThold;
+        if (prpt.touchMode == 2 && prpt.touchModeLevel == 2 && UseHighTholdAtSensitivityMode()) return kSensitivityPeakThold;
     } else if (!SofInSmartCoverMode() && UseHighTholdAtSensitivityMode()) {
         return kSmartCoverPeakThold;
     }
@@ -138,7 +138,7 @@ bool IsSwitching() { return Prpt().tholdSwitching != 0; }
 
 bool UseFingerThold() {
     const TsaStatic& stat = Static();
-    return (Prpt().field2E4 == 0 || !GloveOrKnuckleActive()) && !SmartCover() && stat.field3F1 == 0 &&
+    return (Prpt().touchModeLatched == 0 || !GloveOrKnuckleActive()) && !SmartCover() && stat.field3F1 == 0 &&
            stat.fullIncellSignalDisparity == 0;
 }
 

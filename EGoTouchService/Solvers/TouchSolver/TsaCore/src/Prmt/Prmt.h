@@ -98,7 +98,9 @@ struct FlashPrmt {
     uint8_t reportRateHz;  // 0 时按 8 ms 一帧
     uint8_t reserved039[0x3];
     uint16_t dbEnterIdle;  // 允许进入 IDLE 后的防抖时间（ms）
-    uint8_t reserved03E[0x22];
+    uint8_t reserved03E[0x6];
+    uint8_t field044;  // TouchMode：为 0 时手指 → 无物体的切换防抖 60 帧，否则立即切换
+    uint8_t reserved045[0x1B];
     uint32_t antiTouchScenarios;  // 哪些场景启用防误触
     uint32_t proximityScenarios;  // 哪些场景启用接近检测
     uint8_t reserved068[0x28];
@@ -110,7 +112,9 @@ struct FlashPrmt {
     int16_t field096;
     int16_t field098;
     int16_t field09A;
-    uint8_t reserved09C[0x50A];
+    uint8_t reserved09C[0x504];
+    uint16_t outputResScale;  // 对外坐标的分辨率倍数（TSA 可设置），TSAOut 的显示坐标按它放大
+    uint8_t reserved5A2[0x4];
     uint16_t dim1Res;  // Dim1 方向的显示分辨率
     uint16_t dim2Res;
     uint8_t reserved5AA[0x4];
@@ -168,8 +172,10 @@ struct FlashPrmt {
     uint8_t reserved88C[0x2];
     AiirPrmt aiir[3];
     uint8_t field8A0;
-    uint8_t field8A1;
-    uint8_t reserved8A2[0x17];
+    uint8_t jitRadiusDisplay;  // 抗抖动半径（显示像素），ConstPrmt 换算成 jitRadius
+    uint8_t liftOffJitterSuppress;  // Filter：抬起过程中信号骤降时按抗抖动半径压住坐标
+    uint8_t noCurvePredict;  // Filter：为 0 时轨迹折返后按速度外推坐标
+    uint8_t reserved8A4[0x15];
     uint8_t gripPeakEdgeDist;  // 峰到边缘的距离超过它不算握持峰；也是握持合并峰的搜索半径
     uint16_t gripTimeInterval;  // 握持格与非握持格的按下时间差超过它才拆分区域
     uint16_t maxNotGripTime;  // 非握持峰的握持时间不超过它才看椭圆度
@@ -328,6 +334,7 @@ static_assert(offsetof(FlashPrmt, field02E) == 0x02E);
 static_assert(offsetof(FlashPrmt, sensorArchitecture) == 0x034);
 static_assert(offsetof(FlashPrmt, reportRateHz) == 0x038);
 static_assert(offsetof(FlashPrmt, dbEnterIdle) == 0x03C);
+static_assert(offsetof(FlashPrmt, field044) == 0x044);
 static_assert(offsetof(FlashPrmt, antiTouchScenarios) == 0x060);
 static_assert(offsetof(FlashPrmt, proximityScenarios) == 0x064);
 static_assert(offsetof(FlashPrmt, dim1LogicFirst) == 0x090);
@@ -338,6 +345,7 @@ static_assert(offsetof(FlashPrmt, field094) == 0x094);
 static_assert(offsetof(FlashPrmt, field096) == 0x096);
 static_assert(offsetof(FlashPrmt, field098) == 0x098);
 static_assert(offsetof(FlashPrmt, field09A) == 0x09A);
+static_assert(offsetof(FlashPrmt, outputResScale) == 0x5A0);
 static_assert(offsetof(FlashPrmt, dim1Res) == 0x5A6);
 static_assert(offsetof(FlashPrmt, dim2Res) == 0x5A8);
 static_assert(offsetof(FlashPrmt, dim1ClipLow) == 0x5AE);
@@ -380,7 +388,9 @@ static_assert(offsetof(FlashPrmt, idtSnapDistMm) == 0x888);
 static_assert(offsetof(FlashPrmt, accThold) == 0x88A);
 static_assert(offsetof(FlashPrmt, aiir) == 0x88E);
 static_assert(offsetof(FlashPrmt, field8A0) == 0x8A0);
-static_assert(offsetof(FlashPrmt, field8A1) == 0x8A1);
+static_assert(offsetof(FlashPrmt, jitRadiusDisplay) == 0x8A1);
+static_assert(offsetof(FlashPrmt, liftOffJitterSuppress) == 0x8A2);
+static_assert(offsetof(FlashPrmt, noCurvePredict) == 0x8A3);
 static_assert(offsetof(FlashPrmt, gripPeakEdgeDist) == 0x8B9);
 static_assert(offsetof(FlashPrmt, gripTimeInterval) == 0x8BA);
 static_assert(offsetof(FlashPrmt, maxNotGripTime) == 0x8BC);
@@ -506,8 +516,8 @@ struct FlashConstPrmt {
     uint32_t dim1DisplayScale;  // 显示坐标（含两端裁剪）对 Q8.8 像素坐标的比例，Q16
     uint32_t dim2DisplayScale;
     uint16_t aiirCoefToDeltaRatio[3];  // 每组 AIIR 系数的插值斜率，Q10
-    uint16_t field012;
-    uint16_t field014;
+    uint16_t jitRadius;  // 抗抖动半径（Q8.8 传感器单位，按 Dim1 分辨率换算）；Filter 两个方向都用它
+    uint16_t jitRadiusDim2;  // 按 Dim2 分辨率换算的抗抖动半径（无人读）
     uint16_t field016;
     uint16_t field018;
     uint8_t q8PerMm;  // 每 mm 的 Q8.8 传感器单位数：0x1000 / sensorPitchX16 + 1
@@ -544,8 +554,8 @@ static_assert(offsetof(FlashConstPrmt, field000) == 0x000);
 static_assert(offsetof(FlashConstPrmt, dim1DisplayScale) == 0x004);
 static_assert(offsetof(FlashConstPrmt, dim2DisplayScale) == 0x008);
 static_assert(offsetof(FlashConstPrmt, aiirCoefToDeltaRatio) == 0x00C);
-static_assert(offsetof(FlashConstPrmt, field012) == 0x012);
-static_assert(offsetof(FlashConstPrmt, field014) == 0x014);
+static_assert(offsetof(FlashConstPrmt, jitRadius) == 0x012);
+static_assert(offsetof(FlashConstPrmt, jitRadiusDim2) == 0x014);
 static_assert(offsetof(FlashConstPrmt, field016) == 0x016);
 static_assert(offsetof(FlashConstPrmt, field018) == 0x018);
 static_assert(offsetof(FlashConstPrmt, q8PerMm) == 0x01A);
@@ -628,9 +638,12 @@ struct DynamicPrmt {
     uint8_t maxClickSuppressDistance;
     uint8_t reserved07B[0x1];
     uint8_t flickDistance;
-    uint8_t reserved07D[0x3];
+    uint8_t reserved07D[0x1];
+    uint8_t clickToFlickStep;  // 点击转滑动后每帧收回的点击偏移（外部像素）
+    uint8_t reserved07F[0x1];
     uint8_t zTholdFlags;  // bit1 抬起门限按区域分支；bit2 手套、bit3 指关节模式用按下门限判稳定
-    uint8_t reserved081[0x3];
+    uint8_t touchModeFlags;  // bit3：TouchMode 先试指关节（3）再试手指（1）
+    uint8_t reserved082[0x2];
     uint32_t gloveFilterSides;
     uint16_t distToEnterGloveMode;
     uint8_t reserved08A[0x2];
@@ -683,7 +696,9 @@ static_assert(offsetof(DynamicPrmt, clickDuration) == 0x074);
 static_assert(offsetof(DynamicPrmt, clickSuppressDistance) == 0x078);
 static_assert(offsetof(DynamicPrmt, maxClickSuppressDistance) == 0x07A);
 static_assert(offsetof(DynamicPrmt, flickDistance) == 0x07C);
+static_assert(offsetof(DynamicPrmt, clickToFlickStep) == 0x07E);
 static_assert(offsetof(DynamicPrmt, zTholdFlags) == 0x080);
+static_assert(offsetof(DynamicPrmt, touchModeFlags) == 0x081);
 static_assert(offsetof(DynamicPrmt, gloveFilterSides) == 0x084);
 static_assert(offsetof(DynamicPrmt, distToEnterGloveMode) == 0x088);
 static_assert(offsetof(DynamicPrmt, chargerNoiseTholdPercent) == 0x08C);

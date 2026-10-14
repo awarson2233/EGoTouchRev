@@ -64,7 +64,8 @@ struct TsaStatic {
     uint16_t strongTapCount;  // TE：报过点的触点抬起时峰值超过 2 倍 finger 门限、长轴小于 21 mm 的连续次数（到 5 为止）
     uint8_t reserved124[0x2CD];
     uint8_t field3F1;
-    uint8_t reserved3F2[0x9];
+    uint8_t reserved3F2[0x8];
+    uint8_t strongFingerFrames;  // TouchMode：手指模式下全局峰 Zn 超过 3 倍手套退出门限的连续帧数
     uint8_t field3FB;
     uint8_t vpAllowed;  // TZ：允许插入虚拟峰（区域够长时置 1，连续 5 帧不够长后清 0）
     uint8_t vpDenyFrames;  // 区域不够长的连续帧数（到 5 为止）
@@ -95,6 +96,7 @@ static_assert(offsetof(TsaStatic, justExitedSpecialCtrlMode) == 0x115);
 static_assert(offsetof(TsaStatic, signalReverted) == 0x11A);
 static_assert(offsetof(TsaStatic, strongTapCount) == 0x122);
 static_assert(offsetof(TsaStatic, field3F1) == 0x3F1);
+static_assert(offsetof(TsaStatic, strongFingerFrames) == 0x3FA);
 static_assert(offsetof(TsaStatic, field3FB) == 0x3FB);
 static_assert(offsetof(TsaStatic, vpAllowed) == 0x3FC);
 static_assert(offsetof(TsaStatic, vpDenyFrames) == 0x3FD);
@@ -127,13 +129,15 @@ struct TsaPrpt {
     int16_t field2DE;
     uint8_t field2E0;
     uint8_t reserved2E1[0x3];
-    uint8_t field2E4;
+    uint8_t touchModeLatched;  // TouchMode：手套 / 指关节模式已锁定
     uint8_t reserved2E5[0x3];
-    uint32_t field2E8;
-    int32_t field2EC;
-    uint8_t reserved2F0[0x4];
-    int32_t field2F4;
-    uint8_t reserved2F8[0x48];
+    uint32_t touchMode;  // TouchMode：当前触控模式（0 无物体、1 手指、2 手套、3 指关节）
+    int32_t touchModeLevel;  // 当前模式的检测级别（2 为确认）
+    int32_t touchModeDetect;  // 当前模式的检测结果（1 未检出、2 检出）
+    uint32_t prevTouchMode;  // 上一帧的 touchMode / Level / Detect
+    int32_t prevTouchModeLevel;
+    int32_t prevTouchModeDetect;
+    uint8_t reserved300[0x40];
 };
 static_assert(sizeof(TsaPrpt) == 0x340);
 static_assert(offsetof(TsaPrpt, field004) == 0x004);
@@ -153,10 +157,13 @@ static_assert(offsetof(TsaPrpt, field2DC) == 0x2DC);
 static_assert(offsetof(TsaPrpt, tholdSwitching) == 0x2DD);
 static_assert(offsetof(TsaPrpt, field2DE) == 0x2DE);
 static_assert(offsetof(TsaPrpt, field2E0) == 0x2E0);
-static_assert(offsetof(TsaPrpt, field2E4) == 0x2E4);
-static_assert(offsetof(TsaPrpt, field2E8) == 0x2E8);
-static_assert(offsetof(TsaPrpt, field2EC) == 0x2EC);
-static_assert(offsetof(TsaPrpt, field2F4) == 0x2F4);
+static_assert(offsetof(TsaPrpt, touchModeLatched) == 0x2E4);
+static_assert(offsetof(TsaPrpt, touchMode) == 0x2E8);
+static_assert(offsetof(TsaPrpt, touchModeLevel) == 0x2EC);
+static_assert(offsetof(TsaPrpt, touchModeDetect) == 0x2F0);
+static_assert(offsetof(TsaPrpt, prevTouchMode) == 0x2F4);
+static_assert(offsetof(TsaPrpt, prevTouchModeLevel) == 0x2F8);
+static_assert(offsetof(TsaPrpt, prevTouchModeDetect) == 0x2FC);
 
 /// TsaStatic::processingState
 inline constexpr uint32_t kProcMsActive = 0x80000000u;  // 互容主流程进行中（PROC_MS_ACTIVE）

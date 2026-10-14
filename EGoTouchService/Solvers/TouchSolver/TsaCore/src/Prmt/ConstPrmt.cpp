@@ -62,8 +62,8 @@ void Init() {
     c.dim1DisplayScale = DisplayScale(flash.dim1Res, flash.dim1ClipLow, flash.dim1ClipHigh, dim1Len);
     c.dim2DisplayScale = DisplayScale(flash.dim2Res, flash.dim2ClipLow, flash.dim2ClipHigh, dim2Len);
     for (int i = 0; i < 3; ++i) c.aiirCoefToDeltaRatio[i] = AiirRatio(flash.aiir[i]);
-    c.field012 = PerResolution(flash.field8A1, dim1Len, flash.dim1Res);
-    c.field014 = PerResolution(flash.field8A1, dim2Len, flash.dim2Res);
+    c.jitRadius = PerResolution(flash.jitRadiusDisplay, dim1Len, flash.dim1Res);
+    c.jitRadiusDim2 = PerResolution(flash.jitRadiusDisplay, dim2Len, flash.dim2Res);
     c.field016 = PerResolution(flash.field8A0, dim1Len, flash.dim1Res);
     c.field018 = PerResolution(flash.field8A0, dim2Len, flash.dim2Res);
 

@@ -83,7 +83,7 @@ void VpInit() {
 void VpProcess(TouchZoneUnit& z) {
     const uint8_t prevMajorMm = z.prevIdx != kNoTouch ? static_cast<uint8_t>(PrevTouches().unit[z.prevIdx].majorMm) : 0;
     if (PrevTouches().count <= Peaks().count) return;
-    if (GetDbShape(z) != kShapeMultiFinger || Prpt().field2E8 != Prpt().field2F4 || z.exceptionType != 0) return;
+    if (GetDbShape(z) != kShapeMultiFinger || Prpt().touchMode != Prpt().prevTouchMode || z.exceptionType != 0) return;
     if (PrevTouches().exceptionFlags != 0 || (z.flags & kZoneOnBorder) != 0 || kVpMaxPrevMajorMm <= prevMajorMm) return;
     if ((PrmtFlash().gripFlags & kGripNoVirtualPeak) != 0) return;
     if (IsVirtualPeakAllowed(z)) TryInsertVpa(z);

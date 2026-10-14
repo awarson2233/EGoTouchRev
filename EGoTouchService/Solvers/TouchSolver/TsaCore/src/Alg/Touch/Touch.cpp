@@ -196,7 +196,7 @@ void SetVolatileFlagLiftOffZFailed(uint8_t curIdx, uint8_t prevIdx, bool nextEdg
     TouchUnit& cur = Cur(curIdx);
     const PrevTouchUnit& prev = Prev(prevIdx);
     const PeakEntry& peak = PeakOf(cur);
-    const bool regionThold = ((2 >> (static_cast<uint8_t>(prpt.field2E8) & 0x1f)) & 1) != 0 && prpt.field2EC == 2 &&
+    const bool regionThold = ((2 >> (static_cast<uint8_t>(prpt.touchMode) & 0x1f)) & 1) != 0 && prpt.touchModeLevel == 2 &&
                              (dyn.zTholdFlags & 2) != 0;
     if (!regionThold) {
         // 按住超过 60 帧且移动过的触点不判
@@ -223,7 +223,7 @@ void SetVolatileFlagStableTouch(uint8_t curIdx) {
     const TsaStatic& stat = Static();
     const bool glove = (dyn.zTholdFlags & 4) != 0 && (stat.featureFlags & kFeatGloveMode) != 0;
     const bool knuckle = (dyn.zTholdFlags & 8) != 0 && (stat.featureFlags & kFeatKnuckle) != 0;
-    const bool fingerThold = (Prpt().field2E4 == 0 || (!glove && !knuckle)) &&
+    const bool fingerThold = (Prpt().touchModeLatched == 0 || (!glove && !knuckle)) &&
                              (stat.featureFlags & kFeatSmartCover) == 0 && stat.field3F1 == 0;
     const int thold = fingerThold ? dyn.znFingerThold : dyn.znTouchDownThold;
     TouchUnit& cur = Cur(curIdx);

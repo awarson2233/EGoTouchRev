@@ -49,6 +49,8 @@ void TSA_Free(int64_t* ptr);
 uint32_t TSA_GetSide(uint16_t dim1, uint16_t dim2);
 
 // Core/TSAOut.c
+uint16_t TSAOut_Dim1PosInternal(uint16_t pos, uint16_t scale);
+uint16_t TSAOut_Dim2PosInternal(uint16_t pos, uint16_t scale);
 uint16_t TSAOut_DisplayXPos(uint8_t idx, ...);
 uint16_t TSAOut_DisplayYPos(uint8_t idx, ...);
 uint16_t TSAOut_Pixel2DisplayDim1(uint16_t pos);
