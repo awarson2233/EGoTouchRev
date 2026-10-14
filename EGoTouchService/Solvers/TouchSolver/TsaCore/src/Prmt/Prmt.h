@@ -92,7 +92,10 @@ struct FlashPrmt {
     CmfThold cmfTholdNormal;  // 常态
     CmfThold cmfTholdAlt;  // TsaStatic::systemFlags bit18 置位时
     uint8_t field62C[0x50];  // ConstPrmt 取前 field025 项的最大值
-    uint8_t reserved67C[0x1A2];
+    uint8_t reserved67C[0x194];
+    uint32_t cmfMethodNormal;  // CMF 方法：常态 / 智能皮套（1 为 SOF）
+    uint32_t cmfMethodSmartCover;
+    uint8_t reserved818[0x6];
     uint8_t sigMult;  // 触点区域遍历门限相对峰值的比例（/128）：默认
     uint8_t sigMultNormal;  // 设备接地
     uint8_t sigMultSD;  // 设备悬浮
@@ -127,7 +130,13 @@ struct FlashPrmt {
     uint8_t reserved907[0x1];
     uint8_t flickDistance;  // 决定下一个触点默认是否做点击抑制的移动距离（像素）
     uint8_t field909;  // 调参表里标为 obsolete
-    uint8_t reserved90A[0xE];
+    uint8_t reserved90A[0x2];
+    int16_t noiseTholdQuiet;  // 噪声门限：没有噪声触点时
+    int16_t noiseTholdOneNoisy;  // 恰有一个噪声触点时
+    int16_t noiseTholdMultiNoisy;  // 多个噪声触点时；也是初始的峰门限
+    int16_t noisyTouchSigSum;  // 历史触点的 sigSum 超过它即计为噪声触点
+    uint8_t snrScaleX16;  // 门限按 SNR 换算的比例（/16）
+    uint8_t reserved915[0x3];
     uint8_t zTholdFlags;  // DynPrmt 初值块（0x918..0x924）的开头
     uint8_t reserved919[0x3];
     uint32_t gloveFilterSides;  // 手套过滤作用的边：上 1、下 2、左 4、右 8
@@ -275,6 +284,8 @@ static_assert(offsetof(FlashPrmt, field608) == 0x608);
 static_assert(offsetof(FlashPrmt, cmfTholdNormal) == 0x620);
 static_assert(offsetof(FlashPrmt, cmfTholdAlt) == 0x626);
 static_assert(offsetof(FlashPrmt, field62C) == 0x62C);
+static_assert(offsetof(FlashPrmt, cmfMethodNormal) == 0x810);
+static_assert(offsetof(FlashPrmt, cmfMethodSmartCover) == 0x814);
 static_assert(offsetof(FlashPrmt, sigMult) == 0x81E);
 static_assert(offsetof(FlashPrmt, sigMultNormal) == 0x81F);
 static_assert(offsetof(FlashPrmt, sigMultSD) == 0x820);
@@ -295,6 +306,11 @@ static_assert(offsetof(FlashPrmt, clickSuppressDistance) == 0x904);
 static_assert(offsetof(FlashPrmt, maxClickSuppressDistance) == 0x906);
 static_assert(offsetof(FlashPrmt, flickDistance) == 0x908);
 static_assert(offsetof(FlashPrmt, field909) == 0x909);
+static_assert(offsetof(FlashPrmt, noiseTholdQuiet) == 0x90C);
+static_assert(offsetof(FlashPrmt, noiseTholdOneNoisy) == 0x90E);
+static_assert(offsetof(FlashPrmt, noiseTholdMultiNoisy) == 0x910);
+static_assert(offsetof(FlashPrmt, noisyTouchSigSum) == 0x912);
+static_assert(offsetof(FlashPrmt, snrScaleX16) == 0x914);
 static_assert(offsetof(FlashPrmt, zTholdFlags) == 0x918);
 static_assert(offsetof(FlashPrmt, gloveFilterSides) == 0x91C);
 static_assert(offsetof(FlashPrmt, distToEnterGloveMode) == 0x920);

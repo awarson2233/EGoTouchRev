@@ -3,6 +3,7 @@
 #include <utility>
 
 #include "Alg/Touch/TouchData.h"
+#include "Alg/TouchThold/TouchThold.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Legacy/RawApi.h"
@@ -130,7 +131,7 @@ void DetectInRange(int16_t thold, uint8_t firstRow, uint8_t lastRow, uint8_t fir
     const int16_t* dif = Buffers().dif;
     bool toeSpecial = false;
     Clean();
-    if (IsToExcludeSideRegion() && static_cast<uint8_t>(TouchThold_ToeUseSpecialThold()) != 0) toeSpecial = true;
+    if (IsToExcludeSideRegion() && TouchThold::ToeUseSpecialThold()) toeSpecial = true;
 
     for (uint8_t row = firstRow; row <= lastRow; ++row) {
         auto cell = static_cast<uint16_t>(firstCol + row * flash.dim1Len - 1);

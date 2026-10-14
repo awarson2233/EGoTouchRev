@@ -25,6 +25,7 @@ uint16_t TSA_GetYRes(void);
 uint32_t TSA_IsUnderWaterDetected(void);
 uint32_t TSA_IsOutOfWaterDetected(void);
 char* TSA_GetPrmtName(void);
+int16_t TSA_GetMinSigPrpt(void);
 void TSA_ScenarioProcess(void);
 uint16_t TSA_SideTouchDim1Center(uint8_t sideIdx);
 uint16_t TSA_SideTouchDim2Center(uint8_t sideIdx);
@@ -41,6 +42,7 @@ char TSAOut_Angle(char angle);
 
 // Core/TSAStatic.c
 uint8_t TSAStatic_IsChargerPlugged(void);
+uint64_t TSAStatic_IsSafeBaselineApplied(void);
 uint8_t TSAStatic_IsAFEJustEnterIDLEMode(void);
 uint8_t TSAStatic_IsAFEJustExitIDLEMode(void);
 
@@ -77,11 +79,6 @@ void HardwareAnalyzer_ReportToTSA(void);
 // Tracking/IDT.c
 void IDT_Process(uint8_t useStrictAccCheck);
 
-// Tracking/TouchThold.c
-void TouchThold_Init(void);
-void TouchThold_Process(int16_t fingerThold, int16_t gloveThold, int16_t* peakThold, int16_t* touchThold,
-                        uint16_t* touchDownThold);
-uint64_t TouchThold_ToeUseSpecialThold(void);
 
 // Tracking/TS.c
 uint64_t TS_SQPixelToSQMM(uint32_t sqPixel);

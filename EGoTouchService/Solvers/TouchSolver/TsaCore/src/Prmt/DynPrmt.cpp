@@ -2,6 +2,7 @@
 
 #include <cstring>
 
+#include "Alg/TouchThold/TouchThold.h"
 #include "App/TsaStatic.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
@@ -63,14 +64,12 @@ void GetPkThold() {
     const FlashPrmt& flash = PrmtFlash();
     DynamicPrmt& dyn = PrmtDynamic();
     TsaPrpt& prpt = Prpt();
-    int16_t edgePeak = 0, edgeTouch = 0;
-    uint16_t edgeTouchDown = 0;
-    TouchThold_Process(static_cast<int16_t>(flash.fingerThold * 0x38 / 0x50), flash.gloveThold, &edgePeak, &edgeTouch,
-                       &edgeTouchDown);
+    int16_t edgePeak = 0, edgeTouch = 0, edgeTouchDown = 0;
+    TouchThold::Process(static_cast<int16_t>(flash.fingerThold * 0x38 / 0x50), flash.gloveThold, &edgePeak, &edgeTouch,
+                        &edgeTouchDown);
     dyn.edgePeakThold = edgePeak;
     dyn.edgePeakTholdLow = edgeTouch;
-    TouchThold_Process(flash.fingerThold, flash.gloveThold, &prpt.peakThold, &prpt.touchThold,
-                       reinterpret_cast<uint16_t*>(&prpt.touchDownThold));
+    TouchThold::Process(flash.fingerThold, flash.gloveThold, &prpt.peakThold, &prpt.touchThold, &prpt.touchDownThold);
     dyn.sdZnTholdScaleX16 = flash.sdZnTholdScaleX16;
     dyn.touchThold = flash.peakFilterReferenceThreshold;
     dyn.sigThold = prpt.peakThold;
@@ -85,10 +84,9 @@ void GetPkThold() {
 void UpdateNoiseTholdBeforeTouch(int16_t noise, int16_t sideNoise) {
     DynamicPrmt& dyn = PrmtDynamic();
     const TsaPrpt& prpt = Prpt();
-    if (static_cast<char>(TouchThold_ToeUseSpecialThold()) == 0 || prpt.field2E8 != 2 || prpt.field2EC != 2 ||
+    if (!TouchThold::ToeUseSpecialThold() || prpt.field2E8 != 2 || prpt.field2EC != 2 ||
         (Static().featureFlags & kFeatSmartCover) != 0) {
-        dyn.smallThold = static_cast<char>(TouchThold_ToeUseSpecialThold()) == 0 ? static_cast<int16_t>(noise / 2)
-                                                                                  : TwoThirds(noise);
+        dyn.smallThold = !TouchThold::ToeUseSpecialThold() ? static_cast<int16_t>(noise / 2) : TwoThirds(noise);
         dyn.sideSmallThold = static_cast<int16_t>(sideNoise / 2);
     } else {
         dyn.smallThold = TwoThirds(noise);
@@ -123,15 +121,6 @@ void UpdateStepAfterTouch(int16_t noise, int16_t sideNoise) {
     dyn.reportRate = rate;
 }
 
-// 手指模式（未确认手套 / 指关节、无智能皮套、BLReset 未置 field3F1、无整屏信号失衡）时噪声门限取 finger 门限。
-bool UseFingerNoiseThold() {
-    const DynamicPrmt& dyn = PrmtDynamic();
-    const TsaStatic& stat = Static();
-    const bool glove = (dyn.zTholdFlags & 4) != 0 && (stat.featureFlags & kFeatGloveMode) != 0;
-    const bool knuckle = (dyn.zTholdFlags & 8) != 0 && (stat.featureFlags & kFeatKnuckle) != 0;
-    return (Prpt().field2E4 == 0 || (!glove && !knuckle)) && (stat.featureFlags & kFeatSmartCover) == 0 &&
-           stat.field3F1 == 0 && stat.fullIncellSignalDisparity == 0;
-}
 
 // TSADynPrmt_GetBL @ 0x6bb3cb4f
 // 本帧基线更新用的噪声门限与步长。
@@ -141,7 +130,7 @@ void GetBl() {
     const TsaPrpt& prpt = Prpt();
     int16_t noise;
     int16_t sideNoise;
-    if (UseFingerNoiseThold()) {
+    if (TouchThold::UseFingerThold()) {
         noise = prpt.fingerTouchThold;
         sideNoise = static_cast<int16_t>(prpt.fingerTouchThold * 3 / 4);
     } else {
@@ -185,7 +174,7 @@ void Init() {
     for (const InitBlock& b : kInitBlocks) std::memcpy(dyn + b.dynOffset, flash + b.flashOffset, b.size);
     PrmtDynamic().field05A = 2000;
     PrmtDynamic().resetCounterCap = 2000;
-    TouchThold_Init();
+    TouchThold::Init();
     GetUnderWaterThold();
     SsInit();
 }

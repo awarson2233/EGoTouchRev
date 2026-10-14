@@ -35,11 +35,15 @@ struct TsaStatic {
     uint8_t reserved100[0x8];
     uint32_t featureFlags2;
     uint32_t processingState;  // bit31：互容主流程进行中；bit4：峰 Zn 只取十字五点和
-    uint8_t reserved110[0x4];
+    uint8_t reserved110[0x1];
+    uint8_t field111;
+    uint8_t reserved112[0x2];
     uint8_t fullIncellSignalDisparity;  // 整屏 incell 信号失衡（峰检测按 SD 模式处理）
     uint8_t reserved115[0x2DC];
     uint8_t field3F1;
-    uint8_t reserved3F2[0x5E];
+    uint8_t reserved3F2[0x9];
+    uint8_t field3FB;
+    uint8_t reserved3FC[0x54];
 };
 static_assert(sizeof(TsaStatic) == 0x450);
 static_assert(offsetof(TsaStatic, fullIncellHighPeakTime) == 0x078);
@@ -56,22 +60,31 @@ static_assert(offsetof(TsaStatic, baselineStageInitialSignal) == 0x0F8);
 static_assert(offsetof(TsaStatic, featureFlags) == 0x0FC);
 static_assert(offsetof(TsaStatic, featureFlags2) == 0x108);
 static_assert(offsetof(TsaStatic, processingState) == 0x10C);
+static_assert(offsetof(TsaStatic, field111) == 0x111);
 static_assert(offsetof(TsaStatic, fullIncellSignalDisparity) == 0x114);
 static_assert(offsetof(TsaStatic, field3F1) == 0x3F1);
+static_assert(offsetof(TsaStatic, field3FB) == 0x3FB);
 
 /// g_tsaPrpt：每帧统计的全局属性。
 struct TsaPrpt {
-    uint8_t reserved000[0xC8];
+    uint8_t reserved000[0xA0];
+    int16_t sigPeakPositive;  // Dif 的正向极值
+    uint8_t reserved0A2[0x26];
     int32_t field0C8;
     uint8_t reserved0CC[0xBA];
     uint16_t field186;
-    uint8_t reserved188[0x14A];
+    uint8_t reserved188[0x148];
+    int16_t noiseThold;  // TouchThold 按噪声触点数与 SNR 换算的噪声门限
     int16_t peakThold;  // TouchThold_Process 按 finger 门限算出的峰门限、触点门限与按下门限
     int16_t touchThold;
-    uint8_t reserved2D6[0x2];
+    int16_t field2D6;
     int16_t fingerTouchThold;  // TouchThold_Init 置为 finger 门限
     int16_t touchDownThold;
-    uint8_t reserved2DC[0x8];
+    uint8_t field2DC;
+    uint8_t tholdSwitching;  // TouchThold_IsSwitching
+    int16_t field2DE;
+    uint8_t field2E0;
+    uint8_t reserved2E1[0x3];
     uint8_t field2E4;
     uint8_t reserved2E5[0x3];
     uint32_t field2E8;
@@ -79,12 +92,19 @@ struct TsaPrpt {
     uint8_t reserved2F0[0x50];
 };
 static_assert(sizeof(TsaPrpt) == 0x340);
+static_assert(offsetof(TsaPrpt, sigPeakPositive) == 0x0A0);
 static_assert(offsetof(TsaPrpt, field0C8) == 0x0C8);
 static_assert(offsetof(TsaPrpt, field186) == 0x186);
+static_assert(offsetof(TsaPrpt, noiseThold) == 0x2D0);
 static_assert(offsetof(TsaPrpt, peakThold) == 0x2D2);
 static_assert(offsetof(TsaPrpt, touchThold) == 0x2D4);
+static_assert(offsetof(TsaPrpt, field2D6) == 0x2D6);
 static_assert(offsetof(TsaPrpt, fingerTouchThold) == 0x2D8);
 static_assert(offsetof(TsaPrpt, touchDownThold) == 0x2DA);
+static_assert(offsetof(TsaPrpt, field2DC) == 0x2DC);
+static_assert(offsetof(TsaPrpt, tholdSwitching) == 0x2DD);
+static_assert(offsetof(TsaPrpt, field2DE) == 0x2DE);
+static_assert(offsetof(TsaPrpt, field2E0) == 0x2E0);
 static_assert(offsetof(TsaPrpt, field2E4) == 0x2E4);
 static_assert(offsetof(TsaPrpt, field2E8) == 0x2E8);
 static_assert(offsetof(TsaPrpt, field2EC) == 0x2EC);
