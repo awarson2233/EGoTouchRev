@@ -42,13 +42,14 @@ struct FlashPrmt {
     uint8_t displayXAxis;  // 与 dim1Axis 相等时 Dim1 是显示的 X 方向
     uint8_t dim1Axis;
     uint8_t reserved01A[0x1];
-    uint8_t field01B;  // ConstPrmt 由它推导 field01A / field01C / field01E
+    uint8_t sensorPitchX16;  // 传感器间距（1/16 mm）；ConstPrmt 由它推导像素与 mm 的换算
     uint8_t reserved01C[0x1];
     uint8_t dim1Len;  // 列数
     uint8_t dim2Len;  // 行数
     uint8_t reserved01F[0xD];
     uint16_t sensorNum;  // dim1Len × dim2Len
-    uint8_t reserved02E[0x6];
+    uint16_t field02E;  // TS_MMToDisplayPixel：mm × max(dim1Res, dim2Res) × 16 / field02E
+    uint8_t reserved030[0x4];
     uint32_t sensorArchitecture;  // OnCell(1)、Hybrid Incell(2)、Full Incell(3)
     uint8_t reportRateHz;  // 0 时按 8 ms 一帧
     uint8_t reserved039[0x3];
@@ -118,7 +119,7 @@ struct FlashPrmt {
     uint8_t field8A0;
     uint8_t field8A1;
     uint8_t reserved8A2[0x57];
-    uint8_t field8F9;  // DynPrmt 初值的单字节项
+    uint8_t defaultSizeMm;  // 尚无尺寸的触点的默认尺寸（mm）；DynPrmt 初值
     uint8_t reserved8FA[0x2];
     uint32_t defaultTouchAction;  // 新触点默认的 TouchAction；也是 DynPrmt 初值块（0x8fc..0x90c）的开头
     uint16_t clickDuration;  // 点击后允许移动的时间（ms）
@@ -248,10 +249,11 @@ struct FlashPrmt {
 static_assert(sizeof(FlashPrmt) == 0x1890);
 static_assert(offsetof(FlashPrmt, displayXAxis) == 0x018);
 static_assert(offsetof(FlashPrmt, dim1Axis) == 0x019);
-static_assert(offsetof(FlashPrmt, field01B) == 0x01B);
+static_assert(offsetof(FlashPrmt, sensorPitchX16) == 0x01B);
 static_assert(offsetof(FlashPrmt, dim1Len) == 0x01D);
 static_assert(offsetof(FlashPrmt, dim2Len) == 0x01E);
 static_assert(offsetof(FlashPrmt, sensorNum) == 0x02C);
+static_assert(offsetof(FlashPrmt, field02E) == 0x02E);
 static_assert(offsetof(FlashPrmt, sensorArchitecture) == 0x034);
 static_assert(offsetof(FlashPrmt, reportRateHz) == 0x038);
 static_assert(offsetof(FlashPrmt, dbEnterIdle) == 0x03C);
@@ -298,7 +300,7 @@ static_assert(offsetof(FlashPrmt, accThold) == 0x88A);
 static_assert(offsetof(FlashPrmt, aiir) == 0x88E);
 static_assert(offsetof(FlashPrmt, field8A0) == 0x8A0);
 static_assert(offsetof(FlashPrmt, field8A1) == 0x8A1);
-static_assert(offsetof(FlashPrmt, field8F9) == 0x8F9);
+static_assert(offsetof(FlashPrmt, defaultSizeMm) == 0x8F9);
 static_assert(offsetof(FlashPrmt, defaultTouchAction) == 0x8FC);
 static_assert(offsetof(FlashPrmt, clickDuration) == 0x900);
 static_assert(offsetof(FlashPrmt, clickSuppressDistance) == 0x904);
@@ -412,10 +414,10 @@ struct FlashConstPrmt {
     uint16_t field014;
     uint16_t field016;
     uint16_t field018;
-    uint8_t field01A;
+    uint8_t q8PerMm;  // 每 mm 的 Q8.8 传感器单位数：0x1000 / sensorPitchX16 + 1
     uint8_t reserved01B[0x1];
-    uint16_t field01C;
-    uint16_t field01E;
+    uint16_t mmPerQ8Q16;  // 每个 Q8.8 传感器单位的 mm 数（Q16）：0x10000 / q8PerMm
+    uint16_t sizeAreaScale;  // 0x32400 / sensorPitchX16²，即 256π / 传感器面积（mm²）：TS_GetSizeInMM 用
     uint16_t dim1LenQ8;  // dim1Len << 8
     uint16_t dim2LenQ8;
     uint8_t field024;  // dim1Axis 为 0 时是 dim2Len，否则是 dim1Len
@@ -449,9 +451,9 @@ static_assert(offsetof(FlashConstPrmt, field012) == 0x012);
 static_assert(offsetof(FlashConstPrmt, field014) == 0x014);
 static_assert(offsetof(FlashConstPrmt, field016) == 0x016);
 static_assert(offsetof(FlashConstPrmt, field018) == 0x018);
-static_assert(offsetof(FlashConstPrmt, field01A) == 0x01A);
-static_assert(offsetof(FlashConstPrmt, field01C) == 0x01C);
-static_assert(offsetof(FlashConstPrmt, field01E) == 0x01E);
+static_assert(offsetof(FlashConstPrmt, q8PerMm) == 0x01A);
+static_assert(offsetof(FlashConstPrmt, mmPerQ8Q16) == 0x01C);
+static_assert(offsetof(FlashConstPrmt, sizeAreaScale) == 0x01E);
 static_assert(offsetof(FlashConstPrmt, dim1LenQ8) == 0x020);
 static_assert(offsetof(FlashConstPrmt, dim2LenQ8) == 0x022);
 static_assert(offsetof(FlashConstPrmt, field024) == 0x024);
@@ -518,7 +520,7 @@ struct DynamicPrmt {
     int16_t refThold;  // peakFilterReferenceThreshold
     int16_t negRefThold;
     uint8_t reserved060[0xC];
-    uint8_t field06C;
+    uint8_t defaultSizeMm;  // 尚无尺寸的触点的默认尺寸（mm）：上一个抬起的触点的尺寸，封顶 9
     uint8_t reserved06D[0x3];
     uint32_t defaultTouchAction;  // 新触点默认的 TouchAction：初值来自机型参数，此后由报过点的触点抬起时更新；也是机型参数初值块（0x70..0x80）的开头
     uint16_t clickDuration;
@@ -576,7 +578,7 @@ static_assert(offsetof(DynamicPrmt, resetCounterCap) == 0x058);
 static_assert(offsetof(DynamicPrmt, field05A) == 0x05A);
 static_assert(offsetof(DynamicPrmt, refThold) == 0x05C);
 static_assert(offsetof(DynamicPrmt, negRefThold) == 0x05E);
-static_assert(offsetof(DynamicPrmt, field06C) == 0x06C);
+static_assert(offsetof(DynamicPrmt, defaultSizeMm) == 0x06C);
 static_assert(offsetof(DynamicPrmt, defaultTouchAction) == 0x070);
 static_assert(offsetof(DynamicPrmt, clickDuration) == 0x074);
 static_assert(offsetof(DynamicPrmt, clickSuppressDistance) == 0x078);

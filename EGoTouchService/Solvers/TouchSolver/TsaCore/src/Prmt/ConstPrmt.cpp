@@ -67,13 +67,13 @@ void Init() {
     c.field016 = PerResolution(flash.field8A0, dim1Len, flash.dim1Res);
     c.field018 = PerResolution(flash.field8A0, dim2Len, flash.dim2Res);
 
-    // 以下按 64 位无符号除；field01B 为 0 时与原代码一样除零
-    const uint64_t unit = flash.field01B;
-    c.field01A = static_cast<uint8_t>(0x1000u / unit + 1);
-    c.field01E = static_cast<uint16_t>(0x32400u / unit / unit);
-    c.field01C = static_cast<uint16_t>(0x10000u / static_cast<uint64_t>(static_cast<int64_t>(static_cast<int>(0x1000u / unit) + 1)));
-    const uint32_t scaleProduct = static_cast<uint32_t>(flash.peakFilterReferenceThreshold) * c.field01E * flash.field8F9 *
-                                  flash.field8F9;
+    // 以下按 64 位无符号除；sensorPitchX16 为 0 时与原代码一样除零
+    const uint64_t pitch = flash.sensorPitchX16;
+    c.q8PerMm = static_cast<uint8_t>(0x1000u / pitch + 1);
+    c.sizeAreaScale = static_cast<uint16_t>(0x32400u / pitch / pitch);
+    c.mmPerQ8Q16 = static_cast<uint16_t>(0x10000u / static_cast<uint64_t>(static_cast<int64_t>(static_cast<int>(0x1000u / pitch) + 1)));
+    const uint32_t scaleProduct = static_cast<uint32_t>(flash.peakFilterReferenceThreshold) * c.sizeAreaScale * flash.defaultSizeMm *
+                                  flash.defaultSizeMm;
     c.field000 = static_cast<uint16_t>(0x100000u / static_cast<uint64_t>(scaleProduct >> 10));
 
     // 参考门限到 [field600, field5FC] 区间的线性映射：斜率（有符号除）与截距（无符号除）

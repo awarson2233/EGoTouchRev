@@ -1,5 +1,6 @@
 #include "Alg/Touch/TouchGeometry.h"
 
+#include "Alg/TouchSize/TouchSize.h"
 #include "App/TsaStatic.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
@@ -26,7 +27,7 @@ uint32_t GetSqDistPixel(uint16_t dim1A, uint16_t dim2A, uint16_t dim1B, uint16_t
 
 // Touch_GetSQDistMM @ 0x6ba734be
 uint16_t GetSqDistMm(uint16_t dim1A, uint16_t dim2A, uint16_t dim1B, uint16_t dim2B) {
-    return static_cast<uint16_t>(TS_SQPixelToSQMM(GetSqDistPixel(dim1A, dim2A, dim1B, dim2B)));
+    return static_cast<uint16_t>(TouchSize::SqPixelToSqMm(GetSqDistPixel(dim1A, dim2A, dim1B, dim2B)));
 }
 
 // Touch_GetSQDistPixelToEdge @ 0x6ba7329a
@@ -82,7 +83,7 @@ uint32_t GetDim2EdgeDist(uint16_t dim2) {
 
 // Touch_GetPostReportLength @ 0x6ba76958
 uint32_t GetPostReportLength(int startDim1, int startDim2, int endDim1, int endDim2) {
-    const auto pitch = static_cast<uint16_t>(TS_MMToPixel(2));
+    const auto pitch = static_cast<uint16_t>(TouchSize::MmToPixel(2));
     uint32_t length = 0;
     if (pitch != 0) {
         const int d1 = AbsWrap(static_cast<int>(static_cast<uint32_t>(endDim1) - static_cast<uint32_t>(startDim1)));

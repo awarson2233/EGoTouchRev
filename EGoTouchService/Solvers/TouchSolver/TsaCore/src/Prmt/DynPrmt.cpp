@@ -21,7 +21,7 @@ struct InitBlock {
 };
 constexpr InitBlock kInitBlocks[] = {
     {offsetof(DynamicPrmt, touchThold), offsetof(FlashPrmt, gloveExitThold), 0x24},
-    {offsetof(DynamicPrmt, field06C), offsetof(FlashPrmt, field8F9), 0x1},
+    {offsetof(DynamicPrmt, defaultSizeMm), offsetof(FlashPrmt, defaultSizeMm), 0x1},
     {offsetof(DynamicPrmt, defaultTouchAction), offsetof(FlashPrmt, defaultTouchAction), 0x10},
     {offsetof(DynamicPrmt, zTholdFlags), offsetof(FlashPrmt, zTholdFlags), 0xc},
     {offsetof(DynamicPrmt, field024), offsetof(FlashPrmt, field608), 0x1e},  // 含 CMF 门限的常态组

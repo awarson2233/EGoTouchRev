@@ -7,6 +7,7 @@
 #include "Alg/Peak/Peak.h"
 #include "Alg/Peak/PrevPeak.h"
 #include "Alg/Touch/PrevTouch.h"
+#include "Alg/TouchSize/TouchSize.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
@@ -73,7 +74,7 @@ void GetSqAccMmFromPrevPos(uint8_t curIdx, uint8_t prevIdx) {
     const auto sq1 = static_cast<uint32_t>(acc1 * acc1);
     uint32_t sum = static_cast<uint32_t>(acc2 * acc2) + sq1;
     if (sum < sq1) sum = 0xffffffffu;
-    cur.sqAccMmFromPrev = static_cast<uint16_t>(TS_SQPixelToSQMM(sum));
+    cur.sqAccMmFromPrev = static_cast<uint16_t>(TouchSize::SqPixelToSqMm(sum));
 }
 
 // ── UnitUpdate 中的标志 ──────────────────────────────────────────────
@@ -338,12 +339,12 @@ void SetVolatileFlagFalseFlickDetected(uint8_t curIdx, uint8_t prevIdx) {
     if ((Static().systemFlags & 0x20) != 0 && (IsProject("W169") || IsProject("W189"))) {
         wideMargin = peak.dim1 < 2 || flash.dim1Len - 2 <= peak.dim1 || peak.dim2 < 2 || flash.dim2Len - 2 <= peak.dim2;
     }
-    const uint32_t minDist = static_cast<uint16_t>(TS_MMToPixel(wideMargin ? 2 : 1));
+    const uint32_t minDist = static_cast<uint16_t>(TouchSize::MmToPixel(wideMargin ? 2 : 1));
     if ((minDist * minDist >> 1) >= cur.sqDistPxFromPrev) return;
 
     const auto majorDiff = static_cast<uint32_t>(std::abs(cur.majorMm - prev.majorMm));
     const auto minorDiff = static_cast<uint32_t>(std::abs(cur.minorMm - prev.minorMm));
-    const auto shapeSqPx = static_cast<uint32_t>(TS_SQMMToSQPixel(static_cast<uint16_t>(minorDiff * minorDiff + majorDiff * majorDiff)));
+    const auto shapeSqPx = static_cast<uint32_t>(TouchSize::SqMmToSqPixel(static_cast<uint16_t>(minorDiff * minorDiff + majorDiff * majorDiff)));
     if (cur.sqDistPxFromPrev < shapeSqPx >> 2) {
         prev.falseFlickPos = cur.pos;
         prev.falseFlickOffset.dim1 = static_cast<int16_t>(cur.pos.dim1 - prev.pos.dim1 + prev.falseFlickOffset.dim1);
@@ -703,7 +704,7 @@ int IsBetaGrip(uint8_t curIdx, uint8_t prevIdx) {
     }
     const uint16_t y = TSAOut_DisplayYPos(curIdx);
     const uint16_t yRes = TSA_GetYRes();
-    const auto bottomBand = static_cast<uint16_t>(TS_MMToDisplayPixel(15));
+    const auto bottomBand = static_cast<uint16_t>(TouchSize::MmToDisplayPixel(15));
     if (y < yRes - 1 - bottomBand) beta = false;
     if ((Prev(prevIdx).persistFlags & 0x1000000) != 0) beta = false;
 

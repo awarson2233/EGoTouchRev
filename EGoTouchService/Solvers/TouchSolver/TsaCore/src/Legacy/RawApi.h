@@ -14,6 +14,9 @@ extern "C" {
 // Common/TSABssMemoryImage.c
 void TSACoreRaw_LoadProjectTables(void);
 
+// Common/MISC.c
+int Misc_SqrtUint32(uint32_t value);
+
 // Core/AFE.c
 uint32_t AFE_IsRawJump(void);
 uint16_t AFE_GetColNum(void);
@@ -78,12 +81,5 @@ void HardwareAnalyzer_ReportToTSA(void);
 
 // Tracking/IDT.c
 void IDT_Process(uint8_t useStrictAccCheck);
-
-
-// Tracking/TS.c
-uint64_t TS_SQPixelToSQMM(uint32_t sqPixel);
-uint32_t TS_MMToDisplayPixel(uint8_t mm);
-int32_t TS_MMToPixel(uint8_t mm);
-uint64_t TS_SQMMToSQPixel(uint16_t sqMm);
 
 }  // extern "C"
