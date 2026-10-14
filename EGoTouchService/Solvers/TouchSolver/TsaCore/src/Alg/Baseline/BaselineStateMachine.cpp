@@ -6,6 +6,7 @@
 
 #include "Alg/Baseline/Baseline.h"
 #include "Alg/Baseline/BaselineInternal.h"
+#include "Alg/SelfData/SelfData.h"
 #include "Alg/Touch/TouchData.h"
 #include "Alg/TouchThold/TouchThold.h"
 #include "App/TsaBuffer.h"
@@ -71,7 +72,7 @@ void SaveNormalBl() {
 // BLSM_Reset @ 0x6ba4cf23（SS_Reset 被裁掉）
 void ResetAll() {
     Iir::Reset();
-    Self_Reset();
+    Self::Reset();
 }
 
 // BLSM_GetProperty @ 0x6ba4d523

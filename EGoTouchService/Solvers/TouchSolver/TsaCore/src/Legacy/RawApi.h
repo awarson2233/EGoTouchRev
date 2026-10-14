@@ -83,6 +83,16 @@ uint8_t TSAStatic_IsSignalReverted(void);
 uint32_t TSAStatic_IsAFTModeEnabled(void);
 uint32_t TSAStatic_GetSigThold(int mode);
 uint8_t TSAStatic_IsAllFreqNoisy(void);
+uint8_t TSAStatic_IsAllFreqBecomeNoisy(void);
+bool TSAStatic_IsHWReset(void);
+
+// Signal/CMF.c
+void CMF_Process(void);
+
+// Signal/TPSensor.c
+bool TPSensor_AddToBrokenSensorList(uint8_t col, uint8_t row, uint8_t type);
+uint64_t TPSensor_RevertScalingDif(uint16_t dif, uint8_t col, uint8_t row);
+void TPSensor_RevertTranslateRaw(int16_t* raw, uint32_t n);
 
 // Rejection/AntiTouch.c
 void AntiTouch_Report(void);
@@ -108,9 +118,6 @@ int16_t CMF_GetNoiseValue(uint8_t dim1, uint8_t dim2);
 // Signal/TPSensor.c
 char TPSensor_IsNoMoveInCorrection(uint32_t dim1, uint32_t dim2);
 void TPSensor_IsBrokenSensorInTouchZone(void* zone);
-
-// Signal/Self.c
-void Self_Reset(void);
 
 // Signal/HardwareAnalyzer.c
 void HardwareAnalyzer_ReportToTSA(void);

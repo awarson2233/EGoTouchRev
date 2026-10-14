@@ -6,6 +6,7 @@
 
 #include "Alg/Baseline/BaselineInternal.h"
 #include "Alg/Peak/PeakData.h"
+#include "Alg/SelfData/SelfData.h"
 #include "Alg/Touch/TouchData.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
@@ -52,10 +53,8 @@ bool SideTouch() { return (Static().featureFlags & kFeatSideTouch) != 0; }
 bool IsGame() { return static_cast<char>(TSA_IsGameScenario()) != 0; }
 void Debug(uint32_t bit) { Static().blDebugFlags |= bit; }
 int16_t DifAt(uint8_t col, uint8_t row) { return Buffers().dif[GridIndex(col, row)]; }
-/// Self 缓冲第 7 段按 int16 读（原代码如此，汇编 MOVZX word）。
-int16_t SelfBlResetWord(int i) { return reinterpret_cast<const int16_t*>(SelfForBlReset())[7 * kSelfSegment + i]; }
-/// 自容在该列强（超过 8000 且超过 SS Dif 的 10 倍）。
-bool StrongSelf(int col) { return kStrongSelf <= SelfForBlReset()[col] && SsDifForBl()[col] * 10 < SelfForBlReset()[col]; }
+/// 这一列的 Dif 和强（不小于 8001 且超过 SS Dif 的 10 倍）。
+bool StrongSelf(int col) { return kStrongSelf <= SelfForBlReset().sum[col] && SsDifForBl()[col] * 10 < SelfForBlReset().sum[col]; }
 
 // ToeSynaBl_IsColumnRawChanged @ 0x6bb46bc3
 // 这一列的 CMF 前 raw 与抓取时相比有格变化超过 200。
@@ -268,13 +267,13 @@ bool GripRegionAbnormal(bool protected2) {
         const int far = cols - 1 - c;
         if (StrongSelf(c)) {
             abnormal = true;
-        } else if (0x4b0 < SelfBlResetWord(c)) {
+        } else if (0x4b0 < SelfForBlReset().maxAbs[c]) {
             abnormal = false;
             break;
         }
         if (StrongSelf(far)) {
             abnormal = true;
-        } else if (0x4b0 < SelfBlResetWord(far)) {
+        } else if (0x4b0 < SelfForBlReset().maxAbs[far]) {
             abnormal = false;
             break;
         }
@@ -284,7 +283,7 @@ bool GripRegionAbnormal(bool protected2) {
         }
     }
     for (uint16_t c = 3; c < cols - 3; ++c) {
-        const int16_t v = SelfBlResetWord(c);
+        const int16_t v = SelfForBlReset().maxAbs[c];
         if (400 < v || v < -400) {
             abnormal = false;
             break;
@@ -420,14 +419,14 @@ bool IsBaselineAbnormalAftScreenOn() {
     const FlashPrmt& fl = PrmtFlash();
     bool active = false;
     if (Enabled() && Flag(kFlagBackLight)) {
-        const int32_t* self = SelfForBlReset();
+        const SelfData& self = SelfForBlReset();
         uint16_t cols = 0;
         uint16_t rows = 0;
         for (uint16_t c = 0; c < fl.dim1Len; ++c) {
-            if (600 < self[6 * kSelfSegment + c]) ++cols;
+            if (600 < self.strongAbsSum[c]) ++cols;
         }
         for (uint16_t r = 0; r < fl.dim2Len; ++r) {
-            if (0x96 < self[7 * kSelfSegment + fl.dim1Len + r]) ++rows;
+            if (0x96 < self.innerStrongAbsSum[fl.dim1Len + r]) ++rows;
         }
         const TsaPrpt& prpt = Prpt();
         active = fl.dim1Len * 2u / 3 < cols && fl.dim2Len >> 1 < rows && 3 < prpt.field180 && 3 < prpt.field182 &&
@@ -474,12 +473,12 @@ bool IsWaterDetected() {
     if (!Enabled() || !Flag(kFlagWater)) return false;
     TsaStatic& stat = Static();
     const FlashPrmt& fl = PrmtFlash();
-    const int32_t* self = SelfForBlReset();
+    const SelfData& self = SelfForBlReset();
     const int32_t* ss = SsDifForBl();
     uint8_t active = 0;
     uint8_t quiet = 0;
     for (uint16_t c = 2; c < fl.dim1Len - 2; ++c) {
-        if (self[6 * kSelfSegment + c] <= self[4 * kSelfSegment + c] + 0x4b0) continue;
+        if (self.strongAbsSum[c] <= self.strongSum[c] + 0x4b0) continue;
         bool near = false;
         for (int k = -1; k < 2; ++k) {
             const int32_t v = ss[c + k];

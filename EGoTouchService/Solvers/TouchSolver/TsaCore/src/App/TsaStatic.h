@@ -18,7 +18,8 @@ struct ExceptionState {
     uint8_t wetFinger;  // FI：本帧有区域判为湿手指
     uint8_t reserved015[0x3];
     uint32_t detected;  // 本帧检出的异常（各区域与水下检测取最大），Exception_Process 末尾清零
-    uint8_t reserved01C[0x4];
+    uint8_t reserved01C[0x2];
+    int16_t field01E;  // HIException 写（被裁掉），RxLineFilter 读
 };
 static_assert(sizeof(ExceptionState) == 0x020);
 static_assert(offsetof(ExceptionState, debounceFrames) == 0x000);
@@ -26,8 +27,36 @@ static_assert(offsetof(ExceptionState, noiseSettleCount) == 0x008);
 static_assert(offsetof(ExceptionState, lastDetected) == 0x010);
 static_assert(offsetof(ExceptionState, wetFinger) == 0x014);
 static_assert(offsetof(ExceptionState, detected) == 0x018);
+static_assert(offsetof(ExceptionState, field01E) == 0x01E);
 
 /// g_tsaStaticGrid（经 g_tsaStaticPtr 选用）：系统级运行状态。
+/// TsaPrpt 里一个方向的线统计极值（Self_GetPropertyDim），下标相对该方向的第一条线。
+struct SelfPrpt {
+    int32_t maxSum;
+    uint8_t maxSumIdx;
+    uint8_t reserved005[0x3];
+    int32_t minSum;
+    uint8_t minSumIdx;
+    uint8_t reserved00D[0x3];
+    int32_t maxPosSum;
+    uint8_t maxPosSumIdx;
+    uint8_t reserved015[0x3];
+    int32_t minNegSum;
+    uint8_t minNegSumIdx;
+    uint8_t reserved01D[0x3];
+    int32_t strongSumTotal;  // 各线 strongSum 之和
+};
+static_assert(sizeof(SelfPrpt) == 0x024);
+static_assert(offsetof(SelfPrpt, maxSum) == 0x000);
+static_assert(offsetof(SelfPrpt, maxSumIdx) == 0x004);
+static_assert(offsetof(SelfPrpt, minSum) == 0x008);
+static_assert(offsetof(SelfPrpt, minSumIdx) == 0x00C);
+static_assert(offsetof(SelfPrpt, maxPosSum) == 0x010);
+static_assert(offsetof(SelfPrpt, maxPosSumIdx) == 0x014);
+static_assert(offsetof(SelfPrpt, minNegSum) == 0x018);
+static_assert(offsetof(SelfPrpt, minNegSumIdx) == 0x01C);
+static_assert(offsetof(SelfPrpt, strongSumTotal) == 0x020);
+
 struct TsaStatic {
     uint8_t reserved000[0x3];
     uint8_t afeIdle;  // AFE 处于 IDLE 模式（TSAStatic_PreProcess 每帧取）
@@ -294,7 +323,10 @@ struct TsaPrpt {
     uint8_t reserved190[0x10];
     uint16_t field1A0;
     uint16_t field1A2;
-    uint8_t reserved1A4[0xD4];
+    uint8_t reserved1A4[0x88];
+    SelfPrpt selfCols;  // 各列的线统计极值
+    SelfPrpt selfRows;  // 各行的线统计极值
+    uint8_t reserved274[0x4];
     uint32_t blStage;  // BLSM 阶段
     uint32_t prevBlStage;
     uint32_t blPropertyFlags;  // BLSM_GetProperty 本帧的基线属性（kBlProp*）
@@ -379,6 +411,8 @@ static_assert(offsetof(TsaPrpt, field18C) == 0x18C);
 static_assert(offsetof(TsaPrpt, field18E) == 0x18E);
 static_assert(offsetof(TsaPrpt, field1A0) == 0x1A0);
 static_assert(offsetof(TsaPrpt, field1A2) == 0x1A2);
+static_assert(offsetof(TsaPrpt, selfCols) == 0x22C);
+static_assert(offsetof(TsaPrpt, selfRows) == 0x250);
 static_assert(offsetof(TsaPrpt, blStage) == 0x278);
 static_assert(offsetof(TsaPrpt, prevBlStage) == 0x27C);
 static_assert(offsetof(TsaPrpt, blPropertyFlags) == 0x280);

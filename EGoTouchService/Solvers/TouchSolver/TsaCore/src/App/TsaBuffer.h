@@ -21,7 +21,7 @@ struct TsaBufferTable {
     void* silentTouchNum;
     void* unnormalizedRaw;
     void* preUnnormalizedRaw;
-    void* rawGrid;
+    int16_t* rawGrid;  // 归一化前后的 raw（原地归一化）
     void* difGrid;
     void* preCmfRawGrid;
     int16_t* cleanBaseline;  // BLReset 存下的干净基线
@@ -38,7 +38,7 @@ struct TsaBufferTable {
     int16_t* raw2RawDif;
     void* raw2RawDifAftCmf;
     void* preDif;
-    void* gridIirDif;
+    int16_t* gridIirDif;  // GridIIR：上一帧滤波后的 Dif
     void* blGrid;
     int16_t* blNormal;
     int8_t* tzGrid;
@@ -112,11 +112,7 @@ static_assert(offsetof(TsaBufferTable, gripRegion) == 0x150);
     return static_cast<uint16_t>(dim1 + dim2 * static_cast<uint32_t>(PrmtFlash().dim1Len));
 }
 
-/// 缓冲表之外，另有几块固定地址的自容缓冲（Self / SS 模块写）。
-/// 元素按 Dim1 的列在前、Dim2 的行在后排成一维；Self 缓冲每 160 个元素一段，各段的含义随 Self 模块改写时再定。
-inline constexpr int kSelfSegment = 160;
-[[nodiscard]] inline int32_t* SelfBuf() noexcept { return &Image::At<int32_t>(0x6bc18880); }          // g_tsaBufSelf
-[[nodiscard]] inline int32_t* SelfForBlReset() noexcept { return &Image::At<int32_t>(0x6bc24080); }   // g_tsaBufSelfForBlRst
+/// 缓冲表之外，另有两块固定地址的自容 Dif（SS 模块写，SS 被裁掉）。元素按 Dim1 的列在前、Dim2 的行在后排成一维。
 [[nodiscard]] inline int32_t* SsPreCmfDif() noexcept { return &Image::At<int32_t>(0x6bc3ad80); }      // g_tsaBufSSPreCMFDif
 [[nodiscard]] inline int32_t* SsDifForBl() noexcept { return &Image::At<int32_t>(0x6bc3d900); }       // g_tsaBufSsDifForBl
 /// 每格的传感器标志（g_tpSensorFlag，TPSensor 模块分配）；bit5 为坏点。

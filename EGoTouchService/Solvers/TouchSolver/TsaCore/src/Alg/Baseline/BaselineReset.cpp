@@ -13,6 +13,7 @@
 #include "Alg/Baseline/Baseline.h"
 #include "Alg/Baseline/BaselineInternal.h"
 #include "Alg/Peak/PeakData.h"
+#include "Alg/SelfData/SelfData.h"
 #include "Alg/Touch/TouchData.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
@@ -127,8 +128,8 @@ bool IsTouchToBeProtected() {
     const bool fullIncell = fl.sensorArchitecture == 3;
     bool r = false;
     if (prev.count == 1 && (prev.unit[0].volatileFlags & kVolatileEdgeTouch) == 0) {
-        const int32_t* self = SelfBuf();
-        r = fullIncell || ((prpt.field16C < self[prpt.field170] || prpt.field16C < self[prpt.field171 + fl.dim1Len]) &&
+        const SelfData& self = SelfBuf();
+        r = fullIncell || ((prpt.field16C < self.sum[prpt.field170] || prpt.field16C < self.sum[prpt.field171 + fl.dim1Len]) &&
                            fl.fingerThold * 3 / 2 < prpt.field16C);
     } else if (prev.count == 2 &&
                ((prev.unit[0].volatileFlags & kVolatileEdgeTouch) == 0 || (prev.unit[1].volatileFlags & kVolatileEdgeTouch) == 0)) {
@@ -487,18 +488,18 @@ void IsBaselineAbnormalType1(bool overNoise, bool protected2) {
 bool IsFullPanelOverNoise() {
     const FlashPrmt& fl = PrmtFlash();
     if (fl.cmfEnabled == 0 && fl.toeSynaBl == 0) return false;
-    const int32_t* self = SelfBuf();
+    const SelfData& self = SelfBuf();
     uint8_t cols = 0;
     uint8_t rows = 0;
     int rising = 0;
     const bool side = SideTouch();
     const uint16_t end = static_cast<uint16_t>(fl.dim1Len - (side ? 1 : 0));
     for (uint16_t c = side ? 1 : 0; c < end; ++c) {
-        if (600 < self[6 * kSelfSegment + c]) ++cols;
-        if (self[4 * kSelfSegment + c] + 400 < self[6 * kSelfSegment + c]) ++rising;
+        if (600 < self.strongAbsSum[c]) ++cols;
+        if (self.strongSum[c] + 400 < self.strongAbsSum[c]) ++rising;
     }
     for (uint16_t r = 0; r < fl.dim2Len; ++r) {
-        if (0x96 < self[7 * kSelfSegment + fl.dim1Len + r]) ++rows;
+        if (0x96 < self.innerStrongAbsSum[fl.dim1Len + r]) ++rows;
     }
     if (rising <= 2) return false;
     if (!AfterInit(kAfterInitMs)) {
@@ -844,7 +845,7 @@ bool IsTouchToBeProtected2(bool needTwo) {
     const TsaPrpt& prpt = Prpt();
     const uint8_t cols = PrmtFlash().dim1Len;
     const int32_t* ss = SsPreCmfDif();
-    const int32_t* self = SelfBuf();
+    const SelfData& self = SelfBuf();
     const int peakLimit = PrmtDynamic().peakThold / 3 * 4;
     const InnerPeak inner;
     uint16_t n = 0;
@@ -855,8 +856,8 @@ bool IsTouchToBeProtected2(bool needTwo) {
             continue;
         }
         const PeakEntry& pk = Peaks().entry[u.peakIdx];
-        if ((0 < ss[cols + pk.dim2] || 0 < ss[pk.dim1]) && 0 < self[5 * kSelfSegment + cols + pk.dim2] + 100 &&
-            0 < self[5 * kSelfSegment + pk.dim1] + 100) {
+        if ((0 < ss[cols + pk.dim2] || 0 < ss[pk.dim1]) && 0 < self.innerStrongSum[cols + pk.dim2] + 100 &&
+            0 < self.innerStrongSum[pk.dim1] + 100) {
             ++n;
         }
     }

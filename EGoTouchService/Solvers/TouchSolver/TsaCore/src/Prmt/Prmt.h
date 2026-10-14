@@ -143,7 +143,8 @@ struct FlashPrmt {
     uint8_t reserved5DC[0x20];
     int32_t field5FC;
     int32_t field600;
-    uint8_t reserved604[0x4];
+    uint8_t rawForceNormalize;  // Rawdata：raw 按有符号值归一化，且总是做归一化
+    uint8_t reserved605[0x3];
     uint8_t field608;  // DynPrmt 初值块（0x608..0x626）的开头
     uint8_t reserved609[0x17];
     CmfThold cmfTholdNormal;  // 常态
@@ -183,11 +184,14 @@ struct FlashPrmt {
     uint8_t jitRadiusDisplay;  // 抗抖动半径（显示像素），ConstPrmt 换算成 jitRadius
     uint8_t liftOffJitterSuppress;  // Filter：抬起过程中信号骤降时按抗抖动半径压住坐标
     uint8_t noCurvePredict;  // Filter：为 0 时轨迹折返后按速度外推坐标
-    uint8_t reserved8A4[0x15];
+    uint8_t rxLineZ8Ratio;  // RxLineFilter：同一扫描线上更强的峰 Z8 超过本峰 Z8 的这个比例（/128）判为串扰
+    uint8_t rxLineMaxDist;  // RxLineFilter：两峰的扫描线位置相差小于它才算同一线
+    uint8_t reserved8A6[0x13];
     uint8_t gripPeakEdgeDist;  // 峰到边缘的距离超过它不算握持峰；也是握持合并峰的搜索半径
     uint16_t gripTimeInterval;  // 握持格与非握持格的按下时间差超过它才拆分区域
     uint16_t maxNotGripTime;  // 非握持峰的握持时间不超过它才看椭圆度
-    uint8_t reserved8BE[0x3B];
+    uint8_t reserved8BE[0x3A];
+    uint8_t gridIirWeight;  // GridIIR：全频点噪声时 Dif 的 IIR 权重（/256）
     uint8_t defaultSizeMm;  // 尚无尺寸的触点的默认尺寸（mm）；DynPrmt 初值
     uint8_t reserved8FA[0x2];
     uint32_t defaultTouchAction;  // 新触点默认的 TouchAction；也是 DynPrmt 初值块（0x8fc..0x90c）的开头
@@ -380,6 +384,7 @@ static_assert(offsetof(FlashPrmt, gloveExitThold) == 0x5D8);
 static_assert(offsetof(FlashPrmt, gloveThold) == 0x5DA);
 static_assert(offsetof(FlashPrmt, field5FC) == 0x5FC);
 static_assert(offsetof(FlashPrmt, field600) == 0x600);
+static_assert(offsetof(FlashPrmt, rawForceNormalize) == 0x604);
 static_assert(offsetof(FlashPrmt, field608) == 0x608);
 static_assert(offsetof(FlashPrmt, cmfTholdNormal) == 0x620);
 static_assert(offsetof(FlashPrmt, cmfTholdAlt) == 0x626);
@@ -411,9 +416,12 @@ static_assert(offsetof(FlashPrmt, field8A0) == 0x8A0);
 static_assert(offsetof(FlashPrmt, jitRadiusDisplay) == 0x8A1);
 static_assert(offsetof(FlashPrmt, liftOffJitterSuppress) == 0x8A2);
 static_assert(offsetof(FlashPrmt, noCurvePredict) == 0x8A3);
+static_assert(offsetof(FlashPrmt, rxLineZ8Ratio) == 0x8A4);
+static_assert(offsetof(FlashPrmt, rxLineMaxDist) == 0x8A5);
 static_assert(offsetof(FlashPrmt, gripPeakEdgeDist) == 0x8B9);
 static_assert(offsetof(FlashPrmt, gripTimeInterval) == 0x8BA);
 static_assert(offsetof(FlashPrmt, maxNotGripTime) == 0x8BC);
+static_assert(offsetof(FlashPrmt, gridIirWeight) == 0x8F8);
 static_assert(offsetof(FlashPrmt, defaultSizeMm) == 0x8F9);
 static_assert(offsetof(FlashPrmt, defaultTouchAction) == 0x8FC);
 static_assert(offsetof(FlashPrmt, clickDuration) == 0x900);
