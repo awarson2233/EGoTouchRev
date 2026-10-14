@@ -196,13 +196,13 @@ private:
     static constexpr bool kAxisRotated = false;
     static constexpr int kDim1Length = 60;
     static constexpr int kDim2Length = 40;
-    static constexpr int kDim1PitchSize = 0x102C;
-    static constexpr int kDim2PitchSize = 0x0A50;
-    static constexpr int kTxPitch = 250;
-    static constexpr int kRxPitch = 200;
-    static constexpr int kStylusTiltParam = 5;
-    static constexpr std::array<uint16_t, 4> kRatioThresholds{{20, 90, 155, 200}};
-    static constexpr std::array<uint16_t, 4> kRatioScales{{0, 850, 950, 1000}};
+    static constexpr int kDim1PitchSize = 0x102C;   // asa[0xA2C]
+    static constexpr int kDim2PitchSize = 0x0A50;   // asa[0xA2A]
+    static constexpr int kTxPitch = 60;             // asa[0xA28]
+    static constexpr int kRxPitch = 40;             // asa[0xA29]
+    static constexpr int kStylusTiltParam = 144;    // stylus unit[0x26A]
+    static constexpr std::array<uint16_t, 4> kRatioThresholds{{40, 90, 155, 200}};  // stylus unit[0x252]
+    static constexpr std::array<uint16_t, 4> kRatioScales{{0, 850, 950, 1000}};     // stylus unit[0x25E]
 
     std::array<uint16_t, kHistorySize> m_signalRatioBuf{};
     int m_signalRatioBufCnt = 0;
