@@ -555,6 +555,7 @@ bool DeviceRuntime::IsTsaCoreSolverEnabled() const {
 void DeviceRuntime::IngestBtMcuPressure(uint16_t p) {
   std::lock_guard<std::mutex> lk(m_pipelineMu);
   m_stylusPipeline.SetBtMcuPressure(p);
+  m_tsaCoreSolver.OnBtPressure(0, 0, 0, p);
 }
 
 void DeviceRuntime::IngestBtMcuPressurePacket(
@@ -562,6 +563,8 @@ void DeviceRuntime::IngestBtMcuPressurePacket(
     const std::array<uint16_t, 4> &rawPressure, uint8_t freq1, uint8_t freq2) {
   std::lock_guard<std::mutex> lk(m_pipelineMu);
   m_stylusPipeline.SetBtMcuPressurePacket(pressure, rawPressure, freq1, freq2);
+  // ApDaemon 收到压力包时同样通知 TSACore：它据此判断蓝牙笔是否还活着
+  m_tsaCoreSolver.OnBtPressure(pressure[0], pressure[1], pressure[2], pressure[3]);
 }
 
 void DeviceRuntime::ApplyPenStateToStylusPipeline() {
@@ -1362,27 +1365,32 @@ void DeviceRuntime::OnStreaming() {
     // Skipped-master frames carry fresh stylus/slave data only; do not feed
     // them into touch modules, otherwise BaselineTracker treats the missing
     // master as invalid input and clears cross-frame finger visualization state.
-    if (touchFrame.masterWasRead) {
-      if (m_masterParserOnly.load(std::memory_order_relaxed)) {
+    // TSACore 是例外：原版每一帧都调用它，跳过 master 的帧只跑笔相关的手指侧逻辑
+    // （StylusAft 的抑制计数按调用次数走）。
+    if (m_masterParserOnly.load(std::memory_order_relaxed)) {
+      if (touchFrame.masterWasRead) {
         m_touchPipeline.ProcessMasterParserOnly(touchFrame);
-      } else if (m_useTsaCoreSolver.load(std::memory_order_relaxed)) {
-        // 解析器仍由 TouchPipeline 负责（热力图 / suffix 供诊断与 IPC 使用），
-        // 触点改由 TSACore 解算。
-        m_touchPipeline.ProcessMasterParserOnly(touchFrame);
-        dispatchTouch = m_tsaCoreSolver.Process(touchFrame);
-        afeActions = m_tsaCoreSolver.PendingAfeActions();
-      } else {
-        dispatchTouch = m_touchPipeline.Process(touchFrame);
       }
+    } else if (m_useTsaCoreSolver.load(std::memory_order_relaxed)) {
+      // 解析器仍由 TouchPipeline 负责（热力图 / suffix 供诊断与 IPC 使用），
+      // 触点改由 TSACore 解算。
+      if (touchFrame.masterWasRead) {
+        m_touchPipeline.ProcessMasterParserOnly(touchFrame);
+      }
+      m_tsaCoreSolver.SetStylusConnected(m_chip.IsStylusConnected());
+      dispatchTouch = m_tsaCoreSolver.Process(touchFrame);
+      afeActions = m_tsaCoreSolver.PendingAfeActions();
+    } else if (touchFrame.masterWasRead) {
+      dispatchTouch = m_touchPipeline.Process(touchFrame);
+    }
 
-      // Serialized re-check: if parser-only was enabled between pipeline
-      // processing and this check, suppress touch dispatch. The lock
-      // guarantees that SetMasterParserOnlyMode's FlushTouchAllUp()
-      // either hasn't happened yet (touch→all-up = correct HID order)
-      // or already happened (dispatch suppressed = correct).
-      if (dispatchTouch && m_masterParserOnly.load(std::memory_order_relaxed)) {
-        dispatchTouch = false;
-      }
+    // Serialized re-check: if parser-only was enabled between pipeline
+    // processing and this check, suppress touch dispatch. The lock
+    // guarantees that SetMasterParserOnlyMode's FlushTouchAllUp()
+    // either hasn't happened yet (touch→all-up = correct HID order)
+    // or already happened (dispatch suppressed = correct).
+    if (dispatchTouch && m_masterParserOnly.load(std::memory_order_relaxed)) {
+      dispatchTouch = false;
     }
   }
 
@@ -1502,6 +1510,9 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
     std::lock_guard<std::mutex> lk(m_penStateMu);
     m_penState.factoryStatusFlags = Himax::Pen::ApplyFactoryStatusFlagUpdate(
         m_penState.factoryStatusFlags, ev.code, payload0);
+    // ApDaemon 的 DriverThp::GetStatus：状态字交给 TSACore（屏幕旋转、笔吸附 / 休眠、
+    // 连接、防误触模式）
+    m_tsaCoreSolver.SetPenStatusWord(m_penState.factoryStatusFlags);
   }
 
   switch (ev.code) {
