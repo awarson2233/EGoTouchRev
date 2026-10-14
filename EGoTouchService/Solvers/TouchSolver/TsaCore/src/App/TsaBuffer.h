@@ -49,13 +49,13 @@ struct TsaBufferTable {
     void* rawStoredSinceMutualSsNotMatch;
     int8_t* tzPrev;  // 上一帧的区域图
     void* tzZonePrev;
-    void* tzZone;
+    uint8_t* tzZone;  // 每格所属区域的编码基数（TouchZoneUnit::mapTag），只记强信号格
     void* tzId;
-    void* subTz;
-    void* gripStage;
+    int8_t* subTz;  // SubTZ 的遍历标记：(编码 + 1) × Dif 符号，0 为未访问
+    uint8_t* gripStage;  // 每格的握持阶段，1 为握持
     void* gripTime;
     void* gripTimeOff;
-    void* gripRegion;
+    uint8_t* gripRegion;
 };
 static_assert(sizeof(TsaBufferTable) == 0x158);
 static_assert(offsetof(TsaBufferTable, timeOff) == 0x000);

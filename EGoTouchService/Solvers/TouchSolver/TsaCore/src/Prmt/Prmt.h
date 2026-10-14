@@ -145,7 +145,9 @@ struct FlashPrmt {
     uint8_t sigMult;  // 触点区域遍历门限相对峰值的比例（/128）：默认
     uint8_t sigMultNormal;  // 设备接地
     uint8_t sigMultSD;  // 设备悬浮
-    uint8_t reserved821[0x15];
+    uint8_t reserved821[0x12];
+    uint8_t mfCentToMinPkRatio;  // 质心到最小峰的信号比低于它判为多指（TZ 形状判定、SubTZ 多指判定）
+    uint8_t reserved834[0x2];
     uint8_t largeObjectSizeMm;  // 判为大物体的尺寸
     uint8_t reserved837[0x1];
     uint32_t aftEdgeWidthThold;  // AFT 的 ewx / ewy 边缘宽度门限
@@ -346,6 +348,7 @@ static_assert(offsetof(FlashPrmt, noisyTouchDownDebounce) == 0x818);
 static_assert(offsetof(FlashPrmt, sigMult) == 0x81E);
 static_assert(offsetof(FlashPrmt, sigMultNormal) == 0x81F);
 static_assert(offsetof(FlashPrmt, sigMultSD) == 0x820);
+static_assert(offsetof(FlashPrmt, mfCentToMinPkRatio) == 0x833);
 static_assert(offsetof(FlashPrmt, largeObjectSizeMm) == 0x836);
 static_assert(offsetof(FlashPrmt, aftEdgeWidthThold) == 0x838);
 static_assert(offsetof(FlashPrmt, ctdEdge) == 0x840);

@@ -67,6 +67,7 @@ uint8_t TSAStatic_IsAFEJustExitIDLEMode(void);
 bool TSAStatic_IsFreqShiftDone(void);
 uint64_t TSAStatic_IsProximityEnabled(void);
 uint8_t TSAStatic_IsSignalReverted(void);
+uint32_t TSAStatic_IsAFTModeEnabled(void);
 
 // Baseline/BLIIR.c
 void BLIIR_CalcDiffCommon(int16_t* difOut, int16_t* raw, int16_t* baseline);
@@ -80,6 +81,11 @@ uint64_t PressureDrift_Detect(uint8_t dim1, uint8_t dim2);
 
 // Detection/TZ.c
 void TZ_GetExceptionRatio(void* zone);
+void TZ_GetAxisInternal(double m0, double m1Dim1, double m1Dim2, double m2Dim1Dim2, double m2Dim1, double m2Dim2,
+                        uint16_t* majorAxis, uint16_t* minorAxis, int8_t* angle);
+void TZ_SeparateZoneRegretProcess(void* zone, void* subZone);
+void TZ_TryExtraMergePeak(void* zone, uint8_t dim1, uint8_t dim2);
+uint8_t TZ_GetAutoCentToMinPkRatio(void* zone, uint8_t peakA, uint8_t peakB);
 
 // Rejection/AntiTouch.c
 void AntiTouch_Report(void);
