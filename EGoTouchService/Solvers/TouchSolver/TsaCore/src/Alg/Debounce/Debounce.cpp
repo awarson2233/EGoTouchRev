@@ -14,7 +14,6 @@ namespace Solvers::Tsa::Core::Debounce {
 
 namespace {
 
-constexpr uint32_t kPersistFastClick = 0x40000;  // TouchUnit::persistFlags：快速点击
 constexpr int16_t kNoiseHigh = 500;              // 共模噪声超出 (kNoiseLow, kNoiseHigh] 时按 noisyTouchDownDebounce 防抖
 constexpr int16_t kNoiseLow = -400;
 

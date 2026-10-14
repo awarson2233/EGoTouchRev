@@ -39,7 +39,9 @@ struct TsaStatic {
     uint8_t field111;
     uint8_t reserved112[0x2];
     uint8_t fullIncellSignalDisparity;  // 整屏 incell 信号失衡（峰检测按 SD 模式处理）
-    uint8_t reserved115[0x2DC];
+    uint8_t reserved115[0xD];
+    uint16_t strongTapCount;  // TE：报过点的触点抬起时峰值超过 2 倍 finger 门限、长轴小于 21 mm 的连续次数（到 5 为止）
+    uint8_t reserved124[0x2CD];
     uint8_t field3F1;
     uint8_t reserved3F2[0x9];
     uint8_t field3FB;
@@ -62,6 +64,7 @@ static_assert(offsetof(TsaStatic, featureFlags2) == 0x108);
 static_assert(offsetof(TsaStatic, processingState) == 0x10C);
 static_assert(offsetof(TsaStatic, field111) == 0x111);
 static_assert(offsetof(TsaStatic, fullIncellSignalDisparity) == 0x114);
+static_assert(offsetof(TsaStatic, strongTapCount) == 0x122);
 static_assert(offsetof(TsaStatic, field3F1) == 0x3F1);
 static_assert(offsetof(TsaStatic, field3FB) == 0x3FB);
 

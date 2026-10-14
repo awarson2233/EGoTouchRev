@@ -7,6 +7,8 @@
 namespace Solvers::Tsa::Core::Debounce {
 
 inline constexpr uint16_t kNoTouchDown = 0xffff;
+/// TouchUnit::persistFlags：按下防抖期间判出的快速点击（抬起时可进入 kLiftOffHold）。
+inline constexpr uint32_t kPersistFastClick = 0x40000;
 
 /// 新触点的按下防抖帧数：按区域异常、峰门限、信号增长、侧边、噪声等逐项取较大值，任一否决条件成立时为 kNoTouchDown。
 [[nodiscard]] uint16_t TouchDownNum(uint8_t prevIdx, uint8_t curIdx);

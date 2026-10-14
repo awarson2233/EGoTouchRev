@@ -30,6 +30,7 @@ uint32_t TSA_IsOutOfWaterDetected(void);
 char* TSA_GetPrmtName(void);
 int16_t TSA_GetMinSigPrpt(void);
 uint64_t TSA_IsGameScenario(void);
+uint32_t TSA_IsWindowsPadFeatureEnabled(void);
 void TSA_ScenarioProcess(void);
 uint16_t TSA_SideTouchDim1Center(uint8_t sideIdx);
 uint16_t TSA_SideTouchDim2Center(uint8_t sideIdx);
@@ -47,6 +48,7 @@ char TSAOut_Angle(char angle);
 // Core/TSAStatic.c
 uint8_t TSAStatic_IsChargerPlugged(void);
 uint64_t TSAStatic_IsSafeBaselineApplied(void);
+void TSAStatic_ProcessAftTouchEvent(void);
 uint8_t TSAStatic_IsAFEJustEnterIDLEMode(void);
 uint8_t TSAStatic_IsAFEJustExitIDLEMode(void);
 
