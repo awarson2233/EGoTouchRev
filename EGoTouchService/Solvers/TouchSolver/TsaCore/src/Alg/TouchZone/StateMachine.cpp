@@ -11,6 +11,7 @@
 #include "Alg/Sensor/Sensor.h"
 #include "Alg/Touch/PrevTouch.h"
 #include "Alg/Touch/TouchData.h"
+#include "Alg/TpSensor/TpSensor.h"
 #include "Alg/TouchZone/SubTouchZone.h"
 #include "Alg/TouchZone/TouchZone.h"
 #include "Alg/TouchZone/TouchZoneInternal.h"
@@ -158,7 +159,7 @@ void GetPrevTouch(TouchZoneUnit& z) {
 
 // TZ_GetProperty @ 0x6ba8b126
 void GetProperty(TouchZoneUnit& z) {
-    TPSensor_IsBrokenSensorInTouchZone(&z);
+    if (TpSensor::IsBrokenSensorInZone(z.mapTag)) z.flags |= kZoneBrokenSensor;
     CentroidCore(z);
     GetEdgeTouchedFlag(z);
     GetHtiValidFlag(z);

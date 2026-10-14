@@ -3,6 +3,7 @@
 #include <cstdlib>
 
 #include "Alg/Baseline/Baseline.h"
+#include "Alg/TpSensor/TpSensor.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
@@ -91,7 +92,7 @@ void RetrieveBaseline(int16_t* bl, const int16_t* dif) {
             }
             int v = dif[i];
             if ((stat.featureFlags & kFeatSideTouch) == 0 || (c != 0 && c != fl.dim1Len - 1)) {
-                v = static_cast<int16_t>(TPSensor_RevertScalingDif(static_cast<uint16_t>(v), c, r));
+                v = TpSensor::RevertScalingDif(static_cast<int16_t>(v), c, r);
             }
             if (IsProcessNeeded()) v = v * kUnitScale / Scale();
             bl[i] = static_cast<int16_t>(stat.signalReverted == 0 ? v + bl[i] : bl[i] - v);
@@ -112,7 +113,7 @@ void GetUnNormalizedBaseline(int16_t* bl, uint32_t n) {
             }
         }
     }
-    TPSensor_RevertTranslateRaw(bl, n);
+    TpSensor::RevertTranslateRaw(bl, n);
 }
 
 }  // namespace Solvers::Tsa::Core::Rawdata

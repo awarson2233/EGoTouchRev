@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+#include "Alg/TpSensor/TpSensor.h"
 #include "App/TsaBuffer.h"
 #include "Common/Assert.h"
 #include "Common/Image.h"
@@ -125,7 +126,7 @@ void Process() {
         for (uint8_t c = 0; c < fl.dim1Len; ++c) {
             const uint16_t i = GridIndex(c, r);
             if (deb[i] != 0) --deb[i];
-            if (deb[i] != 0 && !TPSensor_AddToBrokenSensorList(c, r, kBrokenByBadChannel)) break;
+            if (deb[i] != 0 && !TpSensor::AddToBrokenSensorList(c, r, kBrokenByBadChannel)) break;
         }
     }
 }

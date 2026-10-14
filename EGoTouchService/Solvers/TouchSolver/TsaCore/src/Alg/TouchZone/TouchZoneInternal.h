@@ -43,9 +43,6 @@ inline constexpr uint8_t kNoPeak = kMaxPeakNum;
 [[nodiscard]] inline PeakTable& PeaksGrid() noexcept { return Image::At<PeakTable>(0x6bbc0980); }
 /// g_tsaBufTimeHand：每格自手掌按下以来的时间。
 [[nodiscard]] inline int16_t* TimeHand() noexcept { return Image::At<int16_t*>(0x6bba3518); }
-/// g_tpSensorDim1Offset / Dim2Offset：每格传感器中心相对格中心的偏移（1/128 格）。
-[[nodiscard]] inline int8_t* SensorDim1Offset() noexcept { return Image::At<int8_t*>(0x6bb80e08); }
-[[nodiscard]] inline int8_t* SensorDim2Offset() noexcept { return Image::At<int8_t*>(0x6bb80e10); }
 /// g_tsaBufSelf 里 TZ 借用的两段（每个区域重新清零），下标 dim1，或 dim1Len + dim2：
 /// 每列 / 行遍历到的信号和，与未达门限的格数。
 [[nodiscard]] inline int32_t* LineSigSum() noexcept { return &Image::At<int32_t>(0x6bc18880 + 0x1400); }

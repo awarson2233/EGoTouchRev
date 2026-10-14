@@ -8,6 +8,7 @@
 #include "Alg/Peak/PeakData.h"
 #include "Alg/Touch/PrevTouch.h"
 #include "Alg/Touch/TouchData.h"
+#include "Alg/TpSensor/TpSensor.h"
 #include "Alg/TouchZone/InnerCorner.h"
 #include "Alg/TouchZone/TouchZoneInternal.h"
 #include "App/TsaBuffer.h"
@@ -333,8 +334,8 @@ void TraversalNeighbor(TouchZoneUnit& z, uint16_t from, const TraversalCtx& ctx)
             z.centroidWeightDim1 += w1;
             z.centroidWeightDim2 += w2;
             z.sigSum += sig;
-            z.centroidMomentDim1 += (SensorDim1Offset()[cell] + d1 * 0x80) * w1 / 128;
-            z.centroidMomentDim2 += (SensorDim2Offset()[cell] + d2 * 0x80) * w2 / 128;
+            z.centroidMomentDim1 += (TpSensor::Dim1Offset()[cell] + d1 * 0x80) * w1 / 128;
+            z.centroidMomentDim2 += (TpSensor::Dim2Offset()[cell] + d2 * 0x80) * w2 / 128;
             InnerCorner::Process(z, d1, d2);
         }
     }

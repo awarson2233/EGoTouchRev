@@ -56,6 +56,36 @@ static_assert(sizeof(CtdEdgePrmt) == 0x011);
 static_assert(offsetof(CtdEdgePrmt, segmentNum) == 0x000);
 static_assert(offsetof(CtdEdgePrmt, segment) == 0x001);
 
+/// g_tsaPrmtFlash：机型参数表（W273AS2700 由 Prmt::LoadProject 装入）。原厂按 0x840 字节分成三段，这里按整块的偏移排布。
+/// 调参表（TtPrmt）与运行时参数（RtPrmt）每帧把各自的当前值写回其中的对应字段，名字取自它们的键名与说明。
+/// 单个传感器中心相对格中心的偏移（1/128 格），TZ 求质心时加上。
+struct SensorOffset {
+    uint8_t dim1;
+    uint8_t dim2;
+    uint8_t flags;  // bit0：启用
+    int8_t dim1Offset;
+    int8_t dim2Offset;
+};
+static_assert(sizeof(SensorOffset) == 0x005);
+static_assert(offsetof(SensorOffset, dim1) == 0x000);
+static_assert(offsetof(SensorOffset, dim2) == 0x001);
+static_assert(offsetof(SensorOffset, flags) == 0x002);
+static_assert(offsetof(SensorOffset, dim1Offset) == 0x003);
+static_assert(offsetof(SensorOffset, dim2Offset) == 0x004);
+
+/// 单个传感器的 raw 平移与 Dif 缩放（TPSensor）。
+struct SensorTranslate {
+    uint8_t dim1;
+    uint8_t dim2;
+    uint16_t difScale;  // Dif × difScale / 1024
+    int16_t rawOffset;  // raw 加上的平移量
+};
+static_assert(sizeof(SensorTranslate) == 0x006);
+static_assert(offsetof(SensorTranslate, dim1) == 0x000);
+static_assert(offsetof(SensorTranslate, dim2) == 0x001);
+static_assert(offsetof(SensorTranslate, difScale) == 0x002);
+static_assert(offsetof(SensorTranslate, rawOffset) == 0x004);
+
 /// ER（边缘修正）的一条逻辑边：触点到逻辑边缘的距离落在 (minDistMm, maxDistMm) 内时做 move-in 修正（只用低字节）。
 /// 四条边依次是上、下、左、右（TSA side 1、2、4、8）。
 struct ErEdgeMmPrmt {
@@ -79,8 +109,6 @@ static_assert(sizeof(ErEdgePrmt) == 0x006);
 static_assert(offsetof(ErEdgePrmt, minDist) == 0x000);
 static_assert(offsetof(ErEdgePrmt, maxDist) == 0x002);
 
-/// g_tsaPrmtFlash：机型参数表（W273AS2700 由 Prmt::LoadProject 装入）。原厂按 0x840 字节分成三段，这里按整块的偏移排布。
-/// 调参表（TtPrmt）与运行时参数（RtPrmt）每帧把各自的当前值写回其中的对应字段，名字取自它们的键名与说明。
 struct FlashPrmt {
     uint8_t reserved000[0x18];
     uint8_t displayXAxis;  // 与 dim1Axis 相等时 Dim1 是显示的 X 方向
@@ -222,7 +250,14 @@ struct FlashPrmt {
     uint8_t reserved93F[0x1];
     int16_t chargerNoiseTholdPercent;  // Hybrid Incell 充电噪声门限相对 HTI 门限的百分比；也是 DynPrmt 初值块（0x940..0x94c）的开头
     uint16_t field942;  // 调参表里标为 obsolete
-    uint8_t reserved944[0xD0C];
+    uint8_t reserved944[0x8];
+    uint8_t sensorOffsetNum;
+    SensorOffset sensorOffset[38];
+    uint8_t reservedA0B[0x2];
+    uint8_t sensorTranslateNum;
+    SensorTranslate sensorTranslate[20];
+    uint8_t brokenSensorCompensation;  // TPSensor：用邻格外推补偿坏传感器的 Dif
+    uint8_t reservedA87[0xBC9];
     uint16_t field1650;
     uint16_t field1652;
     uint16_t field1654;
@@ -443,6 +478,11 @@ static_assert(offsetof(FlashPrmt, waterSigLowPercent) == 0x93D);
 static_assert(offsetof(FlashPrmt, waterSigHighPercent) == 0x93E);
 static_assert(offsetof(FlashPrmt, chargerNoiseTholdPercent) == 0x940);
 static_assert(offsetof(FlashPrmt, field942) == 0x942);
+static_assert(offsetof(FlashPrmt, sensorOffsetNum) == 0x94C);
+static_assert(offsetof(FlashPrmt, sensorOffset) == 0x94D);
+static_assert(offsetof(FlashPrmt, sensorTranslateNum) == 0xA0D);
+static_assert(offsetof(FlashPrmt, sensorTranslate) == 0xA0E);
+static_assert(offsetof(FlashPrmt, brokenSensorCompensation) == 0xA86);
 static_assert(offsetof(FlashPrmt, field1650) == 0x1650);
 static_assert(offsetof(FlashPrmt, field1652) == 0x1652);
 static_assert(offsetof(FlashPrmt, field1654) == 0x1654);

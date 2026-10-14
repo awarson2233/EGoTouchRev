@@ -133,7 +133,6 @@ bool IsTouchNeedMoveInCorrection(uint8_t curIdx) {
         MoveInCorrectedButDisabled() = 1;
         return false;
     }
-    if (TPSensor_IsNoMoveInCorrection(pos.dim1, pos.dim2) != 0) return false;
     return prmt.minDist < dist && dist < prmt.maxDist && cur.majorMm <= kMaxMoveInMajorMm;
 }
 

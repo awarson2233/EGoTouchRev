@@ -115,8 +115,6 @@ static_assert(offsetof(TsaBufferTable, gripRegion) == 0x150);
 /// 缓冲表之外，另有两块固定地址的自容 Dif（SS 模块写，SS 被裁掉）。元素按 Dim1 的列在前、Dim2 的行在后排成一维。
 [[nodiscard]] inline int32_t* SsPreCmfDif() noexcept { return &Image::At<int32_t>(0x6bc3ad80); }      // g_tsaBufSSPreCMFDif
 [[nodiscard]] inline int32_t* SsDifForBl() noexcept { return &Image::At<int32_t>(0x6bc3d900); }       // g_tsaBufSsDifForBl
-/// 每格的传感器标志（g_tpSensorFlag，TPSensor 模块分配）；bit5 为坏点。
-[[nodiscard]] inline uint8_t* TpSensorFlags() noexcept { return Image::At<uint8_t*>(0x6bb80e00); }
 /// 接近检测用的基线（g_tsaBufProxBL）；接近检测被裁掉后仍随基线复位同步。
 [[nodiscard]] inline int16_t*& ProxBl() noexcept { return Image::At<int16_t*>(0x6bba3f90); }
 

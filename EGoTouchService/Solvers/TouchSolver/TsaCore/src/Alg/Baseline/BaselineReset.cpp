@@ -15,6 +15,7 @@
 #include "Alg/Peak/PeakData.h"
 #include "Alg/SelfData/SelfData.h"
 #include "Alg/Touch/TouchData.h"
+#include "Alg/TpSensor/TpSensor.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
@@ -879,7 +880,7 @@ bool IsRawChanged(int16_t* stored, bool store) {
     const FlashPrmt& fl = PrmtFlash();
     const FlashConstPrmt& c = PrmtFlashConst();
     TsaAssert(c.field024 <= kMaxCmfLen);
-    const uint8_t* sensorFlags = TpSensorFlags();
+    const uint8_t* sensorFlags = TpSensor::Flags();
     const uint16_t first = SideTouch() ? 1 : 0;
     const uint16_t lines = static_cast<uint16_t>(c.field025 - first);
     uint16_t changed = 0;
@@ -887,7 +888,7 @@ bool IsRawChanged(int16_t* stored, bool store) {
         for (uint16_t k = 0; k < c.field024; ++k) {
             const auto idx = static_cast<uint16_t>(fl.dim1Axis == 1 ? k + fl.dim1Len * line : line + fl.dim1Len * k);
             const int d = reinterpret_cast<const uint16_t*>(stored)[idx] - cur[idx];
-            if (RawChangedThold(k, line) < std::abs(d) && (sensorFlags[idx] & 0x20) == 0) ++changed;
+            if (RawChangedThold(k, line) < std::abs(d) && (sensorFlags[idx] & TpSensor::kFlagNotch) == 0) ++changed;
         }
     }
     return 4 <= changed;
