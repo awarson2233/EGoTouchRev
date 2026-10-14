@@ -6,21 +6,24 @@
 
 | 术语 | 含义 |
 |------|------|
-| raw 管线 | [raw](/EGoTouchService/Solvers/TouchSolver/raw) 下 9 个活跃目录里 76 个从 `TSACore.dll` 反编译重建的 C 文件（`_unused` 是裁掉的模块）。它是**手指 MS 管线**加 StylusAft 防误触；主动笔坐标解算 `TSA_ASAProcess` 已裁剪成空桩（[TSAPrunedStubs.h](/EGoTouchService/Solvers/TouchSolver/raw/include/TSAPrunedStubs.h#L421)），笔仍由现有 `StylusPipeline` 负责 |
+| raw 管线 | [raw](/EGoTouchService/Solvers/TouchSolver/raw) 下 9 个活跃目录里 76 个从 `TSACore.dll` 反编译重建的 C 文件（`_unused` 是裁掉的模块）。它是**手指 MS 管线**加 StylusAft 防误触；主动笔坐标解算（`ASA_MainProcess` 及其闭包）没有还原，`TSA_ASAProcess` 只保留外壳，笔的报告由现有 `StylusPipeline` 解出后经宿主桥送入，见第 7 节 |
 | 内存镜像 | `g_tsaMemoryImage`，覆盖原 DLL VA `0x6bb4e000..0x6bcad000` 的 1.44 MB 数组。所有全局变量都经 `TSA_MEM_AT(va)` 映射到这里，所以整个 TSACore 是**进程级单例** |
 | AFE 帧 | `AFE_Frame`（[TSAPrmtStaticTables.h](/EGoTouchService/Solvers/TouchSolver/raw/include/TSAPrmtStaticTables.h#L969)），即 `himax_thp_drv` 交给 TSACore 的每帧结构：`pRawData` 指向 2400 个以 `0x7ffe` 为零点的 `uint16` |
 | AFE HAL spec | `g_afeHalSpec`，决定 `AFE_SetFrameTrans` / `AFE_SetCapsTrans` 按哪一版布局拷贝帧与 caps。DLL `.data` 初值为 `0x011a00`（1.26.0），ApDaemon 从不调用 `TSA_SetAFESpecVersion` |
 | ctrl flags | `TSA_ProcessingAFEFrame` 的第二参数，宿主每帧维护的 32 位控制字（首帧、基线重置、IDLE、跳频完成等） |
 | AFE 适配层 | 本文提议的新模块，复刻 `himax_thp_drv` 对 SPI 原始帧做的预处理，产出 TSACore 期望的输入域 |
+| 笔帧 | `AFE_Frame +0x40` 指向的 `stylusFrame`（驱动的 `g_StylusOut`）：两张 TX 整屏矩阵指针加 `status`，`0x12` 表示本帧有笔信号，`0x06` 表示没有 |
+| 笔状态字 | THP_Service 汇总的 16 位笔状态（连接、吸附 / 休眠、旋转角、防误触模式），业务侧是 `RuntimePenState::factoryStatusFlags` |
 
 ## 架构
 
-替换后的形态：手指解算由一个薄 C++ 外观类 `TsaCoreSolver` 承担，对 [DeviceRuntime.cpp](/EGoTouchService/Device/runtime/DeviceRuntime.cpp#L1358-L1367) 保持与 `TouchPipeline` 同样的调用面（`Process(HeatmapFrame&) -> bool dispatchTouch`），内部按「宿主三件套」拆开：AFE 适配层顶替 `himax_thp_drv`，Host Shim 顶替 `ApDaemon` 的 `TsaFrame`，输出映射器把 `TSA_Rpt*` 翻成现有 `TouchContact`，闭环策略把 TSACore 的请求翻成交给宿主执行的 AFE 动作。
+替换后的形态：手指解算由一个薄 C++ 外观类 `TsaCoreSolver` 承担，对 [DeviceRuntime.cpp](/EGoTouchService/Device/runtime/DeviceRuntime.cpp#L1366-L1385) 保持与 `TouchPipeline` 同样的调用面（`Process(HeatmapFrame&) -> bool dispatchTouch`），内部按「宿主三件套」拆开：AFE 适配层顶替 `himax_thp_drv`，Host Shim 顶替 `ApDaemon` 的 `TsaFrame`，输出映射器把 `TSA_Rpt*` 翻成现有 `TouchContact`，闭环策略把 TSACore 的请求翻成交给宿主执行的 AFE 动作。
 
 ```mermaid
 flowchart LR
     SPI["Chip GetFrame<br/>5063B master + slave"] --> AD["HimaxAfeAdapter<br/>(复刻 himax_thp_drv)"]
-    AD -->|"AFE_Frame + status"| SH["TsaHostShim<br/>(复刻 ApDaemon TsaFrame)"]
+    AD -->|"AFE_Frame + status<br/>笔帧"| SH["TsaHostShim<br/>(复刻 ApDaemon TsaFrame)"]
+    PEN["StylusPipeline 笔报告<br/>BT MCU 笔状态字 / 压力包"] --> SH
     SH -->|"TSA_ProcessingAFEFrame(frame, ctrl, ts)"| RAW["TSACoreRaw<br/>C 静态库 / 单例"]
     RAW -->|"TSA_Rpt*"| OM["TsaOutputMapper"]
     OM -->|"TouchContact[]"| VHF["VhfReporter<br/>DispatchTouch"]
@@ -42,12 +45,13 @@ sequenceDiagram
     participant H as TsaHostShim
     participant T as TSACoreRaw
     RT->>S: Process(frame)
-    S->>A: Build(rawPtr, rawLen)
-    A-->>S: AFE_Frame{pRawData, status, curScanFreq...}
+    S->>A: Build(rawPtr, rawLen)，BuildStylus(rawPtr, rawLen)
+    A-->>S: AFE_Frame{pRawData, status, curScanFreq...}，笔帧状态
     S->>H: UpdateCtrlFlags(frame.status)
     alt status & 0x40 (SOS / 校验失败)
         H-->>S: 本帧不进 TSACore，走恢复
     else 正常
+        H->>T: TSAHost_SetStylusReport(笔报告)
         H->>T: TSA_ProcessingAFEFrame(&frame, ctrl, ts)
         H->>H: ctrl &= 0xf0ffffe0
         H->>T: TSA_SetFeatures(features)
@@ -67,6 +71,7 @@ sequenceDiagram
 | P1（已完成） | `HimaxAfeAdapter`，按 `himax_thp_drv` 真实逻辑复刻预处理 | 以 P2 真机触摸正确为准，不与原驱动缓冲逐字节比对 |
 | P2（已完成） | `TsaHostShim` + `TsaOutputMapper` + `TsaCoreSolver` 外观，经开关替换 `TouchPipeline` | `arm64-Debug-TsaCore` 真机触摸正常 |
 | P3（代码完成，待真机验证） | 闭环控制（跳频、扫描率、IDLE、校准），连同宿主电源状态机升级（[device-runtime-power-state-machine.md](/docs/artifacts/device-runtime-power-state-machine.md)） | 长时运行无基线漂移、跳频请求能落到 IC、灭屏 / 合盖 / 休眠后触摸可恢复 |
+| 笔接缝（代码完成，待真机验证） | 笔帧状态、笔报告、笔状态字接进 TSACore，StylusAft 按原版运行 | 纯手指回放逐帧不变；真机上写字时掌根不出点、笔尖附近没有误触 |
 | P4 | 渐进整理成可读源码：结构体恢复、重命名、去镜像 | 每一步的 DvrReplay 逐帧输出与整理前逐位一致 |
 
 ## 分点解释
@@ -193,7 +198,7 @@ flowchart TD
 
 **status 与扫描参数。** 校验通过时基值为 `0x02`，再按 suffix 叠加：`word[0]==1 → |0x01`、跳频在途且当前频率等于目标且 `word[2]!=0 → |0x04`、`word[3]==0x00bb → |0x08`、`word[14]` 或 `word[16] > 1499 → |0x20`、`word[6]!=0 → |0x40`。`curScanFreq = {75,113}[word[10]]`，`curScanRate = 120`。测试录制里出现过的位是 `0x02 | 0x08 | 0x20`。
 
-`AFE_Frame` 按 spec 0x011a00 的布局填：`+0x10 pRawData`，`+0x18 pLineData = NULL`，`+0x30 curScanFreq`，`+0x32 curScanRate`，`+0x34 status`，`+0x38 dwGesture = 0`，`+0x40 pStylusData`（ASA 已裁剪，传 NULL），其余置 0。缓冲区由适配层持有；`AFE_SetFrame` 会把 `pRawData` 深拷进 `g_afeGridData`，所以不需要跨帧保活。
+`AFE_Frame` 按 spec 0x011a00 的布局填：`+0x10 pRawData`，`+0x18 pLineData = NULL`，`+0x30 curScanFreq`，`+0x32 curScanRate`，`+0x34 status`，`+0x38 dwGesture = 0`，`+0x40 pStylusData`（笔帧，见第 7 节），其余置 0。缓冲区由适配层持有；`AFE_SetFrame` 会把 `pRawData` 深拷进 `g_afeGridData`，所以不需要跨帧保活。
 
 **方向。** 驱动把整帧倒序（等价于旋转 180°），TSACore 的 pitch 映射表、增益表、边缘参数都以倒序后的方向为准，所以输入必须倒序；现有 `TouchPipeline` 不倒序，两条管线的输出坐标因此互为 `x' = 2560 - x`。显示方向在输出侧还原，见第 5 节。
 
@@ -226,18 +231,18 @@ ctrl flags 由 shim 每帧根据适配层 `status` 维护（TSACore 的消费点
 
 | 位 | 置位来源 | 生命周期 |
 |----|---------|---------|
-| 0, 1 | 初始化；AFE 重新启动（`TsaCoreSolver::OnAfeStarted`，宿主状态机进入取帧时调用，[DeviceRuntime.cpp](/EGoTouchService/Device/runtime/DeviceRuntime.cpp#L1265-L1283)） | 一次性 |
+| 0, 1 | 初始化；AFE 重新启动（`TsaCoreSolver::OnAfeStarted`，宿主状态机进入取帧时调用，[DeviceRuntime.cpp](/EGoTouchService/Device/runtime/DeviceRuntime.cpp#L1268-L1286)） | 一次性 |
 | 2 | IDLE 退出：`status&1` 由 1 变 0，或回放工具注入的退出（`OnAfeIdleExit`） | 一次性 |
-| 3 | `status & 0x08` 的**上升沿**，清除握手见第 7 节 | 一次性 |
+| 3 | `status & 0x08` 的**上升沿**，清除握手见第 8 节 | 一次性 |
 | 4 | `status & 0x04` 跳频完成 | 一次性 |
 | 5 | `status & 0x01` IDLE | 跟随电平 |
 | 8 | 灭屏。不维护：业务侧灭屏即停止取帧，TSACore 收不到帧 | — |
 | 17 | `status & 0x20` 充电噪声 | 跟随电平 |
 | 18 | 常驻 | 持续 |
 
-每帧调用 `TSA_ProcessingAFEFrame(&frame, ctrl, ts)` 后执行 `ctrl &= 0xf0ffffe0` 与 `TSA_SetFeatures(features)`，再查询闭环请求（[TsaHostShim.cpp](/EGoTouchService/Solvers/TouchSolver/TsaCore/TsaHostShim.cpp#L115-L124)）。校验失败或 `status & 0x40` 的帧不进 TSACore，也不产生闭环动作。
+每帧调用 `TSA_ProcessingAFEFrame(&frame, ctrl, ts)` 后执行 `ctrl &= 0xf0ffffe0` 与 `TSA_SetFeatures(features)`，再查询闭环请求（[TsaHostShim.cpp](/EGoTouchService/Solvers/TouchSolver/TsaCore/TsaHostShim.cpp#L153-L168)）。校验失败或 `status & 0x40` 的帧不进 TSACore，也不产生闭环动作。
 
-bit 3 与 ApDaemon 的做法不同：ApDaemon 的 `TsaFrame::UpdateStatusCalibration` 是「status 带 0x08 就置位」并立刻 `ClearStatus(8)`，固件下一帧就把标志清掉。TSACore 把 ctrl 低 4 位任一非零都视为硬件复位态（`TSAStatic_IsHWReset`），期间不出点。业务侧原先从不发 `ClearStatus`（命令是空桩），suffix `word[3]` 因此恒为 `0xbb`；现在清除握手由第 7 节的闭环完成，shim 仍只在上升沿置位一次（[TsaHostShim.cpp](/EGoTouchService/Solvers/TouchSolver/TsaCore/TsaHostShim.cpp#L91-L96)），因为重发间隔内标志还会多留几帧，按电平置位会把复位态拉长。ctrl 的 bit 28–29（屏幕旋转）在活跃代码里没有读取点，不维护。
+bit 3 与 ApDaemon 的做法不同：ApDaemon 的 `TsaFrame::UpdateStatusCalibration` 是「status 带 0x08 就置位」并立刻 `ClearStatus(8)`，固件下一帧就把标志清掉。TSACore 把 ctrl 低 4 位任一非零都视为硬件复位态（`TSAStatic_IsHWReset`），期间不出点。业务侧原先从不发 `ClearStatus`（命令是空桩），suffix `word[3]` 因此恒为 `0xbb`；现在清除握手由第 8 节的闭环完成，shim 仍只在上升沿置位一次（[TsaHostShim.cpp](/EGoTouchService/Solvers/TouchSolver/TsaCore/TsaHostShim.cpp#L126-L131)），因为重发间隔内标志还会多留几帧，按电平置位会把复位态拉长。ctrl 的 bit 28–29（屏幕旋转）在活跃代码里没有读取点，不维护。
 
 第三参数 `ts` 是毫秒：TSACore 把它存进 `TSAStatic`，各处的防抖窗口（如 `TSAStatic_IsChargerPlugged` 的 `+2000`）都按毫秒比较。运行时取单调时钟，回放时由调用方显式给定（录制里有逐帧系统时间就用它，否则按 120 Hz 合成），保证回放结果只取决于输入。`AFE_Frame` 的 `+0x00 / +0x04 / +0x08`（秒、微秒、帧序号）由同一个时间戳派生。
 
@@ -299,9 +304,9 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    F["DeviceRuntime::OnStreaming<br/>master 帧"] --> SW{"m_useTsaCoreSolver"}
-    SW -- 否 --> TP["TouchPipeline::Process"]
-    SW -- 是 --> PA["TouchPipeline::ProcessMasterParserOnly<br/>热力图 / suffix，供诊断与 IPC"]
+    F["DeviceRuntime::OnStreaming<br/>每一帧"] --> SW{"m_useTsaCoreSolver"}
+    SW -- "否，且有 master" --> TP["TouchPipeline::Process"]
+    SW -- 是 --> PA["TouchPipeline::ProcessMasterParserOnly<br/>热力图 / suffix，供诊断与 IPC<br/>仅有 master 的帧"]
     PA --> TS["TsaCoreSolver::Process"]
     TP --> D["VhfReporter::DispatchTouch"]
     TS --> D
@@ -311,14 +316,93 @@ flowchart TD
 2. **单例**：TSACore 全部状态在 `g_tsaMemoryImage` 里，一个进程只有第一个完成初始化的 `TsaHostShim` 可用，其余实例的 `Process` 直接返回 false。新旧管线 A/B 对比要分进程跑。实例析构后可以重新初始化，但 TSACore 在初始化时申请的堆缓冲没有释放路径。
 3. **线程**：只在 worker 线程、`m_pipelineMu` 内调用。宿主状态机的进入 / 离开动作通过 `OnAfeStarted`（芯片 Init 成功：适配层、闭环、输出记账归零，TSACore 按首帧重建基线）和 `OnAfeStopped`（停止取帧：输出记账归零，HID 侧由宿主统一抬起）通知解算器。
 4. **配置**：`registerBindings` / `applyConfig` 的旧参数对 TSACore 不生效。TSACore 参数来自内置 `kW273AS2700_FlashPrmt`（[TSAPrmt.c](/EGoTouchService/Solvers/TouchSolver/raw/Prmt/TSAPrmt.c#L108-L116)）。
-5. **与笔的关系**：TSACore 内部的 ASA（主动笔解算）已裁剪，StylusAft 拿不到笔的状态，落笔时的手掌抑制目前不起作用；`TouchPipeline` 里的 `StylusTouchSuppressor` 也不在这条路径上。
+5. **与笔的关系**：笔的坐标仍由 `StylusPipeline` 解算，调用 `Process` 之前 `frame.stylus` 必须已经处理过；解算器把笔报告、笔帧状态和笔会话状态送进 TSACore，手指侧的笔相关逻辑按原版运行，见第 7 节。`TouchPipeline` 里的 `StylusTouchSuppressor` 不在这条路径上。
 6. **充电器**：`TsaCoreSolver::SetChargerPlugged` 对应 `thp_afe_set_charger`，业务侧还没有充电状态事件接进来，默认按未插入处理。
 
 验证链路：[TsaRawReplay](/Tools/TsaRawReplay/main.cpp) 默认驱动 `TsaCoreSolver`，加 `--legacy` 驱动 `TouchPipeline`，两次运行输出同一格式的触点 CSV（帧号、点数、ID、事件、像素坐标），可以直接对比点数、ID 连续性与坐标；最终以原机 ApDaemon 上报为准。工具依赖 DVR 读取器回填原始帧，只在 Debug 配置下可用。测试录制（480 帧多指点按）上 `TsaCoreSolver` 两次运行逐字节一致，92 次 Down 对应 87 次 Up 加录制结束时仍在场的 5 个点，没有不成对的事件。与 `TouchPipeline` 对比：两条管线都报出的触点坐标一致（配对点的坐标差中位数约 1 px，说明两轴翻转正确），但点数差别很大——`TsaCoreSolver` 在 409 帧里有点，`TouchPipeline` 只在 69 帧里有点，后者的 351 个触点里只有 180 个在 80 px 内能找到对应点。哪一边更接近原机，要用原机 ApDaemon 的上报来判定。
 
-### 7. P3：闭环控制
+### 7. 笔状态接缝：StylusSolver 出笔，TSACore 管手指侧
 
-TSACore 每帧处理完会给出四类请求，ApDaemon 在 `TsaFrame::Process` 的帧后段把它们连同本帧状态位一起翻成 `himax_thp_drv` 命令。业务侧拆成两层：[TsaAfeControl](/EGoTouchService/Solvers/TouchSolver/TsaCore/TsaAfeControl.h) 只做决策，不碰硬件，回放工具可以直接打印；[DeviceRuntime](/EGoTouchService/Device/runtime/DeviceRuntime.cpp#L1411-L1447) 在 worker 线程上同步执行这些动作，再把结果回报给解算器。
+**取舍。** 笔的坐标、压力、倾角继续由 `StylusPipeline`（`StylusSolver`）解算并上报，TSACore 的 ASA 本体不还原；TSACore 只需要知道「笔在不在、落在哪、朝哪倾、蓝牙会话是什么状态」，手指侧依赖这些量的原版逻辑就能原样运行。理由有三条：
+
+1. `TSA_ASAProcess` 的调用闭包是 369 个函数，raw 里缺 329 个（约 118 KB 机器码、1.18 万行反编译）。手头的录制里没有一份同时带手指矩阵和落笔数据，还原出来无从验证，还要顶掉已经可用的笔。
+2. 手指侧读笔状态的入口很窄：`TSA_StylusAftProcess`（[TSA.c](/EGoTouchService/Solvers/TouchSolver/raw/Core/TSA.c#L547-L591)）只经 `TSA_ASAAFEStatus`、`ASA_GetRptInRange`、`TSA_RptASA*` 读 `g_curASOut`，其余是 `g_asaStatic` 的状态位和蓝牙会话的三个全局。把这几处按原版的写入时机填对，就不需要 ASA 的解算本体。
+3. 原版对 HPP3 笔的「落笔时手掌抑制」和「笔尖附近误触抑制」是同一个模块 StylusAft（[StylusAft.c](/EGoTouchService/Solvers/TouchSolver/raw/Rejection/StylusAft.c)，raw 里是完整的反编译），外加按屏幕旋转方向工作的 GripFilter。旧管线的 `StylusTouchSuppressor` 与 `TouchTracker` 里的近似实现是另起的规则和阈值，不搬到这条路径。
+
+```mermaid
+flowchart LR
+    SL["slave 帧"] --> BS["HimaxAfeAdapter::BuildStylus<br/>笔帧状态 0x12 / 0x06"]
+    SS["StylusSolver<br/>frame.stylus.output"] --> MR["TsaCoreSolver::MakeStylusReport<br/>换到 TSACore 坐标系"]
+    EV["BT MCU 笔事件<br/>笔状态字 / 压力包"] --> PS["TsaHostShim::SetPenStatusWord<br/>OnBtPressure"]
+    BS --> PF["TsaHostShim::ProcessFrame"]
+    MR --> PF
+    PF -->|"AFE_Frame.pStylusData<br/>TSAHost_SetStylusReport"| ASA["TSA_ASAProcess 外壳<br/>ASAHost_MainProcess"]
+    PS -->|"TSA_SetASABluetooth*<br/>TSA_EnableScenario(0x20)<br/>TSA_SetScreenRotateState"| G["蓝牙会话状态<br/>场景位 / 旋转状态"]
+    ASA -->|"g_curASOut / g_asaStatic"| AFT["TSA_StylusAftProcess<br/>手掌与笔尖误触抑制"]
+    G --> AFT
+    ASA --> MODE["TSA_InStylusMode<br/>笔模式下不请求进 IDLE"]
+    G --> GF["GripFilter / HotZone<br/>按旋转方向"]
+```
+
+1. **笔帧**（[HimaxAfeAdapter.cpp](/EGoTouchService/Solvers/TouchSolver/TsaCore/HimaxAfeAdapter.cpp#L245)）。驱动每帧都交出 `g_StylusOut`。`status = 0x12` 的条件是：slave 校验通过（`slave + 5` 起 167 个小端字求和，低 16 位为 0 且和不为 0）、第一个 9×9 块的两个头字不是 `(0xff, 0xff)`、笔已连接（`thp_afe_set_stylus_connect`）、master suffix 缓存的 `word[24] < 3000`；否则 `status = 0x06`，两个矩阵指针为空。两个块在 `slave + 7` 与 `slave + 173`，按 `thp_unpack_9x9_block_to_matrix` 展开：中心行列取两个头字的低字节（有符号），格子 `(r, c)` 的下标是 `(row - 4 + r) * 60 + (col - 4 + c)`，越界丢弃，写到 `matrix[2399 - index]`。驱动在 status 上叠加的跳频请求位 `0x40` 没有复刻，笔的跳频握手在业务侧。
+2. **没有 master 的帧。** 笔已连接且 slave 有信号时，驱动在奇数帧跳过 master，`pRawData` 为空；ApDaemon 的 `TsaFrame::Process` 不看有没有手指数据，照样调用 `TSA_ProcessingAFEFrame`，这时 `TSA_MSProcess` 只做收尾，ASA、StylusAft 与输出后处理仍然运行，StylusAft 的抑制计数因此按调用次数递减。`TsaCoreSolver::Process`（[TsaCoreSolver.cpp](/EGoTouchService/Solvers/TouchSolver/TsaCore/TsaCoreSolver.cpp#L16-L54)）对 `masterWasRead == false` 的帧，在笔帧状态为 `0x12` 时用 `BuildWithoutMaster` 组出 `status = 0x02 | 缓存的 suffix 位` 并以空的 `pRawData` 调用；[DeviceRuntime.cpp](/EGoTouchService/Device/runtime/DeviceRuntime.cpp#L1366-L1385) 在 TSACore 生效时每一帧都调用解算器，`TouchPipeline` 的解析仍只在有 master 的帧上跑。
+3. **ASA 外壳与宿主桥**（[ASAHostBridge.c](/EGoTouchService/Solvers/TouchSolver/raw/Rejection/ASAHostBridge.c)）。`TSA_ASAProcess` 按反编译还原：`ValidJudgment`、进出笔模式、`g_asaStatic` 状态位的帧前帧后处理、计数器清理、`HardwareAnalyzer_ASA_Process`，以及蓝牙会话的三个设置函数和 `HPP3_BtStatusProcess`。只有解算本体 `ASA_MainProcess` 换成 `ASAHost_MainProcess`：控制流与返回值不变，报告坐标、倾角、压力和状态位改从 `TSAHost_SetStylusReport` 送进来的宿主报告填入 `g_curASOut`；抬笔时书写先退成一帧不带压力的悬停，再清空。ASA 本体还原以后，把这一个函数换回去即可。与原函数有两处差别：`ASA_MainProcess` 之后的 StylusRecheck（`dwFeatureFlags2 & 0x100`，本机型开启，用笔的峰值与上一帧触点的重叠来否决假笔并 `ASA_Reset`）没有实现，宿主报告视为已经复核过；`HPP3_FreqShiftProcess` 只保留开头的 `HPP3_BtStatusProcess`。
+4. **坐标与倾角**（[TsaCoreSolver.cpp](/EGoTouchService/Solvers/TouchSolver/TsaCore/TsaCoreSolver.cpp#L92-L110)）。`StylusSolver` 的坐标是面板原始行列方向、每个节点 1024 单位；TSACore 用驱动倒序后的方向，ASA 的报告量程是显示像素（`GetClipReport`：`round(分辨率 × 坐标 / 节点数 / 1024)`，夹在 `[0, 分辨率 − 1]`）。所以 `X = round(2560 × (61440 − x) / 61440)`、`Y = round(1600 × (40960 − y) / 40960)`，两个轴都倒过来，倾角相应取反。状态位：悬停在场 bit0，书写 bit1；悬停时压力填 0。坐标的方向与半格约定用真实笔数据核对过（见本节的验证），倾角符号还没有。
+5. **笔会话状态**（[TsaHostShim.cpp](/EGoTouchService/Solvers/TouchSolver/TsaCore/TsaHostShim.cpp#L86-L115)）。ApDaemon 的 `DriverThp::GetStatus` 与 `stylus3`、`stylusaft` 两个监听把笔状态字翻成 TSACore 调用，这里照做；业务侧在 `DeviceRuntime::IngestPenEvent`（[DeviceRuntime.cpp](/EGoTouchService/Device/runtime/DeviceRuntime.cpp#L1515)）与压力包入口（[DeviceRuntime.cpp](/EGoTouchService/Device/runtime/DeviceRuntime.cpp#L555-L568)）把最新值交给解算器。事件线程只写原子量，真正写入 TSACore 发生在下一次 `Process` 开头（`ApplyPenSession`），TSACore 的全局状态始终只在取帧线程上改动。
+
+| 状态字 | 来源事件 | 下发 | 作用 |
+|--------|----------|------|------|
+| bit 1 | `PEN_CONN_STATUS` | 上升沿调 `TSA_SetASABluetoothConnectStatus(1)`；断开时原版不通知 | `g_bt_pen_status = 1`，StylusAft 的总开关 |
+| bit 2–3 | `PEN_CUR_STATUS` | 每次连调两次 `TSA_SetASABluetoothPenStatus`，参数依次是 `(w >> 2) & 1`、`(w >> 2) & 2`，后一次覆盖前一次 | `g_btPenStatus` 最终只剩吸附位，影响手掌阈值 |
+| bit 6–7 | `PEN_ROATE_ANGLE` | `TSA_SetScreenRotateState(w >> 6)` | `TSAStatic_IsScreenRotated`，GripFilter 与热区按方向调整 |
+| bit 8 | `PEN_TOUCH_MODE` | 变化时 `TSA_EnableScenario(0x20)` / `TSA_DisableScenario(0x20)` | StylusAft 的严格模式 |
+| 压力包 | BT MCU 压力上报 | `TSA_SetASABluetoothPressure(p0..p3)` | 刷新 `g_lastBtCmdTime`，`g_bt_pen_status = 1`；60 s 没有包则降为 2 |
+
+原厂日志（`Service_LogFile`）与这张表吻合：一个月里 33 次启动，每次注册监听时打一条 `StylusAftExecute THP_DisableScenario, THP#32`，没有出现过 Enable，即场景 `0x20` 在日常使用中一直关闭；`DriverThp::GetStatus` 的 `pen status PenHibernate / PenAttach` 行有 1.5 万条。
+
+6. **接通后 StylusAft 的行为。** 以下都是反编译里的原逻辑，接缝只负责让它的输入有值。`StylusAft_PostProcessUnit`（[StylusAft.c](/EGoTouchService/Solvers/TouchSolver/raw/Rejection/StylusAft.c#L4-L136)）对每个触点依次判断：
+
+```mermaid
+flowchart TD
+    A["触点"] --> B{"蓝牙笔连接状态 != 0"}
+    B -- 否 --> Z["不处理"]
+    B -- 是 --> C{"年龄 < 241 帧<br/>或抑制计数 > 0"}
+    C -- 否 --> Z
+    C -- 是 --> D{"噪声等级 < 3"}
+    D -- 否 --> Y["清掉撤回标记与抑制计数"]
+    D -- 是 --> E["撤回判定 / 抑制判定<br/>手掌、扇形区、邻域、早期手掌、边缘手掌"]
+    E --> F["抑制计数 > 0：递减并置抑制位"]
+    F --> G["平板特性且不在边缘：<br/>新触点按年龄与椭圆率去抖"]
+    G --> H["场景 0x20 且年龄 < 3：置抑制位"]
+    H --> I{"距上次笔在场 < 200 ms"}
+    I -- 是 --> J["记为撤回并置抑制位"]
+    I -- 否 --> K["保持"]
+```
+
+- 笔在场后 200 ms 内，所有被处理的触点都置抑制位并记为撤回；撤回过的触点每帧把抑制计数重置为 40，直到抬起。写字时压在屏上的掌根因此一直不出点，笔尖附近新冒出的触点也在这个窗口里被吃掉。
+- 手掌等级（`StylusAft_GetPalmLevel`，[StylusAft.c](/EGoTouchService/Solvers/TouchSolver/raw/Rejection/StylusAft.c#L523-L589)）：平板特性（`dwFeatureFlags & 0x1000000`，本机型开启）下，笔活跃（`g_bt_pen_status == 1` 且未吸附）时长轴 > 20 即判手掌，否则 > 30；场景 `0x20` 关闭时还有长轴 ≥ 39 一档，打开时按长轴与椭圆率的组合分 0–3 级。判为手掌的触点抑制计数置 100。
+- 新触点去抖（`StylusAft_SuppressBaseContext`，[StylusAft.c](/EGoTouchService/Solvers/TouchSolver/raw/Rejection/StylusAft.c#L413-L519)）：笔活跃时年龄 < 2 的触点直接抑制，年龄 2–5 按椭圆率 ≥ 7 / 9 / 11 / 13 逐级抑制；笔不活跃时没有首帧抑制，阈值是 12 / 14 / 16 / 18。蓝牙笔连接过之后，新触点的头几帧可能不出点，这是原版行为。
+- 扇形区（`StylusAft_InFanArea`，[StylusAft.c](/EGoTouchService/Solvers/TouchSolver/raw/Rejection/StylusAft.c#L868-L906)）：笔在场后 800 ms 内，触点到笔尖的距离 < `max(7 × |6 × tilt|, 800)`、到「笔尖 + 30 × tilt」的距离 < `max(5 × |6 × tilt|, 566)`（像素），且手掌等级不为 0。倾角指向握笔的手，所以倾角符号决定扇形朝哪边。
+- `TSA_InStylusMode`（[TSA.c](/EGoTouchService/Solvers/TouchSolver/raw/Core/TSA.c#L1684)）在笔帧有效期间为真，`TSA_IsOKToEnterIDLEMode` 返回 0。
+
+7. **还原这条链时修掉的两处 raw 错误。** 原 DLL 里有两个同名的文件内静态量 `g_lastStylusTimeStamp`：`0x6bb819e0` 只给 `TSA_DelayToIdleModeHPPx` 用，`0x6bbaa150` 是 StylusAft 的「上次笔在场时间」；raw 把两者映射到了同一个地址，现在后者单独命名为 `g_stylusAftLastStylusTimeStamp`（[TSABssMemoryImage.h](/EGoTouchService/Solvers/TouchSolver/raw/include/TSABssMemoryImage.h#L313)）。`AsaOut_t` 的 `dwRptStatusFlags` 偏移应为 `0xe8`，原来的头文件少了 4 字节填充（[TSAPrmtStaticTables.h](/EGoTouchService/Solvers/TouchSolver/raw/include/TSAPrmtStaticTables.h#L1051)）。同样的同名静态量还有 `g_queue`、`g_gridData`、`g_postureData`（各有两个地址，raw 里各只有一个宏），尚未逐个核对。
+
+**验证。** 手指录制 4 份（带原始帧，没有笔），笔录制 1 份（没有保存原始帧和矩阵，只有 suffix 与 slave 数据），所以分三步。纯手指回放：[TsaRawReplay](/Tools/TsaRawReplay/main.cpp) 带 `--afe` 跑 4 份手指录制，触点 CSV 与闭环请求 / 动作序列和接入前逐字节一致；这时每帧都经过 ASA 外壳（笔帧状态 `0x06`），手指输出不受影响。真实笔数据：`--stylus-solver` 像 `DeviceRuntime` 一样先跑 `StylusPipeline` 再喂 TSACore，缺原始帧的录制由工具用 suffix 拼回一帧（矩阵填驱动的零点，等于没有手指）。那份笔录制里有 53 帧带笔信号，其中 25 帧没有 master：笔帧状态全部是 `0x12`，`TSA_InStylusMode` 与 `TSA_RptASAInRange` 在这些帧上为真；送进 TSACore 的笔报告与「按驱动方式展开的 TX1 整屏矩阵」的峰值重心（格子中心记在半格处）相比，平均偏差 x −4.9 px、y −2.0 px，平均绝对偏差 8.3 / 6.4 px，最大 26 / 17 px，而半格是 21 / 20 px、方向反了会差出上千像素。两者一个来自业务侧解算、一个来自驱动的展开方式，互相独立，所以坐标翻转和半格约定可以认为是对的。这份录制全程悬停，没有落笔，也没有手指。手指侧的笔相关逻辑：用 `--pen` 系列选项往手指录制里注入一支模拟笔，改写 slave 段让笔帧有效、填 `stylus.output`、下发笔状态字，可选让奇数帧不带 master。在 7 指录制（480 帧）上每 60 帧统计在场触点数：
+
+| 条件 | 0 | 60 | 120 | 180 | 240 | 300 | 360 | 420 |
+|------|---|----|-----|-----|-----|-----|-----|-----|
+| 基线（没有笔会话） | 210 | 136 | 252 | 158 | 254 | 218 | 252 | 267 |
+| 笔已连接，笔不在场 | 179 | 114 | 97 | 127 | 107 | 53 | 140 | 84 |
+| 再加第 120–300 帧落笔 | 179 | 114 | 58 | 62 | 30 | 1 | 109 | 26 |
+| 改成第 120–300 帧悬停 | 179 | 114 | 90 | 118 | 88 | 2 | 126 | 84 |
+
+落笔期间在场触点数大幅下降，抬笔后被撤回的触点保持抑制直到抬起，`TSA_InStylusMode` 与 `TSA_RptASAInRange` 在第 120 帧变真、抬笔后一两帧变假；单指录制在「笔已连接」下只少 1–4 帧（新触点去抖）。回放里没有压力包，蓝牙状态立刻降为 2，对应的是「笔连着但不活跃」的阈值。防误触模式位（状态字 `0x0102`）打开后，录制里的滑动手指几乎全部被抑制：这是严格模式按椭圆率分级的结果，原厂日志里这个场景从未打开过，raw 算出的椭圆率量级（滑动时 20–60，静止时约 11）也没有原版数据可比。注入的结果只能说明链路通了、方向与反编译一致；抑制效果本身要有同时带手掌和落笔的录制或真机才能对照。
+
+**待真机确认。** 写字时掌根是否不出点、笔尖附近是否还有误触；倾角符号与扇形区朝向（取反是按坐标系翻转推出来的）；笔在场时不进 IDLE 的表现；吸附 / 休眠状态（`PEN_CUR_STATUS` 2 / 3）以及原版连调两次的写法在本机上的实际取值；BT MCU 是否真的会发 `PEN_ROATE_ANGLE` 与 `PEN_TOUCH_MODE`；`TSA_SetScreenRotateState` 接通后横竖屏下 GripFilter 的变化；蓝牙笔连接后新触点头几帧的延迟是否可接受。芯片层在 slave 有信号时就跳过 master，原驱动还要求笔已连接，这一点没有改动。
+
+### 8. P3：闭环控制
+
+TSACore 每帧处理完会给出四类请求，ApDaemon 在 `TsaFrame::Process` 的帧后段把它们连同本帧状态位一起翻成 `himax_thp_drv` 命令。业务侧拆成两层：[TsaAfeControl](/EGoTouchService/Solvers/TouchSolver/TsaCore/TsaAfeControl.h) 只做决策，不碰硬件，回放工具可以直接打印；[DeviceRuntime](/EGoTouchService/Device/runtime/DeviceRuntime.cpp#L1419-L1455) 在 worker 线程上同步执行这些动作，再把结果回报给解算器。
 
 ```mermaid
 sequenceDiagram
@@ -376,7 +460,7 @@ sequenceDiagram
 
 IDLE 退出会让 TSACore 重新建立基线，期间不出点。真实流程里退出总是由第一根手指触发，代价是首次触摸约 6 帧（50 ms）的延迟，与 ApDaemon 一致。真机上要确认的是：命令历史里出现 `TSACore->ForceToFreqPoint` 且帧里的扫描频率随之改变，`ClearStatus(8)` 之后 `word[3]` 不再是 `0xbb`，长时间运行没有基线漂移。
 
-### 8. P4：渐进整理成可读源码
+### 9. P4：渐进整理成可读源码
 
 P2 跑通后，raw 的 DvrReplay 输出就是金标准，整理的每一步都和它对比。比对内容是逐帧的触点（点数、ID、坐标、事件），加上 `TSA_RptDiffPtr`、`TSA_RptBaselinePtr` 两块中间缓冲的哈希；某一步只要出现一帧不一致，就回退这一步。缺少这条比对链路之前不要动结构和命名，否则改坏了也看不出来。
 
