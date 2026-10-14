@@ -107,7 +107,13 @@ function Get-FirstDifference {
 # 录制的帧数：让工具读一遍但不喂帧
 function Get-RecordingInfo {
     param([string]$Exe, [string]$Recording)
-    $text = & $Exe $Recording --quiet --to 0 2>&1 | Out-String
+    # 覆盖率构建的程序退出时会在当前目录写 default.profraw；这次运行不计入覆盖率
+    $env:LLVM_PROFILE_FILE = Join-Path ([System.IO.Path]::GetTempPath()) 'tsa-recording-info.profraw'
+    try {
+        $text = & $Exe $Recording --quiet --to 0 2>&1 | Out-String
+    } finally {
+        Remove-Item Env:LLVM_PROFILE_FILE
+    }
     $frames = if ($text -match 'loaded (\d+) frames') { [int]$Matches[1] } else { 0 }
     [pscustomobject]@{ Frames = $frames }
 }
