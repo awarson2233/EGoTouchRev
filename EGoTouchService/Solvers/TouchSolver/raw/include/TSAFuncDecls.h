@@ -861,62 +861,17 @@ void Baseline_Compensation(void);
 // Bezier @ 0x6ba6595d (Common\MISC.c)
 int Bezier(int param_1,int param_2,int param_3);
 
-// CMF_AddPreDif @ 0x6ba53988 (Signal\CMF.c)
-void CMF_AddPreDif(longlong param_1,undefined8 param_2,longlong param_3,longlong param_4, ...);
-
-// CMF_ConditionClearCmfToPreDif @ 0x6ba52790 (Signal\CMF.c)
-void CMF_ConditionClearCmfToPreDif(longlong param_1,byte param_2,longlong param_3,short *param_4);
-
 // CMF_CopyCommonModeNoise @ 0x6ba4e7ee (Signal\CMF.c)
 void CMF_CopyCommonModeNoise(int param_1,byte param_2,byte param_3,byte param_4,undefined2 param_5);
-
-// CMF_CrossErosionWeight @ 0x6ba52948 (Signal\CMF.c)
-void CMF_CrossErosionWeight(undefined8 param_1,undefined4 param_2,undefined4 param_3);
 
 // CMF_EnablePreCMFDiffLog @ 0x6ba4d94e (Signal\CMF.c)
 void CMF_EnablePreCMFDiffLog(undefined1 param_1);
 
-// CMF_Filter1DBySubSlot @ 0x6ba51a1e (Signal\CMF.c)
-undefined8 CMF_Filter1DBySubSlot(longlong param_1);
-
-// CMF_Filter1DByWholeLine @ 0x6ba51c74 (Signal\CMF.c)
-void CMF_Filter1DByWholeLine(int *param_1);
-
-// CMF_Filter1DCore @ 0x6ba51d3a (Signal\CMF.c)
-void CMF_Filter1DCore(undefined8 param_1);
-
-// CMF_Filter2D @ 0x6ba54009 (Signal\CMF.c)
-void CMF_Filter2D(int param_1, int param_2);
-
-// CMF_Filter2DCommon @ 0x6ba53f96 (Signal\CMF.c)
-void CMF_Filter2DCommon(undefined8 param_1,undefined8 param_2,char param_3);
-
-// CMF_Filter2DCommonInternal @ 0x6ba53ad9 (Signal\CMF.c)
-void CMF_Filter2DCommonInternal(longlong *param_1,undefined2 param_2,longlong *param_3,int param_4);
-
-// CMF_Filter2DCore @ 0x6ba51d77 (Signal\CMF.c)
-void CMF_Filter2DCore(undefined4 *param_1);
-
-// CMF_FilterOnTx @ 0x6ba534d8 (Signal\CMF.c)
-void CMF_FilterOnTx(short param_1,longlong param_2);
-
-// CMF_FilterOnTxOfRx @ 0x6ba532b5 (Signal\CMF.c)
-void CMF_FilterOnTxOfRx(byte param_1,byte param_2,longlong param_3);
-
 // CMF_Free @ 0x6ba4d8a8 (Signal\CMF.c)
 void CMF_Free(void);
 
-// CMF_GetAverage @ 0x6ba537c3 (Signal\CMF.c)
-ulonglong CMF_GetAverage(short *param_1,int param_2);
-
 // CMF_GetCmfMethod @ 0x6ba4d903 (Signal\CMF.c)
 uint CMF_GetCmfMethod(void);
-
-// CMF_GetDistance @ 0x6ba52613 (Signal\CMF.c)
-int CMF_GetDistance(int param_1,int param_2,int param_3,longlong param_4);
-
-// CMF_GetNeighborCoef @ 0x6ba511ea (Signal\CMF.c)
-void CMF_GetNeighborCoef(longlong param_1,byte param_2,undefined1 param_3,undefined1 param_4);
 
 // CMF_GetNoiseValue @ 0x6ba4d97a (Signal\CMF.c)
 undefined2 CMF_GetNoiseValue(byte param_1,byte param_2);
@@ -927,17 +882,8 @@ short CMF_GetNoiseValueFromBuf();
 // CMF_Init @ 0x6ba4d8c1 (Signal\CMF.c)
 void CMF_Init();
 
-// CMF_Init2DFilter @ 0x6ba51699 (Signal\CMF.c)
-void CMF_Init2DFilter(void);
-
 // CMF_InitNoiseData @ 0x6ba4d9e0 (Signal\CMF.c)
 void CMF_InitNoiseData(undefined8 param_1,undefined8 param_2);
-
-// CMF_InitWeight @ 0x6ba5213d (Signal\CMF.c)
-void CMF_InitWeight(short param_1,short param_2,longlong param_3);
-
-// CMF_InitWeightByNeighbor @ 0x6ba529b7 (Signal\CMF.c)
-void CMF_InitWeightByNeighbor (ushort param_1,longlong param_2,int param_3,longlong param_4,longlong param_5, ...);
 
 // CMF_Malloc @ 0x6ba4d880 (Signal\CMF.c)
 bool CMF_Malloc(void);
@@ -960,9 +906,6 @@ int CMF_ProcessCoreWeight (longlong param_1,undefined8 param_2,int param_3,int p
 // CMF_ProcessDim @ 0x6ba4e8b5 (Signal\CMF.c)
 void CMF_ProcessDim(int param_1,short param_2,short param_3,byte param_4,byte param_5);
 
-// CMF_ProcessDimCommon @ 0x6ba4ea9c (Signal\CMF.c)
-void CMF_ProcessDimCommon (undefined4 param_1,short param_2,short param_3,undefined1 param_4,undefined1 param_5 ,undefined1 param_6);
-
 // CMF_ProcessDimCommonNoise @ 0x6ba4ebf3 (Signal\CMF.c)
 void CMF_ProcessDimCommonNoise(int param_1,short param_2,short param_3,byte param_4,byte param_5);
 
@@ -978,26 +921,11 @@ undefined4 CMF_ProcessDimUnitOnBuf (longlong param_1,longlong param_2,int param_
 // CMF_PushNoiseData @ 0x6ba4da6a (Signal\CMF.c)
 void CMF_PushNoiseData(ushort param_1,short param_2);
 
-// CMF_Ransac @ 0x6ba53106 (Signal\CMF.c)
-short CMF_Ransac(longlong param_1,uint param_2,int param_3, ...);
-
-// CMF_SSProcessCoreWeightHalfDim @ 0x6ba4e685 (Signal\CMF.c)
-int CMF_SSProcessCoreWeightHalfDim (longlong param_1,undefined8 param_2,uint param_3,undefined4 param_4, undefined4 param_5,undefined1 *param_6);
-
 // CMF_SaveOrderDiff @ 0x6ba4ecaa (Signal\CMF.c)
 void CMF_SaveOrderDiff(void);
 
 // CMF_SavePreCmfDif @ 0x6ba4f0c9 (Signal\CMF.c)
 void CMF_SavePreCmfDif(void);
-
-// CMF_SetNotchToZero @ 0x6ba526d5 (Signal\CMF.c)
-void CMF_SetNotchToZero(longlong param_1,uint param_2);
-
-// CMF_SubtractPreDif @ 0x6ba53823 (Signal\CMF.c)
-undefined4 CMF_SubtractPreDif(longlong param_1,undefined8 param_2,longlong param_3,longlong param_4, ...);
-
-// CMF_UpdateNeighborDistance @ 0x6ba5288d (Signal\CMF.c)
-void CMF_UpdateNeighborDistance (longlong param_1,longlong param_2,byte param_3,byte param_4,longlong param_5);
 
 // CTD_BasicCalculation @ 0x6ba551e0 (Tracking\CTD.c)
 longlong CTD_BasicCalculation(int param_1,int param_2);
