@@ -5,11 +5,18 @@
 //   TsaRawReplay.exe <file.dvrbin> [--legacy] [--to N] [--dump N] [--charger] [--quiet]
 //                    [--afe] [--idle-exit N] [--hold N K]
 //                    [--pen X Y A B] [--pen-hover] [--pen-tilt TX TY] [--pen-word W] [--pen-interleave]
-//                    [--stylus-solver]
+//                    [--stylus-solver] [--state-digest FILE] [--state-dump STEP FILE]
+//   TsaRawReplay.exe --state-diff A B [SYMBOL]
 //
 //   --afe          把 TSACore 的闭环请求与要下发的 AFE 动作打到 stderr（请求只在变化时打印）
 //   --idle-exit N  在第 N 帧之前注入一次「宿主观察到 IDLE 退出」
 //   --hold N K     把第 N 帧额外重复喂 K 次（模拟长时间静止）
+//
+// 判断两份实现是否等价（重构前后各跑一遍，见 Compare-Reference.ps1）：
+//   --state-digest FILE     每喂一帧，把 TSACore 全部算法状态（镜像 + 堆缓冲，指针已规范化）的摘要写一行
+//   --state-dump STEP FILE  把第 STEP 次喂帧之后的完整状态写成快照文件
+//   --state-diff A B [SYM]  比较两份快照，按符号名列出不同的区间（给了 SYM 就只列名字含它的）；有差异时退出码为 1
+//   --heap-skew N           自检用：先分配 N 个大小不一的堆块再建解算器，摘要不应因此改变
 //
 // 录制里没有笔的时候，可以注入一支模拟笔来走通手指侧依赖笔状态的逻辑（只对 TsaCoreSolver 生效）：
 //   --pen X Y A B      第 A..B 帧（闭区间）笔尖落在 (X, Y)，单位与输出 CSV 相同（显示像素）。
@@ -31,6 +38,7 @@
 #include "DvrBinaryIO.h"
 #include "FrameLayout.h"
 #include "SolverTypes.h"
+#include "StateTrace.h"
 #include "StylusSolver/StylusPipeline.h"
 #include "TouchSolver/TouchPipeline.h"
 #include "TsaCore/TsaCoreSolver.h"
@@ -187,10 +195,20 @@ bool SameRequests(const Solvers::Tsa::AfeRequests& a, const Solvers::Tsa::AfeReq
 } // namespace
 
 int main(int argc, char** argv) {
+    if ((argc == 4 || argc == 5) && std::strcmp(argv[1], "--state-diff") == 0) {
+        TsaReplay::StateSnapshot a, b;
+        if (!a.Read(argv[2]) || !b.Read(argv[3])) {
+            std::fprintf(stderr, "cannot read snapshot\n");
+            return 2;
+        }
+        return TsaReplay::DiffSnapshots(a, b, TSA_RAW_ROOT, argc == 5 ? argv[4] : "") == 0 ? 0 : 1;
+    }
     if (argc < 2) {
         std::fprintf(stderr, "usage: TsaRawReplay <file.dvrbin> [--legacy] [--to N] [--dump N] [--charger] [--quiet] "
                              "[--afe] [--idle-exit N] [--hold N K] [--pen X Y A B] [--pen-hover] "
-                             "[--pen-tilt TX TY] [--pen-word W] [--pen-interleave] [--stylus-solver]\n");
+                             "[--pen-tilt TX TY] [--pen-word W] [--pen-interleave] [--stylus-solver] "
+                             "[--state-digest FILE] [--state-dump STEP FILE]\n"
+                             "       TsaRawReplay --state-diff A B [SYMBOL]\n");
         return 2;
     }
     int to = -1;
@@ -210,6 +228,10 @@ int main(int argc, char** argv) {
     int penFrom = 0, penTo = -1;
     int penTiltX = 0, penTiltY = 0;
     unsigned penWord = 0x0002;
+    const char* digestPath = nullptr;
+    const char* dumpPath = nullptr;
+    int dumpStep = -1;
+    int heapSkew = 0;
     for (int i = 2; i < argc; ++i) {
         if (std::strcmp(argv[i], "--to") == 0 && i + 1 < argc) to = std::atoi(argv[++i]);
         else if (std::strcmp(argv[i], "--dump") == 0 && i + 1 < argc) dump = std::atoi(argv[++i]);
@@ -236,6 +258,12 @@ int main(int argc, char** argv) {
             penTiltX = std::atoi(argv[++i]);
             penTiltY = std::atoi(argv[++i]);
         }
+        else if (std::strcmp(argv[i], "--state-digest") == 0 && i + 1 < argc) digestPath = argv[++i];
+        else if (std::strcmp(argv[i], "--heap-skew") == 0 && i + 1 < argc) heapSkew = std::atoi(argv[++i]);
+        else if (std::strcmp(argv[i], "--state-dump") == 0 && i + 2 < argc) {
+            dumpStep = std::atoi(argv[++i]);
+            dumpPath = argv[++i];
+        }
         else if (std::strcmp(argv[i], "--pen-word") == 0 && i + 1 < argc) {
             penWord = static_cast<unsigned>(std::strtoul(argv[++i], nullptr, 16));
         }
@@ -252,6 +280,10 @@ int main(int argc, char** argv) {
     std::fprintf(stderr, "loaded %zu frames (dvr v%d), solver=%s\n", frames.size(), version,
                  legacy ? "TouchPipeline" : "TsaCoreSolver");
 
+    // 比对工具自检：先占掉一些大小不一的堆块，让后面所有对象换个地址。状态摘要不应随之改变
+    std::vector<std::unique_ptr<char[]>> skew;
+    for (int i = 0; i < heapSkew; ++i) skew.push_back(std::make_unique<char[]>(static_cast<size_t>(64 + i * 37 % 4096)));
+
     // 两个解算器都带大块状态，放堆上
     auto tsa = std::make_unique<Solvers::Tsa::TsaCoreSolver>();
     auto pipeline = std::make_unique<Solvers::TouchPipeline>();
@@ -263,6 +295,37 @@ int main(int argc, char** argv) {
         tsa->SetPenStatusWord(static_cast<uint16_t>(penWord));
     }
     bool penMode = false, penInRange = false;
+
+    std::FILE* digestFile = nullptr;
+    if (digestPath != nullptr && !legacy) {
+        digestFile = std::fopen(digestPath, "w");
+        if (digestFile == nullptr) {
+            std::fprintf(stderr, "cannot write %s\n", digestPath);
+            return 1;
+        }
+        // 规范化方式变了就要换版本号：两边的摘要只有同一版本才能比
+        std::fprintf(digestFile, "# tsa-state %d: step frame digest blocks bytes orphans\n", TsaReplay::kStateFormatVersion);
+    }
+    TsaReplay::StateSnapshot snapshot;
+    // 喂完一帧之后的状态；step = -1 是喂第一帧之前
+    const auto traceState = [&](int traceStep, int frameIndex) {
+        if (digestFile == nullptr && dumpPath == nullptr) return true;
+        if (!snapshot.Capture()) {
+            std::fprintf(stderr, "state capture failed at step %d\n", traceStep);
+            return false;
+        }
+        if (digestFile != nullptr) {
+            std::fprintf(digestFile, "%d %d %016llx %zu %zu %d\n", traceStep, frameIndex,
+                         static_cast<unsigned long long>(snapshot.Digest()), snapshot.blocks.size(), snapshot.TotalBytes(),
+                         snapshot.orphanHeapBlocks);
+        }
+        if (dumpPath != nullptr && traceStep == dumpStep && !snapshot.Write(dumpPath)) {
+            std::fprintf(stderr, "cannot write %s\n", dumpPath);
+            return false;
+        }
+        return true;
+    };
+    if (!legacy && !traceState(-1, -1)) return 1;
 
     int fed = 0, withTouch = 0, dispatched = 0;
     int step = 0;   // 喂进解算器的帧序号，--hold 重复的帧也计数
@@ -339,6 +402,7 @@ int main(int argc, char** argv) {
                 ? f.receiveSystemEpochUs / 1000
                 : static_cast<uint64_t>(fed) * 25 / 3;
             dispatch = tsa->Process(f, baseMs + holdShiftMs);
+            if (!traceState(step, fi)) return 1;
             statusSeen |= tsa->LastAfeStatus();
             if (stylusSolver) {
                 const auto& info = tsa->LastStylusInfo();
