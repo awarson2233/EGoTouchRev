@@ -302,7 +302,7 @@ int ER_BottomMoveInCorrection(byte param_1,byte param_2)
   short sVar3;
   
                     /* 0x17355  540  ER_BottomMoveInCorrection */
-  if (((*(char *)(_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 9) == '\0') ||
+  if (((*(char *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x48) == '\0') ||
       (0x1d < *(ushort *)
                ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x188)))
      || (*(short *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x1be
@@ -467,7 +467,7 @@ void ER_Init(void)
   uVar1 = ER_MMPrmtToPixelPrmt
                     (*(undefined2 *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x4c),2);
   *(undefined2 *)(_refptr_g_tsaPrmtFlashConst + 0x48) = uVar1;
-  uVar1 = ER_MMPrmtToPixelPrmt(*(undefined2 *)(_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 10),4);
+  uVar1 = ER_MMPrmtToPixelPrmt(*(undefined2 *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x50),4);
   *(undefined2 *)(_refptr_g_tsaPrmtFlashConst + 0x4c) = uVar1;
   uVar1 = ER_MMPrmtToPixelPrmt
                     (*(undefined2 *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x52),4);
@@ -475,7 +475,7 @@ void ER_Init(void)
   uVar1 = ER_MMPrmtToPixelPrmt
                     (*(undefined2 *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x56),8);
   *(undefined2 *)(_refptr_g_tsaPrmtFlashConst + 0x52) = uVar1;
-  uVar1 = ER_MMPrmtToPixelPrmt(*(undefined2 *)(_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0xb),8);
+  uVar1 = ER_MMPrmtToPixelPrmt(*(undefined2 *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x58),8);
   *(undefined2 *)(_refptr_g_tsaPrmtFlashConst + 0x54) = uVar1;
   uVar2 = TSA_SideToDimEdge(1);
   ER_GetPrmt(uVar2,((undefined1 *)(_stk + 0x6)),((undefined1 *)(_stk + 0x4)));

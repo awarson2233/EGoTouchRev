@@ -28,9 +28,9 @@ void TSARTPrmt_Process(void)
   *(short *)&_refptr_g_tsaPrmtFlash->field_0x3c = (short)DAT_6bcab828;
   _refptr_g_tsaPrmtFlash->field_0x5ba = (char)DAT_6bcab840;
   _refptr_g_tsaPrmtDynamic[6] = (char)DAT_6bcab840;
-  *(short *)(_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 8) = (short)DAT_6bcab858;
+  *(short *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x40) = (short)DAT_6bcab858;
   *(short *)(_refptr_g_tsaPrmtDynamic + 0x88) = (short)DAT_6bcab858;
-  *(short *)(_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 4) = (short)DAT_6bcab870;
+  *(short *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x20) = (short)DAT_6bcab870;
   *(short *)(_refptr_g_tsaPrmtDynamic + 0x74) = (short)DAT_6bcab870;
   *(short *)&_refptr_g_tsaPrmtFlash[2].field_0x644 = (short)DAT_6bcab888;
   *(short *)&_refptr_g_tsaPrmtFlash[2].field_0x644 = (short)DAT_6bcab888;
@@ -196,8 +196,8 @@ void TSARTPrmt_SyncWithTTPrmt(void)
   DAT_6bcab990 = (uint)*(ushort *)&_refptr_g_tsaPrmtFlash[1].field_0x4a;
   DAT_6bcab9a8 = (uint)*(ushort *)&_refptr_g_tsaPrmtFlash->field_0x3c;
   DAT_6bcab9c0 = (uint)(byte)_refptr_g_tsaPrmtFlash->field_0x5ba;
-  DAT_6bcab9d8 = (uint)*(ushort *)(_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 8);
-  DAT_6bcab9f0 = (uint)*(ushort *)(_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 4);
+  DAT_6bcab9d8 = (uint)*(ushort *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x40);
+  DAT_6bcab9f0 = (uint)*(ushort *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x20);
   DAT_6bcaba08 = (uint)*(ushort *)&_refptr_g_tsaPrmtFlash[2].field_0x644;
   DAT_6bcaba20 = (uint)*(ushort *)&_refptr_g_tsaPrmtFlash[2].field_0x646;
   DAT_6bcaba38 = (uint)*(ushort *)&_refptr_g_tsaPrmtFlash[2].field_0x648;

@@ -47,7 +47,7 @@ void TSATTPrmt_UpdataFlashPrmtTm(void)
 
 {
   *(undefined4 *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x3c) = DAT_6bcabac8;
-  *(short *)(_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 8) = (short)DAT_6bcabae0;
+  *(short *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x40) = (short)DAT_6bcabae0;
   return;
 }
 
@@ -59,10 +59,10 @@ void TSATTPrmt_UpdataFlashPrmtTm(void)
 void TSATTPrmt_UpdataFlashPrmtTa(void)
 
 {
-  *(short *)(_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 4) = (short)DAT_6bcabaf8;
+  *(short *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x20) = (short)DAT_6bcabaf8;
   *(char *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x24) = (char)DAT_6bcabb10;
   *(char *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x26) = (char)DAT_6bcabb28;
-  *(char *)(_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 5) = (char)DAT_6bcabb40;
+  *(char *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x28) = (char)DAT_6bcabb40;
   *(char *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x29) = (char)DAT_6bcabb58;
   return;
 }
@@ -129,7 +129,7 @@ void TSATTPrmt_UpdataFlashPrmtCmf(void)
 void TSATTPrmt_UpdataFlashPrmtHiException(void)
 
 {
-  *(short *)(_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0xc) = (short)DAT_6bcabc00;
+  *(short *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x60) = (short)DAT_6bcabc00;
   *(short *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x62) = (short)DAT_6bcabc18;
   return;
 }
@@ -332,14 +332,14 @@ void TSATTPrmt_Init(void)
   DAT_6bcabad8 = 
   "define sides to apply glove filter which will filter glove touch with >4 grip ratio;\nNOTE: TOP_SIDE=1,BOTTOM_SIDE=2,LEFT_SIDE=4,RIGHT_SIDE=8;\ntuning based on performance of status-bar drop down and navigation-bar drop up with finger and glove;"
   ;
-  DAT_6bcabae0 = (uint)*(ushort *)(_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 8);
-  DAT_6bcabae4 = (uint)*(ushort *)(_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 8);
+  DAT_6bcabae0 = (uint)*(ushort *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x40);
+  DAT_6bcabae4 = (uint)*(ushort *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x40);
   DAT_6bcabae8 = 0x1e;
   DAT_6bcabaec = 0;
   DAT_6bcabaf0 = 
   "distance threshold in mm to activate glove mode;\nthe less threshold is the easier to enter glove mode and the higher possibility for ghost touch;"
   ;
-  DAT_6bcabaf8 = (uint)*(ushort *)(_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 4);
+  DAT_6bcabaf8 = (uint)*(ushort *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x20);
   DAT_6bcabafc = DAT_6bcabaf8;
   DAT_6bcabb00 = DAT_6bcabaf8;
   DAT_6bcabb04 = DAT_6bcabaf8;
@@ -358,8 +358,8 @@ void TSATTPrmt_Init(void)
   DAT_6bcabb38 = 
   "moving distance threshold(pixel) to determine whether to apply click suppression or not;\nthe more threshold is the better click performance and poorer flick performance will be;"
   ;
-  DAT_6bcabb40 = (uint)*(byte *)(_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 5);
-  DAT_6bcabb44 = (uint)*(byte *)(_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 5);
+  DAT_6bcabb40 = (uint)*(byte *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x28);
+  DAT_6bcabb44 = (uint)*(byte *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x28);
   DAT_6bcabb48 = 0x78;
   DAT_6bcabb4c = 0;
   DAT_6bcabb50 = 
@@ -422,8 +422,8 @@ void TSATTPrmt_Init(void)
   DAT_6bcabcc8 = 1000;
   DAT_6bcabccc = 0;
   DAT_6bcabcd0 = "common mode noise threshold for delta signal of neighbouring sensor;";
-  DAT_6bcabc00 = (int)*(short *)(_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0xc);
-  DAT_6bcabc04 = (int)*(short *)(_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0xc);
+  DAT_6bcabc00 = (int)*(short *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x60);
+  DAT_6bcabc04 = (int)*(short *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x60);
   DAT_6bcabc08 = 0x32;
   DAT_6bcabc0c = 10;
   DAT_6bcabc10 = 

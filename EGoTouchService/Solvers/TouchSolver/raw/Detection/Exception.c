@@ -99,8 +99,8 @@ LAB_6ba58fc8:
   puVar1 = _refptr_g_tsaPrmtDynamic;
   if ((*(int *)(*(longlong *)_refptr_g_touchesPtr + 0x20) == 0) ||
      (*(int *)(*(longlong *)_refptr_g_touchesPtr + 0x20) == 0x400)) {
-    *(double *)(_refptr_g_tsaPrmtDynamic + 0x80) = _refptr_g_tsaPrmtFlash[1].pDim1PitchMap[7];
-    *(undefined4 *)(puVar1 + 0x88) = *(undefined4 *)(pTVar2[1].pDim1PitchMap + 8);
+    memcpy(_refptr_g_tsaPrmtDynamic + 0x80, (uint8_t *)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x38, 8);
+    *(undefined4 *)(puVar1 + 0x88) = *(undefined4 *)((longlong)pTVar2[1].pDim1PitchMap + 0x40);
   }
   else {
     _refptr_g_tsaPrmtDynamic[0x80] = _refptr_g_tsaPrmtDynamic[0x80] & 0xfb;

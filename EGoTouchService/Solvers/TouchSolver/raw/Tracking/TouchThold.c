@@ -51,7 +51,7 @@ void TouchThold_Init(void)
   
                     /* 0x3c922  2508  TouchThold_Init */
   uVar1 = TouchThold_GetTholdBasedOnSNR
-                    ((int)*(short *)(_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 6));
+                    ((int)*(short *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x30));
   *(undefined2 *)&_refptr_g_tsaPrpt[1].field_0x16 = uVar1;
   *(ushort *)&_refptr_g_tsaPrpt[1].field_0x18 = _refptr_g_tsaPrmtFlash->wPeakMode3ThresholdMax;
   *(ushort *)&_refptr_g_tsaPrpt[1].field_0x1c = _refptr_g_tsaPrmtFlash->wPeakMode3ThresholdMax;
@@ -164,8 +164,8 @@ short TouchThold_GetNoiseThold(short param_1,short param_2)
       local_c = *(short *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x2e);
     }
   }
-  else if ((1 < bVar1) && (local_c < *(short *)(_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 6))) {
-    local_c = *(short *)(_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 6);
+  else if ((1 < bVar1) && (local_c < *(short *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x30))) {
+    local_c = *(short *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x30);
   }
   local_a = TouchThold_GetTholdBasedOnSNR((int)local_c);
   sVar3 = TouchThold_GetTholdBasedOnTouchMode((int)param_1,(int)param_2);

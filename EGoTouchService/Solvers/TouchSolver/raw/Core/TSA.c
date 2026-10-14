@@ -2632,7 +2632,7 @@ void TSA_ScenarioProcess(void)
       if (iVar1 != 0) goto LAB_6ba906a7;
     }
     TSARTPrmt_SetKeyValue
-              ("distToEnterGloveMode",*(undefined2 *)(_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 8));
+              ("distToEnterGloveMode",*(undefined2 *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x40));
     if ((*(int *)&_refptr_g_tsaPrpt[1].field_0x2c == 2) &&
        ((*(int *)&_refptr_g_tsaPrpt[1].field_0x2c != 2 ||
         (*(int *)&_refptr_g_tsaPrpt[1].field_0x30 != 2)))) {

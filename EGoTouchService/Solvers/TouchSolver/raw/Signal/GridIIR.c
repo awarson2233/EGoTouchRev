@@ -27,7 +27,7 @@ void GridIIR_Process(void)
                           *(undefined8 *)_refptr_g_tsaBufGridIIRDif,
                           _refptr_g_tsaPrmtFlash->wBufElementCount,
                           CONCAT44(dwIirParamUpper,
-                                   (uint)*(byte *)(_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 3)));
+                                   (uint)*(byte *)((longlong)_refptr_g_tsaPrmtFlash[1].pDim1PitchMap + 0x18)));
     }
   }
   else {
