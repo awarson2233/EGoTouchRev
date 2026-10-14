@@ -11,8 +11,13 @@
 
 extern "C" {
 
+// Common/TSABssMemoryImage.c
+void TSACoreRaw_LoadProjectTables(void);
+
 // Core/AFE.c
 uint32_t AFE_IsRawJump(void);
+uint16_t AFE_GetColNum(void);
+uint16_t AFE_GetRowNum(void);
 
 // Core/TSA.c
 uint16_t TSA_GetXRes(void);
@@ -20,6 +25,7 @@ uint16_t TSA_GetYRes(void);
 uint32_t TSA_IsUnderWaterDetected(void);
 uint32_t TSA_IsOutOfWaterDetected(void);
 char* TSA_GetPrmtName(void);
+void TSA_ScenarioProcess(void);
 uint16_t TSA_SideTouchDim1Center(uint8_t sideIdx);
 uint16_t TSA_SideTouchDim2Center(uint8_t sideIdx);
 uint16_t TSA_CoreTouchDim1Center(uint8_t idx);
@@ -72,6 +78,9 @@ void HardwareAnalyzer_ReportToTSA(void);
 void IDT_Process(uint8_t useStrictAccCheck);
 
 // Tracking/TouchThold.c
+void TouchThold_Init(void);
+void TouchThold_Process(int16_t fingerThold, int16_t gloveThold, int16_t* peakThold, int16_t* touchThold,
+                        uint16_t* touchDownThold);
 uint64_t TouchThold_ToeUseSpecialThold(void);
 
 // Tracking/TS.c

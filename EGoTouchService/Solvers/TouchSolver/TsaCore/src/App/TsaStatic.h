@@ -12,7 +12,7 @@ namespace Solvers::Tsa::Core {
 /// g_tsaStaticGrid（经 g_tsaStaticPtr 选用）：系统级运行状态。
 struct TsaStatic {
     uint8_t reserved000[0x78];
-    uint64_t fullIncellHighPeakTime;  // 最大峰持续超过 3 倍模式 3 门限上限时的时间（ms）
+    uint64_t fullIncellHighPeakTime;  // 最大峰持续超过 3 倍 finger 门限时的时间（ms）
     uint8_t reserved080[0x10];
     uint64_t markedLiftOffTime;  // 带 persistFlags 0x20000000 的触点抬起时的时间（ms）
     Point markedLiftOffPos;  // 以及它的位置
@@ -65,7 +65,13 @@ struct TsaPrpt {
     int32_t field0C8;
     uint8_t reserved0CC[0xBA];
     uint16_t field186;
-    uint8_t reserved188[0x15C];
+    uint8_t reserved188[0x14A];
+    int16_t peakThold;  // TouchThold_Process 按 finger 门限算出的峰门限、触点门限与按下门限
+    int16_t touchThold;
+    uint8_t reserved2D6[0x2];
+    int16_t fingerTouchThold;  // TouchThold_Init 置为 finger 门限
+    int16_t touchDownThold;
+    uint8_t reserved2DC[0x8];
     uint8_t field2E4;
     uint8_t reserved2E5[0x3];
     uint32_t field2E8;
@@ -75,12 +81,17 @@ struct TsaPrpt {
 static_assert(sizeof(TsaPrpt) == 0x340);
 static_assert(offsetof(TsaPrpt, field0C8) == 0x0C8);
 static_assert(offsetof(TsaPrpt, field186) == 0x186);
+static_assert(offsetof(TsaPrpt, peakThold) == 0x2D2);
+static_assert(offsetof(TsaPrpt, touchThold) == 0x2D4);
+static_assert(offsetof(TsaPrpt, fingerTouchThold) == 0x2D8);
+static_assert(offsetof(TsaPrpt, touchDownThold) == 0x2DA);
 static_assert(offsetof(TsaPrpt, field2E4) == 0x2E4);
 static_assert(offsetof(TsaPrpt, field2E8) == 0x2E8);
 static_assert(offsetof(TsaPrpt, field2EC) == 0x2EC);
 
 /// TsaStatic::processingState
 inline constexpr uint32_t kProcMsActive = 0x80000000u;  // 互容主流程进行中（PROC_MS_ACTIVE）
+inline constexpr uint32_t kProcIdleScan = 0x00000010u;  // IDLE 扫描：峰 Zn 只取十字五点和，动态门限改按侧边门限
 
 /// TsaStatic::featureFlags
 inline constexpr uint32_t kFeatGloveMode = 0x00000001u;

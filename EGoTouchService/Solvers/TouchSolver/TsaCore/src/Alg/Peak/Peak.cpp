@@ -12,8 +12,6 @@ namespace Solvers::Tsa::Core::Peak {
 
 namespace {
 
-constexpr uint32_t kProcZnCrossOnly = 0x10;  // processingState：Zn 只取十字五点和
-
 // Peak_Z1Filter @ 0x6ba6848b
 // 去掉峰值低于门限的峰（从后往前，删除不影响尚未检查的下标）。
 void Z1Filter(int16_t thold) {
@@ -38,15 +36,15 @@ bool IsFullIncellInsideSensor(uint8_t idx) {
 }
 
 // Peak_IsFullIncellSDDetected @ 0x6ba689c9
-// 整屏 incell 信号失衡：最大峰连续 6 帧以上超过 3 倍模式 3 门限上限、并持续 1 s 之后，
-// 若最大峰回落到 2 倍上限以下而全屏信号和仍高，且峰多或峰的八邻域远大于峰值，判为失衡。
+// 整屏 incell 信号失衡：最大峰连续 6 帧以上超过 3 倍 finger 门限、并持续 1 s 之后，
+// 若最大峰回落到 2 倍 finger 门限以下而全屏信号和仍高，且峰多或峰的八邻域远大于峰值，判为失衡。
 bool IsFullIncellSdDetected() {
     const PeakTable& peaks = Peaks();
     if (peaks.count == 0) return false;
     TsaStatic& stat = Static();
     const FlashPrmt& flash = PrmtFlash();
     bool detected = stat.fullIncellSignalDisparity != 0;
-    const auto cap = static_cast<int16_t>(flash.peakMode3ThresholdMax);
+    const auto cap = flash.fingerThold;
     if (cap * 3 < peaks.maxSig) {
         if (stat.fullIncellHighPeakFrames < 6) {
             ++stat.fullIncellHighPeakFrames;
@@ -58,7 +56,7 @@ bool IsFullIncellSdDetected() {
     }
     if (stat.curTimeMs - stat.fullIncellHighPeakTime < 1001) return false;
     if (peaks.maxSig < cap * 2) {
-        if (static_cast<int16_t>(flash.peakFilterReferenceThreshold) * 2 < Prpt().field0C8) {
+        if (flash.peakFilterReferenceThreshold * 2 < Prpt().field0C8) {
             for (uint8_t i = 0; i < peaks.count; ++i) {
                 if (peaks.count > 4) detected = true;
                 if (IsFullIncellInsideSensor(i) && peaks.maxSig * 3 < peaks.entry[i].sig * 4) detected = true;
@@ -88,20 +86,20 @@ void IdTracking() {
 }  // namespace
 
 // Peak_Process @ 0x6ba68c4b
-// 本机型 peakProcessingMode 为 3：门限封顶为上限的一半，Z8 过滤，未检出整屏失衡时再按原门限做 Z1 过滤。
+// 本机型是 Full Incell：门限封顶为 finger 门限的一半，Z8 过滤，未检出整屏失衡时再按原门限做 Z1 过滤。
 void Process() {
-    DynPrmt& dyn = PrmtDynamic();
+    DynamicPrmt& dyn = PrmtDynamic();
     const FlashPrmt& flash = PrmtFlash();
     const int16_t origThold = dyn.sigThold;
-    const auto cap = static_cast<int16_t>(static_cast<int16_t>(flash.peakMode3ThresholdMax) / 2);
-    if (flash.peakProcessingMode == 3 && cap < dyn.sigThold) dyn.sigThold = cap;
+    const auto cap = static_cast<int16_t>(flash.fingerThold / 2);
+    if (flash.sensorArchitecture == kFullIncell && cap < dyn.sigThold) dyn.sigThold = cap;
 
     const bool excludeSide = IsToExcludeSideRegion();
     const auto lastCol = static_cast<uint8_t>(flash.dim1Len - (excludeSide ? 2 : 1));
     const auto lastRow = static_cast<uint8_t>(flash.dim2Len - 1);
     DetectInRange(dyn.sigThold, 0, lastRow, excludeSide ? 1 : 0, lastCol);
 
-    if (flash.peakProcessingMode == 3) {
+    if (flash.sensorArchitecture == kFullIncell) {
         Z8Filter();
         TsaStatic& stat = Static();
         if (!IsFullIncellSdDetected()) {
@@ -113,7 +111,7 @@ void Process() {
             dyn.znTouchDownThold = dyn.sdZnTholdScaleX16 * dyn.sigThold / 16;
         }
     }
-    // peakProcessingMode 为 2 时的分支依赖 SignalDisparity_IsOKToProcess，该模块在本版本中被裁掉（恒为假）。
+    // Hybrid Incell 时的分支依赖 SignalDisparity_IsOKToProcess，该模块在本版本中被裁掉（恒为假）。
 
     PeakTable& peaks = Peaks();
     uint8_t minDim2 = flash.dim2Len;
@@ -187,7 +185,7 @@ void SortInSigAscending() {
 void CalcZn(uint8_t idx) {
     const FlashPrmt& flash = PrmtFlash();
     const int16_t* dif = Buffers().dif;
-    const bool crossOnly = (Static().processingState & kProcZnCrossOnly) != 0;
+    const bool crossOnly = (Static().processingState & kProcIdleScan) != 0;
     PeakEntry& e = Peaks().entry[idx];
     const uint8_t col = e.dim1;
     const uint8_t row = e.dim2;

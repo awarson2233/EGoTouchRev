@@ -154,7 +154,7 @@ bool ToeUseSpecialZ4TholdEdge() {
 bool NeedNextEdgeLowThresh(uint8_t curIdx) {
     const PeakEntry& peak = PeakOf(Cur(curIdx));
     const FlashPrmt& flash = PrmtFlash();
-    const DynPrmt& dyn = PrmtDynamic();
+    const DynamicPrmt& dyn = PrmtDynamic();
     bool low = false;
     if ((IsProject("P116") || IsProject("P150")) &&
         (peak.dim1 == 1 || peak.dim1 == flash.dim1Len - 2 || peak.dim2 == flash.dim2Len - 1)) {
@@ -177,7 +177,7 @@ void SetVolatileFlagFingerZFailed(uint8_t curIdx) {
 
 // Touch_SetVolatileFlagTouchDownZFailed @ 0x6ba701c3
 void SetVolatileFlagTouchDownZFailed(uint8_t curIdx, bool nextEdgeLow) {
-    const DynPrmt& dyn = PrmtDynamic();
+    const DynamicPrmt& dyn = PrmtDynamic();
     TouchUnit& cur = Cur(curIdx);
     int thold = dyn.znTouchDownThold;
     if (nextEdgeLow) thold = ThreeQuarters(thold);
@@ -189,7 +189,7 @@ void SetVolatileFlagTouchDownZFailed(uint8_t curIdx, bool nextEdgeLow) {
 
 // Touch_SetVolatileFlagLiftOffZFailed @ 0x6ba70356
 void SetVolatileFlagLiftOffZFailed(uint8_t curIdx, uint8_t prevIdx, bool nextEdgeLow) {
-    const DynPrmt& dyn = PrmtDynamic();
+    const DynamicPrmt& dyn = PrmtDynamic();
     const TsaPrpt& prpt = Prpt();
     TouchUnit& cur = Cur(curIdx);
     const PrevTouchUnit& prev = Prev(prevIdx);
@@ -217,7 +217,7 @@ void SetVolatileFlagLiftOffZFailed(uint8_t curIdx, uint8_t prevIdx, bool nextEdg
 
 // Touch_SetVolatileFlagStableTouch @ 0x6ba70775
 void SetVolatileFlagStableTouch(uint8_t curIdx) {
-    const DynPrmt& dyn = PrmtDynamic();
+    const DynamicPrmt& dyn = PrmtDynamic();
     const TsaStatic& stat = Static();
     const bool glove = (dyn.zTholdFlags & 4) != 0 && (stat.featureFlags & kFeatGloveMode) != 0;
     const bool knuckle = (dyn.zTholdFlags & 8) != 0 && (stat.featureFlags & kFeatKnuckle) != 0;
@@ -364,19 +364,19 @@ void SetPersistFlagMoveOver(uint8_t curIdx, uint16_t dim1, uint16_t dim2, uint8_
 void SetPersistFlag(uint8_t curIdx, uint8_t prevIdx) {
     TouchUnit& cur = Cur(curIdx);
     const PrevTouchUnit& prev = Prev(prevIdx);
-    const DynPrmt& dyn = PrmtDynamic();
+    const DynamicPrmt& dyn = PrmtDynamic();
 
     if ((cur.volatileFlags & 4) != 0) cur.persistFlags |= 1;
-    if (static_cast<int>(static_cast<uint32_t>(dyn.largeMoveDistMm) * dyn.largeMoveDistMm) <= cur.sqDistMmFromStart) {
+    if (static_cast<int>(static_cast<uint32_t>(dyn.distToEnterGloveMode) * dyn.distToEnterGloveMode) <= cur.sqDistMmFromStart) {
         cur.persistFlags |= 4;
     }
     if ((cur.volatileFlags & 0x1000) != 0) cur.persistFlags |= 0x200;
     if ((prev.persistFlags & 8) != 0 && prev.field0A8 != 6) {
         SetVolatileFlagFalseFlickDetected(curIdx, prevIdx);
         // Touch_SetPersistFlagMoveOverClickSuppressRange @ 0x6ba723e9
-        SetPersistFlagMoveOver(curIdx, prev.falseFlickPos.dim1, prev.falseFlickPos.dim2, dyn.clickSuppressRange, 0x100);
+        SetPersistFlagMoveOver(curIdx, prev.falseFlickPos.dim1, prev.falseFlickPos.dim2, dyn.clickSuppressDistance, 0x100);
         // Touch_SetPersistFlagMoveOverMaxClickSuppressRange @ 0x6ba72518
-        SetPersistFlagMoveOver(curIdx, prev.firstRptPos.dim1, prev.firstRptPos.dim2, dyn.maxClickSuppressRange, 0x8000);
+        SetPersistFlagMoveOver(curIdx, prev.firstRptPos.dim1, prev.firstRptPos.dim2, dyn.maxClickSuppressDistance, 0x8000);
         // Touch_SetPersistFlagMoveOverFlickDistance @ 0x6ba72647（原代码拿累计偏移当坐标用）
         SetPersistFlagMoveOver(curIdx, static_cast<uint16_t>(prev.falseFlickOffset.dim1),
                                static_cast<uint16_t>(prev.falseFlickOffset.dim2), dyn.flickDistance, 0x1000);
@@ -384,7 +384,7 @@ void SetPersistFlag(uint8_t curIdx, uint8_t prevIdx) {
     if ((cur.volatileFlags & 0x800000) != 0) cur.persistFlags |= 0x4000;
     if ((prev.volatileFlags & 0x400000) != 0 && prev.debounceFrames == 10) cur.persistFlags |= 0x2000;
     if (cur.sqDistMmFromPrev > 0x10 || cur.exceptionType != 0 ||
-        static_cast<int16_t>(PrmtFlash().peakMode3ThresholdMax) * 2 < cur.maxPeakSig || Touches().count > 1) {
+        PrmtFlash().fingerThold * 2 < cur.maxPeakSig || Touches().count > 1) {
         cur.persistFlags |= 0x80000;
     }
     if (prev.age == 0 && ByteTrue(AFE_IsRawJump())) cur.gripFlags |= 0x10000000;
@@ -400,7 +400,7 @@ void UnitUpdateMaxMin(uint8_t curIdx, uint8_t prevIdx) {
     TouchUnit& cur = Cur(curIdx);
     const PrevTouchUnit& prev = Prev(prevIdx);
     const PeakEntry& peak = PeakOf(cur);
-    const auto refThold = static_cast<int16_t>(PrmtFlash().peakFilterReferenceThreshold);
+    const auto refThold = PrmtFlash().peakFilterReferenceThreshold;
     const auto refSig = static_cast<int16_t>(std::min<int>(Peaks().maxSig, refThold));
 
     cur.maxField072 = std::max(cur.field072, prev.maxField072);
@@ -474,7 +474,7 @@ void CheckTrustabilityUnit(uint8_t curIdx, uint8_t prevIdx) {
     if (cur.exceptionType != 0) cur.persistFlags2 |= 0x20000;
     if (PrevTouches().reportedThisFrame > 1) cur.persistFlags2 |= 0x20000;
     if (cur.event == TouchEvent::kLiftOff && Prev(prevIdx).event > 2 &&
-        cur.maxPeakSig < static_cast<int16_t>(PrmtFlash().peakFilterReferenceThreshold) * 2 / 5) {
+        cur.maxPeakSig < PrmtFlash().peakFilterReferenceThreshold * 2 / 5) {
         cur.persistFlags2 |= 0x20000;
     }
 }
@@ -538,7 +538,7 @@ bool IsAbnormalShape3(uint8_t curIdx) {
     if (IsOff(curIdx)) return false;
     const TouchUnit& cur = Cur(curIdx);
     if (cur.exceptionType == 0x40 && GetTimeRpt(curIdx) < 0x7fff) return false;
-    const auto refThold = static_cast<int16_t>(PrmtFlash().peakFilterReferenceThreshold);
+    const auto refThold = PrmtFlash().peakFilterReferenceThreshold;
     if (cur.exceptionType == 0x80 && cur.signalScale > refThold / 2) return false;
     if (!IsInAbnormalShapeDetectArea(curIdx)) return false;
     if (cur.majorMm > 0x31 || (cur.volatileFlags & 0x2000) != 0) return true;
@@ -691,7 +691,7 @@ int IsBetaGrip(uint8_t curIdx, uint8_t prevIdx) {
     const bool charger = TSAStatic_IsChargerPlugged() != 0;
     const TouchUnit& cur = Cur(curIdx);
     const int16_t peakSig = PeakOf(cur).sig;
-    const auto refThold = static_cast<int16_t>(PrmtFlash().peakFilterReferenceThreshold);
+    const auto refThold = PrmtFlash().peakFilterReferenceThreshold;
     const uint32_t event = cur.event;
     const bool exception = IsException(curIdx, prevIdx);
     bool beta = !exception && event == TouchEvent::kMove && refThold / 2 <= peakSig && !charger;
