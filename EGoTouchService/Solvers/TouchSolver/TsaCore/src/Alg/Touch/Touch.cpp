@@ -6,6 +6,7 @@
 
 #include "Alg/Peak/Peak.h"
 #include "Alg/Peak/PrevPeak.h"
+#include "Alg/Sensor/Sensor.h"
 #include "Alg/Touch/PrevTouch.h"
 #include "Alg/TouchSize/TouchSize.h"
 #include "App/TsaBuffer.h"
@@ -557,7 +558,7 @@ bool IsAbnormalShape4(uint8_t curIdx) {
 // 抬起的触点所在格仍被其它触点的区域覆盖：被合并。
 bool IsLiftOffDueToMerged(uint8_t curIdx, uint8_t prevIdx) {
     const PrevPeakEntry& prevPeak = PrevPeaks().entry[Prev(prevIdx).peakIdx];
-    return IsOff(curIdx) && IntTrue(Sensor_IsTouchTraversed(prevPeak.dim1, prevPeak.dim2));
+    return IsOff(curIdx) && Sensor::IsTraversed(prevPeak.dim1, prevPeak.dim2);
 }
 
 // Touch_GetMergedInfo @ 0x6ba74b56
@@ -565,8 +566,8 @@ void GetMergedInfo(uint8_t curIdx) {
     TouchTable& touches = Touches();
     const Point pos = touches.unit[curIdx].pos;
     for (uint8_t i = 0; i < touches.count; ++i) {
-        if (i != curIdx && ByteTrue(Sensor_IsInZone(static_cast<uint8_t>(pos.dim1 >> 8), static_cast<uint8_t>(pos.dim2 >> 8),
-                                                     touches.unit[i].zoneIdx))) {
+        if (i != curIdx &&
+            Sensor::IsInZone(static_cast<uint8_t>(pos.dim1 >> 8), static_cast<uint8_t>(pos.dim2 >> 8), touches.unit[i].zoneIdx)) {
             touches.unit[i].gripFlags |= 0x100000;
         }
     }
@@ -578,7 +579,7 @@ bool IsTouchDownDueToSeperated(uint8_t curIdx) {
     const PeakEntry& peak = PeakOf(Cur(curIdx));
     return !IsOff(curIdx) && Cur(curIdx).age == 1 &&
            Static().baselineStageInitialSignal < Buffers().timeDown[CellIndex(peak)] &&
-           IntTrue(Sensor_IsTouchTraversedBefore(peak.dim1, peak.dim2));
+           Sensor::IsTraversedBefore(peak.dim1, peak.dim2);
 }
 
 // Touch_IsSideOverCore @ 0x6ba714db
@@ -1005,12 +1006,12 @@ bool IsSideCoreInSameZone(uint8_t coreIdx, uint8_t sideIdx) {
         const uint8_t zone = TouchesGrid().unit[coreIdx].zoneIdx;
         const auto dim2 = static_cast<uint8_t>(TSA_SideTouchDim2Center(sideIdx));
         const auto dim1 = static_cast<uint8_t>(TSA_SideTouchDim1Center(sideIdx));
-        if (ByteTrue(Sensor_IsInCoreZone(dim1, dim2, zone))) return true;
+        if (Sensor::IsInCoreZone(dim1, dim2, zone)) return true;
     }
     const uint8_t zone = TouchesSide().unit[sideIdx].zoneIdx;
     const auto dim2 = static_cast<uint8_t>(TSA_CoreTouchDim2Center(coreIdx));
     const auto dim1 = static_cast<uint8_t>(TSA_CoreTouchDim1Center(coreIdx));
-    return ByteTrue(Sensor_IsInSideZone(dim1, dim2, zone));
+    return Sensor::IsInSideZone(dim1, dim2, zone);
 }
 
 // Touch_NeedXYFilter @ 0x6ba742dc

@@ -2,6 +2,7 @@
 
 #include <climits>
 
+#include "Alg/Sensor/Sensor.h"
 #include "Alg/Touch/TouchData.h"
 #include "App/TsaBuffer.h"
 #include "Common/Assert.h"
@@ -134,7 +135,7 @@ bool IsOnOuterEdge(uint8_t idx) {
 bool IsInNxNBox(uint8_t dim1, uint8_t dim2, uint8_t boxSize) {
     const PeakTable& peaks = Peaks();
     for (uint8_t i = 0; i < peaks.count; ++i) {
-        if (static_cast<uint8_t>(Sensor_IsInNxNBox(peaks.entry[i].dim1, peaks.entry[i].dim2, dim1, dim2, boxSize)) != 0) {
+        if (Sensor::IsInBox(peaks.entry[i].dim1, peaks.entry[i].dim2, dim1, dim2, boxSize)) {
             return true;
         }
     }
@@ -181,14 +182,14 @@ uint8_t GetDistToEdge(uint8_t idx) {
 uint8_t GetDistance(uint8_t idxA, uint8_t idxB) {
     const PeakEntry& a = Peaks().entry[idxA];
     const PeakEntry& b = Peaks().entry[idxB];
-    return static_cast<uint8_t>(Sensor_GetDistance(a.dim1, a.dim2, b.dim1, b.dim2));
+    return static_cast<uint8_t>(Sensor::Distance(a.dim1, a.dim2, b.dim1, b.dim2));
 }
 
 // Peak_GetSquareDistance @ 0x6ba66c86
 int GetSquareDistance(uint8_t idxA, uint8_t idxB) {
     const PeakEntry& a = Peaks().entry[idxA];
     const PeakEntry& b = Peaks().entry[idxB];
-    return Sensor_GetSquareDistance(a.dim1, a.dim2, b.dim1, b.dim2);
+    return Sensor::SquareDistance(a.dim1, a.dim2, b.dim1, b.dim2);
 }
 
 }  // namespace Solvers::Tsa::Core::Peak

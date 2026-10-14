@@ -67,16 +67,6 @@ uint8_t BLReset_CheckAbnormalTouch(uint8_t idx);
 // Baseline/PressureDrift.c
 uint64_t PressureDrift_Detect(uint8_t dim1, uint8_t dim2);
 
-// Detection/Sensor.c
-int Sensor_GetDistance(uint8_t dim1A, uint8_t dim2A, uint8_t dim1B, uint8_t dim2B);
-int Sensor_GetSquareDistance(uint8_t dim1A, uint8_t dim2A, uint8_t dim1B, uint8_t dim2B);
-uint64_t Sensor_IsInNxNBox(uint8_t dim1, uint8_t dim2, uint8_t centerDim1, uint8_t centerDim2, uint8_t boxSize);
-uint64_t Sensor_IsTouchTraversed(uint8_t dim1, uint8_t dim2);
-uint64_t Sensor_IsTouchTraversedBefore(uint8_t dim1, uint8_t dim2);
-uint64_t Sensor_IsInZone(uint8_t dim1, uint8_t dim2, uint8_t zoneIdx);
-uint64_t Sensor_IsInCoreZone(uint8_t dim1, uint8_t dim2, uint8_t zoneIdx);
-uint64_t Sensor_IsInSideZone(uint8_t dim1, uint8_t dim2, uint8_t zoneIdx);
-
 // Rejection/AntiTouch.c
 void AntiTouch_Report(void);
 
