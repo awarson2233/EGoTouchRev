@@ -73,9 +73,9 @@ void StylusAft_PostProcessUnit(byte param_1)
                    ) = *(uint *)((longlong)(int)(uint)param_1 * 0x168 +
                                  *(longlong *)_refptr_g_touchesPtr + 0x208) | 0x40;
         }
-        if ((g_lastStylusTimeStamp < (*_refptr_g_tsaStaticPtr)->pFrameBufferPtr) &&
+        if ((g_stylusAftLastStylusTimeStamp < (*_refptr_g_tsaStaticPtr)->pFrameBufferPtr) &&
            ((ulonglong)
-            ((longlong)(*_refptr_g_tsaStaticPtr)->pFrameBufferPtr - (longlong)g_lastStylusTimeStamp)
+            ((longlong)(*_refptr_g_tsaStaticPtr)->pFrameBufferPtr - (longlong)g_stylusAftLastStylusTimeStamp)
             < 200)) {
           *(undefined1 *)
            ((longlong)*_refptr_g_prevTouchesPtr + (longlong)(int)(uint)(*(byte *)(_stk + 0x7)) * 0x478 + 0x58c) = 1;
@@ -315,7 +315,7 @@ void StylusAft_ProcessSuppress(byte param_1,byte param_2)
   if ((0x96 < *(ushort *)
                ((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x24e))
      && (800 < (ulonglong)
-               ((longlong)(*_refptr_g_tsaStaticPtr)->pFrameBufferPtr - g_lastStylusTimeStamp))) {
+               ((longlong)(*_refptr_g_tsaStaticPtr)->pFrameBufferPtr - g_stylusAftLastStylusTimeStamp))) {
     *(byte *)((longlong)*_refptr_g_prevTouchesPtr + (longlong)(int)(uint)param_2 * 0x478 + 0x58d) =
          *(byte *)((longlong)*_refptr_g_prevTouchesPtr +
                   (longlong)(int)(uint)param_2 * 0x478 + 0x58d) >> 1;
@@ -638,7 +638,7 @@ undefined8 StylusAft_FanAreaJudge(byte param_1)
                     /* 0xe0f58  1440  StylusAft_FanAreaJudge */
   if ((*(ushort *)((longlong)(int)(uint)param_1 * 0x168 + *(longlong *)_refptr_g_touchesPtr + 0x24e)
        < 0x97) &&
-     ((ulonglong)((longlong)(*_refptr_g_tsaStaticPtr)->pFrameBufferPtr - g_lastStylusTimeStamp) <
+     ((ulonglong)((longlong)(*_refptr_g_tsaStaticPtr)->pFrameBufferPtr - g_stylusAftLastStylusTimeStamp) <
       800)) {
     uVar3 = TSAOut_DisplayYPos(param_1);
     uVar4 = TSAOut_DisplayXPos(param_1);
@@ -951,7 +951,7 @@ void StylusAft_Init(void)
 
 {
                     /* 0xe08d0  1444  StylusAft_Init */
-  g_lastStylusTimeStamp = 0;
+  g_stylusAftLastStylusTimeStamp = 0;
   g_lastStylusX = 0;
   g_lastStylusY = 0;
   g_lastTiltX = 0;

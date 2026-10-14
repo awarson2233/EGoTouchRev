@@ -307,7 +307,10 @@ extern uint8_t g_tsaMemoryImage[kTsaMemoryImageSize];
 #define g_lastPalmY                                TSA_VAR_AT(undefined4, 0x6bbaa174ULL)
 #define g_lastPressureDriftDetectedTimeStamp       TSA_VAR_AT(undefined8, 0x6bbbf560ULL)
 #define g_lastScreenRotatedState                   TSA_VAR_AT(undefined4, 0x6bc72c98ULL)
+// 原 DLL 里有两个同名的文件级静态变量：TSA_Main.c 的（延迟进 IDLE 用）在 0x6bb819e0，
+// StylusAFT.c 的（笔在场时间窗用）在 0x6bbaa150。后者在这里改名以免两处共用一块存储。
 #define g_lastStylusTimeStamp                      TSA_VAR_AT(undefined8, 0x6bb819e0ULL)
+#define g_stylusAftLastStylusTimeStamp             TSA_VAR_AT(undefined8, 0x6bbaa150ULL)
 #define g_lastStylusX                              TSA_VAR_AT(undefined4, 0x6bbaa158ULL)
 #define g_lastStylusY                              TSA_VAR_AT(undefined4, 0x6bbaa15cULL)
 #define g_lastTiltX                                TSA_VAR_AT(undefined4, 0x6bbaa160ULL)

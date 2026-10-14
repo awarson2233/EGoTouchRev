@@ -1048,7 +1048,7 @@ union AsaStatic_t {
 
 union AsaOut_t {
     uint8_t raw[0x100];
-    struct { uint8_t _pad00[0x94]; uint16_t pReportX[9]; uint16_t pReportY[9]; uint8_t _padb8[0x1c]; int16_t nRptXTilt; int16_t nRptYTilt; uint16_t wPressure; uint16_t _padd6[5]; uint32_t dwRptStatusFlags; };
+    struct { uint8_t _pad00[0x94]; uint16_t pReportX[9]; uint16_t pReportY[9]; uint8_t _padb8[0x1c]; int16_t nRptXTilt; int16_t nRptYTilt; uint16_t wPressure; uint8_t _padda[0x0e]; uint32_t dwRptStatusFlags; };
 };
 
 struct AsaGroupInfo_t {

@@ -562,7 +562,7 @@ void TSA_StylusAftProcess(void)
   if ((uVar2 & 0x10) != 0) {
     cVar1 = ASA_GetRptInRange();
     if (cVar1 != '\0') {
-      g_lastStylusTimeStamp = (*_refptr_g_tsaStaticPtr)->pFrameBufferPtr;
+      g_stylusAftLastStylusTimeStamp = (*_refptr_g_tsaStaticPtr)->pFrameBufferPtr;
     }
   }
   sVar3 = TSA_RptASAPressure();
