@@ -63,7 +63,7 @@ sequenceDiagram
     end
 ```
 
-工作量分五块，P0 → P1 → P2 是接入主线，P3 闭环与 P4 源码整理都在 P2 跑通之后进行：
+工作量分五块，P0 → P1 → P2 是接入主线，P3 闭环与 P4 改写都在 P2 跑通之后进行：
 
 | 阶段 | 内容 | 验收 |
 |------|------|------|
@@ -72,7 +72,7 @@ sequenceDiagram
 | P2（已完成） | `TsaHostShim` + `TsaOutputMapper` + `TsaCoreSolver` 外观，经开关替换 `TouchPipeline` | `arm64-Debug-TsaCore` 真机触摸正常 |
 | P3（代码完成，待真机验证） | 闭环控制（跳频、扫描率、IDLE、校准），连同宿主电源状态机升级（[device-runtime-power-state-machine.md](/docs/artifacts/device-runtime-power-state-machine.md)） | 长时运行无基线漂移、跳频请求能落到 IC、灭屏 / 合盖 / 休眠后触摸可恢复 |
 | 笔接缝（代码完成，待真机验证） | 笔帧状态、笔报告、笔状态字接进 TSACore，StylusAft 按原版运行 | 纯手指回放逐帧不变；真机上写字时掌根不出点、笔尖附近没有误触 |
-| P4 | 渐进整理成可读源码：结构体恢复、重命名、去镜像 | 每一步的 DvrReplay 逐帧输出与整理前逐位一致 |
+| P4 | 改写为标准 C++：类型化结构体、具名代码、模块化，最终移出内存镜像 | 每一步与参考版本的逐帧触点、闭环诊断、完整状态摘要逐字节相同 |
 
 ## 分点解释
 
@@ -460,24 +460,8 @@ sequenceDiagram
 
 IDLE 退出会让 TSACore 重新建立基线，期间不出点。真实流程里退出总是由第一根手指触发，代价是首次触摸约 6 帧（50 ms）的延迟，与 ApDaemon 一致。真机上要确认的是：命令历史里出现 `TSACore->ForceToFreqPoint` 且帧里的扫描频率随之改变，`ClearStatus(8)` 之后 `word[3]` 不再是 `0xbb`，长时间运行没有基线漂移。
 
-### 9. P4：渐进整理成可读源码
+### 9. P4：改写为标准 C++
 
-P2 跑通后，raw 的 DvrReplay 输出就是金标准，整理的每一步都和它对比。比对内容是逐帧的触点（点数、ID、坐标、事件），加上 `TSA_RptDiffPtr`、`TSA_RptBaselinePtr` 两块中间缓冲的哈希；某一步只要出现一帧不一致，就回退这一步。缺少这条比对链路之前不要动结构和命名，否则改坏了也看不出来。
+raw 正在逐模块改写成标准 C++，放在 [TsaCore/src](/EGoTouchService/Solvers/TouchSolver/TsaCore/src)，与未改写的 C 编进同一个库。每一步都和参考版本（标签 `tsa-reference`）在全部录制与场景下逐帧比较触点输出、闭环诊断和完整状态摘要，三者逐字节相同才提交。比对方法、改写规则、目录与命名、状态从内存镜像迁出的路径见 [tsacore-cpp-rewrite.md](tsacore-cpp-rewrite.md)。
 
-```mermaid
-flowchart TD
-    G["P2 跑通<br/>录下 DvrReplay 金标准"] --> S1["① 恢复热点结构体<br/>Touch 0x168 / PrevTouch 0x478<br/>TSAStatic / TSAPrmtFlash / TSAPrpt"]
-    S1 --> S2["② 按模块重命名<br/>param_N / local_xx / uVarN / field_0x"]
-    S2 --> S3["③ 去别名<br/>DAT_* / _refptr_* 改为具名全局"]
-    S3 --> S4["④ 按模块移出镜像<br/>改为模块内 static 或结构体成员"]
-    S4 --> S5["⑤ 可选：C → C++"]
-    S1 & S2 & S3 & S4 & S5 --> CMP{"DvrReplay 逐帧<br/>与金标准逐位一致？"}
-    CMP -- 否 --> RB["回退本步"]
-    CMP -- 是 --> NEXT["进入下一步 / 下一个模块"]
-```
-
-1. **结构体优先于命名**：可读性最大的来源是把 `*(uint *)(i * 0x168 + touches + 0x21c)` 变成 `touches[i].flags`。先恢复被访问最多的几个结构体，局部变量的名字在结构体字段定下来以后才好起。`touches`、`prevTouches` 这类数组按定长元素访问，恢复起来最稳；`TSAPrmtFlash` 已经有部分字段名，可以接着补。
-2. **重命名按模块推进**：以文件为单位（如 `Tracking/TE.c`）一次改完，函数头的 `// Function: X @ 地址` 注释保留，用来和反编译对齐。改名同时通过 ghidra-mcp 回写到 Ghidra 工程，让 DLL 侧的反编译和源码用同一套名字。
-3. **移出镜像要逐模块判定**：一个模块只有在不再出现越过本全局的偏移访问时，它的全局才能从 `g_tsaMemoryImage` 移成普通 `static` 变量。被多个模块共享、还按原 VA 布局互相越界读写的块（`g_tsaStaticPtr` 所指区域、各 `g_tsaBuf*`），保持在镜像里直到最后。镜像全部移空以后，单例限制才有可能解除（改为上下文结构体传参）。
-4. **C → C++ 放最后，也可以不做**：业务侧只通过第 6 节的 C++ 外观调用，raw 保持 C 并不影响接入。真要转，等 ①–④ 完成、代码已经是具名结构体加具名函数之后再转，届时基本是机械改写。
-5. **和现有 C++ 复刻的关系**：[TouchSolver](/EGoTouchService/Solvers/TouchSolver) 下的 `*.hpp` 是手写复刻，也是要被替换的对象。整理后的 raw 会直接成为主线代码；复刻里已经做过的字段命名和结构分析（以及 [finger_algorithms](/docs/finger_algorithms) 系列文档）可以作为 ①② 的命名来源，不必从零起名。
+[TouchSolver](/EGoTouchService/Solvers/TouchSolver) 下的 `*.hpp` 是手写复刻，改写完成后由 TSACore 的 C++ 版本替换；复刻里做过的字段命名和结构分析（以及 [finger_algorithms](/docs/finger_algorithms) 系列文档）是改写时的命名来源之一。
