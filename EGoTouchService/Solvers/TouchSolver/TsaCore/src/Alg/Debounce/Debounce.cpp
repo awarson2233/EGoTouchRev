@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "Alg/Cmf/Cmf.h"
 #include "Alg/Peak/PeakData.h"
 #include "Alg/Touch/Touch.h"
 #include "Alg/Touch/TouchData.h"
@@ -133,7 +134,7 @@ uint16_t TouchDownNum(uint8_t prevIdx, uint8_t curIdx) {
     if (flash.noisyTouchDownDebounce != 0) {
         const auto dim1 = static_cast<uint8_t>(cur.rptPos.dim1 >> 8);
         const auto dim2 = static_cast<uint8_t>(cur.rptPos.dim2 >> 8);
-        if (CMF_GetNoiseValue(dim1, dim2) > kNoiseHigh || CMF_GetNoiseValue(dim1, dim2) < kNoiseLow) {
+        if (Cmf::GetNoiseValue(dim1, dim2) > kNoiseHigh || Cmf::GetNoiseValue(dim1, dim2) < kNoiseLow) {
             num = std::max<uint16_t>(num, flash.noisyTouchDownDebounce);
         }
     }

@@ -1,0 +1,370 @@
+#include "Alg/Cmf/Cmf.h"
+
+#include <array>
+#include <cstdio>
+#include <cstdlib>
+
+#include "Alg/Baseline/Baseline.h"
+#include "Alg/SelfData/SelfData.h"
+#include "Alg/TouchThold/TouchThold.h"
+#include "App/TsaBuffer.h"
+#include "App/TsaStatic.h"
+#include "Common/Assert.h"
+#include "Common/Image.h"
+#include "Legacy/RawApi.h"
+#include "Prmt/Prmt.h"
+
+namespace Solvers::Tsa::Core::Cmf {
+
+namespace {
+
+constexpr int kDimRow = 1;                       // 按行（沿 Dim1）
+constexpr int kDimCol = 2;                       // 按列（沿 Dim2）
+constexpr uint32_t kMethod2d = 1;
+constexpr uint32_t kSmartCoverFollowNormal = 2;  // cmfMethodSmartCover 为 2 时沿用常态的方法
+constexpr uint32_t kSpecialCmfOverNoise = 0x8;   // TsaStatic::specialControlFlags：某条线的公共噪声超过噪声门限
+constexpr size_t kAftCmfDifBytes = 0x2648;
+constexpr int16_t kToeEdgeThold = 200;           // ToE 特殊门限时两端各两条线的门限
+constexpr int16_t kGameThold = 0x4b0;
+constexpr int16_t kGameGrad = 200;
+constexpr int kMaxLineLen = 0x102;
+
+/// 一条线上相邻格的分类（CMF_NoiseCal）。
+enum class Cell : int { kFlat = 1, kRise = 2, kFall = 3, kHigh = 4, kLow = 5 };
+
+/// Dif 相近的一段连续平坦格。
+struct NoiseCluster {
+    int32_t sum;
+    uint8_t count;
+    uint8_t reserved005[3];
+    int32_t last;       // 最近加入的格的 Dif
+    int32_t weightSum;  // 权重之和（权重恒为 1）
+};
+static_assert(sizeof(NoiseCluster) == 0x10);
+
+/// g_cmfNoise：一条线的聚类状态与结果。
+struct NoiseState {
+    uint16_t lastIdx;  // 上一个加入的格（0xffff 为无）
+    uint8_t cur;       // 上一个格加入的簇
+    uint8_t clusterNum;
+    NoiseCluster cluster[10];
+    uint8_t resultCount;  // 选中的簇的格数
+    int32_t noise;        // 选中的簇的均值
+    const int32_t* data;
+    const uint8_t* weight;  // 只有被裁掉的 SS 路径会传入，恒为空
+};
+static_assert(sizeof(NoiseState) == 0xc0);
+
+NoiseState& Noise() { return Image::At<NoiseState>(0x6bb7f080); }
+uint8_t& PreCmfDifLogEnabled() { return Image::At<uint8_t>(0x6bb7f040); }
+int16_t* PreCmfDif() { return Image::At<int16_t*>(0x6bc38448); }
+/// 每条线相邻格之差与二阶差（方向随 dim1Axis）。
+int16_t* OneOrderDiff() { return &Image::At<int16_t>(0x6bc16080); }
+int16_t* TwoOrderDiff() { return &Image::At<int16_t>(0x6bc32180); }
+/// Dim1 方向 CMF 之后、全部 CMF 之后的 Dif。
+int16_t* AftDim1CmfDif() { return &Image::At<int16_t>(0x6bc40240); }
+int16_t* AftCmfDif() { return &Image::At<int16_t>(0x6bc21a00); }
+uint16_t GridMapBufSize() { return Image::At<uint16_t>(0x6bc1f348); }
+
+// CMF_InitNoiseData @ 0x6ba4d9e0
+void InitNoiseData(const int32_t* data) {
+    NoiseState& st = Noise();
+    ClearChecked(&st, sizeof(NoiseState), sizeof(NoiseState));
+    st.data = data;
+    st.weight = nullptr;
+    st.lastIdx = 0xffff;
+}
+
+void AddToCluster(NoiseCluster& c, int32_t v) {
+    c.sum += v;
+    ++c.count;
+    c.last = v;
+    c.weightSum += 1;
+}
+
+// CMF_PushNoiseData @ 0x6ba4da6a
+// 紧接上一个格的归入同一簇；否则归入最近值与之相差不到 grad 的簇，都不是就开新簇（最多 10 簇，满了归入上一簇）。
+void PushNoiseData(uint16_t idx, int16_t grad) {
+    NoiseState& st = Noise();
+    const int32_t v = st.data[idx];
+    if (idx == st.lastIdx + 1) {
+        AddToCluster(st.cluster[st.cur], v);
+    } else {
+        bool found = false;
+        for (uint8_t k = 0; k < st.clusterNum; ++k) {
+            const auto d = static_cast<int16_t>(static_cast<int16_t>(v) - static_cast<int16_t>(st.cluster[k].last));
+            if (d < grad && -grad < d) {
+                st.cur = k;
+                AddToCluster(st.cluster[k], v);
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            if (st.clusterNum < 10) {
+                st.cur = st.clusterNum;
+                NoiseCluster& c = st.cluster[st.cur];
+                c.sum = v;
+                c.count = 1;
+                c.last = v;
+                c.weightSum = 1;
+                ++st.clusterNum;
+            } else {
+                AddToCluster(st.cluster[st.cur], v);
+            }
+        }
+    }
+    st.lastIdx = idx;
+}
+
+// CMF_NoiseStatistics @ 0x6ba4deb4（无权重的分支）
+// 均值最小的簇格数更多、或均值为正时取它，否则取均值绝对值最小的簇。
+void NoiseStatistics() {
+    NoiseState& st = Noise();
+    int16_t minAvg = 0x7fff;
+    uint8_t minAvgCount = 0;
+    int16_t minAbs = 0x7fff;
+    st.resultCount = 0;
+    for (uint8_t k = 0; k < st.clusterNum; ++k) {
+        const NoiseCluster& c = st.cluster[k];
+        const auto avg = static_cast<int16_t>(c.sum / static_cast<int>(c.count));
+        if (avg < minAvg) {
+            minAvgCount = c.count;
+            minAvg = avg;
+        }
+        if (std::abs(avg) < std::abs(minAbs)) {
+            st.resultCount = c.count;
+            minAbs = avg;
+        }
+    }
+    if (st.clusterNum == 0) {
+        st.noise = 0;
+        st.resultCount = 0;
+    } else if (st.resultCount < minAvgCount || 0 < minAvg) {
+        st.noise = minAvg;
+        st.resultCount = minAvgCount;
+    } else {
+        st.noise = minAbs;
+    }
+}
+
+// CMF_NoiseCal @ 0x6ba4e376
+// 超过 ±thold 的格与相邻差超过 ±grad 的格不参与；连续两格都平坦时前一格进入聚类。
+void NoiseCal(const int32_t* line, int n, int thold, int grad) {
+    std::array<Cell, kMaxLineLen> cls;
+    auto prev = static_cast<int16_t>(line[0]);
+    for (uint8_t i = 1; i < n; ++i) {
+        const auto v = static_cast<int16_t>(line[i]);
+        const auto d = static_cast<int16_t>(v - prev);
+        if (thold < v) {
+            cls[i] = Cell::kHigh;
+        } else if (v < -thold) {
+            cls[i] = Cell::kLow;
+        } else if (grad < d) {
+            cls[i] = Cell::kRise;
+        } else if (d < -grad) {
+            cls[i] = Cell::kFall;
+        } else {
+            cls[i] = Cell::kFlat;
+        }
+        prev = v;
+    }
+    InitNoiseData(line);
+    for (uint8_t i = 1; i < n - 1; ++i) {
+        if (cls[i] == Cell::kFlat && cls[i + 1] == Cell::kFlat) PushNoiseData(i, static_cast<int16_t>(grad));
+    }
+    NoiseStatistics();
+}
+
+// CMF_ProcessCoreWeight @ 0x6ba4e55b（经 CMF_ProcessCore）
+// 智能皮套且开了 cmfSmartCoverRefine 时，以 1.5 倍的噪声为门限（比原门限小时）再求一次。
+int ProcessCore(int32_t* line, int n, int thold, int grad) {
+    NoiseCal(line, n, thold, grad);
+    if ((Static().featureFlags & kFeatSmartCover) != 0 && PrmtFlash().cmfSmartCoverRefine != 0) {
+        const int refined = Noise().noise * 3 / 2;
+        if (0 < refined && refined < thold) NoiseCal(line, n, refined, grad);
+    }
+    const int noise = Noise().noise;
+    for (uint8_t i = 0; i < n; ++i) line[i] -= noise;
+    return noise;
+}
+
+// CMF_ProcessDimUnitOnBuf @ 0x6ba4e0ec
+// 取第 line 条线（dim 1 为第 line 行，2 为第 line 列）做 CMF，写回 dst。
+int ProcessDimUnitOnBuf(int16_t* dst, const int16_t* src, int dim, uint8_t line, int16_t thold, int16_t grad,
+                        uint8_t cols, uint8_t rows) {
+    uint16_t start;
+    uint8_t step;
+    uint8_t n;
+    if (dim == kDimRow) {
+        start = static_cast<uint16_t>(cols * line);
+        step = 1;
+        n = cols;
+    } else {
+        start = line;
+        step = cols;
+        n = rows;
+    }
+    std::array<int32_t, kMaxLineLen> buf;
+    uint16_t idx = start;
+    for (uint8_t i = 0; i < n; ++i, idx = static_cast<uint16_t>(idx + step)) buf[i] = src[idx];
+    const int noise = ProcessCore(buf.data(), n, thold, grad);
+    idx = start;
+    for (uint8_t i = 0; i < n; ++i, idx = static_cast<uint16_t>(idx + step)) dst[idx] = static_cast<int16_t>(buf[i]);
+    return noise;
+}
+
+// CMF_ProcessDimUnit @ 0x6ba4e2af
+int16_t ProcessDimUnit(int dim, uint8_t line, int16_t thold, int16_t grad, uint8_t cols, uint8_t rows) {
+    int16_t* dif = Buffers().dif;
+    const auto noise = static_cast<int16_t>(ProcessDimUnitOnBuf(dif, dif, dim, line, thold, grad, cols, rows));
+    if (Prpt().noiseThold < noise) Static().specialControlFlags |= kSpecialCmfOverNoise;
+    return noise;
+}
+
+// CMF_CopyCommonModeNoise @ 0x6ba4e7ee
+void CopyCommonModeNoise(int dim, uint8_t line, uint8_t cols, uint8_t rows, int16_t noise) {
+    int16_t* cmn = Buffers().commonModeNoise;
+    if (dim == kDimRow) {
+        for (uint8_t c = 0; c < cols; ++c) cmn[cols * line + c] = noise;
+    } else {
+        for (uint8_t r = 0; r < rows; ++r) cmn[cols * r + line] = noise;
+    }
+}
+
+// CMF_ProcessDim @ 0x6ba4e8b5（自容辅助 SS_* 被裁掉，恒为 0）
+// ToE 用特殊门限时，两端各两条线的门限改为 200。
+void ProcessDim(int dim, int16_t thold, int16_t grad, uint8_t cols, uint8_t rows) {
+    TsaPrpt& prpt = Prpt();
+    prpt.cmfNoiseMin = 0x7fff;
+    prpt.cmfNoiseMax = INT16_MIN;
+    const uint8_t lines = dim == kDimRow ? rows : cols;
+    const bool toe = TouchThold::ToeUseSpecialThold();
+    for (uint8_t line = 0; line < lines; ++line) {
+        const int16_t lineThold = !toe || (1 < line && line < lines - 2) ? thold : kToeEdgeThold;
+        const int16_t noise = ProcessDimUnit(dim, line, lineThold, grad, cols, rows);
+        CopyCommonModeNoise(dim, line, cols, rows, noise);
+        if (noise < prpt.cmfNoiseMin) prpt.cmfNoiseMin = noise;
+        if (prpt.cmfNoiseMax < noise) prpt.cmfNoiseMax = noise;
+    }
+}
+
+// CMF_ProcessDimCommonNoise @ 0x6ba4ebf3（只以 dim 1 调用）
+// 游戏场景下按行再求一遍公共噪声，记到 SelfData::commonNoise[dim1Len + 行]。
+void GameCommonNoise() {
+    const FlashPrmt& fl = PrmtFlash();
+    SelfData& self = SelfBuf();
+    for (uint8_t r = 0; r < fl.dim2Len; ++r) {
+        self.commonNoise[fl.dim1Len + r] = ProcessDimUnit(kDimRow, r, kGameThold, kGameGrad, fl.dim1Len, fl.dim2Len);
+    }
+}
+
+// CMF_SaveOrderDiff @ 0x6ba4ecaa
+// dim1Axis 为 1 时扫描线是行，否则是列。二阶差两端清零的下标按另一方向算（原厂如此）。
+void SaveOrderDiff() {
+    const FlashPrmt& fl = PrmtFlash();
+    const uint32_t cols = fl.dim1Len;
+    const bool lineIsRow = fl.dim1Axis == 1;
+    const uint8_t lines = fl.dim1Axis == 0 ? fl.dim1Len : fl.dim2Len;
+    const uint8_t len = fl.dim1Axis == 0 ? fl.dim2Len : fl.dim1Len;
+    const auto at = [&](uint32_t line, uint32_t k) {
+        return static_cast<uint16_t>(lineIsRow ? k + line * cols : line + k * cols);
+    };
+    const auto atCross = [&](uint32_t line, uint32_t k) {
+        return static_cast<uint16_t>(lineIsRow ? line + k * cols : k + line * cols);
+    };
+    const int16_t* dif = Buffers().dif;
+    int16_t* d1 = OneOrderDiff();
+    int16_t* d2 = TwoOrderDiff();
+    for (uint8_t a = 0; a < lines; ++a) {
+        d1[at(a, 0)] = 0;
+        for (uint8_t k = 1; k < len; ++k) d1[at(a, k)] = static_cast<int16_t>(dif[at(a, k)] - dif[at(a, k - 1)]);
+    }
+    for (uint8_t a = 0; a < lines; ++a) {
+        d2[atCross(a, 0)] = 0;
+        d2[atCross(a, len - 1u)] = 0;
+        for (uint8_t k = 1; k < len - 1; ++k) d2[at(a, k)] = static_cast<int16_t>(d1[at(a, k + 1)] - d1[at(a, k)]);
+    }
+}
+
+// CMF_SavePreCmfDif @ 0x6ba4f0c9
+// 调试日志：按 CMFRemap 的映射表把 CMF 前的 Dif 追加到 preCMFDiff.csv。CMFRemap 被裁掉后表的行列数为 0，
+// 只剩打开、关闭文件。
+void SavePreCmfDif() {
+    if (PreCmfDifLogEnabled() == 0) return;
+    if (std::FILE* f = std::fopen("preCMFDiff.csv", "a")) std::fclose(f);
+}
+
+}  // namespace
+
+// CMF_Malloc @ 0x6ba4d880（CMFPca / CMFRemap 被裁掉）
+bool Malloc() { return true; }
+
+// CMF_Free @ 0x6ba4d8a8
+void Free() {}
+
+// CMF_Init @ 0x6ba4d8c1（2D 滤波的初始化被裁掉）
+void Init() { CMFRemap_Init(); }
+
+// CMF_GetCmfMethod @ 0x6ba4d903
+uint32_t GetMethod() {
+    const FlashPrmt& fl = PrmtFlash();
+    if ((Static().featureFlags & kFeatSmartCover) == 0 || fl.cmfMethodSmartCover == kSmartCoverFollowNormal) {
+        return fl.cmfMethodNormal;
+    }
+    return fl.cmfMethodSmartCover;
+}
+
+// CMF_GetNoiseValue @ 0x6ba4d97a
+int16_t GetNoiseValue(uint8_t dim1, uint8_t dim2) {
+    const FlashPrmt& fl = PrmtFlash();
+    if (dim1 >= fl.dim1Len || dim2 >= fl.dim2Len) return 0;
+    return Buffers().commonModeNoise[GridIndex(dim1, dim2)];
+}
+
+// CMF_ProcessDimCommonOnBuf @ 0x6ba4eb1d
+void ProcessDimCommonOnBuf(int16_t* dst, const int16_t* src, int dim, int16_t thold, int16_t grad, uint8_t cols,
+                           uint8_t rows) {
+    if (GetMethod() == kMethod2d) return;  // 2D 滤波被裁掉
+    const uint8_t lines = dim == kDimRow ? rows : cols;
+    for (uint8_t line = 0; line < lines; ++line) ProcessDimUnitOnBuf(dst, src, dim, line, thold, grad, cols, rows);
+}
+
+// CMF_Process @ 0x6ba4f2c8
+// dim1Axis 为 0 时按列做，否则按行做；之后补偿基线，游戏场景下另求各行公共噪声。
+void Process() {
+    const FlashPrmt& fl = PrmtFlash();
+    const DynamicPrmt& dyn = PrmtDynamic();
+    TsaBufferTable& buf = Buffers();
+    CopyChecked(PreCmfDif(), GridBufSize() * size_t{2}, buf.dif, fl.sensorNum * size_t{2});
+    SaveOrderDiff();
+    SavePreCmfDif();
+    if (Static().cmfBlocked != 0) return;
+    if (GetMethod() != kMethod2d) {  // 2D 滤波被裁掉
+        const uint8_t cols = fl.dim1Len;
+        const uint8_t rows = fl.dim2Len;
+        ClearChecked(buf.commonModeNoise, GridMapBufSize() * size_t{2}, static_cast<size_t>(rows * cols) * 2);
+        ProcessDim(fl.dim1Axis == 0 ? kDimCol : kDimRow, dyn.cmfThold.amp, dyn.cmfThold.grad, cols, rows);
+        if (Static().blRefreshRequest == 0) Baseline::Compensation();
+        if (dyn.cmfThold.gameCommonNoise != 0 && static_cast<char>(TSA_IsGameScenario()) != 0) GameCommonNoise();
+        CopyChecked(AftDim1CmfDif(), kAftCmfDifBytes, buf.dif, fl.sensorNum * size_t{2});
+    }
+    CopyChecked(AftCmfDif(), kAftCmfDifBytes, buf.dif, fl.sensorNum * size_t{2});
+}
+
+}  // namespace Solvers::Tsa::Core::Cmf
+
+// raw 的 TSA / TSABuffer / HardwareAnalyzer 还在调用的入口
+extern "C" {
+namespace C = Solvers::Tsa::Core::Cmf;
+bool CMF_Malloc(void) { return C::Malloc(); }
+void CMF_Free(void) { C::Free(); }
+void CMF_Init(void) { C::Init(); }
+void CMF_Process(void) { C::Process(); }
+uint32_t CMF_GetCmfMethod(void) { return C::GetMethod(); }
+void CMF_EnablePreCMFDiffLog(uint8_t enabled) { Solvers::Tsa::Core::Image::At<uint8_t>(0x6bb7f040) = enabled; }
+void CMF_ProcessDimCommonOnBuf(int16_t* dst, const int16_t* src, int dim, int16_t thold, int16_t grad, uint8_t cols,
+                               uint8_t rows, uint8_t) {
+    C::ProcessDimCommonOnBuf(dst, src, dim, thold, grad, cols, rows);
+}
+}  // extern "C"

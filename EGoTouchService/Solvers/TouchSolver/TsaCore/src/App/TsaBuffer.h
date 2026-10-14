@@ -33,7 +33,7 @@ struct TsaBufferTable {
     int16_t* preCmfRaw;  // CMF 前的 raw
     int16_t* bl;
     int8_t* tz;  // 区域图：每格的区域编码，见 Alg/Sensor/Sensor.h
-    void* commonModeNoise;
+    int16_t* commonModeNoise;  // CMF：每格减去的公共噪声
     int16_t* preHwRaw;
     int16_t* raw2RawDif;
     void* raw2RawDifAftCmf;

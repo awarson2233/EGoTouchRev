@@ -5,6 +5,7 @@
 #include <numbers>
 
 #include "Alg/CTD/Ctd.h"
+#include "Alg/Cmf/Cmf.h"
 #include "Alg/Peak/Peak.h"
 #include "Alg/Peak/PeakData.h"
 #include "Alg/Touch/TouchData.h"
@@ -535,21 +536,21 @@ void GetSurroundingStatusFlag(TouchZoneUnit& z) {
 void GetCmfFlag(TouchZoneUnit& z) {
     const FlashPrmt& fl = PrmtFlash();
     const PeakEntry& p = PeakAt(z.maxSigPeakIdx);
-    const int noise = CMF_GetNoiseValue(p.dim1, p.dim2);
+    const int noise = Cmf::GetNoiseValue(p.dim1, p.dim2);
     const int total = noise + p.sig;
     int thold = PrmtDynamic().peakThold;
     if (TouchThold::ToeUseSpecialThold() && (p.dim1 == 1 || p.dim1 == fl.dim1Len - 2 || p.dim2 == fl.dim2Len - 1)) {
         thold = PrmtDynamic().edgePeakTholdLow;
     }
-    if (total < thold && CMF_GetCmfMethod() != 1) z.flags |= kZoneCmfWeak;
+    if (total < thold && Cmf::GetMethod() != 1) z.flags |= kZoneCmfWeak;
     if ((z.flags & (kZoneIsolated | kZoneLargeShape)) == 0) return;
     int side[2];
     if (fl.dim1Axis == 0) {
-        side[0] = CMF_GetNoiseValue(static_cast<uint8_t>(z.minDim1 - 1), z.minDim2);
-        side[1] = CMF_GetNoiseValue(static_cast<uint8_t>(z.maxDim1 + 1), z.maxDim2);
+        side[0] = Cmf::GetNoiseValue(static_cast<uint8_t>(z.minDim1 - 1), z.minDim2);
+        side[1] = Cmf::GetNoiseValue(static_cast<uint8_t>(z.maxDim1 + 1), z.maxDim2);
     } else {
-        side[0] = CMF_GetNoiseValue(z.minDim1, static_cast<uint8_t>(z.minDim2 - 1));
-        side[1] = CMF_GetNoiseValue(z.maxDim1, static_cast<uint8_t>(z.maxDim2 + 1));
+        side[0] = Cmf::GetNoiseValue(z.minDim1, static_cast<uint8_t>(z.minDim2 - 1));
+        side[1] = Cmf::GetNoiseValue(z.maxDim1, static_cast<uint8_t>(z.maxDim2 + 1));
     }
     for (const int v : side) {
         if (fl.peakFilterReferenceThreshold < v * 2 && noise * 2 <= v && total < v * 2) z.flags |= kZoneCmfSideNoise;

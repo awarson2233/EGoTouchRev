@@ -23,15 +23,17 @@ struct SelfData {
     int32_t innerStrongSum[kMaxLineNum];
     int32_t strongAbsSum[kMaxLineNum];       // 强信号的绝对值之和
     int32_t innerStrongAbsSum[kMaxLineNum];
-    int32_t field1400[kMaxLineNum];          // TSAFold 的输入（TSAFold 被裁掉）
-    int16_t field1680[4 * kMaxLineNum];      // CMF 写
+    int32_t field1400[kMaxLineNum];          // TSAFold 的输入（TSAFold 被裁掉）；TZ 借来记每线遍历到的信号和
+    int16_t commonNoise[2 * kMaxLineNum];    // CMF：游戏场景下各行的公共噪声（下标同上，只写行）
+    int32_t field1900[kMaxLineNum];          // TZ 借来记每线未达门限的格数
 };
 static_assert(sizeof(SelfData) == 0x1b80);
 static_assert(offsetof(SelfData, innerStrongCount) == 0x780);
 static_assert(offsetof(SelfData, maxAbs) == 0x8c0);
 static_assert(offsetof(SelfData, strongSum) == 0xa00);
 static_assert(offsetof(SelfData, innerStrongAbsSum) == 0x1180);
-static_assert(offsetof(SelfData, field1680) == 0x1680);
+static_assert(offsetof(SelfData, commonNoise) == 0x1680);
+static_assert(offsetof(SelfData, field1900) == 0x1900);
 
 [[nodiscard]] inline SelfData& SelfBuf() noexcept { return Image::At<SelfData>(0x6bc18880); }
 [[nodiscard]] inline SelfData& SelfForBlReset() noexcept { return Image::At<SelfData>(0x6bc24080); }

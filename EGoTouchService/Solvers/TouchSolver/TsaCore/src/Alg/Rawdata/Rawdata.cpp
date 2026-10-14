@@ -3,6 +3,7 @@
 #include <cstdlib>
 
 #include "Alg/Baseline/Baseline.h"
+#include "Alg/Cmf/Cmf.h"
 #include "Alg/TpSensor/TpSensor.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
@@ -73,7 +74,7 @@ void Cmf() {
     if (TSAStatic_IsHWReset()) return;
     const TsaBufferTable& buf = Buffers();
     Baseline::CalcDiffCommon(buf.dif, buf.raw, buf.bl);
-    CMF_Process();
+    Cmf::Process();
     Baseline::CalcRawCommon(buf.raw, buf.bl, buf.dif);
 }
 

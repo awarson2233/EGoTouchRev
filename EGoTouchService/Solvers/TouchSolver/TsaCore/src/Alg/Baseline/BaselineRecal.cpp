@@ -84,10 +84,10 @@ void Compensation() {
     const TsaPrpt& prpt = Prpt();
     TsaStatic& stat = Static();
     int16_t offset = 0;
-    if (prpt.field302 < 0) {
-        offset = prpt.field302;
-    } else if (0 < prpt.field300) {
-        offset = prpt.field300;
+    if (prpt.cmfNoiseMax < 0) {
+        offset = prpt.cmfNoiseMax;
+    } else if (0 < prpt.cmfNoiseMin) {
+        offset = prpt.cmfNoiseMin;
     }
     if (std::abs(offset) < kCompensateMin || stat.rawJumpLatched != 0) return;
     const int16_t step = offset < 1 ? static_cast<int16_t>(-kCompensateStep) : kCompensateStep;

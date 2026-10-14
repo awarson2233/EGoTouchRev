@@ -6,6 +6,7 @@
 #include <cstring>
 
 #include "Alg/Peak/PeakData.h"
+#include "Alg/SelfData/SelfData.h"
 #include "Alg/TouchZone/TouchZoneData.h"
 #include "App/TsaBuffer.h"
 #include "Common/Assert.h"
@@ -45,8 +46,8 @@ inline constexpr uint8_t kNoPeak = kMaxPeakNum;
 [[nodiscard]] inline int16_t* TimeHand() noexcept { return Image::At<int16_t*>(0x6bba3518); }
 /// g_tsaBufSelf 里 TZ 借用的两段（每个区域重新清零），下标 dim1，或 dim1Len + dim2：
 /// 每列 / 行遍历到的信号和，与未达门限的格数。
-[[nodiscard]] inline int32_t* LineSigSum() noexcept { return &Image::At<int32_t>(0x6bc18880 + 0x1400); }
-[[nodiscard]] inline int32_t* LineWeakCount() noexcept { return &Image::At<int32_t>(0x6bc18880 + 0x1900); }
+[[nodiscard]] inline int32_t* LineSigSum() noexcept { return SelfBuf().field1400; }
+[[nodiscard]] inline int32_t* LineWeakCount() noexcept { return SelfBuf().field1900; }
 inline constexpr size_t kLineBufBytes = 0x280;
 
 [[nodiscard]] inline int16_t Abs16(int16_t v) noexcept { return static_cast<int16_t>(v < 0 ? -v : v); }

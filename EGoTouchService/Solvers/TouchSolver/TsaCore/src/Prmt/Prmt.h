@@ -28,12 +28,13 @@ static_assert(offsetof(AiirPrmt, heavyCoef) == 0x005);
 struct CmfThold {
     int16_t amp;  // 传感器信号的共模噪声门限
     int16_t grad;  // 相邻传感器差分信号的共模噪声门限
-    int16_t gameExtra;
+    uint8_t gameCommonNoise;  // 游戏场景下再按 Dim1 求一遍各行的公共噪声（写入 SelfData）
+    uint8_t reserved005[0x1];
 };
 static_assert(sizeof(CmfThold) == 0x006);
 static_assert(offsetof(CmfThold, amp) == 0x000);
 static_assert(offsetof(CmfThold, grad) == 0x002);
-static_assert(offsetof(CmfThold, gameExtra) == 0x004);
+static_assert(offsetof(CmfThold, gameCommonNoise) == 0x004);
 
 /// 质心边缘修正的一段：触点尺寸不超过 maxSizeMm 时用这一段，把边缘信号比在 ln 表上的位置换算成补偿量。
 struct CtdEdgeSegment {
@@ -139,7 +140,8 @@ struct FlashPrmt {
     uint8_t blDirtyCheck;  // 查当前基线是否被污染
     uint8_t blAbnormalCheck;  // 查基线异常（否则走 BLReset_Check）
     uint8_t ssNegSignalStableCheck;
-    uint8_t reserved06D[0x23];
+    uint8_t cmfSmartCoverRefine;  // 智能皮套时以 1.5 倍公共噪声为门限再求一次
+    uint8_t reserved06E[0x22];
     uint8_t dim1LogicFirst;  // Dim1 逻辑区域的首末列
     uint8_t dim1LogicLast;
     uint8_t dim2LogicFirst;
@@ -396,6 +398,7 @@ static_assert(offsetof(FlashPrmt, blUpdateFromPreCmfRaw) == 0x069);
 static_assert(offsetof(FlashPrmt, blDirtyCheck) == 0x06A);
 static_assert(offsetof(FlashPrmt, blAbnormalCheck) == 0x06B);
 static_assert(offsetof(FlashPrmt, ssNegSignalStableCheck) == 0x06C);
+static_assert(offsetof(FlashPrmt, cmfSmartCoverRefine) == 0x06D);
 static_assert(offsetof(FlashPrmt, dim1LogicFirst) == 0x090);
 static_assert(offsetof(FlashPrmt, dim1LogicLast) == 0x091);
 static_assert(offsetof(FlashPrmt, dim2LogicFirst) == 0x092);

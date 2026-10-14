@@ -86,8 +86,8 @@ uint8_t TSAStatic_IsAllFreqNoisy(void);
 uint8_t TSAStatic_IsAllFreqBecomeNoisy(void);
 bool TSAStatic_IsHWReset(void);
 
-// Signal/CMF.c
-void CMF_Process(void);
+// Core/TSAPrunedImpl.c
+void CMFRemap_Init(void);
 
 
 // Rejection/AntiTouch.c
@@ -107,9 +107,6 @@ uint8_t GripFilter_IsMergeHandlerSensorEnabled(uint8_t dim1, uint8_t dim2);
 // Rejection/Thenar.c
 void Thenar_UnitCopy(uint8_t* dst, uint8_t* src);
 
-// Signal/CMF.c
-uint32_t CMF_GetCmfMethod(void);
-int16_t CMF_GetNoiseValue(uint8_t dim1, uint8_t dim2);
 
 
 // Signal/HardwareAnalyzer.c

@@ -204,7 +204,7 @@ bool IsTouchProtectOnRawJump() {
         if ((u.volatileFlags & kVolatileEdgeTouch) != 0) edge = true;
         ++n;
     }
-    return 1 <= n && n <= 3 && strong && !edge && std::abs(prpt.field300) * 3 < ref && std::abs(prpt.field302) * 3 < ref;
+    return 1 <= n && n <= 3 && strong && !edge && std::abs(prpt.cmfNoiseMin) * 3 < ref && std::abs(prpt.cmfNoiseMax) * 3 < ref;
 }
 
 // BLReset_IsLongTimeRawJumpDetected @ 0x6ba48d9e

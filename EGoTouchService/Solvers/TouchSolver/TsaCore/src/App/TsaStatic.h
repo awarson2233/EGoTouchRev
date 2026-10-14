@@ -101,7 +101,9 @@ struct TsaStatic {
     uint8_t resetFlagsCleared;  // systemFlags 的复位位本帧刚清掉
     uint8_t reserved118[0x2];
     uint8_t signalReverted;  // 信号反向（TSAStatic_IsSignalReverted）
-    uint8_t reserved11B[0x7];
+    uint8_t reserved11B[0x1];
+    uint8_t cmfBlocked;  // 本帧不做 CMF（只存 CMF 前的 Dif）
+    uint8_t reserved11D[0x5];
     uint16_t strongTapCount;  // TE：报过点的触点抬起时峰值超过 2 倍 finger 门限、长轴小于 21 mm 的连续次数（到 5 为止）
     uint8_t reserved124[0x1C4];
     uint8_t blResetLatched;  // BLReset：收到过硬件复位，Init 带参数时清零
@@ -204,6 +206,7 @@ static_assert(offsetof(TsaStatic, fullIncellSignalDisparity) == 0x114);
 static_assert(offsetof(TsaStatic, justExitedSpecialCtrlMode) == 0x115);
 static_assert(offsetof(TsaStatic, resetFlagsCleared) == 0x117);
 static_assert(offsetof(TsaStatic, signalReverted) == 0x11A);
+static_assert(offsetof(TsaStatic, cmfBlocked) == 0x11C);
 static_assert(offsetof(TsaStatic, strongTapCount) == 0x122);
 static_assert(offsetof(TsaStatic, blResetLatched) == 0x2E8);
 static_assert(offsetof(TsaStatic, recalFrames) == 0x2E9);
@@ -366,8 +369,8 @@ struct TsaPrpt {
     uint32_t prevTouchMode;  // 上一帧的 touchMode / Level / Detect
     int32_t prevTouchModeLevel;
     int32_t prevTouchModeDetect;
-    int16_t field300;
-    int16_t field302;
+    int16_t cmfNoiseMin;  // CMF：本帧各线公共噪声的最小、最大值
+    int16_t cmfNoiseMax;
     uint8_t reserved304[0x3C];
 };
 static_assert(sizeof(TsaPrpt) == 0x340);
@@ -445,8 +448,8 @@ static_assert(offsetof(TsaPrpt, touchModeDetect) == 0x2F0);
 static_assert(offsetof(TsaPrpt, prevTouchMode) == 0x2F4);
 static_assert(offsetof(TsaPrpt, prevTouchModeLevel) == 0x2F8);
 static_assert(offsetof(TsaPrpt, prevTouchModeDetect) == 0x2FC);
-static_assert(offsetof(TsaPrpt, field300) == 0x300);
-static_assert(offsetof(TsaPrpt, field302) == 0x302);
+static_assert(offsetof(TsaPrpt, cmfNoiseMin) == 0x300);
+static_assert(offsetof(TsaPrpt, cmfNoiseMax) == 0x302);
 
 /// TsaStatic::processingState
 inline constexpr uint32_t kProcMsActive = 0x80000000u;  // 互容主流程进行中（PROC_MS_ACTIVE）
