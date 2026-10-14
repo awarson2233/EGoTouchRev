@@ -300,7 +300,7 @@ void TSATTPrmt_Init(void)
   DAT_6bcaba84 = g_tsaTTPrmt;
   DAT_6bcaba88 = g_tsaTTPrmt * 2;
   iVar5 = g_tsaTTPrmt;
-  if (g_tsaTTPrmt < 0) {
+  if ((int)g_tsaTTPrmt < 0) {
     iVar5 = g_tsaTTPrmt + 3;
   }
   DAT_6bcaba8c = g_tsaTTPrmt - (iVar5 >> 2);
@@ -311,7 +311,7 @@ void TSATTPrmt_Init(void)
   DAT_6bcaba9c = DAT_6bcaba98;
   DAT_6bcabaa0 = DAT_6bcaba98 * 2;
   iVar5 = DAT_6bcaba98;
-  if (DAT_6bcaba98 < 0) {
+  if ((int)DAT_6bcaba98 < 0) {
     iVar5 = DAT_6bcaba98 + 3;
   }
   DAT_6bcabaa4 = DAT_6bcaba98 - (iVar5 >> 2);

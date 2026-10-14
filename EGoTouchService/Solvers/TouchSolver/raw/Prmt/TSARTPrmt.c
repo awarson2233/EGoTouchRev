@@ -74,7 +74,7 @@ void TSARTPrmt_Init(void)
   DAT_6bcab904 = g_tsaRTPrmtDefault;
   DAT_6bcab908 = g_tsaRTPrmtDefault * 2;
   iVar1 = g_tsaRTPrmtDefault;
-  if (g_tsaRTPrmtDefault < 0) {
+  if ((int)g_tsaRTPrmtDefault < 0) {
     iVar1 = g_tsaRTPrmtDefault + 3;
   }
   DAT_6bcab90c = g_tsaRTPrmtDefault - (iVar1 >> 2);
