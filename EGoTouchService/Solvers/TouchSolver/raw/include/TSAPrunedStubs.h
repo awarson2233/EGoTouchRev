@@ -257,6 +257,7 @@ static inline undefined8 SensorGesture_IsProximityPutDownGestureTimeOut(uint par
 static inline void SHBVolumeData_Process() {  } // pruned (SHBVolumeData.c)
 static inline void SHBVolumeData_Reset() {  } // pruned (SHBVolumeData.c)
 static inline void SideTouch_AppendAbnormalBaselineDescription() {  } // pruned (SideTouch.c)
+static inline void SideTouch_Clean() {  } // pruned (SideTouch.c)
 static inline void SideTouch_AppendVolumeGUIOffTimeOutDescription() {  } // pruned (SideTouch.c)
 static inline void SideTouch_AppendVolumeGUIOnTimeOutDescription() {  } // pruned (SideTouch.c)
 static inline void SideTouch_GesturePrmtHandler() {  } // pruned (SideTouch.c)
@@ -418,7 +419,6 @@ static inline void TSAWrapper_Init(void) {}
 static inline void TSAWrapper_Process(void) {}
 static inline float TSAWrapper_GetTouchXVelocity(int id) { return 0.0f; }
 static inline float TSAWrapper_GetTouchYVelocity(int id) { return 0.0f; }
-static inline void TSA_ASAProcess(uint32_t flags, ...) {}
 static inline void UDFPEvent_Init(void) {}
 static inline void VirtualKey_SetAODRingState(uint8_t state) {}
 static inline void LinearTestInit(void) {}

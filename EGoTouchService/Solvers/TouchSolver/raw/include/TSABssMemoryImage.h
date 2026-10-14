@@ -1586,6 +1586,19 @@ static inline void TSA_MemoryImage_Init(void) {
 #define DAT_6bba3788                                (*((undefined1*)TSA_MEM_AT(0x6bba3788ULL)))
 #define DAT_6bba397e                                (*((undefined2*)TSA_MEM_AT(0x6bba397eULL)))
 
+// ----------------------------------------------------------------------------
+// ASA symbols read or written by the finger pipeline (Rejection/ASAHostBridge.c)
+// ----------------------------------------------------------------------------
+#define g_asaDisableTouch                           TSA_VAR_AT(char, 0x6bb81940ULL)
+#define g_preInRange                                TSA_VAR_AT(char, 0x6bb81941ULL)
+#define g_isAsaCurFrameExitAbnormal                 TSA_VAR_AT(int, 0x6bb81944ULL)
+#define g_isLastFrameBypass                         TSA_VAR_AT(uint8_t, 0x6bb9ec12ULL)
+#define g_lastBtCmdTime                             TSA_VAR_AT(ulonglong, 0x6bc70980ULL)
+#define g_asaRealtime                               TSA_VAR_AT(ulonglong, 0x6bc71a20ULL)
+#define g_curPrmtUnit                               TSA_VAR_AT(uint8_t, 0x6bc4d870ULL)
+#define g_curStylusHWVersion                        TSA_VAR_AT(uint8_t, 0x6bc4d871ULL)
+#define StylusDataType                              TSA_VAR_AT(uint32_t, 0x6bc4d868ULL)
+
 static const char DAT_6bb53aef[] = "U";
 static const char DAT_6bb53af1[] = "NF";
 static const char DAT_6bb53af4[] = "FF";

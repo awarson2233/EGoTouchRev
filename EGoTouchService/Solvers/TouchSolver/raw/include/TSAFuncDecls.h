@@ -6079,6 +6079,56 @@ void Self_GetPropertyDim(int param_1);
 // Self_Reset @ 0x6ba6a920 (Signal\Self.c)
 void Self_Reset(void);
 
+// --- ASA 侧被手指管线读写的那一层（Rejection\ASAHostBridge.c） ---
+// TSA_ASAProcess @ 0x6ba99e8d (Core\TSA.c)
+void TSA_ASAProcess(uint param_1);
+// TSA_RptASAInRange @ 0x6ba9c7e9 (Core\TSA.c)
+undefined8 TSA_RptASAInRange(void);
+// TSA_SetASABluetoothConnectStatus @ 0x6ba9cd02 (Core\TSA.c)
+void TSA_SetASABluetoothConnectStatus(undefined4 param_1);
+// TSA_SetASABluetoothPenStatus @ 0x6ba9cc2d (Core\TSA.c)
+void TSA_SetASABluetoothPenStatus(undefined1 param_1);
+// TSA_SetASABluetoothPressure @ 0x6ba9cc65 (Core\TSA.c)
+void TSA_SetASABluetoothPressure(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+// ASA_SetBluetoothStatus @ 0x6bac72d3 (Rejection\ASA.c)
+void ASA_SetBluetoothStatus(uint param_1);
+// ASA_SetBluetoothPenStatus @ 0x6bac7135 (Rejection\ASA.c)
+void ASA_SetBluetoothPenStatus(undefined1 param_1);
+// ASA_SetBluetoothPressure @ 0x6bac714d (Rejection\ASA.c)
+void ASA_SetBluetoothPressure(ushort param_1,ushort param_2,ushort param_3,ushort param_4);
+// ASA_IsHpp3TouchEnableFeatureEnabled @ 0x6bac8a70 (Rejection\ASA.c)
+bool ASA_IsHpp3TouchEnableFeatureEnabled(void);
+// ASA_IsTouchNull @ 0x6bac704c (Rejection\ASA.c)
+undefined8 ASA_IsTouchNull(longlong param_1);
+// ASA_NeedRecordTrigger @ 0x6bac7780 (Rejection\ASA.c)
+bool ASA_NeedRecordTrigger(void);
+// ValidJudgment @ 0x6bac4efc (Rejection\ASA.c)
+bool ValidJudgment(stylusFrame *pStylusFrame);
+// GetRealtime @ 0x6bac8400 (Rejection\ASA.c)
+ulonglong GetRealtime(void);
+// ASAStaticCounterClean @ 0x6bac8414 (Rejection\ASA.c)
+void ASAStaticCounterClean(void);
+// ASAStaticPreProcess @ 0x6bac89f0 (Rejection\ASA.c)
+void ASAStaticPreProcess(void);
+// ASAStaticPostProcess @ 0x6bac8a04 (Rejection\ASA.c)
+void ASAStaticPostProcess(void);
+// ASAStaticStatusPreProcess @ 0x6bac883d (Rejection\ASA.c)
+void ASAStaticStatusPreProcess(uint auxStatusFlags);
+// EnterActiveStylusMode @ 0x6bac858b (Rejection\ASA.c)
+void EnterActiveStylusMode(void);
+// ExitActiveStylusMode @ 0x6bac87b1 (Rejection\ASA.c)
+void ExitActiveStylusMode(void);
+// ASAOutClean @ 0x6bac30f0 (Rejection\ASA.c)
+void ASAOutClean(void);
+// HPP3_BtStatusProcess @ 0x6bab778a (Rejection\HPP3.c)
+void HPP3_BtStatusProcess(void);
+// BtPressureInit @ 0x6babf350 (Rejection\HPP3.c)
+void BtPressureInit(void);
+// HardwareAnalyzer_ASA_Process @ 0x6baf1bc2 (Signal\HardwareAnalyzer.c)
+void HardwareAnalyzer_ASA_Process(void);
+// 宿主桥：每帧在 TSA_ProcessingAFEFrame 之前送入 StylusSolver 解出的笔报告
+void TSAHost_SetStylusReport(uint dwStatusFlags,ushort wXPos,ushort wYPos,short nXTilt,short nYTilt,ushort wPressure);
+
 #ifdef __cplusplus
 }
 #endif
