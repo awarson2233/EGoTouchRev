@@ -93,7 +93,8 @@ flowchart TB
 - 偏移访问换成结构体字段；`param_N` / `local_xx` / `uVarN` 换成有意义的名字；Ghidra 的 `do { ... } while (true)` + `return`、`goto` 改成结构化循环与分支；冗余的中间变量去掉。
 - `memset_s` / `memcpy_s` 换成 `ZeroFill` / `std::memcpy`（它们在合法参数下恒返回 0，`rc == EOK` 断言分支是死代码）。整对象清零必须用 `ZeroFill`：填充字节也是状态，`obj = {}` 不保证清零填充。
 - 断言块（`StrPrintf_Process` 加 `HardwareAnalyzer_SetSoftException`）换成 `TsaAssert(条件)`。日志输出在本移植里已裁掉。
-- 裁掉的模块（`TSAPrunedStubs.h` 里返回常量的桩）可以做常量传播并删除因此不可达的分支，在原调用处留一行注释说明裁掉了什么。
+- 裁掉的模块（`TSAPrunedStubs.h` 里返回常量的桩）可以做常量传播并删除因此不可达的分支，在原调用处留一行注释说明裁掉了什么。因此不再有调用者的原函数（如只在裁掉的分支里用到的 `Peak_SortInSigDescending`、`Peak_GetMaxPeak`），以及整个程序里本来就没有调用者的函数（如 `Peak_IsOnLine`）不改写。
+- 原代码里 `undefined4` 返回值的 `CONCAT31(高位, 比较结果)` 是 Ghidra 对 `setcc` 只写低字节的建模，新接口返回 `bool`；仍有 raw 调用者的，转发函数按原样拼出高 24 位。
 - 整数表达式在模 2^32（或对应位宽）意义下的代数等价改写，例如把插值写成更直观的形式，只要所有中间量仍是同一位宽的无符号运算。
 
 不能改的：

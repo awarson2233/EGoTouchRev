@@ -4,7 +4,8 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "Alg/Peak/PeakData.h"
+#include "Alg/Peak/Peak.h"
+#include "Alg/Peak/PrevPeak.h"
 #include "Alg/Touch/PrevTouch.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
@@ -81,14 +82,14 @@ void GetSqAccMmFromPrevPos(uint8_t curIdx, uint8_t prevIdx) {
 void SetEdgeFlag(uint8_t curIdx) {
     TouchUnit& cur = Cur(curIdx);
     const uint8_t peak = cur.peakIdx;
-    if (Peak_IsOnInnerEdgeDim1Near(peak)) cur.edgeFlags |= 0x100;
-    else if (ByteTrue(Peak_IsOnInnerEdgeDim1Far(peak))) cur.edgeFlags |= 0x200;
-    if (Peak_IsOnInnerEdgeDim2Near(peak)) cur.edgeFlags |= 0x400;
-    else if (ByteTrue(Peak_IsOnInnerEdgeDim2Far(peak))) cur.edgeFlags |= 0x800;
-    if (Peak_IsOnOuterEdgeDim1Near(peak)) cur.edgeFlags |= 0x1000;
-    else if (ByteTrue(Peak_IsOnOuterEdgeDim1Far(peak))) cur.edgeFlags |= 0x2000;
-    if (Peak_IsOnOuterEdgeDim2Near(peak)) cur.edgeFlags |= 0x4000;
-    else if (ByteTrue(Peak_IsOnOuterEdgeDim2Far(peak))) cur.edgeFlags |= 0x8000;
+    if (Peak::IsOnInnerEdgeDim1Near(peak)) cur.edgeFlags |= 0x100;
+    else if (Peak::IsOnInnerEdgeDim1Far(peak)) cur.edgeFlags |= 0x200;
+    if (Peak::IsOnInnerEdgeDim2Near(peak)) cur.edgeFlags |= 0x400;
+    else if (Peak::IsOnInnerEdgeDim2Far(peak)) cur.edgeFlags |= 0x800;
+    if (Peak::IsOnOuterEdgeDim1Near(peak)) cur.edgeFlags |= 0x1000;
+    else if (Peak::IsOnOuterEdgeDim1Far(peak)) cur.edgeFlags |= 0x2000;
+    if (Peak::IsOnOuterEdgeDim2Near(peak)) cur.edgeFlags |= 0x4000;
+    else if (Peak::IsOnOuterEdgeDim2Far(peak)) cur.edgeFlags |= 0x8000;
 }
 
 // Touch_SetRegion @ 0x6ba72bce
@@ -664,7 +665,7 @@ void ProcessAftTouchEventUnit(uint8_t curIdx) {
 
     if (IsLiftOffDueToMerged(curIdx, prevIdx)) {
         cur.persistFlags2 |= 0x1000000;
-        if (GripFilter_IsGripOrTbdTouch(curIdx) != 0 && ByteTrue(PrevPeak_IsOnOuterEdge(cur.peakIdx))) {
+        if (GripFilter_IsGripOrTbdTouch(curIdx) != 0 && PrevPeak::IsOnOuterEdge(cur.peakIdx)) {
             GetMergedInfo(curIdx);
         }
     }
@@ -981,7 +982,7 @@ bool IsGrip(uint8_t curIdx) {
 // Touch_IsGhostByMinSigOff @ 0x6ba7160b
 // 信号刻度不到所在格抬起后最小信号的两倍：可能是残影。
 bool IsGhostByMinSigOff(uint8_t curIdx) {
-    if (!ByteTrue(Peak_IsTouchValid(curIdx))) return false;
+    if (!Peak::IsTouchValid(curIdx)) return false;
     const TouchUnit& cur = Cur(curIdx);
     return cur.signalScale < Buffers().minSigOff[CellIndex(PeakOf(cur))] * 2;
 }

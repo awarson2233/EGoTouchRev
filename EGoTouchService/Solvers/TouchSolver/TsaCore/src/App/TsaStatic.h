@@ -11,10 +11,14 @@ namespace Solvers::Tsa::Core {
 
 /// g_tsaStaticGrid（经 g_tsaStaticPtr 选用）：系统级运行状态。
 struct TsaStatic {
-    uint8_t reserved000[0x90];
+    uint8_t reserved000[0x78];
+    uint64_t fullIncellHighPeakTime;  // 最大峰持续超过 3 倍模式 3 门限上限时的时间（ms）
+    uint8_t reserved080[0x10];
     uint64_t markedLiftOffTime;  // 带 persistFlags 0x20000000 的触点抬起时的时间（ms）
     Point markedLiftOffPos;  // 以及它的位置
-    uint8_t reserved09C[0x8];
+    uint8_t reserved09C[0x4];
+    uint8_t fullIncellHighPeakFrames;  // 最大峰超过上述门限的连续帧数（到 6 为止）
+    uint8_t reserved0A1[0x3];
     uint32_t specialControlFlags;
     uint8_t reserved0A8[0x4];
     int32_t trustedTouchCount;  // TouchUnit::trustTag 为 1 的累计次数
@@ -28,15 +32,20 @@ struct TsaStatic {
     int16_t baselineStageInitialSignal;  // 基线初始化阶段的信号门限
     uint8_t reserved0FA[0x2];
     uint32_t featureFlags;
-    uint8_t reserved100[0xC];
-    uint32_t processingState;  // bit31：互容主流程进行中
-    uint8_t reserved110[0x2E1];
+    uint8_t reserved100[0x8];
+    uint32_t featureFlags2;
+    uint32_t processingState;  // bit31：互容主流程进行中；bit4：峰 Zn 只取十字五点和
+    uint8_t reserved110[0x4];
+    uint8_t fullIncellSignalDisparity;  // 整屏 incell 信号失衡（峰检测按 SD 模式处理）
+    uint8_t reserved115[0x2DC];
     uint8_t field3F1;
     uint8_t reserved3F2[0x5E];
 };
 static_assert(sizeof(TsaStatic) == 0x450);
+static_assert(offsetof(TsaStatic, fullIncellHighPeakTime) == 0x078);
 static_assert(offsetof(TsaStatic, markedLiftOffTime) == 0x090);
 static_assert(offsetof(TsaStatic, markedLiftOffPos) == 0x098);
+static_assert(offsetof(TsaStatic, fullIncellHighPeakFrames) == 0x0A0);
 static_assert(offsetof(TsaStatic, specialControlFlags) == 0x0A4);
 static_assert(offsetof(TsaStatic, trustedTouchCount) == 0x0AC);
 static_assert(offsetof(TsaStatic, suspectTouchCount) == 0x0B0);
@@ -45,12 +54,16 @@ static_assert(offsetof(TsaStatic, systemFlags) == 0x0BC);
 static_assert(offsetof(TsaStatic, curTimeMs) == 0x0E0);
 static_assert(offsetof(TsaStatic, baselineStageInitialSignal) == 0x0F8);
 static_assert(offsetof(TsaStatic, featureFlags) == 0x0FC);
+static_assert(offsetof(TsaStatic, featureFlags2) == 0x108);
 static_assert(offsetof(TsaStatic, processingState) == 0x10C);
+static_assert(offsetof(TsaStatic, fullIncellSignalDisparity) == 0x114);
 static_assert(offsetof(TsaStatic, field3F1) == 0x3F1);
 
 /// g_tsaPrpt：每帧统计的全局属性。
 struct TsaPrpt {
-    uint8_t reserved000[0x186];
+    uint8_t reserved000[0xC8];
+    int32_t field0C8;
+    uint8_t reserved0CC[0xBA];
     uint16_t field186;
     uint8_t reserved188[0x15C];
     uint8_t field2E4;
@@ -60,6 +73,7 @@ struct TsaPrpt {
     uint8_t reserved2F0[0x50];
 };
 static_assert(sizeof(TsaPrpt) == 0x340);
+static_assert(offsetof(TsaPrpt, field0C8) == 0x0C8);
 static_assert(offsetof(TsaPrpt, field186) == 0x186);
 static_assert(offsetof(TsaPrpt, field2E4) == 0x2E4);
 static_assert(offsetof(TsaPrpt, field2E8) == 0x2E8);

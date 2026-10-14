@@ -41,21 +41,13 @@ uint8_t TSAStatic_IsAFEJustExitIDLEMode(void);
 // Baseline/BLReset.c
 uint8_t BLReset_CheckAbnormalTouch(uint8_t idx);
 
-// Detection/Peak.c
-bool Peak_IsOnInnerEdgeDim1Near(uint8_t peakIdx);
-uint32_t Peak_IsOnInnerEdgeDim1Far(uint8_t peakIdx);
-bool Peak_IsOnInnerEdgeDim2Near(uint8_t peakIdx);
-uint32_t Peak_IsOnInnerEdgeDim2Far(uint8_t peakIdx);
-bool Peak_IsOnOuterEdgeDim1Near(uint8_t peakIdx);
-uint32_t Peak_IsOnOuterEdgeDim1Far(uint8_t peakIdx);
-bool Peak_IsOnOuterEdgeDim2Near(uint8_t peakIdx);
-uint32_t Peak_IsOnOuterEdgeDim2Far(uint8_t peakIdx);
-uint32_t Peak_IsTouchValid(uint8_t idx);
-
-// Detection/PrevPeak.c
-uint64_t PrevPeak_IsOnOuterEdge(uint8_t peakIdx);
+// Baseline/PressureDrift.c
+uint64_t PressureDrift_Detect(uint8_t dim1, uint8_t dim2);
 
 // Detection/Sensor.c
+int Sensor_GetDistance(uint8_t dim1A, uint8_t dim2A, uint8_t dim1B, uint8_t dim2B);
+int Sensor_GetSquareDistance(uint8_t dim1A, uint8_t dim2A, uint8_t dim1B, uint8_t dim2B);
+uint64_t Sensor_IsInNxNBox(uint8_t dim1, uint8_t dim2, uint8_t centerDim1, uint8_t centerDim2, uint8_t boxSize);
 uint64_t Sensor_IsTouchTraversed(uint8_t dim1, uint8_t dim2);
 uint64_t Sensor_IsTouchTraversedBefore(uint8_t dim1, uint8_t dim2);
 uint64_t Sensor_IsInZone(uint8_t dim1, uint8_t dim2, uint8_t zoneIdx);
@@ -75,6 +67,12 @@ void Thenar_UnitCopy(uint8_t* dst, uint8_t* src);
 
 // Signal/HardwareAnalyzer.c
 void HardwareAnalyzer_ReportToTSA(void);
+
+// Tracking/IDT.c
+void IDT_Process(uint8_t useStrictAccCheck);
+
+// Tracking/TouchThold.c
+uint64_t TouchThold_ToeUseSpecialThold(void);
 
 // Tracking/TS.c
 uint64_t TS_SQPixelToSQMM(uint32_t sqPixel);

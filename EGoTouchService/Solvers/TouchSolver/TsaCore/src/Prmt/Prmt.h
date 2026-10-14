@@ -20,7 +20,8 @@ struct FlashPrmt {
     uint8_t dim2Len;  // 行数
     uint8_t reserved01F[0xD];
     uint16_t sensorNum;  // dim1Len × dim2Len
-    uint8_t reserved02E[0xA];
+    uint8_t reserved02E[0x6];
+    uint32_t peakProcessingMode;  // 3：峰门限封顶、Z8 过滤、Z1 回退
     uint8_t reportRateHz;  // 0 时按 8 ms 一帧
     uint8_t reserved039[0x56D];
     uint16_t dim1Res;  // Dim1 方向的显示分辨率
@@ -36,6 +37,7 @@ static_assert(offsetof(FlashPrmt, dim1Axis) == 0x019);
 static_assert(offsetof(FlashPrmt, dim1Len) == 0x01D);
 static_assert(offsetof(FlashPrmt, dim2Len) == 0x01E);
 static_assert(offsetof(FlashPrmt, sensorNum) == 0x02C);
+static_assert(offsetof(FlashPrmt, peakProcessingMode) == 0x034);
 static_assert(offsetof(FlashPrmt, reportRateHz) == 0x038);
 static_assert(offsetof(FlashPrmt, dim1Res) == 0x5A6);
 static_assert(offsetof(FlashPrmt, dim2Res) == 0x5A8);
@@ -61,14 +63,14 @@ static_assert(offsetof(FlashConstPrmt, dim2FarEdge) == 0x030);
 struct DynPrmt {
     int16_t touchThold;
     uint8_t reserved002[0x6];
-    int16_t sigThold;
+    int16_t sigThold;  // 峰检测门限
     int16_t edgePeakThold;
     int16_t peakThold;
     int16_t edgePeakTholdLow;
     int32_t znTouchDownThold;
     int32_t znFingerThold;
     int32_t znTouchDownThold2;
-    uint8_t reserved01C[0x1];
+    uint8_t sdZnTholdScaleX16;  // 信号失衡时 znTouchDownThold = sigThold × 它 / 16
     uint8_t lowTholdOnDim1FarEdge;  // 峰在 Dim1 远端最后一列时用低门限
     uint8_t lowTholdOnDim2FarEdge;
     uint8_t reserved01F[0x59];
@@ -94,6 +96,7 @@ static_assert(offsetof(DynPrmt, edgePeakTholdLow) == 0x00E);
 static_assert(offsetof(DynPrmt, znTouchDownThold) == 0x010);
 static_assert(offsetof(DynPrmt, znFingerThold) == 0x014);
 static_assert(offsetof(DynPrmt, znTouchDownThold2) == 0x018);
+static_assert(offsetof(DynPrmt, sdZnTholdScaleX16) == 0x01C);
 static_assert(offsetof(DynPrmt, lowTholdOnDim1FarEdge) == 0x01D);
 static_assert(offsetof(DynPrmt, lowTholdOnDim2FarEdge) == 0x01E);
 static_assert(offsetof(DynPrmt, clickSuppressRange) == 0x078);
