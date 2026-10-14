@@ -7,11 +7,21 @@
 // 0x011a00（AFE_SetCapsNormal / AFE_SetFrameNormal 的拷贝范围）。
 // ══════════════════════════════════════════════════════════════════════
 
+#include <cstddef>
 #include <cstdint>
 
 extern "C" {
 
 void TSACoreRaw_InitImage(void);
+
+// 算法状态所在的全部内存（raw/Common/TSAState.c），回放比对用。镜像块的 va 是原 DLL 的地址；
+// 堆缓冲的 va 为 0。返回块数；capacity 不够时只返回需要的块数，登记表溢出时返回 (size_t)-1。
+typedef struct TSACoreRaw_StateBlock {
+    const uint8_t* data;
+    uint64_t size;
+    uint64_t va;
+} TSACoreRaw_StateBlock;
+size_t TSACoreRaw_StateBlocks(TSACoreRaw_StateBlock* out, size_t capacity);
 
 uint64_t TSA_InitAFEProject_UI(int64_t projectName, int64_t afeStruct, int64_t caps);
 int      TSA_ProcessingAFEFrame(void* frame, uint32_t ctrl, uint64_t timestampMs);

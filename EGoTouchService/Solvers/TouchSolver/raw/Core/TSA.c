@@ -6333,6 +6333,9 @@ void * TSA_MallocAndInit(uint param_1)
   }
   else {
     pvVar2 = malloc((ulonglong)param_1);
+    if (pvVar2 != (void *)0x0) {
+      TSAState_OnAlloc(pvVar2,param_1);
+    }
     if ((pvVar2 != (void *)0x0) && (iVar1 = memset_s(pvVar2,param_1,0,param_1), iVar1 != 0)) {
       StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\"\n","../../src/Common/TSA_Malloc.c"
                         ,0x16,"rc == EOK");
@@ -6647,6 +6650,7 @@ void TSA_Free(longlong *param_1)
 {
                     /* 0x634c4  1856  TSA_Free */
   if (*param_1 != 0) {
+    TSAState_OnFree((void *)*param_1);
     free((void *)*param_1);
     *param_1 = 0;
   }

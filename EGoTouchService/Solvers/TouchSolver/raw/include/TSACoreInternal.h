@@ -28,6 +28,10 @@ static const char _rdata = '\0';
 #include "TSABssMemoryImage.h"
 #include "TSAFuncDecls.h"
 
+// Common/TSAState.c：回放比对用的状态登记，不属于原 DLL
+void TSAState_OnAlloc(void *ptr,uint32_t size);
+void TSAState_OnFree(void *ptr);
+
 // ----------------------------------------------------------------------------
 // Type Aliases
 // ----------------------------------------------------------------------------
