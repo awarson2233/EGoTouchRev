@@ -309,9 +309,11 @@ int main(int argc, char** argv) {
             if (!penHover) tsa->OnBtPressure(0, 0, 0, 1024);
             if (penInterleave && (fi & 1) != 0) f.masterWasRead = false;
         }
+        decltype(f.stylus.input.btSample) recordedBt{};
         if (stylusSolver && !legacy) {
             // 录制里的蓝牙采样是当时管线看到的最新一包，序号变了才算新包
             const auto bt = f.stylus.input.btSample;
+            recordedBt = bt;
             if (bt.hasSample && bt.seq != btSeqSeen) {
                 btSeqSeen = bt.seq;
                 stylus->SetBtMcuPressurePacket(bt.pressure, bt.rawPressure, bt.freq1, bt.freq2);
@@ -353,8 +355,21 @@ int main(int argc, char** argv) {
                                      (peak.centerCol + 0.5) * 2560.0 / Frame::kRxCount,
                                      (peak.centerRow + 0.5) * 1600.0 / Frame::kTxCount);
                     }
-                    std::fprintf(stderr, " stylusMode=%d asaInRange=%d\n", tsa->InStylusMode() ? 1 : 0,
-                                 tsa->StylusInRange() ? 1 : 0);
+                    {
+                        // 倾角的中间量：TX2/TX1 信号比、坐标差上限、TX1 − TX2 坐标差（1024 单位 / 节点）
+                        const auto& tilt = f.stylus.runtime.hpp3.tilt;
+                        const auto& post = f.stylus.runtime.hpp3.post;
+                        std::fprintf(stderr, " tilt(valid=%d ratio=%u lim=%u dif=%d,%d", tilt.valid ? 1 : 0, tilt.signalRatio,
+                                     tilt.lenLimit, tilt.diffDim1, tilt.diffDim2);
+#if EGOTOUCH_DIAG
+                        std::fprintf(stderr, " raw=%d,%d", tilt.rawDiffDim1, tilt.rawDiffDim2);
+#endif
+                        std::fprintf(stderr, ") post(speed=%d coef=%d)", static_cast<int>(post.speedValue),
+                                     static_cast<int>(post.iirCoef));
+                    }
+                    std::fprintf(stderr, " bt(seq=%u p=%u,%u,%u,%u) stylusMode=%d asaInRange=%d\n", recordedBt.seq,
+                                 recordedBt.pressure[0], recordedBt.pressure[1], recordedBt.pressure[2],
+                                 recordedBt.pressure[3], tsa->InStylusMode() ? 1 : 0, tsa->StylusInRange() ? 1 : 0);
                 }
             }
             if (pen && (tsa->InStylusMode() != penMode || tsa->StylusInRange() != penInRange)) {
