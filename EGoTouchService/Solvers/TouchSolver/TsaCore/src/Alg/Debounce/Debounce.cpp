@@ -107,7 +107,7 @@ uint16_t TouchDownNum(uint8_t prevIdx, uint8_t curIdx) {
     if ((cur.exceptionType & 0x80) != 0) num = std::max<uint16_t>(num, 2);
     if ((cur.exceptionType & 0x8) != 0 && num == 0) num = 1;
     if ((cur.exceptionType & 0x200) != 0) num = cur.field098 < 1 ? kNoTouchDown : std::max<uint16_t>(num, 3);
-    if (stat.field111 != 0) num = std::max<uint16_t>(num, 2);
+    if (stat.noiseLevel != 0) num = std::max<uint16_t>(num, 2);
     if (cur.field164 != 0) num = std::max<uint16_t>(num, 3);
     // 否决条件。TouchDownTholdCheck 有副作用，只在 exceptionType bit6 未置位时调用。
     if ((cur.exceptionType & 0x40) != 0 || !TouchDownTholdCheck(prevIdx, curIdx) || (cur.volatileFlags & 0x400) != 0 ||
@@ -141,14 +141,14 @@ uint16_t TouchDownNum(uint8_t prevIdx, uint8_t curIdx) {
 }
 
 // DB_LiftOffNum @ 0x6ba55e79
-// 报过点且没有 persistFlags bit7 的触点才做抬起防抖：多指拆分区域 3 帧，volatileFlags bit28 或 Static::field111 大于 2 时至少 2 帧。
+// 报过点且没有 persistFlags bit7 的触点才做抬起防抖：多指拆分区域 3 帧，volatileFlags bit28 或 噪声等级大于 2 时至少 2 帧。
 uint16_t LiftOffNum(uint8_t prevIdx) {
     const PrevTouchUnit& prev = Prev(prevIdx);
     if ((prev.persistFlags & 0x8) == 0 || (prev.persistFlags & 0x80) != 0) return 0;
     uint16_t num = 0;
     if (prev.zoneShape == 3) num = 3;
     if ((prev.volatileFlags & 0x10000000) != 0 && num < 2) num = 2;
-    if (Static().field111 > 2 && num < 2) num = 2;
+    if (Static().noiseLevel > 2 && num < 2) num = 2;
     return num;
 }
 

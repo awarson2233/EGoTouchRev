@@ -9,6 +9,24 @@
 
 namespace Solvers::Tsa::Core {
 
+/// Exception 的一组状态。Hybrid Incell 与 Full Incell 各有一组，按 FlashPrmt::sensorArchitecture 选用。
+struct ExceptionState {
+    uint16_t debounceFrames;  // 本帧检出的异常与上一帧相同的连续帧数
+    uint8_t reserved002[0x6];
+    uint64_t noiseSettleCount;  // 噪声异常之外的帧逐帧累加 baselineStageInitialSignal，超过 0x52 时噪声等级清零
+    uint32_t lastDetected;  // 上一帧检出的异常；强制进入水下、噪声等异常时为强制的值
+    uint8_t wetFinger;  // FI：本帧有区域判为湿手指
+    uint8_t reserved015[0x3];
+    uint32_t detected;  // 本帧检出的异常（各区域与水下检测取最大），Exception_Process 末尾清零
+    uint8_t reserved01C[0x4];
+};
+static_assert(sizeof(ExceptionState) == 0x020);
+static_assert(offsetof(ExceptionState, debounceFrames) == 0x000);
+static_assert(offsetof(ExceptionState, noiseSettleCount) == 0x008);
+static_assert(offsetof(ExceptionState, lastDetected) == 0x010);
+static_assert(offsetof(ExceptionState, wetFinger) == 0x014);
+static_assert(offsetof(ExceptionState, detected) == 0x018);
+
 /// g_tsaStaticGrid（经 g_tsaStaticPtr 选用）：系统级运行状态。
 struct TsaStatic {
     uint8_t reserved000[0x78];
@@ -35,17 +53,21 @@ struct TsaStatic {
     uint8_t reserved100[0x8];
     uint32_t featureFlags2;
     uint32_t processingState;  // bit31：互容主流程进行中；bit4：峰 Zn 只取十字五点和
-    uint8_t reserved110[0x1];
-    uint8_t field111;
+    uint8_t field110;  // 全局异常为 0x40 / 0x80 时置 1
+    uint8_t noiseLevel;  // 噪声等级：异常 0x100 时 2、0x8000 时 3，噪声异常结束一段时间后清零
     uint8_t reserved112[0x2];
     uint8_t fullIncellSignalDisparity;  // 整屏 incell 信号失衡（峰检测按 SD 模式处理）
-    uint8_t reserved115[0xD];
+    uint8_t justExitedSpecialCtrlMode;  // 刚退出特殊控制模式
+    uint8_t reserved116[0xC];
     uint16_t strongTapCount;  // TE：报过点的触点抬起时峰值超过 2 倍 finger 门限、长轴小于 21 mm 的连续次数（到 5 为止）
     uint8_t reserved124[0x2CD];
     uint8_t field3F1;
     uint8_t reserved3F2[0x9];
     uint8_t field3FB;
-    uint8_t reserved3FC[0x54];
+    uint8_t reserved3FC[0xC];
+    ExceptionState hiException;  // Hybrid Incell 用（本机型 HIException 被裁掉）
+    uint8_t reserved428[0x8];
+    ExceptionState fiException;  // Full Incell 用
 };
 static_assert(sizeof(TsaStatic) == 0x450);
 static_assert(offsetof(TsaStatic, fullIncellHighPeakTime) == 0x078);
@@ -62,17 +84,24 @@ static_assert(offsetof(TsaStatic, baselineStageInitialSignal) == 0x0F8);
 static_assert(offsetof(TsaStatic, featureFlags) == 0x0FC);
 static_assert(offsetof(TsaStatic, featureFlags2) == 0x108);
 static_assert(offsetof(TsaStatic, processingState) == 0x10C);
-static_assert(offsetof(TsaStatic, field111) == 0x111);
+static_assert(offsetof(TsaStatic, field110) == 0x110);
+static_assert(offsetof(TsaStatic, noiseLevel) == 0x111);
 static_assert(offsetof(TsaStatic, fullIncellSignalDisparity) == 0x114);
+static_assert(offsetof(TsaStatic, justExitedSpecialCtrlMode) == 0x115);
 static_assert(offsetof(TsaStatic, strongTapCount) == 0x122);
 static_assert(offsetof(TsaStatic, field3F1) == 0x3F1);
 static_assert(offsetof(TsaStatic, field3FB) == 0x3FB);
+static_assert(offsetof(TsaStatic, hiException) == 0x408);
+static_assert(offsetof(TsaStatic, fiException) == 0x430);
 
 /// g_tsaPrpt：每帧统计的全局属性。
 struct TsaPrpt {
     uint8_t reserved000[0xA0];
     int16_t sigPeakPositive;  // Dif 的正向极值
-    uint8_t reserved0A2[0x26];
+    uint8_t reserved0A2[0x1A];
+    int16_t underWaterCells;  // Dif 落在水下门限区间内的格数
+    int16_t underWaterNegCells;  // -Dif 落在该区间内的格数
+    uint8_t reserved0C0[0x8];
     int32_t field0C8;
     uint8_t reserved0CC[0xBA];
     uint16_t field186;
@@ -96,6 +125,8 @@ struct TsaPrpt {
 };
 static_assert(sizeof(TsaPrpt) == 0x340);
 static_assert(offsetof(TsaPrpt, sigPeakPositive) == 0x0A0);
+static_assert(offsetof(TsaPrpt, underWaterCells) == 0x0BC);
+static_assert(offsetof(TsaPrpt, underWaterNegCells) == 0x0BE);
 static_assert(offsetof(TsaPrpt, field0C8) == 0x0C8);
 static_assert(offsetof(TsaPrpt, field186) == 0x186);
 static_assert(offsetof(TsaPrpt, noiseThold) == 0x2D0);

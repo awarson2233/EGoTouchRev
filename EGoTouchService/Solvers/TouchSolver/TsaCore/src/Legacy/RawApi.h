@@ -21,6 +21,7 @@ int Misc_SqrtUint32(uint32_t value);
 uint32_t AFE_IsRawJump(void);
 uint16_t AFE_GetColNum(void);
 uint16_t AFE_GetRowNum(void);
+uint32_t AFE_IsManualFreqHopping(void);
 
 // Core/TSA.c
 uint16_t TSA_GetXRes(void);
@@ -41,6 +42,9 @@ uint32_t TSA_GetDimEdge(uint16_t dim1, uint16_t dim2);
 uint64_t TSA_DimEdgeToSide(int dimEdge);
 uint64_t TSA_SideToEdge(uint32_t side);
 uint64_t TSA_SideToDimEdge(int side);
+bool TSA_IsPossibleUnderWater(void);
+void* TSA_MallocAndInit(uint32_t size);
+void TSA_Free(int64_t* ptr);
 
 // Core/TSAOut.c
 uint16_t TSAOut_DisplayXPos(uint8_t idx, ...);
@@ -60,12 +64,22 @@ void TSAStatic_ProcessAftTouchEvent(void);
 uint64_t TSAStatic_IsScreenRotated(void);
 uint8_t TSAStatic_IsAFEJustEnterIDLEMode(void);
 uint8_t TSAStatic_IsAFEJustExitIDLEMode(void);
+bool TSAStatic_IsFreqShiftDone(void);
+uint64_t TSAStatic_IsProximityEnabled(void);
+uint8_t TSAStatic_IsSignalReverted(void);
+
+// Baseline/BLIIR.c
+void BLIIR_CalcDiffCommon(int16_t* difOut, int16_t* raw, int16_t* baseline);
 
 // Baseline/BLReset.c
 uint8_t BLReset_CheckAbnormalTouch(uint8_t idx);
+uint8_t BLReset_Status(void);
 
 // Baseline/PressureDrift.c
 uint64_t PressureDrift_Detect(uint8_t dim1, uint8_t dim2);
+
+// Detection/TZ.c
+void TZ_GetExceptionRatio(void* zone);
 
 // Rejection/AntiTouch.c
 void AntiTouch_Report(void);

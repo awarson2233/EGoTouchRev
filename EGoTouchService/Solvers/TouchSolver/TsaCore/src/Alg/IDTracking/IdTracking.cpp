@@ -89,12 +89,12 @@ int32_t GetAcc(uint8_t curIdx, uint8_t prevIdx) {
 
 // IDT_IsToIncAccThold @ 0x6ba615c7
 // 放大加速度门限（×4）：不是握持中的普通触点，历史没有 persistFlags2 的禁止位，且处于异常、
-// Static::field111 ≥ 2 或上一帧位移已经较大。
+// 噪声等级 ≥ 2 或上一帧位移已经较大。
 bool IsToIncAccThold(uint8_t curIdx, uint8_t prevIdx) {
     const PrevTouchUnit& prev = Prev(prevIdx);
     if (!GripFilter_IsPeakAbsGrip(Cur(curIdx).peakIdx) && prev.gripStage == 1) return false;
     if ((prev.persistFlags2 & kPersist2NoIncAccThold) != 0) return false;
-    if (Touch::IsException(curIdx, prevIdx) || Static().field111 >= 2) return true;
+    if (Touch::IsException(curIdx, prevIdx) || Static().noiseLevel >= 2) return true;
     return prev.maxSqDistMmFromPrev >= kIncAccTholdSqDistMm;
 }
 

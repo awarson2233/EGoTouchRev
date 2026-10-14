@@ -29,10 +29,10 @@ struct TsaBufferTable {
     void* rawCapture;
     void* rawCaptureNextSide;
     int16_t* dif;  // 当前帧 Dif
-    void* raw;
+    int16_t* raw;
     void* preCmfRaw;
-    void* bl;
-    void* tz;
+    int16_t* bl;
+    int8_t* tz;  // 区域图：每格的区域编码，见 Alg/Sensor/Sensor.h
     void* commonModeNoise;
     void* preHwRaw;
     void* raw2RawDif;
@@ -40,14 +40,14 @@ struct TsaBufferTable {
     void* preDif;
     void* gridIirDif;
     void* blGrid;
-    void* blNormal;
-    void* tzGrid;
+    int16_t* blNormal;
+    int8_t* tzGrid;
     void* sd;
     void* ssChargerNFilterDif;
     void* aftSsCmfDif;
     void* rawStoredSinceSsNoSignal;
     void* rawStoredSinceMutualSsNotMatch;
-    void* tzPrev;
+    int8_t* tzPrev;  // 上一帧的区域图
     void* tzZonePrev;
     void* tzZone;
     void* tzId;
@@ -103,6 +103,9 @@ static_assert(offsetof(TsaBufferTable, gripTimeOff) == 0x148);
 static_assert(offsetof(TsaBufferTable, gripRegion) == 0x150);
 
 [[nodiscard]] inline TsaBufferTable& Buffers() noexcept { return Image::At<TsaBufferTable>(0x6bb81280); }
+
+/// 网格缓冲的元素个数（g_gridBufSize）。
+[[nodiscard]] inline uint16_t GridBufSize() noexcept { return Image::At<uint16_t>(0x6bc34a80); }
 
 /// 传感器 (dim1, dim2) 在网格缓冲里的下标，按 16 位截断。
 [[nodiscard]] inline uint16_t GridIndex(uint8_t dim1, uint8_t dim2) noexcept {

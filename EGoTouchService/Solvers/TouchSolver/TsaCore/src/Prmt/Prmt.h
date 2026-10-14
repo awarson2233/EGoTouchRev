@@ -184,7 +184,10 @@ struct FlashPrmt {
     uint16_t distToEnterGloveMode;  // 进入手套模式的移动距离（mm）
     uint8_t reserved922[0x2];
     ErEdgeMmPrmt erEdgeMm[4];  // ER：上、下、左、右四条逻辑边
-    uint8_t reserved93C[0x4];
+    uint8_t wetFingerMinWaterCells;  // FIException：判湿手指所需的最少水膜格数
+    uint8_t waterSigLowPercent;  // 水膜格的 Dif 区间：sigPeakPositive 的百分比
+    uint8_t waterSigHighPercent;
+    uint8_t reserved93F[0x1];
     int16_t chargerNoiseTholdPercent;  // Hybrid Incell 充电噪声门限相对 HTI 门限的百分比；也是 DynPrmt 初值块（0x940..0x94c）的开头
     uint16_t field942;  // 调参表里标为 obsolete
     uint8_t reserved944[0xD0C];
@@ -367,6 +370,9 @@ static_assert(offsetof(FlashPrmt, zTholdFlags) == 0x918);
 static_assert(offsetof(FlashPrmt, gloveFilterSides) == 0x91C);
 static_assert(offsetof(FlashPrmt, distToEnterGloveMode) == 0x920);
 static_assert(offsetof(FlashPrmt, erEdgeMm) == 0x924);
+static_assert(offsetof(FlashPrmt, wetFingerMinWaterCells) == 0x93C);
+static_assert(offsetof(FlashPrmt, waterSigLowPercent) == 0x93D);
+static_assert(offsetof(FlashPrmt, waterSigHighPercent) == 0x93E);
 static_assert(offsetof(FlashPrmt, chargerNoiseTholdPercent) == 0x940);
 static_assert(offsetof(FlashPrmt, field942) == 0x942);
 static_assert(offsetof(FlashPrmt, field1650) == 0x1650);
@@ -594,7 +600,8 @@ struct DynamicPrmt {
     uint8_t flickDistance;
     uint8_t reserved07D[0x3];
     uint8_t zTholdFlags;  // bit1 抬起门限按区域分支；bit2 手套、bit3 指关节模式用按下门限判稳定
-    uint8_t reserved081[0x7];
+    uint8_t reserved081[0x3];
+    uint32_t gloveFilterSides;
     uint16_t distToEnterGloveMode;
     uint8_t reserved08A[0x2];
     int16_t chargerNoiseTholdPercent;
@@ -647,6 +654,7 @@ static_assert(offsetof(DynamicPrmt, clickSuppressDistance) == 0x078);
 static_assert(offsetof(DynamicPrmt, maxClickSuppressDistance) == 0x07A);
 static_assert(offsetof(DynamicPrmt, flickDistance) == 0x07C);
 static_assert(offsetof(DynamicPrmt, zTholdFlags) == 0x080);
+static_assert(offsetof(DynamicPrmt, gloveFilterSides) == 0x084);
 static_assert(offsetof(DynamicPrmt, distToEnterGloveMode) == 0x088);
 static_assert(offsetof(DynamicPrmt, chargerNoiseTholdPercent) == 0x08C);
 static_assert(offsetof(DynamicPrmt, skipZ8CheckOnInnerEdge) == 0x096);

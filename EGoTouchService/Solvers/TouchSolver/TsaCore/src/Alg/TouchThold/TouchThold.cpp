@@ -86,7 +86,7 @@ int16_t BasedOnExperience(int16_t thold) {
     const TsaPrpt& prpt = Prpt();
     const uint32_t exceptions = PrevTouches().exceptionFlags;
     auto result = static_cast<int16_t>(std::min(flash.peakFilterReferenceThreshold, prpt.sigPeakPositive) / 4);
-    if (exceptions == 0x100 || Static().field111 == 2) {
+    if (exceptions == 0x100 || Static().noiseLevel == 2) {
         if (result < -minSig) result = static_cast<int16_t>(-minSig);
         const auto cap = static_cast<int16_t>(prpt.sigPeakPositive * 3 / 4);
         result = std::min(result, cap);
