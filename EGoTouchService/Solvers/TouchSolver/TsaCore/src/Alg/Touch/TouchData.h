@@ -30,6 +30,13 @@ inline constexpr uint32_t kLiftOff = 0x20;
 inline constexpr uint32_t kWindowsPadLiftOff = 0x40;
 }  // namespace TouchEvent
 
+/// TouchUnit::action（TouchAction）：按点击还是按滑动处理这个触点。
+namespace TouchAction {
+inline constexpr uint32_t kNone = 0;  // 未定，取 DynamicPrmt::defaultTouchAction
+inline constexpr uint32_t kClick = 1;  // 按点击处理：Filter 把位置锁在按下点（点击抑制）
+inline constexpr uint32_t kSlide = 2;  // 按滑动处理：不做点击抑制
+}  // namespace TouchAction
+
 /// 历史轨迹里的一个点。
 struct HistoryEntry {
     SPoint pos;

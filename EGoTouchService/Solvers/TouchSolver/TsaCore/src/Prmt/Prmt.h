@@ -120,8 +120,7 @@ struct FlashPrmt {
     uint8_t reserved8A2[0x57];
     uint8_t field8F9;  // DynPrmt 初值的单字节项
     uint8_t reserved8FA[0x2];
-    uint8_t field8FC;  // DynPrmt 初值块（0x8fc..0x90c）的开头
-    uint8_t reserved8FD[0x3];
+    uint32_t defaultTouchAction;  // 新触点默认的 TouchAction；也是 DynPrmt 初值块（0x8fc..0x90c）的开头
     uint16_t clickDuration;  // 点击后允许移动的时间（ms）
     uint8_t reserved902[0x2];
     uint8_t clickSuppressDistance;  // 判点击 / 轻扫、决定是否做点击抑制的移动距离（像素）
@@ -300,7 +299,7 @@ static_assert(offsetof(FlashPrmt, aiir) == 0x88E);
 static_assert(offsetof(FlashPrmt, field8A0) == 0x8A0);
 static_assert(offsetof(FlashPrmt, field8A1) == 0x8A1);
 static_assert(offsetof(FlashPrmt, field8F9) == 0x8F9);
-static_assert(offsetof(FlashPrmt, field8FC) == 0x8FC);
+static_assert(offsetof(FlashPrmt, defaultTouchAction) == 0x8FC);
 static_assert(offsetof(FlashPrmt, clickDuration) == 0x900);
 static_assert(offsetof(FlashPrmt, clickSuppressDistance) == 0x904);
 static_assert(offsetof(FlashPrmt, maxClickSuppressDistance) == 0x906);
@@ -521,8 +520,7 @@ struct DynamicPrmt {
     uint8_t reserved060[0xC];
     uint8_t field06C;
     uint8_t reserved06D[0x3];
-    uint8_t field070;  // 机型参数初值块（0x70..0x80）的开头
-    uint8_t reserved071[0x3];
+    uint32_t defaultTouchAction;  // 新触点默认的 TouchAction：初值来自机型参数，此后由报过点的触点抬起时更新；也是机型参数初值块（0x70..0x80）的开头
     uint16_t clickDuration;
     uint8_t reserved076[0x2];
     uint8_t clickSuppressDistance;  // 外部像素
@@ -579,7 +577,7 @@ static_assert(offsetof(DynamicPrmt, field05A) == 0x05A);
 static_assert(offsetof(DynamicPrmt, refThold) == 0x05C);
 static_assert(offsetof(DynamicPrmt, negRefThold) == 0x05E);
 static_assert(offsetof(DynamicPrmt, field06C) == 0x06C);
-static_assert(offsetof(DynamicPrmt, field070) == 0x070);
+static_assert(offsetof(DynamicPrmt, defaultTouchAction) == 0x070);
 static_assert(offsetof(DynamicPrmt, clickDuration) == 0x074);
 static_assert(offsetof(DynamicPrmt, clickSuppressDistance) == 0x078);
 static_assert(offsetof(DynamicPrmt, maxClickSuppressDistance) == 0x07A);
