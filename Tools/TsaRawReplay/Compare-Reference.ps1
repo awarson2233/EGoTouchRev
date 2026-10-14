@@ -5,7 +5,7 @@
 
 .DESCRIPTION
   把同一批录制分别喂给两份 TsaRawReplay：一份从参考提交（默认是标签 tsa-reference）构建，一份从当前
-  工作区构建。每份录制跑若干场景（纯回放、充电器、长时间静止、注入模拟笔、真实笔），比较三样东西：
+  工作区构建。每份录制跑若干场景（纯回放、充电器、长时间静止、注入模拟笔、经 StylusPipeline 的真实笔），比较三样东西：
 
     触点 CSV        每帧上报的触点（数量、ID、事件、坐标）
     stderr          闭环请求 / AFE 动作、笔状态等逐帧诊断
@@ -59,7 +59,8 @@ function Invoke-Native {
 }
 
 function Get-RecordingFiles {
-    foreach ($item in $Recordings) {
+    # 经 pwsh -File 调用时，逗号分隔的列表会整个落进第一个元素
+    foreach ($item in ($Recordings -split ',' | ForEach-Object Trim | Where-Object { $_ })) {
         if (Test-Path $item -PathType Container) {
             Get-ChildItem $item -Filter *.dvrbin | Sort-Object Name | ForEach-Object FullName
         } elseif (Test-Path $item) {
@@ -103,13 +104,12 @@ function Get-FirstDifference {
     $null
 }
 
-# 录制的帧数、有没有真实笔数据：让工具读一遍但不喂帧
+# 录制的帧数：让工具读一遍但不喂帧
 function Get-RecordingInfo {
     param([string]$Exe, [string]$Recording)
     $text = & $Exe $Recording --quiet --to 0 2>&1 | Out-String
     $frames = if ($text -match 'loaded (\d+) frames') { [int]$Matches[1] } else { 0 }
-    $penFrames = if ($text -match '(\d+) with the pen in range') { [int]$Matches[1] } else { 0 }
-    [pscustomobject]@{ Frames = $frames; HasPen = ($penFrames -gt 0) }
+    [pscustomobject]@{ Frames = $frames }
 }
 
 function Get-Scenarios {
@@ -124,8 +124,9 @@ function Get-Scenarios {
         @{ Name = 'idle';      Args = @('--afe', '--idle-exit', $half, '--hold', $quarter, 600) }
         @{ Name = 'pen-write'; Args = @('--afe', '--pen', 1280, 800, $quarter, $threeQuarters, '--pen-word', '0102', '--pen-tilt', 25, -15) }
         @{ Name = 'pen-hover'; Args = @('--afe', '--pen', 640, 1200, $quarter, $threeQuarters, '--pen-hover', '--pen-interleave') }
+        # 真实笔数据走 StylusPipeline；没有笔的录制也跑，走的是「笔已连接但不在场」
+        @{ Name = 'stylus';    Args = @('--afe', '--stylus-solver') }
     )
-    if ($Info.HasPen) { $list += @{ Name = 'stylus'; Args = @('--afe', '--stylus-solver') } }
     $list
 }
 
