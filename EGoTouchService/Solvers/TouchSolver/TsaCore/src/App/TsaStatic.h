@@ -58,7 +58,9 @@ struct TsaStatic {
     uint8_t reserved112[0x2];
     uint8_t fullIncellSignalDisparity;  // 整屏 incell 信号失衡（峰检测按 SD 模式处理）
     uint8_t justExitedSpecialCtrlMode;  // 刚退出特殊控制模式
-    uint8_t reserved116[0xC];
+    uint8_t reserved116[0x4];
+    uint8_t signalReverted;  // 信号反向（TSAStatic_IsSignalReverted）
+    uint8_t reserved11B[0x7];
     uint16_t strongTapCount;  // TE：报过点的触点抬起时峰值超过 2 倍 finger 门限、长轴小于 21 mm 的连续次数（到 5 为止）
     uint8_t reserved124[0x2CD];
     uint8_t field3F1;
@@ -88,6 +90,7 @@ static_assert(offsetof(TsaStatic, field110) == 0x110);
 static_assert(offsetof(TsaStatic, noiseLevel) == 0x111);
 static_assert(offsetof(TsaStatic, fullIncellSignalDisparity) == 0x114);
 static_assert(offsetof(TsaStatic, justExitedSpecialCtrlMode) == 0x115);
+static_assert(offsetof(TsaStatic, signalReverted) == 0x11A);
 static_assert(offsetof(TsaStatic, strongTapCount) == 0x122);
 static_assert(offsetof(TsaStatic, field3F1) == 0x3F1);
 static_assert(offsetof(TsaStatic, field3FB) == 0x3FB);
@@ -96,7 +99,9 @@ static_assert(offsetof(TsaStatic, fiException) == 0x430);
 
 /// g_tsaPrpt：每帧统计的全局属性。
 struct TsaPrpt {
-    uint8_t reserved000[0xA0];
+    uint8_t reserved000[0x4];
+    uint16_t field004;  // RfNoise：超过传感器数的一半时即使没有噪声线也做前后两半的比较
+    uint8_t reserved006[0x9A];
     int16_t sigPeakPositive;  // Dif 的正向极值
     uint8_t reserved0A2[0x1A];
     int16_t underWaterCells;  // Dif 落在水下门限区间内的格数
@@ -124,6 +129,7 @@ struct TsaPrpt {
     uint8_t reserved2F0[0x50];
 };
 static_assert(sizeof(TsaPrpt) == 0x340);
+static_assert(offsetof(TsaPrpt, field004) == 0x004);
 static_assert(offsetof(TsaPrpt, sigPeakPositive) == 0x0A0);
 static_assert(offsetof(TsaPrpt, underWaterCells) == 0x0BC);
 static_assert(offsetof(TsaPrpt, underWaterNegCells) == 0x0BE);

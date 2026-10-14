@@ -34,8 +34,8 @@ struct TsaBufferTable {
     int16_t* bl;
     int8_t* tz;  // 区域图：每格的区域编码，见 Alg/Sensor/Sensor.h
     void* commonModeNoise;
-    void* preHwRaw;
-    void* raw2RawDif;
+    int16_t* preHwRaw;
+    int16_t* raw2RawDif;
     void* raw2RawDifAftCmf;
     void* preDif;
     void* gridIirDif;
