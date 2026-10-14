@@ -1103,14 +1103,15 @@ void TZ_ContourInit(void)
   
                     /* 0x4590b  2363  TZ_ContourInit */
   for (local_c = 0; local_c < 5; local_c = local_c + 1) {
-    fVar2 = (float)local_c / DAT_6bb52ef0;
-    dVar1 = (double)SinXDivX((double)(fVar2 + DAT_6bb52ef4));
+    /* .rdata 常量是 float：0x6bb52ef0 = 4.0f，0x6bb52ef4 = 1.0f，0x6bb52ee0 = 2.0f */
+    fVar2 = (float)local_c / *(float *)&DAT_6bb52ef0;
+    dVar1 = (double)SinXDivX((double)(fVar2 + *(float *)&DAT_6bb52ef4));
     *(float *)(&g_afu + (longlong)local_c * 0x10) = (float)dVar1;
     dVar1 = (double)SinXDivX((double)fVar2);
     *(float *)(&DAT_6bc13984 + (longlong)local_c * 0x10) = (float)dVar1;
-    dVar1 = (double)SinXDivX((double)(DAT_6bb52ef4 - fVar2));
+    dVar1 = (double)SinXDivX((double)(*(float *)&DAT_6bb52ef4 - fVar2));
     *(float *)(&DAT_6bc13988 + (longlong)local_c * 0x10) = (float)dVar1;
-    dVar1 = (double)SinXDivX((double)(DAT_6bb52ee0 - fVar2));
+    dVar1 = (double)SinXDivX((double)(*(float *)&DAT_6bb52ee0 - fVar2));
     *(float *)(&DAT_6bc1398c + (longlong)local_c * 0x10) = (float)dVar1;
   }
   return;
@@ -5234,7 +5235,7 @@ undefined2 TZ_GetERInernal(longlong param_1,int param_2)
   }
   (*(double *)(_stk + 0x88)) = (*(double *)(_stk + 0x10)) / (*(double *)(_stk + 0x8));
   (*(double *)(_stk + 0x80)) = (*(double *)(_stk + 0x18)) / (*(double *)(_stk + 0x8));
-  TZ_GetAxisInternal((*(double *)(_stk + 0x8)),(*(double *)(_stk + 0x10)),(*(double *)(_stk + 0x18)),(*(undefined8 *)(_stk + 0x20)),(*(undefined8 *)(_stk + 0x28)),(*(undefined8 *)(_stk + 0x30)),&(*(ushort *)(_stk + 0x6)),&(*(ushort *)(_stk + 0x4)),
+  TZ_GetAxisInternal((*(double *)(_stk + 0x8)),(*(double *)(_stk + 0x10)),(*(double *)(_stk + 0x18)),(*(double *)(_stk + 0x20)),(*(double *)(_stk + 0x28)),(*(double *)(_stk + 0x30)),&(*(ushort *)(_stk + 0x6)),&(*(ushort *)(_stk + 0x4)),
                      &(*(char *)(_stk + 0x3)));
   uVar1 = (uint)(*(ushort *)(_stk + 0x6));
   (*(ushort *)(_stk + 0x6)) = (ushort)(int)((double)uVar1 / 2.449489742783178);
@@ -6130,18 +6131,20 @@ float TZ_BiCubicInter(int param_1,int param_2,int param_3,int param_4)
   iVar2 = param_2 + -1;
   if ((((iVar1 < 0) || ((int)(uint)_refptr_g_tsaPrmtFlash->bCols < param_1 + 3)) || (iVar2 < 0)) ||
      ((int)(uint)_refptr_g_tsaPrmtFlash->bRows < param_2 + 3)) {
-    local_c = (float)TZ_BiCubicInterEdge(iVar1,iVar2,&g_afu + lVar3,
-                                         &g_afu + (longlong)param_4 * 0x10);
+    /* TZ_BiCubicInterEdge 在 xmm0 里返回 float */
+    local_c = TZ_BiCubicInterEdge(iVar1,iVar2,&g_afu + lVar3,
+                                  &g_afu + (longlong)param_4 * 0x10);
   }
   else {
-    local_c = DAT_6bb52ef8;
+    local_c = *(float *)&DAT_6bb52ef8;
     local_18 = (short *)((ulonglong)((uint)_refptr_g_tsaPrmtFlash->bCols * iVar2 + iVar1 & 0xffff) *
                          2 + g_tzBuffer);
     for (local_1c = 0; local_1c < 4; local_1c = local_1c + 1) {
+      /* 原汇编的求和次序：w3·s3 + ((w0·s0 + w1·s1) + w2·s2) */
       local_c = local_c + (*(float *)(&DAT_6bc1398c + lVar3) * (float)(int)local_18[3] +
-                          *(float *)(&g_afu + lVar3) * (float)(int)*local_18 +
-                          *(float *)(&DAT_6bc13984 + lVar3) * (float)(int)local_18[1] +
-                          *(float *)(&DAT_6bc13988 + lVar3) * (float)(int)local_18[2]) *
+                          ((*(float *)(&g_afu + lVar3) * (float)(int)*local_18 +
+                          *(float *)(&DAT_6bc13984 + lVar3) * (float)(int)local_18[1]) +
+                          *(float *)(&DAT_6bc13988 + lVar3) * (float)(int)local_18[2])) *
                           *(float *)(&g_afu + (longlong)param_4 * 0x10 + (longlong)local_1c * 4);
       local_18 = local_18 + _refptr_g_tsaPrmtFlash->bCols;
     }
@@ -6428,12 +6431,12 @@ undefined8 TZ_IsToBeRptTouchMerged(longlong param_1)
 // Function: TZ_BiCubicInterEdge @ 6ba85db3
 // ============================================================================
 
-undefined4 TZ_BiCubicInterEdge(int param_1,int param_2,undefined8 param_3,undefined8 param_4)
+float TZ_BiCubicInterEdge(int param_1,int param_2,undefined8 param_3,undefined8 param_4)
 
 {
   /* 栈局部变量按原栈偏移还原为 _stk（Stack[-0x68]..）：被调方会越过单个局部变量访问相邻字段 */
   _Alignas(16) uint8_t _stk[0x70];
-  undefined4 uVar1;
+  float uVar1;
   
   (*(int *)(_stk + 0x5c)) = 0;
   (*(int *)(_stk + 0x58)) = 4;
@@ -6531,13 +6534,14 @@ float TZ_BiCubicInter4x4(int *param_1,float *param_2,longlong param_3)
   float local_10;
   int local_c;
   
-  local_10 = DAT_6bb52ef8;
+  local_10 = *(float *)&DAT_6bb52ef8;
   local_18 = param_1;
   for (local_c = 0; local_c < 4; local_c = local_c + 1) {
+    /* 原汇编的求和次序：w3·s3 + ((w0·s0 + w1·s1) + w2·s2) */
     local_10 = local_10 +
                (param_2[3] * (float)local_18[3] +
-               *param_2 * (float)*local_18 + param_2[1] * (float)local_18[1] +
-               param_2[2] * (float)local_18[2]) * *(float *)(param_3 + (longlong)local_c * 4);
+               ((*param_2 * (float)*local_18 + param_2[1] * (float)local_18[1]) +
+               param_2[2] * (float)local_18[2])) * *(float *)(param_3 + (longlong)local_c * 4);
     local_18 = local_18 + 4;
   }
   return local_10;

@@ -5023,7 +5023,7 @@ float TZ_BiCubicInter(int param_1,int param_2,int param_3,int param_4);
 float TZ_BiCubicInter4x4(int *param_1,float *param_2,longlong param_3);
 
 // TZ_BiCubicInterEdge @ 0x6ba85db3 (Detection\TZ.c)
-undefined4 TZ_BiCubicInterEdge(int param_1,int param_2,undefined8 param_3,undefined8 param_4);
+float TZ_BiCubicInterEdge(int param_1,int param_2,undefined8 param_3,undefined8 param_4);
 
 // TZ_CalcAxisMass @ 0x6ba86978 (Detection\TZ.c)
 void TZ_CalcAxisMass(double *param_1,longlong param_2,int param_3);

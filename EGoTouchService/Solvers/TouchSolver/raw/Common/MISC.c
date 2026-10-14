@@ -156,28 +156,32 @@ int GetSensorStartDspl(char param_1,char param_2,short param_3,byte param_4,byte
 double SinXDivX(double param_1)
 
 {
+  /* .rdata 常量是 float：0x6bb52ecc = -1.0f（三次卷积核的 a），0x6bb52ee0.. = 2/3/5/8/4。
+     原汇编先求 x² 再求 x³ = x²·x，两段多项式都乘 x³。 */
+  float fVar0;
   double dVar1;
+  double dVar2;
+  double dVar3;
   double local_res8;
-  
+
+  fVar0 = *(float *)&DAT_6bb52ecc;
   local_res8 = param_1;
   if (param_1 < 0.0) {
     local_res8 = -param_1;
   }
-  dVar1 = local_res8 * local_res8;
-  if (1.0 < local_res8) {
-    if (2.0 < local_res8) {
-      dVar1 = 0.0;
-    }
-    else {
-      dVar1 = (((double)DAT_6bb52ecc * dVar1 * local_res8 -
-               (double)(DAT_6bb52ecc * DAT_6bb52ee8) * dVar1) +
-              (double)(DAT_6bb52ecc * DAT_6bb52eec) * local_res8) -
-              (double)(DAT_6bb52ecc * DAT_6bb52ef0);
-    }
+  dVar2 = local_res8 * local_res8;
+  dVar3 = dVar2 * local_res8;
+  if (local_res8 <= 1.0) {
+    dVar1 = ((double)(fVar0 + *(float *)&DAT_6bb52ee0) * dVar3 -
+            (double)(fVar0 + *(float *)&DAT_6bb52ee4) * dVar2) + 1.0;
+  }
+  else if (local_res8 <= 2.0) {
+    dVar1 = (((double)fVar0 * dVar3 - (double)(fVar0 * *(float *)&DAT_6bb52ee8) * dVar2) +
+            (double)(fVar0 * *(float *)&DAT_6bb52eec) * local_res8) -
+            (double)(fVar0 * *(float *)&DAT_6bb52ef0);
   }
   else {
-    dVar1 = ((double)(DAT_6bb52ecc + DAT_6bb52ee0) * dVar1 * local_res8 -
-            (double)(DAT_6bb52ecc + DAT_6bb52ee4) * dVar1) + 1.0;
+    dVar1 = 0.0;
   }
   return dVar1;
 }
