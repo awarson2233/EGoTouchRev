@@ -81,7 +81,7 @@ typedef PeakTable_t PeakArray;
 #define _DAT_6bb800d0     (*((void**)TSA_MEM_AT(0x6bb800d0ULL)))
 
 #define _DAT_6bb4f202     (*((uint16_t*)TSA_MEM_AT(0x6bb4f202ULL)))
-#define _DAT_6bb4f208     (*((uint32_t*)TSA_MEM_AT(0x6bb4f208ULL)))
+#define _DAT_6bb4f208     (*((uint16_t*)TSA_MEM_AT(0x6bb4f208ULL)))
 #define _DAT_6bb4f244     (*((uint32_t*)TSA_MEM_AT(0x6bb4f244ULL)))
 #define _DAT_6bb4f248     (*((uint32_t*)TSA_MEM_AT(0x6bb4f248ULL)))
 #define _DAT_6bb4f250     (*((uint32_t*)TSA_MEM_AT(0x6bb4f250ULL)))
@@ -118,7 +118,7 @@ typedef PeakTable_t PeakArray;
 #define s_AbnormalExitIdleMode_6bb5b2af "AbnormalExitIdleMode"
 #define s_FailedExitIdleMode_6bb5b306   "FailedExitIdleMode"
 
-#define _DAT_6bb4f204 (*((uint32_t*)TSA_MEM_AT(0x6bb4f204ULL)))
+#define _DAT_6bb4f204 (*((uint16_t*)TSA_MEM_AT(0x6bb4f204ULL)))
 #define _DAT_6bb4f210 (*((uint16_t*)TSA_MEM_AT(0x6bb4f210ULL)))
 #define _DAT_6bb4f212 (*((uint16_t*)TSA_MEM_AT(0x6bb4f212ULL)))
 
