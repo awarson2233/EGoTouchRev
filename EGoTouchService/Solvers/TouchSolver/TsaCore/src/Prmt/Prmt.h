@@ -117,7 +117,8 @@ struct FlashPrmt {
     uint8_t reserved67C[0x194];
     uint32_t cmfMethodNormal;  // CMF 方法：常态 / 智能皮套（1 为 SOF）
     uint32_t cmfMethodSmartCover;
-    uint8_t reserved818[0x6];
+    uint8_t noisyTouchDownDebounce;  // 触点处的共模噪声大于 500 或小于 -400 时按下防抖的最少帧数；0 为不启用
+    uint8_t reserved819[0x5];
     uint8_t sigMult;  // 触点区域遍历门限相对峰值的比例（/128）：默认
     uint8_t sigMultNormal;  // 设备接地
     uint8_t sigMultSD;  // 设备悬浮
@@ -302,6 +303,7 @@ static_assert(offsetof(FlashPrmt, cmfTholdAlt) == 0x626);
 static_assert(offsetof(FlashPrmt, field62C) == 0x62C);
 static_assert(offsetof(FlashPrmt, cmfMethodNormal) == 0x810);
 static_assert(offsetof(FlashPrmt, cmfMethodSmartCover) == 0x814);
+static_assert(offsetof(FlashPrmt, noisyTouchDownDebounce) == 0x818);
 static_assert(offsetof(FlashPrmt, sigMult) == 0x81E);
 static_assert(offsetof(FlashPrmt, sigMultNormal) == 0x81F);
 static_assert(offsetof(FlashPrmt, sigMultSD) == 0x820);

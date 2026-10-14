@@ -29,6 +29,7 @@ uint32_t TSA_IsUnderWaterDetected(void);
 uint32_t TSA_IsOutOfWaterDetected(void);
 char* TSA_GetPrmtName(void);
 int16_t TSA_GetMinSigPrpt(void);
+uint64_t TSA_IsGameScenario(void);
 void TSA_ScenarioProcess(void);
 uint16_t TSA_SideTouchDim1Center(uint8_t sideIdx);
 uint16_t TSA_SideTouchDim2Center(uint8_t sideIdx);
@@ -75,6 +76,9 @@ uint64_t GripFilter_IsGripOrTbd(int32_t gripStage);
 
 // Rejection/Thenar.c
 void Thenar_UnitCopy(uint8_t* dst, uint8_t* src);
+
+// Signal/CMF.c
+int16_t CMF_GetNoiseValue(uint8_t dim1, uint8_t dim2);
 
 // Signal/HardwareAnalyzer.c
 void HardwareAnalyzer_ReportToTSA(void);
