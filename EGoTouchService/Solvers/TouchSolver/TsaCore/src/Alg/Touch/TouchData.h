@@ -63,8 +63,8 @@ struct TouchUnit {
     uint8_t iirRemDim2;
     Point jitPos;  // 抗抖动后坐标
     Point rptPos;  // 送去上报的坐标
-    uint32_t field034;
-    uint32_t field038;
+    int32_t hotZoneShiftDim1;  // HotZoneAdjust 把上报坐标平移的量，报点期间逐帧沿用
+    int32_t hotZoneShiftDim2;
     uint8_t field03C;
     uint8_t field03D;
     uint8_t field03E;
@@ -211,8 +211,8 @@ static_assert(offsetof(TouchUnit, iirRemDim1) == 0x02A);
 static_assert(offsetof(TouchUnit, iirRemDim2) == 0x02B);
 static_assert(offsetof(TouchUnit, jitPos) == 0x02C);
 static_assert(offsetof(TouchUnit, rptPos) == 0x030);
-static_assert(offsetof(TouchUnit, field034) == 0x034);
-static_assert(offsetof(TouchUnit, field038) == 0x038);
+static_assert(offsetof(TouchUnit, hotZoneShiftDim1) == 0x034);
+static_assert(offsetof(TouchUnit, hotZoneShiftDim2) == 0x038);
 static_assert(offsetof(TouchUnit, field03C) == 0x03C);
 static_assert(offsetof(TouchUnit, field03D) == 0x03D);
 static_assert(offsetof(TouchUnit, field03E) == 0x03E);
@@ -346,8 +346,8 @@ struct PrevTouchUnit {
     uint8_t iirRemDim2;
     Point jitPos;  // 抗抖动后坐标
     Point rptPos;  // 送去上报的坐标
-    uint32_t field034;
-    uint32_t field038;
+    int32_t hotZoneShiftDim1;  // HotZoneAdjust 把上报坐标平移的量，报点期间逐帧沿用
+    int32_t hotZoneShiftDim2;
     uint8_t field03C;
     uint8_t field03D;
     uint8_t field03E;
@@ -551,8 +551,8 @@ static_assert(offsetof(PrevTouchUnit, iirRemDim1) == 0x02A);
 static_assert(offsetof(PrevTouchUnit, iirRemDim2) == 0x02B);
 static_assert(offsetof(PrevTouchUnit, jitPos) == 0x02C);
 static_assert(offsetof(PrevTouchUnit, rptPos) == 0x030);
-static_assert(offsetof(PrevTouchUnit, field034) == 0x034);
-static_assert(offsetof(PrevTouchUnit, field038) == 0x038);
+static_assert(offsetof(PrevTouchUnit, hotZoneShiftDim1) == 0x034);
+static_assert(offsetof(PrevTouchUnit, hotZoneShiftDim2) == 0x038);
 static_assert(offsetof(PrevTouchUnit, field03C) == 0x03C);
 static_assert(offsetof(PrevTouchUnit, field03D) == 0x03D);
 static_assert(offsetof(PrevTouchUnit, field03E) == 0x03E);

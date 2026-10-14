@@ -287,7 +287,16 @@ struct FlashPrmt {
     uint8_t reserved173E[0x6];
     uint32_t sensorEnabled;
     uint8_t sensorRate;
-    uint8_t reserved1749[0x147];
+    uint8_t reserved1749[0xEF];
+    uint32_t hotZoneAdjustCore;  // HotZoneAdjust：0 时中心落在核心区（非边缘格）的热区不调整
+    uint8_t hotZoneMinGap;  // 触点到最近与次近热区的距离须相差超过它（外部单位）
+    uint8_t hotZoneGridDim1;  // 判定热区所在格时把屏幕分成的列数、行数
+    uint8_t hotZoneGridDim2;
+    uint8_t hotZoneSizeNum;  // hotZoneSize 的项数
+    uint16_t hotZoneSize[10];  // 热区尺寸档（外部单位）：取与热区面积最接近的一档
+    uint16_t hotZoneExpandMax[4];  // 最大尺寸档的扩展量（外部单位）：Dim1 两端、Dim2 两端，按热区所在列 / 行在两端间插值
+    uint16_t hotZoneExpandMin[4];  // 最小尺寸档的扩展量
+    uint8_t reserved1864[0x2C];
 };
 static_assert(sizeof(FlashPrmt) == 0x1890);
 static_assert(offsetof(FlashPrmt, displayXAxis) == 0x018);
@@ -445,6 +454,14 @@ static_assert(offsetof(FlashPrmt, motorVolumeOnWaveform) == 0x173C);
 static_assert(offsetof(FlashPrmt, motorVolumeOffWaveform) == 0x173D);
 static_assert(offsetof(FlashPrmt, sensorEnabled) == 0x1744);
 static_assert(offsetof(FlashPrmt, sensorRate) == 0x1748);
+static_assert(offsetof(FlashPrmt, hotZoneAdjustCore) == 0x1838);
+static_assert(offsetof(FlashPrmt, hotZoneMinGap) == 0x183C);
+static_assert(offsetof(FlashPrmt, hotZoneGridDim1) == 0x183D);
+static_assert(offsetof(FlashPrmt, hotZoneGridDim2) == 0x183E);
+static_assert(offsetof(FlashPrmt, hotZoneSizeNum) == 0x183F);
+static_assert(offsetof(FlashPrmt, hotZoneSize) == 0x1840);
+static_assert(offsetof(FlashPrmt, hotZoneExpandMax) == 0x1854);
+static_assert(offsetof(FlashPrmt, hotZoneExpandMin) == 0x185C);
 
 /// g_tsaPrmtFlashConst：由机型参数推导出的常量（ConstPrmt::Init；0x40..0x56 由 ER_Init 写）。
 struct FlashConstPrmt {

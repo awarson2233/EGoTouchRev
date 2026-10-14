@@ -31,6 +31,7 @@ char* TSA_GetPrmtName(void);
 int16_t TSA_GetMinSigPrpt(void);
 uint64_t TSA_IsGameScenario(void);
 uint32_t TSA_IsWindowsPadFeatureEnabled(void);
+bool TSA_IsTypingScenario(void);
 void TSA_ScenarioProcess(void);
 uint16_t TSA_SideTouchDim1Center(uint8_t sideIdx);
 uint16_t TSA_SideTouchDim2Center(uint8_t sideIdx);
@@ -49,12 +50,14 @@ uint16_t TSAOut_Pixel2DisplayDim2(uint16_t pos);
 uint32_t TSAOut_RevertDim1Pos(uint16_t pos);
 uint32_t TSAOut_RevertDim2Pos(uint16_t pos);
 uint64_t TSAOut_ExtToIntDist(uint16_t dist);
+uint32_t TSAOut_IntToExtDist(int16_t dist);
 char TSAOut_Angle(char angle);
 
 // Core/TSAStatic.c
 uint8_t TSAStatic_IsChargerPlugged(void);
 uint64_t TSAStatic_IsSafeBaselineApplied(void);
 void TSAStatic_ProcessAftTouchEvent(void);
+uint64_t TSAStatic_IsScreenRotated(void);
 uint8_t TSAStatic_IsAFEJustEnterIDLEMode(void);
 uint8_t TSAStatic_IsAFEJustExitIDLEMode(void);
 
