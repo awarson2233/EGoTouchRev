@@ -100,10 +100,18 @@ struct FlashPrmt {
     uint16_t dbEnterIdle;  // 允许进入 IDLE 后的防抖时间（ms）
     uint8_t reserved03E[0x6];
     uint8_t field044;  // TouchMode：为 0 时手指 → 无物体的切换防抖 60 帧，否则立即切换
-    uint8_t reserved045[0x1B];
+    uint8_t reserved045[0x3];
+    uint16_t recalRawCenter;  // BLRecal：raw 上下边界的目标中心与允许范围
+    uint16_t recalRawRange;
+    uint8_t reserved04C[0x14];
     uint32_t antiTouchScenarios;  // 哪些场景启用防误触
     uint32_t proximityScenarios;  // 哪些场景启用接近检测
-    uint8_t reserved068[0x28];
+    uint8_t cmfEnabled;
+    uint8_t blUpdateFromPreCmfRaw;  // 基线 IIR 按 CMF 前的 raw 更新
+    uint8_t blDirtyCheck;  // 查当前基线是否被污染
+    uint8_t blAbnormalCheck;  // 查基线异常（否则走 BLReset_Check）
+    uint8_t ssNegSignalStableCheck;
+    uint8_t reserved06D[0x23];
     uint8_t dim1LogicFirst;  // Dim1 逻辑区域的首末列
     uint8_t dim1LogicLast;
     uint8_t dim2LogicFirst;
@@ -310,7 +318,12 @@ struct FlashPrmt {
     uint8_t reserved173E[0x6];
     uint32_t sensorEnabled;
     uint8_t sensorRate;
-    uint8_t reserved1749[0xEF];
+    uint8_t reserved1749[0x7];
+    uint8_t toeSynaBl;  // ToeSynaBl 工作区开关
+    uint8_t toeSideCols;  // 两侧各几列算侧边
+    uint8_t reserved1752[0x2];
+    uint32_t toeSynaBlFlags;  // bit0 背光偏移、bit1 水、bit2 自互容不符、bit3 异常触点形状
+    uint8_t reserved1758[0xE0];
     uint32_t hotZoneAdjustCore;  // HotZoneAdjust：0 时中心落在核心区（非边缘格）的热区不调整
     uint8_t hotZoneMinGap;  // 触点到最近与次近热区的距离须相差超过它（外部单位）
     uint8_t hotZoneGridDim1;  // 判定热区所在格时把屏幕分成的列数、行数
@@ -335,8 +348,15 @@ static_assert(offsetof(FlashPrmt, sensorArchitecture) == 0x034);
 static_assert(offsetof(FlashPrmt, reportRateHz) == 0x038);
 static_assert(offsetof(FlashPrmt, dbEnterIdle) == 0x03C);
 static_assert(offsetof(FlashPrmt, field044) == 0x044);
+static_assert(offsetof(FlashPrmt, recalRawCenter) == 0x048);
+static_assert(offsetof(FlashPrmt, recalRawRange) == 0x04A);
 static_assert(offsetof(FlashPrmt, antiTouchScenarios) == 0x060);
 static_assert(offsetof(FlashPrmt, proximityScenarios) == 0x064);
+static_assert(offsetof(FlashPrmt, cmfEnabled) == 0x068);
+static_assert(offsetof(FlashPrmt, blUpdateFromPreCmfRaw) == 0x069);
+static_assert(offsetof(FlashPrmt, blDirtyCheck) == 0x06A);
+static_assert(offsetof(FlashPrmt, blAbnormalCheck) == 0x06B);
+static_assert(offsetof(FlashPrmt, ssNegSignalStableCheck) == 0x06C);
 static_assert(offsetof(FlashPrmt, dim1LogicFirst) == 0x090);
 static_assert(offsetof(FlashPrmt, dim1LogicLast) == 0x091);
 static_assert(offsetof(FlashPrmt, dim2LogicFirst) == 0x092);
@@ -500,6 +520,9 @@ static_assert(offsetof(FlashPrmt, motorVolumeOnWaveform) == 0x173C);
 static_assert(offsetof(FlashPrmt, motorVolumeOffWaveform) == 0x173D);
 static_assert(offsetof(FlashPrmt, sensorEnabled) == 0x1744);
 static_assert(offsetof(FlashPrmt, sensorRate) == 0x1748);
+static_assert(offsetof(FlashPrmt, toeSynaBl) == 0x1750);
+static_assert(offsetof(FlashPrmt, toeSideCols) == 0x1751);
+static_assert(offsetof(FlashPrmt, toeSynaBlFlags) == 0x1754);
 static_assert(offsetof(FlashPrmt, hotZoneAdjustCore) == 0x1838);
 static_assert(offsetof(FlashPrmt, hotZoneMinGap) == 0x183C);
 static_assert(offsetof(FlashPrmt, hotZoneGridDim1) == 0x183D);

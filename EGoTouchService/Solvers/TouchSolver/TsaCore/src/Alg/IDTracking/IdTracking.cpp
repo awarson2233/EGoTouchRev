@@ -71,11 +71,11 @@ int64_t AccThold() {
 
 // IDT_GetAcc @ 0x6ba61704
 // 当前触点相对历史触点的速度（位移 / 帧间隔），第二帧取速度平方的 1/4，之后取速度平方与加速度平方的较小者。
-// 帧间隔默认取 |TsaStatic::baselineStageInitialSignal|（原代码如此）。
+// 帧间隔默认取 |TsaStatic::frameIntervalMs|（原代码如此）。
 int32_t GetAcc(uint8_t curIdx, uint8_t prevIdx) {
     const TouchUnit& cur = Cur(curIdx);
     const PrevTouchUnit& prev = Prev(prevIdx);
-    int32_t dt = WrapAbs(Static().baselineStageInitialSignal);
+    int32_t dt = WrapAbs(Static().frameIntervalMs);
     if (UsesTimestamps()) dt = static_cast<int32_t>(ElapsedMs(cur, prev));
     if (dt == 0) dt = 1;
     const int32_t vx = (cur.rawPos.dim1 - prev.rawPos.dim1) / dt;

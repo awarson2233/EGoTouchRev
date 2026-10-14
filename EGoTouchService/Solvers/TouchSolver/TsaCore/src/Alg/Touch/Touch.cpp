@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "Alg/Baseline/Baseline.h"
 #include "Alg/Peak/Peak.h"
 #include "Alg/Peak/PrevPeak.h"
 #include "Alg/Sensor/Sensor.h"
@@ -321,7 +322,7 @@ void SetVolatileFlag(uint8_t curIdx, uint8_t prevIdx) {
 
     if (prev.age == 0 && (stat.systemFlags & 0x10) != 0) cur.volatileFlags |= 0x800000;
     if ((prev.persistFlags & 0x4000) != 0 || (cur.volatileFlags & 0x800000) != 0) {
-        if (BLReset_CheckAbnormalTouch(curIdx) != 0) cur.volatileFlags |= 0x400000;
+        if (Baseline::CheckAbnormalTouch(curIdx)) cur.volatileFlags |= 0x400000;
     }
     if (prev.age == 0 && cur.exceptionType != 0) stat.specialControlFlags |= 0x80;
     GetPeakSumPosSig(curIdx, prevIdx);
@@ -578,7 +579,7 @@ void GetMergedInfo(uint8_t curIdx) {
 bool IsTouchDownDueToSeperated(uint8_t curIdx) {
     const PeakEntry& peak = PeakOf(Cur(curIdx));
     return !IsOff(curIdx) && Cur(curIdx).age == 1 &&
-           Static().baselineStageInitialSignal < Buffers().timeDown[CellIndex(peak)] &&
+           Static().frameIntervalMs < Buffers().timeDown[CellIndex(peak)] &&
            Sensor::IsTraversedBefore(peak.dim1, peak.dim2);
 }
 

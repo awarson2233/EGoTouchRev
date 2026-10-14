@@ -62,12 +62,6 @@ inline constexpr size_t kLineBufBytes = 0x280;
     const int sign = Buffers().dif[cell] < 0 ? -1 : 1;
     return TzAccess().map[cell] * sign - CurrentAccess()->tag;
 }
-/// 原代码的 memset_s：长度超过容量时不写并记一次断言。
-inline void ClearChecked(void* p, size_t capacity, size_t n) noexcept {
-    TsaAssert(n <= capacity);
-    if (n <= capacity) std::memset(p, 0, n);
-}
-
 // StateMachine.cpp
 void UnitInit(TouchZoneUnit& z);
 void VirtualPeakInfoRetrieval();

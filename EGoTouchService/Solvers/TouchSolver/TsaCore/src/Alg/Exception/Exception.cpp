@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstring>
 
+#include "Alg/Baseline/Baseline.h"
 #include "Alg/Exception/FiException.h"
 #include "Alg/Touch/TouchData.h"
 #include "Alg/TouchZone/TouchZoneData.h"
@@ -31,8 +32,8 @@ ExceptionState& State() { return IsFullIncell() ? Static().fiException : Static(
 // 各有多少格落在 [underWaterTholdLow, underWaterThold] 内。
 void CountWaterCells(bool fromBaseline) {
     TsaBufferTable& buf = Buffers();
-    if (fromBaseline) BLIIR_CalcDiffCommon(buf.dif, buf.bl, buf.blNormal);
-    else BLIIR_CalcDiffCommon(buf.dif, buf.raw, buf.bl);
+    if (fromBaseline) Baseline::CalcDiffCommon(buf.dif, buf.bl, buf.blNormal);
+    else Baseline::CalcDiffCommon(buf.dif, buf.raw, buf.bl);
     const FlashPrmt& fl = PrmtFlash();
     const DynamicPrmt& dyn = PrmtDynamic();
     int16_t pos = 0;
@@ -83,7 +84,7 @@ void UpdateGlobal(ExceptionState& st) {
     if (detected == kNoiseLevel3) return force(kNoiseLevel3);
     if (detected == kUnderWater || prev.exceptionFlags == kUnderWater) return force(kUnderWater);
     if (detected == kUnderWaterReverted) return force(kUnderWaterReverted);
-    if (BLReset_Status() == 1 && IsFullIncell()) return force(kAbnormalBaseline);
+    if (Baseline::ResetStatus() == 1 && IsFullIncell()) return force(kAbnormalBaseline);
     if (Static().justExitedSpecialCtrlMode != 0) {
         cur.exceptionFlags |= kExitedSpecialCtrl;
         st.lastDetected = kExitedSpecialCtrl;
@@ -187,7 +188,7 @@ void Process() {
         stat.noiseLevel = 3;
         st.noiseSettleCount = 0;
     } else {
-        st.noiseSettleCount += static_cast<uint64_t>(static_cast<int64_t>(stat.baselineStageInitialSignal));
+        st.noiseSettleCount += static_cast<uint64_t>(static_cast<int64_t>(stat.frameIntervalMs));
         if (st.noiseSettleCount > kNoiseSettleLimit) {
             stat.noiseLevel = 0;
             st.noiseSettleCount = kNoiseSettleLimit + 1;

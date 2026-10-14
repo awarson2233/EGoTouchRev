@@ -516,7 +516,7 @@ struct PrevTouchUnit {
     uint8_t field3A7;
     uint16_t betaGripFrames;
     uint8_t reserved3AA[0x2];
-    uint8_t field3AC;
+    uint8_t blTrustFrames;  // BLReset：未贴边、标记 0x20000000 的小触点持续可信的帧数（0..15）
     uint8_t reserved3AD[0x1];
     SPoint clickToFlickOffset;
     uint8_t curIdx;  // 匹配到的当前帧触点下标，kNoTouch 表示已丢失
@@ -708,7 +708,7 @@ static_assert(offsetof(PrevTouchUnit, debounceFrames) == 0x3A4);
 static_assert(offsetof(PrevTouchUnit, field3A6) == 0x3A6);
 static_assert(offsetof(PrevTouchUnit, field3A7) == 0x3A7);
 static_assert(offsetof(PrevTouchUnit, betaGripFrames) == 0x3A8);
-static_assert(offsetof(PrevTouchUnit, field3AC) == 0x3AC);
+static_assert(offsetof(PrevTouchUnit, blTrustFrames) == 0x3AC);
 static_assert(offsetof(PrevTouchUnit, clickToFlickOffset) == 0x3AE);
 static_assert(offsetof(PrevTouchUnit, curIdx) == 0x3B2);
 static_assert(offsetof(PrevTouchUnit, postReportIirCoef) == 0x3B3);

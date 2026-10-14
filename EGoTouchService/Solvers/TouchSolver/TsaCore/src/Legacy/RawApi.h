@@ -23,6 +23,13 @@ uint32_t AFE_IsRawJump(void);
 uint16_t AFE_GetColNum(void);
 uint16_t AFE_GetRowNum(void);
 uint32_t AFE_IsManualFreqHopping(void);
+bool AFE_IsRawUnifiedToTargetValue(void);
+bool AFE_IsAlwaysNoisy(void);
+uint32_t AFE_IsAutoCalibration(void);
+bool AFE_IsRecalRequested(void);
+uint64_t AFE_IsCoreTouchDetected(void);
+uint8_t AFE_IsFrequentlyHopping(void);
+bool AFE_IsIndividualBaselineForEachFreq(void);
 
 // Core/TSA.c
 uint16_t TSA_GetXRes(void);
@@ -47,6 +54,8 @@ bool TSA_IsPossibleUnderWater(void);
 void* TSA_MallocAndInit(uint32_t size);
 void TSA_Free(int64_t* ptr);
 uint32_t TSA_GetSide(uint16_t dim1, uint16_t dim2);
+uint64_t TSA_InStylusMode(void);
+uint32_t TSA_IsPadFeatureEnabled(void);
 
 // Core/TSAOut.c
 uint16_t TSAOut_Dim1PosInternal(uint16_t pos, uint16_t scale);
@@ -75,16 +84,6 @@ uint32_t TSAStatic_IsAFTModeEnabled(void);
 uint32_t TSAStatic_GetSigThold(int mode);
 uint8_t TSAStatic_IsAllFreqNoisy(void);
 
-// Baseline/BLIIR.c
-void BLIIR_CalcDiffCommon(int16_t* difOut, int16_t* raw, int16_t* baseline);
-
-// Baseline/BLReset.c
-uint8_t BLReset_CheckAbnormalTouch(uint8_t idx);
-uint8_t BLReset_Status(void);
-
-// Baseline/PressureDrift.c
-uint64_t PressureDrift_Detect(uint8_t dim1, uint8_t dim2);
-
 // Rejection/AntiTouch.c
 void AntiTouch_Report(void);
 
@@ -109,6 +108,9 @@ int16_t CMF_GetNoiseValue(uint8_t dim1, uint8_t dim2);
 // Signal/TPSensor.c
 char TPSensor_IsNoMoveInCorrection(uint32_t dim1, uint32_t dim2);
 void TPSensor_IsBrokenSensorInTouchZone(void* zone);
+
+// Signal/Self.c
+void Self_Reset(void);
 
 // Signal/HardwareAnalyzer.c
 void HardwareAnalyzer_ReportToTSA(void);

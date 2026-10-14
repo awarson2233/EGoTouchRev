@@ -129,7 +129,7 @@ uint16_t TouchDownNum(uint8_t prevIdx, uint8_t curIdx) {
     }
     FastClickProcess(prevIdx, curIdx);
     num = std::max(num, prev.field0F8);
-    if (stat.baselineStageInitialSignal > 0xe) num = static_cast<uint16_t>((num + 1) / 2);
+    if (stat.frameIntervalMs > 0xe) num = static_cast<uint16_t>((num + 1) / 2);
     if (flash.noisyTouchDownDebounce != 0) {
         const auto dim1 = static_cast<uint8_t>(cur.rptPos.dim1 >> 8);
         const auto dim2 = static_cast<uint8_t>(cur.rptPos.dim2 >> 8);

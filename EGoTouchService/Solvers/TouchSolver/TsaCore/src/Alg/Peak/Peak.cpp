@@ -9,6 +9,7 @@
 #include "App/TsaStatic.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
+#include "WorkAround/PressureDrift/PressureDrift.h"
 
 namespace Solvers::Tsa::Core::Peak {
 
@@ -158,7 +159,7 @@ void DetectInRange(int16_t thold, uint8_t firstRow, uint8_t lastRow, uint8_t fir
             const auto above = static_cast<uint16_t>(cell - flash.dim1Len);
             if ((firstR || lastC || dif[static_cast<uint16_t>(above + 1)] < sig) && (firstR || dif[above] < sig) &&
                 (firstR || firstC || dif[static_cast<uint16_t>(above - 1)] < sig) &&
-                ((Static().featureFlags2 & 0x20) == 0 || static_cast<uint8_t>(PressureDrift_Detect(col, row)) == 0)) {
+                ((Static().featureFlags2 & 0x20) == 0 || !PressureDrift::Detect(col, row))) {
                 Insert(col, row);
             }
         }

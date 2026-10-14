@@ -24,13 +24,13 @@ struct TsaBufferTable {
     void* rawGrid;
     void* difGrid;
     void* preCmfRawGrid;
-    void* cleanBaseline;
+    int16_t* cleanBaseline;  // BLReset 存下的干净基线
     uint16_t* tzAge;  // 每格所在握持区域的年龄（gripFlags 0x200）
-    void* rawCapture;
-    void* rawCaptureNextSide;
+    int16_t* rawCapture;  // SHB 抓取时的 CMF 前 raw
+    int16_t* rawCaptureNextSide;  // ToeSynaBl：两侧列 raw 变化时抓取的 CMF 前 raw
     int16_t* dif;  // 当前帧 Dif
     int16_t* raw;
-    void* preCmfRaw;
+    int16_t* preCmfRaw;  // CMF 前的 raw
     int16_t* bl;
     int8_t* tz;  // 区域图：每格的区域编码，见 Alg/Sensor/Sensor.h
     void* commonModeNoise;
@@ -45,7 +45,7 @@ struct TsaBufferTable {
     void* sd;
     void* ssChargerNFilterDif;
     void* aftSsCmfDif;
-    void* rawStoredSinceSsNoSignal;
+    int16_t* rawStoredSinceSsNoSignal;
     void* rawStoredSinceMutualSsNotMatch;
     int8_t* tzPrev;  // 上一帧的区域图
     uint8_t* tzZonePrev;  // 上一帧的 tzZone
@@ -111,5 +111,17 @@ static_assert(offsetof(TsaBufferTable, gripRegion) == 0x150);
 [[nodiscard]] inline uint16_t GridIndex(uint8_t dim1, uint8_t dim2) noexcept {
     return static_cast<uint16_t>(dim1 + dim2 * static_cast<uint32_t>(PrmtFlash().dim1Len));
 }
+
+/// 缓冲表之外，另有几块固定地址的自容缓冲（Self / SS 模块写）。
+/// 元素按 Dim1 的列在前、Dim2 的行在后排成一维；Self 缓冲每 160 个元素一段，各段的含义随 Self 模块改写时再定。
+inline constexpr int kSelfSegment = 160;
+[[nodiscard]] inline int32_t* SelfBuf() noexcept { return &Image::At<int32_t>(0x6bc18880); }          // g_tsaBufSelf
+[[nodiscard]] inline int32_t* SelfForBlReset() noexcept { return &Image::At<int32_t>(0x6bc24080); }   // g_tsaBufSelfForBlRst
+[[nodiscard]] inline int32_t* SsPreCmfDif() noexcept { return &Image::At<int32_t>(0x6bc3ad80); }      // g_tsaBufSSPreCMFDif
+[[nodiscard]] inline int32_t* SsDifForBl() noexcept { return &Image::At<int32_t>(0x6bc3d900); }       // g_tsaBufSsDifForBl
+/// 每格的传感器标志（g_tpSensorFlag，TPSensor 模块分配）；bit5 为坏点。
+[[nodiscard]] inline uint8_t* TpSensorFlags() noexcept { return Image::At<uint8_t*>(0x6bb80e00); }
+/// 接近检测用的基线（g_tsaBufProxBL）；接近检测被裁掉后仍随基线复位同步。
+[[nodiscard]] inline int16_t*& ProxBl() noexcept { return Image::At<int16_t*>(0x6bba3f90); }
 
 }  // namespace Solvers::Tsa::Core

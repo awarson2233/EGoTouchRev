@@ -88,7 +88,7 @@ bool IsClose(int a, int b) {
 
 // RFNoise_Raw2RawProcessDim @ 0x6bb44a73
 // 逐条线扫描。本帧偏移超过 finger 门限的线计入噪声线数，它的帧差之和按所在的前半 / 后半累计；
-// 超过噪声门限的线（不论是否已累计）再累计一次。有噪声线（或 Prpt::field004 超过传感器数的一半）时，
+// 超过噪声门限的线（不论是否已累计）再累计一次。有噪声线（或 Prpt::overNoiseCount 超过传感器数的一半）时，
 // 前后两半的帧差反向且大小相近即判为射频噪声。噪声值取三种帧差各自在所有线上的最大偏移中最小的。
 bool Scan(bool alongDim1, int16_t& noise, uint8_t& noisyLines) {
     const FlashPrmt& fl = PrmtFlash();
@@ -108,7 +108,7 @@ bool Scan(bool alongDim1, int16_t& noise, uint8_t& noisyLines) {
         for (int i = 0; i < 3; ++i) maxOffset[i] = std::max(maxOffset[i], st.offset[i]);
     }
     bool detected = false;
-    if (count != 0 || (fl.sensorNum >> 1) < Prpt().field004) detected = IsClose(firstHalf, -secondHalf);
+    if (count != 0 || (fl.sensorNum >> 1) < Prpt().overNoiseCount) detected = IsClose(firstHalf, -secondHalf);
     noise = std::min({maxOffset[0], maxOffset[1], maxOffset[2]});
     noisyLines = count;
     return detected;
