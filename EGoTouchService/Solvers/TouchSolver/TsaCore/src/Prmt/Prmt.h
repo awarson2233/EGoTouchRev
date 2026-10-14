@@ -56,6 +56,29 @@ static_assert(sizeof(CtdEdgePrmt) == 0x011);
 static_assert(offsetof(CtdEdgePrmt, segmentNum) == 0x000);
 static_assert(offsetof(CtdEdgePrmt, segment) == 0x001);
 
+/// ER（边缘修正）的一条逻辑边：触点到逻辑边缘的距离落在 (minDistMm, maxDistMm) 内时做 move-in 修正（只用低字节）。
+/// 四条边依次是上、下、左、右（TSA side 1、2、4、8）。
+struct ErEdgeMmPrmt {
+    uint16_t minDistMm;  // 也是 ER_GetLimit 的边缘宽度
+    uint16_t maxDistMm;
+    uint8_t field4;  // erEdgeMm[0].field4：底边 move-in 修正开关（原代码只读这一处）
+    uint8_t reserved005[0x1];
+};
+static_assert(sizeof(ErEdgeMmPrmt) == 0x006);
+static_assert(offsetof(ErEdgeMmPrmt, minDistMm) == 0x000);
+static_assert(offsetof(ErEdgeMmPrmt, maxDistMm) == 0x002);
+static_assert(offsetof(ErEdgeMmPrmt, field4) == 0x004);
+
+/// ErEdgeMmPrmt 换算成 Q8.8 传感器坐标（ER_Init）。
+struct ErEdgePrmt {
+    uint16_t minDist;
+    uint16_t maxDist;
+    uint8_t reserved004[0x2];
+};
+static_assert(sizeof(ErEdgePrmt) == 0x006);
+static_assert(offsetof(ErEdgePrmt, minDist) == 0x000);
+static_assert(offsetof(ErEdgePrmt, maxDist) == 0x002);
+
 /// g_tsaPrmtFlash：机型参数表（W273AS2700 由 Prmt::LoadProject 装入）。原厂按 0x840 字节分成三段，这里按整块的偏移排布。
 /// 调参表（TtPrmt）与运行时参数（RtPrmt）每帧把各自的当前值写回其中的对应字段，名字取自它们的键名与说明。
 struct FlashPrmt {
@@ -159,7 +182,9 @@ struct FlashPrmt {
     uint8_t reserved919[0x3];
     uint32_t gloveFilterSides;  // 手套过滤作用的边：上 1、下 2、左 4、右 8
     uint16_t distToEnterGloveMode;  // 进入手套模式的移动距离（mm）
-    uint8_t reserved922[0x1E];
+    uint8_t reserved922[0x2];
+    ErEdgeMmPrmt erEdgeMm[4];  // ER：上、下、左、右四条逻辑边
+    uint8_t reserved93C[0x4];
     int16_t chargerNoiseTholdPercent;  // Hybrid Incell 充电噪声门限相对 HTI 门限的百分比；也是 DynPrmt 初值块（0x940..0x94c）的开头
     uint16_t field942;  // 调参表里标为 obsolete
     uint8_t reserved944[0xD0C];
@@ -332,6 +357,7 @@ static_assert(offsetof(FlashPrmt, snrScaleX16) == 0x914);
 static_assert(offsetof(FlashPrmt, zTholdFlags) == 0x918);
 static_assert(offsetof(FlashPrmt, gloveFilterSides) == 0x91C);
 static_assert(offsetof(FlashPrmt, distToEnterGloveMode) == 0x920);
+static_assert(offsetof(FlashPrmt, erEdgeMm) == 0x924);
 static_assert(offsetof(FlashPrmt, chargerNoiseTholdPercent) == 0x940);
 static_assert(offsetof(FlashPrmt, field942) == 0x942);
 static_assert(offsetof(FlashPrmt, field1650) == 0x1650);
@@ -452,7 +478,8 @@ struct FlashConstPrmt {
     uint8_t reserved036[0x2];
     uint32_t field038;
     uint32_t field03C;
-    uint8_t reserved040[0x1A];
+    ErEdgePrmt erEdge[4];  // ER_Init 由 FlashPrmt::erEdgeMm 换算
+    uint8_t reserved058[0x2];
     uint16_t field05A;
     uint16_t field05C;
     uint16_t field05E;
@@ -486,6 +513,7 @@ static_assert(offsetof(FlashConstPrmt, field032) == 0x032);
 static_assert(offsetof(FlashConstPrmt, field034) == 0x034);
 static_assert(offsetof(FlashConstPrmt, field038) == 0x038);
 static_assert(offsetof(FlashConstPrmt, field03C) == 0x03C);
+static_assert(offsetof(FlashConstPrmt, erEdge) == 0x040);
 static_assert(offsetof(FlashConstPrmt, field05A) == 0x05A);
 static_assert(offsetof(FlashConstPrmt, field05C) == 0x05C);
 static_assert(offsetof(FlashConstPrmt, field05E) == 0x05E);

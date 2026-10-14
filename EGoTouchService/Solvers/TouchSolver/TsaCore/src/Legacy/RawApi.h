@@ -36,12 +36,18 @@ uint16_t TSA_SideTouchDim1Center(uint8_t sideIdx);
 uint16_t TSA_SideTouchDim2Center(uint8_t sideIdx);
 uint16_t TSA_CoreTouchDim1Center(uint8_t idx);
 uint16_t TSA_CoreTouchDim2Center(uint8_t idx);
+uint32_t TSA_GetDimEdge(uint16_t dim1, uint16_t dim2);
+uint64_t TSA_DimEdgeToSide(int dimEdge);
+uint64_t TSA_SideToEdge(uint32_t side);
+uint64_t TSA_SideToDimEdge(int side);
 
 // Core/TSAOut.c
 uint16_t TSAOut_DisplayXPos(uint8_t idx, ...);
 uint16_t TSAOut_DisplayYPos(uint8_t idx, ...);
 uint16_t TSAOut_Pixel2DisplayDim1(uint16_t pos);
 uint16_t TSAOut_Pixel2DisplayDim2(uint16_t pos);
+uint32_t TSAOut_RevertDim1Pos(uint16_t pos);
+uint32_t TSAOut_RevertDim2Pos(uint16_t pos);
 uint64_t TSAOut_ExtToIntDist(uint16_t dist);
 char TSAOut_Angle(char angle);
 
@@ -83,6 +89,9 @@ void Thenar_UnitCopy(uint8_t* dst, uint8_t* src);
 
 // Signal/CMF.c
 int16_t CMF_GetNoiseValue(uint8_t dim1, uint8_t dim2);
+
+// Signal/TPSensor.c
+char TPSensor_IsNoMoveInCorrection(uint32_t dim1, uint32_t dim2);
 
 // Signal/HardwareAnalyzer.c
 void HardwareAnalyzer_ReportToTSA(void);
