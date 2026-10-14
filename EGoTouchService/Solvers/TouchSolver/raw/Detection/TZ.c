@@ -2273,7 +2273,8 @@ int TZ_StylusXYCorrection(ushort param_1)
 {
   double dVar1;
   
-  dVar1 = sin((double)((DAT_6bb52d48 * (float)(param_1 & 0xff)) / _DAT_6bb52d4c));
+  /* .rdata 常量是 float：0x6bb52d48 = 2π，0x6bb52d4c = 255.0f */
+  dVar1 = sin((double)((*(float *)&DAT_6bb52d48 * (float)(param_1 & 0xff)) / _DAT_6bb52d4c));
   return (param_1 & 0xff) + (int)(dVar1 * -14.0) + (uint)(param_1 >> 8) * 0x100;
 }
 
