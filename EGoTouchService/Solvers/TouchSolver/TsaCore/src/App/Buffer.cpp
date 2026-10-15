@@ -17,6 +17,7 @@
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
 #include "Common/Memory.h"
+#include "Extension/HandGesture/HandGesture.h"
 #include "Extension/HardwareAnalyzer/HardwareAnalyzer.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
@@ -276,7 +277,7 @@ void GripStageProcess() {
 // TSAMem_Free @ 0x6baa0608（SafeBaseline、BaliSensorBroken、侧边触摸的释放被裁掉）
 void FreeAll() {
     RfNoise::Free();
-    HandGesture_Free();
+    HandGesture::Free();
     ToeSynaBl::Free();
     HardwareAnalyzer::Free();
     BadChannel::Free();
@@ -296,7 +297,7 @@ bool InitProject() {
     GridMapBufSize() = static_cast<uint16_t>((GridBufSize() * 2u + GridBufSize()) / 2);
     LineBufSize() = static_cast<uint16_t>(fl.dim1Len + fl.dim2Len);
     MaxDimSize() = std::max(fl.dim1Len, fl.dim2Len);
-    return RfNoise::Malloc() && HandGesture_Malloc() != 0 && ToeSynaBl::Malloc() && HardwareAnalyzer::Malloc() &&
+    return RfNoise::Malloc() && HandGesture::Malloc() && ToeSynaBl::Malloc() && HardwareAnalyzer::Malloc() &&
            BadChannel::Malloc() && Property::Malloc() && Alloc(SideTz(), GridBufSize()) && Malloc() && TpSensor::Malloc() &&
            Cmf::Malloc() && Exception::Malloc() && TouchZone::Malloc() && Afe::Malloc();
 }

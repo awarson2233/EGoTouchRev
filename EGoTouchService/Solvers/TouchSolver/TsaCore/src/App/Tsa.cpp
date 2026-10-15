@@ -38,6 +38,7 @@
 #include "Common/Assert.h"
 #include "Common/Image.h"
 #include "Common/Memory.h"
+#include "Extension/HandGesture/HandGesture.h"
 #include "Extension/HardwareAnalyzer/HardwareAnalyzer.h"
 #include "Extension/Thenar/Thenar.h"
 #include "Legacy/RawApi.h"
@@ -107,7 +108,7 @@ void MsInitCommon(bool full) {
     HardwareAnalyzer::Init();
     GripFilter_Init();
     BadChannel::Init();
-    HandGesture_Init();
+    HandGesture::Init();
     if (full) Baseline::ClearRefreshRequest();
     Thenar::Init();
 }
@@ -213,7 +214,7 @@ void TrackAndReport() {
     TouchReport::Process();
     Touch::ProcessExtInfo();
     HardwareAnalyzer::PostProcess();
-    HandGesture_Process();
+    HandGesture::Process();
     PrevTouch::PostProcess();
     PrevPeak::Process();
     Buffer::PostProcess();

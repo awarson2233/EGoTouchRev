@@ -536,10 +536,9 @@ struct PrevTouchUnit {
     SPoint stepBackDelta;  // 多步回退：起退时相对目标的位移
     Point stepBackOrigin;  // 多步回退：目标位置
     uint64_t field458;
-    uint16_t field460;
-    uint16_t field462;
-    uint8_t field464;
-    uint8_t field465;
+    Point relatedGripPos;  // HandGesture：关联握持时这个触点的位置
+    int8_t relatedGripAngle;  // 以及倾角
+    uint8_t relatedGrip;  // HandGesture：与另一个握持触点关联
     int16_t minSigOffAtTouchDown;  // 按下那一格的 g_tsaBufMinSigOff
     int16_t timeOffAtTouchDown;  // 按下那一格的 g_tsaBufTimeOff
     int16_t timeRptAtTouchDown;  // 按下那一格的 g_tsaBufTimeRpt
@@ -722,10 +721,9 @@ static_assert(offsetof(PrevTouchUnit, stepBackCount) == 0x44E);
 static_assert(offsetof(PrevTouchUnit, stepBackDelta) == 0x450);
 static_assert(offsetof(PrevTouchUnit, stepBackOrigin) == 0x454);
 static_assert(offsetof(PrevTouchUnit, field458) == 0x458);
-static_assert(offsetof(PrevTouchUnit, field460) == 0x460);
-static_assert(offsetof(PrevTouchUnit, field462) == 0x462);
-static_assert(offsetof(PrevTouchUnit, field464) == 0x464);
-static_assert(offsetof(PrevTouchUnit, field465) == 0x465);
+static_assert(offsetof(PrevTouchUnit, relatedGripPos) == 0x460);
+static_assert(offsetof(PrevTouchUnit, relatedGripAngle) == 0x464);
+static_assert(offsetof(PrevTouchUnit, relatedGrip) == 0x465);
 static_assert(offsetof(PrevTouchUnit, minSigOffAtTouchDown) == 0x466);
 static_assert(offsetof(PrevTouchUnit, timeOffAtTouchDown) == 0x468);
 static_assert(offsetof(PrevTouchUnit, timeRptAtTouchDown) == 0x46A);

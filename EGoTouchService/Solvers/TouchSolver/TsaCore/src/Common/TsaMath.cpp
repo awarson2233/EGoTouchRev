@@ -90,8 +90,3 @@ double CubicKernel(double x) noexcept {
 }
 
 }  // namespace Solvers::Tsa::Core::Math
-
-// ── 过渡期：未转换的 C 代码按原名调用 ──────────────────────────────
-extern "C" int TSAMath_ATan2(uint16_t y, uint16_t x) {
-    return Solvers::Tsa::Core::Math::ATan2(static_cast<int16_t>(y), static_cast<int16_t>(x));
-}

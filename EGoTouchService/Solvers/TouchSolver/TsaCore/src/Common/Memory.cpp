@@ -61,8 +61,6 @@ void Free(void* p) {
 
 // raw 的调用方
 extern "C" {
-void* TSA_MallocAndInit(uint32_t size) { return Solvers::Tsa::Core::Mem::Allocate(size); }
-void TSA_Free(int64_t* slot) { Solvers::Tsa::Core::Mem::Release(*reinterpret_cast<void**>(slot)); }
 
 // 宿主（回放）：镜像在前，堆缓冲按分配次序。
 size_t TSACoreRaw_StateBlocks(TSACoreRaw_StateBlock* out, size_t capacity) {

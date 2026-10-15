@@ -40,6 +40,5 @@ void ToHand() { Switch(kHand); }
 }  // namespace Solvers::Tsa::Core::DataSwitch
 
 extern "C" {
-void DataSwitch_ToGrid(void) { Solvers::Tsa::Core::DataSwitch::ToGrid(); }
 void DataSwitch_ToHand(void) { Solvers::Tsa::Core::DataSwitch::ToHand(); }
 }

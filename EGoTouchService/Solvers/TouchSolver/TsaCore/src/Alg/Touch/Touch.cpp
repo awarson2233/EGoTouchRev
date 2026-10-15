@@ -1043,7 +1043,6 @@ namespace T = Solvers::Tsa::Core::Touch;
 
 extern "C" {
 void Touch_Clean(void) { T::Clean(); }
-void Touch_AssignPreIdxBasedOnID(void) { T::AssignPreIdxBasedOnId(); }
 void Touch_KeepPrevTouchWithExceptionExcluded(void) { T::KeepPrevTouchWithExceptionExcluded(); }
 void Touch_UnitCopy(uint8_t curIdx, uint8_t prevIdx) { T::UnitCopy(curIdx, prevIdx); }
 void Touch_UnitRemove(uint8_t curIdx) { T::UnitRemove(curIdx); }
@@ -1054,9 +1053,6 @@ void Touch_ProcessBetaGrip(void) { T::ProcessBetaGrip(); }
 void Touch_ProcessExtInfo(void) { T::ProcessExtInfo(); }
 void Touch_CreatePostReport(uint8_t curIdx, uint8_t) { T::CreatePostReport(curIdx); }
 uint16_t Touch_GetSQDistMMInBetween(uint8_t idxA, uint8_t idxB) { return T::GetSqDistMmInBetween(idxA, idxB); }
-uint16_t Touch_GetSQDistMM(uint16_t dim1A, uint16_t dim2A, uint16_t dim1B, uint16_t dim2B) {
-    return T::GetSqDistMm(dim1A, dim2A, dim1B, dim2B);
-}
 uint32_t Touch_GetSQDistPixel(uint16_t dim1A, uint16_t dim2A, uint16_t dim1B, uint16_t dim2B) {
     return T::GetSqDistPixel(dim1A, dim2A, dim1B, dim2B);
 }

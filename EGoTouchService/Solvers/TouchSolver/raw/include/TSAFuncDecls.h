@@ -241,8 +241,6 @@ ushort DB_LiftOffNum(byte param_1);
 ushort DB_TouchDownNum(byte param_1,byte param_2);
 
 
-// DataSwitch_ToGrid @ 0x6ba906d0 (Core\DataSwitch.c)
-void DataSwitch_ToGrid(void);
 
 // DataSwitch_ToHand @ 0x6ba907ce (Core\DataSwitch.c)
 void DataSwitch_ToHand(void);
@@ -793,101 +791,39 @@ void GripFilter_UpdateDeadzone(void);
 // GripFilter_WeakenCornerClickSupress @ 0x6baeca55 (Rejection\GripFilter.c)
 void GripFilter_WeakenCornerClickSupress(char *param_1);
 
-// HandGesture_2HandDetection @ 0x6baef641 (Rejection\HandGesture.c)
-void HandGesture_2HandDetection(void);
 
-// HandGesture_AngleFormat1 @ 0x6baeeabd (Rejection\HandGesture.c)
-short HandGesture_AngleFormat1(short param_1);
 
-// HandGesture_AngleFormat2 @ 0x6baeeaf5 (Rejection\HandGesture.c)
-short HandGesture_AngleFormat2(short param_1);
 
-// HandGesture_BaselineReset @ 0x6baeddbd (Rejection\HandGesture.c)
-void HandGesture_BaselineReset(void);
 
-// HandGesture_CheckRelatedGrip @ 0x6baee667 (Rejection\HandGesture.c)
-void HandGesture_CheckRelatedGrip(byte param_1,byte param_2);
 
-// HandGesture_CheckValidity @ 0x6baeec0f (Rejection\HandGesture.c)
-void HandGesture_CheckValidity(void);
 
-// HandGesture_CopyDiff @ 0x6baef0bb (Rejection\HandGesture.c)
-void HandGesture_CopyDiff(void);
 
-// HandGesture_DifProcess @ 0x6baeef00 (Rejection\HandGesture.c)
-void HandGesture_DifProcess(void);
 
-// HandGesture_DifUnit @ 0x6baeede7 (Rejection\HandGesture.c)
-void HandGesture_DifUnit(byte param_1,byte param_2);
 
-// HandGesture_Free @ 0x6baedd66 (Rejection\HandGesture.c)
-void HandGesture_Free(void);
 
-// HandGesture_GetPkThold @ 0x6baef045 (Rejection\HandGesture.c)
-int HandGesture_GetPkThold(void);
 
-// HandGesture_GetWidth @ 0x6baeedbc (Rejection\HandGesture.c)
-undefined8 HandGesture_GetWidth(void);
 
-// HandGesture_GripDetection @ 0x6baef865 (Rejection\HandGesture.c)
-void HandGesture_GripDetection(void);
 
-// HandGesture_Init @ 0x6baedf1b (Rejection\HandGesture.c)
-void HandGesture_Init();
 
 // HandGesture_Is2HandDetected @ 0x6baee0ce (Rejection\HandGesture.c)
 bool HandGesture_Is2HandDetected(void);
 
-// HandGesture_IsAngleCorelated @ 0x6baeeb33 (Rejection\HandGesture.c)
-bool HandGesture_IsAngleCorelated(short param_1,short param_2);
 
-// HandGesture_IsAngleValid @ 0x6baeeb8b (Rejection\HandGesture.c)
-char HandGesture_IsAngleValid(void);
 
-// HandGesture_IsDistInValid @ 0x6baee0e5 (Rejection\HandGesture.c)
-undefined8 HandGesture_IsDistInValid (undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
 
-// HandGesture_IsGripRelated @ 0x6baee25c (Rejection\HandGesture.c)
-undefined8 HandGesture_IsGripRelated(byte param_1,byte param_2);
 
-// HandGesture_IsOKToCalcDiff @ 0x6baee96e (Rejection\HandGesture.c)
-undefined8 HandGesture_IsOKToCalcDiff(void);
 
-// HandGesture_IsOKToProcessTouch @ 0x6baef06a (Rejection\HandGesture.c)
-undefined8 HandGesture_IsOKToProcessTouch(void);
 
-// HandGesture_IsOKToResetBaseline @ 0x6baee815 (Rejection\HandGesture.c)
-undefined8 HandGesture_IsOKToResetBaseline(void);
 
-// HandGesture_IsRelatedGripDetected @ 0x6baee4eb (Rejection\HandGesture.c)
-undefined8 HandGesture_IsRelatedGripDetected(byte param_1,byte param_2);
 
-// HandGesture_Malloc @ 0x6baedc30 (Rejection\HandGesture.c)
-undefined8 HandGesture_Malloc(void);
 
-// HandGesture_PostProcess @ 0x6baeed20 (Rejection\HandGesture.c)
-void HandGesture_PostProcess(void);
 
-// HandGesture_Process @ 0x6baef9fc (Rejection\HandGesture.c)
-void HandGesture_Process(void);
 
-// HandGesture_ResetRecord @ 0x6baede69 (Rejection\HandGesture.c)
-void HandGesture_ResetRecord(void);
 
-// HandGesture_SetHandArea @ 0x6baee147 (Rejection\HandGesture.c)
-void HandGesture_SetHandArea(byte param_1);
 
-// HandGesture_TZFlagProcess @ 0x6baeecc0 (Rejection\HandGesture.c)
-void HandGesture_TZFlagProcess(void);
 
-// HandGesture_TimeRecord @ 0x6baee9ba (Rejection\HandGesture.c)
-void HandGesture_TimeRecord(void);
 
-// HandGesture_TimeStep @ 0x6baeea17 (Rejection\HandGesture.c)
-void HandGesture_TimeStep(void);
 
-// HandGesture_TouchProcess @ 0x6baef30b (Rejection\HandGesture.c)
-void HandGesture_TouchProcess(void);
 
 
 
@@ -1126,8 +1062,6 @@ void PosnSpecial_Put(ushort param_1);
 // PrevPeak_Process @ 0x6ba68f77 (Detection\PrevPeak.c)
 void PrevPeak_Process(void);
 
-// PrevTouch_AssignCurIdxBasedOnID @ 0x6ba6dbc9 (Tracking\PrevTouch.c)
-void PrevTouch_AssignCurIdxBasedOnID(void);
 
 // PrevTouch_GetIdxBasedOnCurIdx @ 0x6ba6dcc4 (Tracking\PrevTouch.c)
 undefined1 PrevTouch_GetIdxBasedOnCurIdx(byte param_1);
@@ -1347,8 +1281,6 @@ void TSAConstPrmt_Init(void);
 
 
 
-// TSAMath_ATan2 @ 0x6bb429d4 (Common\TSAMath.c)
-int TSAMath_ATan2(ushort param_1,ushort param_2);
 
 
 
@@ -1523,8 +1455,6 @@ void TSA_DisableScenario(uint param_1);
 // TSA_EnableScenario @ 0x6ba8fa07 (Core\TSA.c)
 void TSA_EnableScenario(uint param_1);
 
-// TSA_Free @ 0x6baa34c4 (Core\TSA.c)
-void TSA_Free(longlong *param_1);
 
 // TSA_GetAFEScanFreqIndex @ 0x6ba9f998 (Core\TSA.c)
 undefined8 TSA_GetAFEScanFreqIndex(longlong param_1);
@@ -1616,8 +1546,6 @@ void TSA_MSReset(void);
 
 
 
-// TSA_MallocAndInit @ 0x6baa3430 (Core\TSA.c)
-void * TSA_MallocAndInit(uint param_1);
 
 
 
@@ -1999,8 +1927,6 @@ undefined8 TouchThold_ToeUseSpecialThold(void);
 
 
 
-// Touch_AssignPreIdxBasedOnID @ 0x6ba73fc7 (Tracking\Touch.c)
-void Touch_AssignPreIdxBasedOnID(void);
 
 
 // Touch_Clean @ 0x6ba6f49c (Tracking\Touch.c)
@@ -2026,8 +1952,6 @@ short Touch_GetFormattedTimeInterval(short param_1);
 
 
 
-// Touch_GetSQDistMM @ 0x6ba734be (Tracking\Touch.c)
-undefined2 Touch_GetSQDistMM(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
 
 
 
