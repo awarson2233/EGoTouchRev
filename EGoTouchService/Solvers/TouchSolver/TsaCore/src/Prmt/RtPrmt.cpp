@@ -1,3 +1,4 @@
+#include "App/Scenario.h"
 #include "Prmt/TsaPrmt.h"
 
 #include <array>
@@ -78,7 +79,7 @@ void Init() {
 // 每帧从机型参数重建，交给场景处理按键名改写，再写回机型参数与动态门限。
 void Process() {
     Reset();
-    TSA_ScenarioProcess();
+    Scenario::Process();
     FlashPrmt& flash = PrmtFlash();
     DynamicPrmt& dyn = PrmtDynamic();
     const RtPrmtTable& table = PrmtRunTime();

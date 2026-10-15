@@ -115,16 +115,3 @@ void CrossErosion(int16_t* img, int dim1Len, int dim2Len, bool alongDim1, bool a
 }
 
 }  // namespace Solvers::Tsa::Core::Morphology
-
-extern "C" {
-namespace M = Solvers::Tsa::Core::Morphology;
-void Image_Dilation(void* img, int dim1Len, int dim2Len, uint32_t radius1, uint32_t radius2) {
-    M::Dilation(static_cast<int16_t*>(img), dim1Len, dim2Len, static_cast<int>(radius1), static_cast<int>(radius2));
-}
-void Image_Erosion(void* img, int dim1Len, int dim2Len, uint32_t radius1, uint32_t radius2) {
-    M::Erosion(static_cast<int16_t*>(img), dim1Len, dim2Len, static_cast<int>(radius1), static_cast<int>(radius2));
-}
-void Image_CrossErosion(void* img, int dim1Len, int dim2Len, int alongDim1, int alongDim2) {
-    M::CrossErosion(static_cast<int16_t*>(img), dim1Len, dim2Len, alongDim1 != 0, alongDim2 != 0);
-}
-}  // extern "C"

@@ -12,6 +12,7 @@
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
+#include "Common/Memory.h"
 #include "Extension/HardwareAnalyzer/HardwareAnalyzerInternal.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
@@ -241,7 +242,7 @@ void AfeRawUnstable() {
 // HardwareAnalyzer_BackLightShift @ 0x6baf0dd9
 void BackLightShift() {
     const TsaPrpt& prpt = Prpt();
-    if (ToeSynaBl::BackLightShiftUnit(0x41) && PrmtFlash().sensorNum >> 2 < prpt.field184 &&
+    if (ToeSynaBl::BackLightShiftUnit(0x41) && PrmtFlash().sensorNum >> 2 < prpt.msDif.count &&
         PrmtDynamic().smallThold < prpt.dif.maxSig) {
         SetException(kExcBackLightShift);
     }
@@ -268,7 +269,7 @@ void LargeDisplayNoise() {
 // 只对 aftGateFlags bit3 或 HIMA 参数查。
 void CheckEnvTemp() {
     const TsaStatic& stat = Static();
-    if ((stat.aftGateFlags & 8) == 0 && std::strncmp(TSA_GetPrmtName(), "HIMA", 4) != 0) return;
+    if ((stat.aftGateFlags & 8) == 0 && std::strncmp(ProjectName(), "HIMA", 4) != 0) return;
     const uint8_t z = PrmtDynamic().zTholdFlags;
     const bool mode = ((z & 4) != 0 && (stat.featureFlags & kFeatGloveMode) != 0) ||
                       ((z & 8) != 0 && (stat.featureFlags & kFeatKnuckle) != 0);
@@ -287,20 +288,20 @@ void SetSoftException() { SetException(kExcSoft); }
 // HardwareAnalyzer_Malloc @ 0x6baf2350
 bool Malloc() {
     Counters& c = Cnt();
-    c.difDebounce = static_cast<uint8_t*>(TSA_MallocAndInit(GridBufSize()));
+    c.difDebounce = static_cast<uint8_t*>(Mem::Allocate(GridBufSize()));
     if (c.difDebounce == nullptr) return false;
-    c.difState = static_cast<uint8_t*>(TSA_MallocAndInit(GridBufSize()));
+    c.difState = static_cast<uint8_t*>(Mem::Allocate(GridBufSize()));
     if (c.difState == nullptr) return false;
-    c.difChecked = static_cast<uint8_t*>(TSA_MallocAndInit(GridBufSize()));
+    c.difChecked = static_cast<uint8_t*>(Mem::Allocate(GridBufSize()));
     return c.difChecked != nullptr;
 }
 
 // HardwareAnalyzer_Free @ 0x6baf23ed
 void Free() {
     Counters& c = Cnt();
-    TSA_Free(reinterpret_cast<int64_t*>(&c.difDebounce));
-    TSA_Free(reinterpret_cast<int64_t*>(&c.difState));
-    TSA_Free(reinterpret_cast<int64_t*>(&c.difChecked));
+    Mem::Release(c.difDebounce);
+    Mem::Release(c.difState);
+    Mem::Release(c.difChecked);
 }
 
 // HardwareAnalyzer_Init @ 0x6baefb27
@@ -495,16 +496,10 @@ const char* GetExceptionDescription() { return St().description; }
 
 }  // namespace Solvers::Tsa::Core::HardwareAnalyzer
 
-// raw 的 TSA / TSABuffer / AFE / ASA 等还在调用的入口
+// raw 的调用方
 extern "C" {
 namespace HA = Solvers::Tsa::Core::HardwareAnalyzer;
-uint64_t HardwareAnalyzer_Malloc(void) { return HA::Malloc() ? 1 : 0; }
-void HardwareAnalyzer_Free(void) { HA::Free(); }
-void HardwareAnalyzer_Init(void) { HA::Init(); }
-void HardwareAnalyzer_Reset(void) { HA::Reset(); }
 void HardwareAnalyzer_Process(void) { HA::Process(); }
-void HardwareAnalyzer_ProcessDif(void) { HA::ProcessDif(); }
-void HardwareAnalyzer_PostProcess(void) { HA::PostProcess(); }
 void HardwareAnalyzer_GetRaw2RawPrpt(void) { HA::GetRaw2RawPrpt(); }
 void HardwareAnalyzer_ReportToTSA(void) { HA::ReportToTsa(); }
 void HardwareAnalyzer_SetSoftException(void) { HA::SetSoftException(); }
@@ -512,6 +507,4 @@ int HardwareAnalyzer_GetDetectedException(void) { return HA::GetDetectedExceptio
 // 描述串靠 StrPrintf 拼写，StrPrintf 被裁掉后为空操作。
 void HardwareAnalyzer_GenerateExceptionDescription(void) {}
 uint8_t HardwareAnalyzer_IsToBypassCurrentFrame(void) { return HA::IsToBypassCurrentFrame() ? 1 : 0; }
-const char* HardwareAnalyzer_GetExceptionDescription(void) { return HA::GetExceptionDescription(); }
-uint64_t HardwareAnalyzer_IsNotOKToEnterIDLEMode(void) { return 0; }
 }  // extern "C"

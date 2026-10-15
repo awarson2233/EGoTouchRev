@@ -119,7 +119,9 @@ struct FlashPrmt {
     uint8_t sensorPitch2X16;  // Dim2 方向的传感器间距（1/16 mm）
     uint8_t dim1Len;  // 列数
     uint8_t dim2Len;  // 行数
-    uint8_t reserved01F[0xD];
+    uint8_t afeDim1Len;  // AFE 帧的列数、行数（帧数据按它拷贝）
+    uint8_t afeDim2Len;
+    uint8_t reserved021[0xB];
     uint16_t sensorNum;  // dim1Len × dim2Len
     uint16_t field02E;  // TS_MMToDisplayPixel：mm × max(dim1Res, dim2Res) × 16 / field02E
     uint8_t reserved030[0x4];
@@ -128,7 +130,9 @@ struct FlashPrmt {
     uint8_t reserved039[0x1];
     uint16_t idleEnterDelayMs;  // 可以进 IDLE 之后再等多久才对外请求
     uint16_t dbEnterIdle;  // 允许进入 IDLE 后的防抖时间（ms）
-    uint8_t reserved03E[0x6];
+    uint16_t dbEnterIdleGame;  // 游戏场景的 dbEnterIdle
+    uint16_t dbEnterIdleNormal;  // 普通场景的 dbEnterIdle
+    uint16_t dbEnterIdleTyping;  // 输入场景的 dbEnterIdle
     uint8_t field044;  // TouchMode：为 0 时手指 → 无物体的切换防抖 60 帧，否则立即切换
     uint8_t reserved045[0x1];
     uint16_t idleAfterInitMs;  // 互容主流程初始化后多久之内不进 IDLE
@@ -226,7 +230,9 @@ struct FlashPrmt {
     uint8_t noCurvePredict;  // Filter：为 0 时轨迹折返后按速度外推坐标
     uint8_t rxLineZ8Ratio;  // RxLineFilter：同一扫描线上更强的峰 Z8 超过本峰 Z8 的这个比例（/128）判为串扰
     uint8_t rxLineMaxDist;  // RxLineFilter：两峰的扫描线位置相差小于它才算同一线
-    uint8_t reserved8A6[0x13];
+    uint8_t reserved8A6[0xE];
+    uint8_t sigSumReserveTouch;  // SigSumFilter 保留的触点数
+    uint8_t reserved8B5[0x4];
     uint8_t gripPeakEdgeDist;  // 峰到边缘的距离超过它不算握持峰；也是握持合并峰的搜索半径
     uint16_t gripTimeInterval;  // 握持格与非握持格的按下时间差超过它才拆分区域
     uint16_t maxNotGripTime;  // 非握持峰的握持时间不超过它才看椭圆度
@@ -399,12 +405,17 @@ static_assert(offsetof(FlashPrmt, sensorPitchX16) == 0x01B);
 static_assert(offsetof(FlashPrmt, sensorPitch2X16) == 0x01C);
 static_assert(offsetof(FlashPrmt, dim1Len) == 0x01D);
 static_assert(offsetof(FlashPrmt, dim2Len) == 0x01E);
+static_assert(offsetof(FlashPrmt, afeDim1Len) == 0x01F);
+static_assert(offsetof(FlashPrmt, afeDim2Len) == 0x020);
 static_assert(offsetof(FlashPrmt, sensorNum) == 0x02C);
 static_assert(offsetof(FlashPrmt, field02E) == 0x02E);
 static_assert(offsetof(FlashPrmt, sensorArchitecture) == 0x034);
 static_assert(offsetof(FlashPrmt, reportRateHz) == 0x038);
 static_assert(offsetof(FlashPrmt, idleEnterDelayMs) == 0x03A);
 static_assert(offsetof(FlashPrmt, dbEnterIdle) == 0x03C);
+static_assert(offsetof(FlashPrmt, dbEnterIdleGame) == 0x03E);
+static_assert(offsetof(FlashPrmt, dbEnterIdleNormal) == 0x040);
+static_assert(offsetof(FlashPrmt, dbEnterIdleTyping) == 0x042);
 static_assert(offsetof(FlashPrmt, field044) == 0x044);
 static_assert(offsetof(FlashPrmt, idleAfterInitMs) == 0x046);
 static_assert(offsetof(FlashPrmt, recalRawCenter) == 0x048);
@@ -483,6 +494,7 @@ static_assert(offsetof(FlashPrmt, liftOffJitterSuppress) == 0x8A2);
 static_assert(offsetof(FlashPrmt, noCurvePredict) == 0x8A3);
 static_assert(offsetof(FlashPrmt, rxLineZ8Ratio) == 0x8A4);
 static_assert(offsetof(FlashPrmt, rxLineMaxDist) == 0x8A5);
+static_assert(offsetof(FlashPrmt, sigSumReserveTouch) == 0x8B4);
 static_assert(offsetof(FlashPrmt, gripPeakEdgeDist) == 0x8B9);
 static_assert(offsetof(FlashPrmt, gripTimeInterval) == 0x8BA);
 static_assert(offsetof(FlashPrmt, maxNotGripTime) == 0x8BC);
@@ -737,11 +749,11 @@ struct DynamicPrmt {
     uint8_t reserved06D[0x3];
     uint32_t defaultTouchAction;  // 新触点默认的 TouchAction：初值来自机型参数，此后由报过点的触点抬起时更新；也是机型参数初值块（0x70..0x80）的开头
     uint16_t clickDuration;
-    uint8_t reserved076[0x2];
+    uint16_t gameClickDuration;  // 游戏场景的 clickDuration
     uint8_t clickSuppressDistance;  // 外部像素
-    uint8_t reserved079[0x1];
+    uint8_t gameClickSuppressDistance;
     uint8_t maxClickSuppressDistance;
-    uint8_t reserved07B[0x1];
+    uint8_t gameMaxClickSuppressDistance;
     uint8_t flickDistance;
     uint8_t reserved07D[0x1];
     uint8_t clickToFlickStep;  // 点击转滑动后每帧收回的点击偏移（外部像素）
@@ -799,8 +811,11 @@ static_assert(offsetof(DynamicPrmt, negRefThold) == 0x05E);
 static_assert(offsetof(DynamicPrmt, defaultSizeMm) == 0x06C);
 static_assert(offsetof(DynamicPrmt, defaultTouchAction) == 0x070);
 static_assert(offsetof(DynamicPrmt, clickDuration) == 0x074);
+static_assert(offsetof(DynamicPrmt, gameClickDuration) == 0x076);
 static_assert(offsetof(DynamicPrmt, clickSuppressDistance) == 0x078);
+static_assert(offsetof(DynamicPrmt, gameClickSuppressDistance) == 0x079);
 static_assert(offsetof(DynamicPrmt, maxClickSuppressDistance) == 0x07A);
+static_assert(offsetof(DynamicPrmt, gameMaxClickSuppressDistance) == 0x07B);
 static_assert(offsetof(DynamicPrmt, flickDistance) == 0x07C);
 static_assert(offsetof(DynamicPrmt, clickToFlickStep) == 0x07E);
 static_assert(offsetof(DynamicPrmt, zTholdFlags) == 0x080);

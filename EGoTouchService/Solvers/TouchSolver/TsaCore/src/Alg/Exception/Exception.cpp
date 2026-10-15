@@ -8,6 +8,7 @@
 #include "Alg/Touch/TouchData.h"
 #include "Alg/TouchZone/TouchZoneData.h"
 #include "App/Afe.h"
+#include "App/Report.h"
 #include "App/Sys.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
@@ -150,10 +151,10 @@ void CheckUnderWater() {
     uint32_t detected = 0;
     if ((flags & 1) == 0 && (flags & 4) != 0) {
         CountWaterCells(true);
-        if (TSA_IsPossibleUnderWater()) detected = kUnderWater;
+        if (Report::IsPossibleUnderWater()) detected = kUnderWater;
     } else {
         CountWaterCells(false);
-        if (TSA_IsPossibleUnderWater()) detected = Sys::IsSignalReverted() != 0 ? kUnderWaterReverted : kUnderWater;
+        if (Report::IsPossibleUnderWater()) detected = Sys::IsSignalReverted() != 0 ? kUnderWaterReverted : kUnderWater;
     }
     if (detected != 0) {
         Static().hiException.detected = detected;
@@ -203,13 +204,9 @@ void Process() {
 
 }  // namespace Solvers::Tsa::Core::Exception
 
-// raw 的 TSA / TZ / AFE / TSABuffer 还在调用的入口
+// raw 的调用方
 extern "C" {
 namespace E = Solvers::Tsa::Core::Exception;
-bool Exception_Malloc(void) { return E::Malloc(); }
-void Exception_Free(void) { E::Free(); }
-void Exception_Init(void) { E::Init(); }
-void Exception_CheckUnderWater(void) { E::CheckUnderWater(); }
 void Exception_Process(void) { E::Process(); }
 void Exception_ProcessTouchZone(void* zone) { E::ProcessTouchZone(*static_cast<Solvers::Tsa::Core::TouchZoneUnit*>(zone)); }
 

@@ -8,6 +8,7 @@
 #include "Alg/Touch/PrevTouch.h"
 #include "Alg/Touch/Touch.h"
 #include "Alg/Touch/TouchData.h"
+#include "App/Scenario.h"
 #include "App/TsaOut.h"
 #include "App/TsaStatic.h"
 #include "Common/Image.h"
@@ -300,8 +301,8 @@ bool IsTouchLiftOff(uint8_t c, uint8_t p) {
     uint16_t drop = 0;
     cur.liftOffJitter = 0;
     if (prev.historyCount < kLiftOffMinHistory || PrmtFlash().liftOffJitterSuppress == 0) return false;
-    if (cur.field01C < prev.field01C) {
-        drop = static_cast<uint16_t>(static_cast<uint32_t>(prev.field01C) * 100 / cur.field01C - 100);
+    if (cur.pressure < prev.pressure) {
+        drop = static_cast<uint16_t>(static_cast<uint32_t>(prev.pressure) * 100 / cur.pressure - 100);
         ZValPrevToCurRatio() = drop;
     }
     cur.liftOffJitterCount = prev.liftOffJitterCount;
@@ -334,7 +335,7 @@ void IirPDims(uint8_t c, uint8_t p) {
     if (prev.predictFrames == 0) IsCurveReturn(c, p);
     if (prev.predictFrames != 0) IsPredictFinish(c, p);
     if ((prev.curveReturnFrames != 0 || prev.predictFrames != 0) && IsHandLift(c) &&
-        static_cast<uint8_t>(TSA_IsGameScenario()) == 0) {
+        !Scenario::IsGame()) {
         IsHandLiftFinish(c, p);
         coef = 1;
         cur.jitRadius = fc.jitRadius;
@@ -418,7 +419,7 @@ void JitFilterProcessUnit(uint8_t c, uint8_t p) {
     if (IsLiftOffJitterSuppressed(c)) {
         out = JitFilter(cur.iirPos.dim1, cur.iirPos.dim2, prev.jitPos.dim1, prev.jitPos.dim2, fc.jitRadius, maxStep);
     }
-    const bool game = static_cast<uint8_t>(TSA_IsGameScenario()) != 0;
+    const bool game = Scenario::IsGame();
     auto settle = [&](uint16_t iir, uint16_t lenQ8, int filtered, uint16_t prevJit, uint16_t& jit) {
         if (OnScreenEdge(iir, lenQ8)) {
             jit = iir;

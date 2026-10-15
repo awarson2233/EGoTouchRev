@@ -153,15 +153,7 @@ namespace PS = Solvers::Tsa::Core::PosnSpecial;
 
 extern "C" {
 void PosnSpecial_Init(uint16_t* cells, uint16_t capacity) { PS::Init(cells, capacity); }
-void PosnSpecial_ReBase(void) { PS::ReBase(); }
 void PosnSpecial_Put(uint16_t cell) { PS::Put(cell); }
 uint16_t PosnSpecial_Get(void) { return PS::Get(); }
-uint8_t PosnSpecial_IsEmpty(void) { return PS::IsEmpty(); }
-void PosnSpecial_Record(int16_t sig, int16_t thold, char valid) { PS::Record(sig, thold, valid != 0); }
-void PosnSpecial_Record2(int16_t sig, int16_t thold) { PS::Record2(sig, thold); }
-uint8_t PosnSpecial_GetNumSignChange(void) { return PS::GetNumSignChange(); }
-uint8_t PosnSpecial_GetNumValidSensor(void) { return PS::GetNumValidSensor(); }
-uint8_t PosnSpecial_GetNumEdgeSensor(void) { return PS::GetNumEdgeSensor(); }
-uint32_t PosnSpecial_GetSumEdgeSensor(void) { return static_cast<uint32_t>(PS::GetSumEdgeSensor()); }
 char PosnSpecial_GetPosMarker(void) { return static_cast<char>(PS::GetPosMarker()); }
 }  // extern "C"

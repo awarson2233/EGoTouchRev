@@ -7,6 +7,7 @@
 #include "Alg/Touch/Touch.h"
 #include "Alg/Touch/TouchData.h"
 #include "Alg/TouchThold/TouchThold.h"
+#include "App/Scenario.h"
 #include "App/TsaStatic.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
@@ -33,7 +34,7 @@ bool TouchDownTholdCheck(uint8_t prevIdx, uint8_t curIdx) {
     const PrevTouchUnit& prev = Prev(prevIdx);
     int16_t thold = dyn.peakThold;
     if ((Static().processingState & kProcIdleScan) != 0) {
-        if (static_cast<char>(TSA_IsGameScenario()) == 0 &&
+        if (!Scenario::IsGame() &&
             ((prev.persistFlags2 & 2) != 0 || (PeakOf(cur).sig < thold && (prev.volatileFlags2 & 0x20) != 0))) {
             thold = static_cast<int16_t>(thold * 3 / 2);
             cur.persistFlags2 |= 2;
@@ -157,7 +158,7 @@ uint16_t LiftOffNum(uint8_t prevIdx) {
 uint16_t LargeObjectSize() {
     const uint8_t sizeMm = PrmtFlash().largeObjectSizeMm;
     auto area = static_cast<uint16_t>(sizeMm * sizeMm);
-    if (PrevTouches().field003 != 0) area = static_cast<uint16_t>(static_cast<uint16_t>(area * 3) >> 2);
+    if (PrevTouches().liftOffCount != 0) area = static_cast<uint16_t>(static_cast<uint16_t>(area * 3) >> 2);
     return area;
 }
 

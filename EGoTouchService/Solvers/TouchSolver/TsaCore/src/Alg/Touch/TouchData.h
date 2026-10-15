@@ -55,7 +55,7 @@ struct TouchUnit {
     uint8_t reserved015[0x1];
     uint16_t age;  // 自按下起的帧数
     uint32_t durationMs;  // 自按下消抖开始的毫秒数
-    uint16_t field01C;
+    uint16_t pressure;  // 对外报的压力（信号和的 Z 值）
     Point rawPos;  // 质心（Q8.8 传感器坐标）
     Point pos;  // 边缘补偿后的坐标，后续各模块使用的当前位置
     Point iirPos;  // 自适应 IIR 滤波后坐标
@@ -82,8 +82,8 @@ struct TouchUnit {
     int8_t maxSigSumAngle;  // 区域信号和最大的那一帧的倾角
     uint8_t sizeMm;
     uint8_t udfpSizeMm;
-    uint8_t field056;
-    uint8_t field057;
+    uint8_t gripRatioDim1;  // 区域的握持比（TZ 写入，CTD 按它修正边缘坐标）
+    uint8_t gripRatioDim2;
     uint8_t field058;
     uint8_t field059;
     int16_t maxMinSigOff;  // 来源区域里各格 minSigOff 的最大值
@@ -209,7 +209,7 @@ static_assert(offsetof(TouchUnit, prevDt) == 0x012);
 static_assert(offsetof(TouchUnit, id) == 0x014);
 static_assert(offsetof(TouchUnit, age) == 0x016);
 static_assert(offsetof(TouchUnit, durationMs) == 0x018);
-static_assert(offsetof(TouchUnit, field01C) == 0x01C);
+static_assert(offsetof(TouchUnit, pressure) == 0x01C);
 static_assert(offsetof(TouchUnit, rawPos) == 0x01E);
 static_assert(offsetof(TouchUnit, pos) == 0x022);
 static_assert(offsetof(TouchUnit, iirPos) == 0x026);
@@ -234,8 +234,8 @@ static_assert(offsetof(TouchUnit, angle) == 0x052);
 static_assert(offsetof(TouchUnit, maxSigSumAngle) == 0x053);
 static_assert(offsetof(TouchUnit, sizeMm) == 0x054);
 static_assert(offsetof(TouchUnit, udfpSizeMm) == 0x055);
-static_assert(offsetof(TouchUnit, field056) == 0x056);
-static_assert(offsetof(TouchUnit, field057) == 0x057);
+static_assert(offsetof(TouchUnit, gripRatioDim1) == 0x056);
+static_assert(offsetof(TouchUnit, gripRatioDim2) == 0x057);
 static_assert(offsetof(TouchUnit, field058) == 0x058);
 static_assert(offsetof(TouchUnit, field059) == 0x059);
 static_assert(offsetof(TouchUnit, maxMinSigOff) == 0x05A);
@@ -352,7 +352,7 @@ struct PrevTouchUnit {
     uint8_t reserved015[0x1];
     uint16_t age;  // 自按下起的帧数
     uint32_t durationMs;  // 自按下消抖开始的毫秒数
-    uint16_t field01C;
+    uint16_t pressure;  // 对外报的压力（信号和的 Z 值）
     Point rawPos;  // 质心（Q8.8 传感器坐标）
     Point pos;  // 边缘补偿后的坐标，后续各模块使用的当前位置
     Point iirPos;  // 自适应 IIR 滤波后坐标
@@ -379,8 +379,8 @@ struct PrevTouchUnit {
     int8_t maxSigSumAngle;  // 区域信号和最大的那一帧的倾角
     uint8_t sizeMm;
     uint8_t udfpSizeMm;
-    uint8_t field056;
-    uint8_t field057;
+    uint8_t gripRatioDim1;  // 区域的握持比（TZ 写入，CTD 按它修正边缘坐标）
+    uint8_t gripRatioDim2;
     uint8_t field058;
     uint8_t field059;
     int16_t maxMinSigOff;  // 来源区域里各格 minSigOff 的最大值
@@ -560,7 +560,7 @@ static_assert(offsetof(PrevTouchUnit, prevDt) == 0x012);
 static_assert(offsetof(PrevTouchUnit, id) == 0x014);
 static_assert(offsetof(PrevTouchUnit, age) == 0x016);
 static_assert(offsetof(PrevTouchUnit, durationMs) == 0x018);
-static_assert(offsetof(PrevTouchUnit, field01C) == 0x01C);
+static_assert(offsetof(PrevTouchUnit, pressure) == 0x01C);
 static_assert(offsetof(PrevTouchUnit, rawPos) == 0x01E);
 static_assert(offsetof(PrevTouchUnit, pos) == 0x022);
 static_assert(offsetof(PrevTouchUnit, iirPos) == 0x026);
@@ -585,8 +585,8 @@ static_assert(offsetof(PrevTouchUnit, angle) == 0x052);
 static_assert(offsetof(PrevTouchUnit, maxSigSumAngle) == 0x053);
 static_assert(offsetof(PrevTouchUnit, sizeMm) == 0x054);
 static_assert(offsetof(PrevTouchUnit, udfpSizeMm) == 0x055);
-static_assert(offsetof(PrevTouchUnit, field056) == 0x056);
-static_assert(offsetof(PrevTouchUnit, field057) == 0x057);
+static_assert(offsetof(PrevTouchUnit, gripRatioDim1) == 0x056);
+static_assert(offsetof(PrevTouchUnit, gripRatioDim2) == 0x057);
 static_assert(offsetof(PrevTouchUnit, field058) == 0x058);
 static_assert(offsetof(PrevTouchUnit, field059) == 0x059);
 static_assert(offsetof(PrevTouchUnit, maxMinSigOff) == 0x05A);
@@ -744,7 +744,7 @@ struct TouchTable {
     uint8_t count;  // 有效触点数
     uint8_t reportedCount;  // 上一次 TouchReport 对外报出的点数
     uint8_t field002;
-    uint8_t field003;
+    uint8_t liftOffCount;  // 本帧对外报抬起的触点数
     uint8_t field004;
     uint8_t field005;
     uint8_t field006;
@@ -779,7 +779,7 @@ static_assert(sizeof(TouchTable) == 0x1D60);
 static_assert(offsetof(TouchTable, count) == 0x000);
 static_assert(offsetof(TouchTable, reportedCount) == 0x001);
 static_assert(offsetof(TouchTable, field002) == 0x002);
-static_assert(offsetof(TouchTable, field003) == 0x003);
+static_assert(offsetof(TouchTable, liftOffCount) == 0x003);
 static_assert(offsetof(TouchTable, field004) == 0x004);
 static_assert(offsetof(TouchTable, field005) == 0x005);
 static_assert(offsetof(TouchTable, field006) == 0x006);
@@ -813,7 +813,7 @@ struct PrevTouchTable {
     uint8_t count;  // 有效触点数
     uint8_t reportedCount;  // 上一次 TouchReport 对外报出的点数
     uint8_t field002;
-    uint8_t field003;
+    uint8_t liftOffCount;  // 本帧对外报抬起的触点数
     uint8_t field004;
     uint8_t field005;
     uint8_t field006;
@@ -848,7 +848,7 @@ static_assert(sizeof(PrevTouchTable) == 0x5AA0);
 static_assert(offsetof(PrevTouchTable, count) == 0x000);
 static_assert(offsetof(PrevTouchTable, reportedCount) == 0x001);
 static_assert(offsetof(PrevTouchTable, field002) == 0x002);
-static_assert(offsetof(PrevTouchTable, field003) == 0x003);
+static_assert(offsetof(PrevTouchTable, liftOffCount) == 0x003);
 static_assert(offsetof(PrevTouchTable, field004) == 0x004);
 static_assert(offsetof(PrevTouchTable, field005) == 0x005);
 static_assert(offsetof(PrevTouchTable, field006) == 0x006);

@@ -70,9 +70,3 @@ void Process() {
 }
 
 }  // namespace Solvers::Tsa::Core::RxLineFilter
-
-// raw 的 TSA 还在调用的入口（RxLineFilter_Init 为空）
-extern "C" {
-void RxLineFilter_Init(void) {}
-void RxLineFilter_Process(void) { Solvers::Tsa::Core::RxLineFilter::Process(); }
-}  // extern "C"

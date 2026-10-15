@@ -90,15 +90,8 @@ bool IsInDifferentZones(uint8_t dim1A, uint8_t dim2A, uint8_t dim1B, uint8_t dim
 
 }  // namespace Solvers::Tsa::Core::Sensor
 
-// raw 的 TZ / TouchMode / AntiTouch / TPSensor 还在调用的入口
+// raw 的调用方
 extern "C" {
 namespace S = Solvers::Tsa::Core::Sensor;
-uint8_t Sensor_GetZoneIndex2(uint16_t cell) { return S::ZoneIndex(cell); }
-uint32_t Sensor_GetPosType2(uint16_t cell) { return S::PosType(cell); }
-uint8_t Sensor_GetPosType(uint8_t dim1, uint8_t dim2) { return S::PosType(dim1, dim2); }
 uint8_t Sensor_GetZoneIndex(uint8_t dim1, uint8_t dim2) { return S::ZoneIndex(dim1, dim2); }
-uint64_t Sensor_IsInZone(uint8_t dim1, uint8_t dim2, uint8_t zoneBase) { return S::IsInZone(dim1, dim2, zoneBase) ? 1 : 0; }
-uint8_t Sensor_IsInDifferentTouchZone(uint8_t dim1A, uint8_t dim2A, uint8_t dim1B, uint8_t dim2B) {
-    return S::IsInDifferentZones(dim1A, dim2A, dim1B, dim2B) ? 1 : 0;
-}
 }  // extern "C"

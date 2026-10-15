@@ -81,14 +81,14 @@ void CorrectAxis(TouchUnit& unit, uint16_t rawPos, uint16_t& pos, uint8_t ratio,
 }
 
 // CTD_ECProcessUnit @ 0x6ba55c6b（CTD_ECUpdatePosToEC 只是 Touch_SetEdgeDist）
-// 两个方向的修正比例分别取 TouchUnit::field056 / field057（TZ 写入）在 ln 表里的值。
+// 两个方向的修正比例分别取 TouchUnit::gripRatioDim1 / gripRatioDim2（TZ 写入）在 ln 表里的值。
 void EcProcessUnit(uint8_t idx) {
     Touch::SetEdgeDist(idx);
     TouchUnit& unit = Touches().unit[idx];
     const FlashConstPrmt& c = PrmtFlashConst();
-    CorrectAxis(unit, unit.rawPos.dim1, unit.pos.dim1, unit.field056, kEdgeDim1Near, kEdgeDim1Far, kDim1NearTable,
+    CorrectAxis(unit, unit.rawPos.dim1, unit.pos.dim1, unit.gripRatioDim1, kEdgeDim1Near, kEdgeDim1Far, kDim1NearTable,
                 kDim1FarTable, c.dim1NearEdge, c.dim1FarEdge, kVolatileDim1EdgeCorrected);
-    CorrectAxis(unit, unit.rawPos.dim2, unit.pos.dim2, unit.field057, kEdgeDim2Near, kEdgeDim2Far, kDim2NearTable,
+    CorrectAxis(unit, unit.rawPos.dim2, unit.pos.dim2, unit.gripRatioDim2, kEdgeDim2Near, kEdgeDim2Far, kDim2NearTable,
                 kDim2FarTable, c.dim2NearEdge, c.dim2FarEdge, kVolatileDim2EdgeCorrected);
 }
 
@@ -140,7 +140,6 @@ int64_t BasicCalculation(int32_t weightedSum, int32_t weight) {
 namespace C = Solvers::Tsa::Core::Ctd;
 
 extern "C" {
-void CTD_ECInit(void) {}
 void CTD_ECProcess(void) { C::EcProcess(); }
 void CTD_General(uint8_t dim1, uint8_t dim2, uint8_t dim1Span, uint8_t dim2Span, uint16_t* centerDim1,
                  uint16_t* centerDim2) {

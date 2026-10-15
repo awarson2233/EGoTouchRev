@@ -18,6 +18,7 @@
 #include "App/Sys.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
+#include "Common/Memory.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
@@ -437,12 +438,12 @@ void VirtualPeakInfoRetrieval() {
 
 // TZ_Malloc @ 0x6ba856e0
 bool Malloc() {
-    ZoneSig() = static_cast<int16_t*>(TSA_MallocAndInit(GridBufSize() * 2u));
+    ZoneSig() = static_cast<int16_t*>(Mem::Allocate(GridBufSize() * 2u));
     return ZoneSig() != nullptr;
 }
 
 // TZ_Free @ 0x6ba85723
-void Free() { TSA_Free(reinterpret_cast<int64_t*>(&ZoneSig())); }
+void Free() { Mem::Release(ZoneSig()); }
 
 // TZ_Init @ 0x6ba8aa70
 void Init() {
@@ -465,13 +466,8 @@ void Process() {
 
 }  // namespace Solvers::Tsa::Core::TouchZone
 
-// raw 的 TSA / TSABuffer / HandGesture / Proximity / SideTouch 还在调用的入口
+// raw 的调用方
 extern "C" {
 namespace TZ = Solvers::Tsa::Core::TouchZone;
-bool TZ_Malloc(void) { return TZ::Malloc(); }
-void TZ_Free(void) { TZ::Free(); }
-void TZ_Init(void) { TZ::Init(); }
 void TZ_Process(void) { TZ::Process(); }
-uint64_t TZ_GetAccessFlagPtr(void) { return reinterpret_cast<uint64_t>(Solvers::Tsa::Core::Buffers().tz); }
-uint8_t* TZ_GetDistanceMapPtr(void) { return &Solvers::Tsa::Core::Image::At<uint8_t>(0x6bc34ac0); }
 }  // extern "C"

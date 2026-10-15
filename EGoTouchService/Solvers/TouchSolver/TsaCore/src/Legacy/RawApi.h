@@ -25,45 +25,45 @@ void HandGesture_Free(void);
 // Alg/Exception/Exception.cpp（被裁掉的充电噪声检测，恒为 0）
 uint64_t Exception_GetDetectedChargerNoise(void);
 
-// Core/TSA.c
-uint16_t TSA_GetXRes(void);
-uint16_t TSA_GetYRes(void);
-uint32_t TSA_IsUnderWaterDetected(void);
-uint32_t TSA_IsOutOfWaterDetected(void);
-char* TSA_GetPrmtName(void);
-uint64_t TSA_IsGameScenario(void);
-uint32_t TSA_IsWindowsPadFeatureEnabled(void);
-bool TSA_IsTypingScenario(void);
-void TSA_ScenarioProcess(void);
-uint16_t TSA_SideTouchDim1Center(uint8_t sideIdx);
-uint16_t TSA_SideTouchDim2Center(uint8_t sideIdx);
-uint16_t TSA_CoreTouchDim1Center(uint8_t idx);
-uint16_t TSA_CoreTouchDim2Center(uint8_t idx);
-uint32_t TSA_GetDimEdge(uint16_t dim1, uint16_t dim2);
-uint64_t TSA_DimEdgeToSide(int dimEdge);
-uint64_t TSA_SideToEdge(uint32_t side);
-uint64_t TSA_SideToDimEdge(int side);
-bool TSA_IsPossibleUnderWater(void);
-void* TSA_MallocAndInit(uint32_t size);
-void TSA_Free(int64_t* ptr);
-uint32_t TSA_GetSide(uint16_t dim1, uint16_t dim2);
-uint64_t TSA_InStylusMode(void);
-uint32_t TSA_IsPadFeatureEnabled(void);
-char TSA_IsGripOKToIDLE(void);
-uint8_t TSA_IsOKToEnterIDLEMode(void);
-void TSA_MSReset(void);
-bool TSA_UpdateIDLEModeInternally(void);
-bool TSA_UpdateSideIDLEModeInternally(void);
-int64_t TSA_GetSensorData(void);
-void TSA_SetXPos(uint8_t idx, uint16_t x);
-
-
-
-
+// Common/TSAState.c
+void TSAState_OnAlloc(void* ptr, uint32_t size);
+void TSAState_OnFree(void* ptr);
+// Common/MISC.c（传感器间距映射）
+int SensorPitchSizeMapDim1(int sensorCoord, uint16_t scale);
+int SensorPitchSizeMapDim2(int sensorCoord, uint16_t scale);
+// Rejection/ASA.c、ASAHostBridge.c
+uint16_t ASA_GetDim1Res(void);
+uint16_t ASA_GetDim2Res(void);
+bool ASA_GetRptInRange(void);
+uint16_t ASA_GetRptPressure(void);
+uint16_t ASA_GetRptXPos(void);
+int16_t ASA_GetRptXTilt(void);
+uint16_t ASA_GetRptYPos(void);
+int16_t ASA_GetRptYTilt(void);
+uint64_t ASA_InitAFEProject(uint64_t caps, uint64_t flashAsa);
+uint64_t ASA_InitProjectFromTsa(uint64_t flash);
+bool ASA_IsEnterStylusHPP2(void);
+uint64_t ASA_IsEnterStylusHPP3(void);
+void TSA_ASAProcess(uint32_t ctrl);
+// Rejection/StylusAft.c
+void StylusAft_Init(void);
+void StylusAft_PostProcessUnit(uint8_t idx);
+// Rejection/TouchReport.c
+void TouchReport_Init(void);
+void TouchReport_Process(void);
+// Rejection/HandGesture.c
+void HandGesture_Init(void);
+void HandGesture_Process(void);
 // Rejection/AntiTouch.c
+void AntiTouch_Init(void);
+void AntiTouch_Process(void);
 void AntiTouch_Report(void);
 
 // Rejection/GripFilter.c
+void GripFilter_Init(void);
+uint8_t GripFilter_IsOKToEnterIDLE(void);
+void GripFilter_Process(void);
+void GripFilter_RegionProcess(void);
 char GripFilter_IsGripOrTbdTouch(uint8_t idx);
 bool GripFilter_IsGripTouch(uint8_t idx);
 uint64_t GripFilter_IsGripOrTbd(int32_t gripStage);
@@ -75,6 +75,8 @@ uint32_t GripFilter_GetTrackingThold(void);
 uint8_t GripFilter_IsMergeHandlerSensorEnabled(uint8_t dim1, uint8_t dim2);
 
 // Rejection/Thenar.c
+void Thenar_Init(void);
+void Thenar_ProcessInfoByDif(void);
 void Thenar_UnitCopy(uint8_t* dst, uint8_t* src);
 bool Thenar_UpdateExternalInfo(void);
 

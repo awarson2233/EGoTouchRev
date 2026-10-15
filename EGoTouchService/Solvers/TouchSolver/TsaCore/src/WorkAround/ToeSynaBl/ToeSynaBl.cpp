@@ -1,3 +1,4 @@
+#include "App/Scenario.h"
 #include "App/Sys.h"
 #include "WorkAround/ToeSynaBl/ToeSynaBl.h"
 
@@ -13,6 +14,7 @@
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
 #include "Common/Image.h"
+#include "Common/Memory.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
@@ -51,7 +53,7 @@ State& S() { return Image::At<State>(0x6bbbf590); }
 bool Enabled() { return PrmtFlash().toeSynaBl != 0; }
 bool Flag(uint32_t bit) { return (PrmtFlash().toeSynaBlFlags & bit) != 0; }
 bool SideTouch() { return (Static().featureFlags & kFeatSideTouch) != 0; }
-bool IsGame() { return static_cast<char>(TSA_IsGameScenario()) != 0; }
+bool IsGame() { return Scenario::IsGame(); }
 void Debug(uint32_t bit) { Static().blDebugFlags |= bit; }
 int16_t DifAt(uint8_t col, uint8_t row) { return Buffers().dif[GridIndex(col, row)]; }
 /// 这一列的 Dif 和强（不小于 8001 且超过 SS Dif 的 10 倍）。
@@ -167,7 +169,7 @@ void BackLightShiftProcess() {
 // 计时器只会回落（原代码没有累加的地方），实际恒为 0。
 void ClothRiskProcess() {
     TsaStatic& stat = Static();
-    if (Prpt().field16E < -799) {
+    if (Prpt().msDif.minSig < -799) {
         stat.toeClothRiskTimer = 0;
         return;
     }
@@ -303,12 +305,12 @@ bool GripRegionAbnormal(bool protected2) {
 }
 
 // ToeSynaBl_IsWaterDetectedZ8Check @ 0x6bb45950
-// field172 / field173 所指的格不贴边，且其 3×3 邻域里有 Dif 高于 -150 的格。
+// msDif.minDim1 / msDif.minDim2 所指的格不贴边，且其 3×3 邻域里有 Dif 高于 -150 的格。
 bool IsWaterDetectedZ8Check() {
     const TsaPrpt& prpt = Prpt();
     const FlashPrmt& fl = PrmtFlash();
-    const uint16_t d1 = prpt.field172;
-    const uint16_t d2 = prpt.field173;
+    const uint16_t d1 = prpt.msDif.minDim1;
+    const uint16_t d2 = prpt.msDif.minDim2;
     if (d1 == 0 || d2 == 0 || fl.dim1Len - 1 <= d1 || fl.dim2Len - 1 <= d2) return false;
     for (int a = -1; a < 2; ++a) {
         for (int b = -1; b < 2; ++b) {
@@ -325,20 +327,20 @@ bool IsWaterDetectedZ8Check() {
 bool Malloc() {
     const uint32_t bytes = GridBufSize() * 2u;
     State& s = S();
-    s.rawSinceClothRisk = static_cast<int16_t*>(TSA_MallocAndInit(bytes));
+    s.rawSinceClothRisk = static_cast<int16_t*>(Mem::Allocate(bytes));
     if (s.rawSinceClothRisk == nullptr) return false;
-    s.rawSinceBackLightShift = static_cast<int16_t*>(TSA_MallocAndInit(bytes));
+    s.rawSinceBackLightShift = static_cast<int16_t*>(Mem::Allocate(bytes));
     if (s.rawSinceBackLightShift == nullptr) return false;
-    s.rawSinceDim2SsNoSignal = static_cast<int16_t*>(TSA_MallocAndInit(bytes));
+    s.rawSinceDim2SsNoSignal = static_cast<int16_t*>(Mem::Allocate(bytes));
     return s.rawSinceDim2SsNoSignal != nullptr;
 }
 
 // ToeSynaBl_Free @ 0x6bb46137
 void Free() {
     State& s = S();
-    TSA_Free(reinterpret_cast<int64_t*>(&s.rawSinceClothRisk));
-    TSA_Free(reinterpret_cast<int64_t*>(&s.rawSinceBackLightShift));
-    TSA_Free(reinterpret_cast<int64_t*>(&s.rawSinceDim2SsNoSignal));
+    Mem::Release(s.rawSinceClothRisk);
+    Mem::Release(s.rawSinceBackLightShift);
+    Mem::Release(s.rawSinceDim2SsNoSignal);
 }
 
 // ToeSynaBl_GetSidePrpt @ 0x6bb471b0
@@ -430,7 +432,7 @@ bool IsBaselineAbnormalAftScreenOn() {
             if (0x96 < self.innerStrongAbsSum[fl.dim1Len + r]) ++rows;
         }
         const TsaPrpt& prpt = Prpt();
-        active = fl.dim1Len * 2u / 3 < cols && fl.dim2Len >> 1 < rows && 3 < prpt.field180 && 3 < prpt.field182 &&
+        active = fl.dim1Len * 2u / 3 < cols && fl.dim2Len >> 1 < rows && 3 < prpt.msDif.posCount && 3 < prpt.msDif.negCount &&
                  B::Reset::CheckNumOverNoise();
     }
     if (active) {
@@ -455,7 +457,7 @@ void IsBaselineAbnormal(bool skipShape, bool protected2, bool& abnormal) {
     Static().toeSsNotMatchTimer = 0;
     if (GripRegionAbnormal(protected2)) abnormal = true;
     if (IsLongTimeSsNoSignal() && Static().curTimeMs < Static().msInitTime + 60000) {
-        const char* name = TSA_GetPrmtName();
+        const char* name = ProjectName();
         if (std::strncmp(name, "P150", 4) == 0 || std::strncmp(name, "P186", 4) == 0 || std::strncmp(name, "P17392", 6) == 0 ||
             std::strncmp(name, "P17292", 6) == 0) {
             abnormal = true;
@@ -505,12 +507,3 @@ bool IsWaterDetected() {
 }
 
 }  // namespace Solvers::Tsa::Core::ToeSynaBl
-
-// raw 的 TSA / TSABuffer / HardwareAnalyzer 还在调用的入口
-extern "C" {
-namespace T = Solvers::Tsa::Core::ToeSynaBl;
-uint64_t ToeSynaBl_Malloc(void) { return T::Malloc() ? 1 : 0; }
-void ToeSynaBl_Free(void) { T::Free(); }
-void ToeSynaBl_GetSidePrpt(void) { T::GetSidePrpt(); }
-uint64_t ToeSynaBl_BackLightShiftUnit(uint16_t percent) { return T::BackLightShiftUnit(percent) ? 1 : 0; }
-}  // extern "C"

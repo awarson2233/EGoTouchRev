@@ -13,6 +13,7 @@
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Image.h"
+#include "Common/Memory.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
@@ -150,12 +151,12 @@ void Debounce(TouchZoneUnit& zone) {
 
 // FIException_Malloc @ 0x6ba59360
 bool Malloc() {
-    Reached() = static_cast<uint8_t*>(TSA_MallocAndInit(GridBufSize()));
+    Reached() = static_cast<uint8_t*>(Mem::Allocate(GridBufSize()));
     return Reached() != nullptr;
 }
 
 // FIException_Free @ 0x6ba593a1
-void Free() { TSA_Free(reinterpret_cast<int64_t*>(&Reached())); }
+void Free() { Mem::Release(Reached()); }
 
 // FIException_Init @ 0x6ba593c2：逐个字段清零，填充字节不动。
 void Init() {

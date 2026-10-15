@@ -6,6 +6,7 @@
 #include "App/TsaBuffer.h"
 #include "Common/Assert.h"
 #include "Common/Image.h"
+#include "Common/Memory.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
@@ -105,12 +106,12 @@ void CheckType2() {
 
 // BadChannel_Malloc @ 0x6bb42b10
 bool Malloc() {
-    Debounce() = static_cast<uint8_t*>(TSA_MallocAndInit(GridBufSize()));
+    Debounce() = static_cast<uint8_t*>(Mem::Allocate(GridBufSize()));
     return Debounce() != nullptr;
 }
 
 // BadChannel_Free @ 0x6bb42b51
-void Free() { TSA_Free(reinterpret_cast<int64_t*>(&Debounce())); }
+void Free() { Mem::Release(Debounce()); }
 
 // BadChannel_Init @ 0x6bb42b6c
 void Init() { ClearChecked(Debounce(), GridBufSize(), GridBufSize()); }
@@ -147,13 +148,3 @@ bool IsDmdDetected() {
 }
 
 }  // namespace Solvers::Tsa::Core::BadChannel
-
-// raw 的 HardwareAnalyzer / TSA / TSABuffer 还在调用的入口
-extern "C" {
-namespace BC = Solvers::Tsa::Core::BadChannel;
-bool BadChannel_Malloc(void) { return BC::Malloc(); }
-void BadChannel_Free(void) { BC::Free(); }
-void BadChannel_Init(void) { BC::Init(); }
-void BadChannel_Process(void) { BC::Process(); }
-uint64_t BadChannel_IsDMDDetected(void) { return BC::IsDmdDetected() ? 1 : 0; }
-}  // extern "C"

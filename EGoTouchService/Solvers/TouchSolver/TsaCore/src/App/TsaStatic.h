@@ -150,7 +150,7 @@ struct TsaStatic {
     int64_t afeSideIdleExitTime;
     int64_t idleReadyTime;  // idleReady 成立的时间（ms），-1 为不成立
     int64_t sideIdleReadyTime;
-    int64_t field038;
+    int64_t idleDebounceStart;  // 可以进 IDLE 的起始时间（ms），-1 为不可进；满 dbEnterIdle 后才放行
     int64_t proxScreenOffTime;  // AFE 进入接近灭屏状态的时间（ms），-1 为不在
     int64_t field048;
     int64_t proximityOnTime;  // 接近检测启用的时间（ms），-1 为未启用
@@ -163,7 +163,7 @@ struct TsaStatic {
     uint64_t autoCalibrationStartTime;  // AFE 开始自动校准的时间（ms）
     uint64_t markedLiftOffTime;  // 带 persistFlags 0x20000000 的触点抬起时的时间（ms）
     Point markedLiftOffPos;  // 以及它的位置
-    uint32_t activeReason;  // 本帧不能进 IDLE 的原因位（只写，供日志）
+    uint8_t reserved09C[0x4];
     uint8_t fullIncellHighPeakFrames;  // 最大峰超过上述门限的连续帧数（到 6 为止）
     uint8_t resetHoldFrames;  // 系统复位请求之后，复位位再保持的帧数
     uint8_t reserved0A2[0x2];
@@ -214,14 +214,17 @@ struct TsaStatic {
     int32_t field12C;
     int32_t field130;
     int32_t field134;
-    int32_t field138;
-    uint8_t reserved13C[0x4];
+    uint8_t reserved138[0x8];
     void* sensorDataCallback;
     int64_t field148;
-    uint8_t reserved150[0x4];
+    uint8_t appScenarioValid;  // 宿主设置过应用类型（appType / reportRateLevel 有效）
+    uint8_t reserved151[0x3];
     uint32_t aftGateFlags;  // bit3：查环境温度异常（否则只对 HIMA 参数查）
     uint32_t prevAftGateFlags;
-    uint8_t reserved15C[0x108];
+    int8_t reportRateLevel;  // 宿主要求的报点率档位：0 用机型上限，1..6 为 60 Hz 的倍数，更高为 360 Hz
+    uint8_t reserved15D[0x3];
+    int32_t appType;  // 宿主的应用类型：4 输入、8 视频、9 游戏、999 其它特殊场景
+    uint8_t reserved164[0x100];
     int32_t screenRotation;  // 0 / 1 / 2 / 3：0° / 90° / 180° / 270°
     int32_t field268;
     int32_t field26C;
@@ -340,7 +343,7 @@ static_assert(offsetof(TsaStatic, afeIdleExitTime) == 0x018);
 static_assert(offsetof(TsaStatic, afeSideIdleExitTime) == 0x020);
 static_assert(offsetof(TsaStatic, idleReadyTime) == 0x028);
 static_assert(offsetof(TsaStatic, sideIdleReadyTime) == 0x030);
-static_assert(offsetof(TsaStatic, field038) == 0x038);
+static_assert(offsetof(TsaStatic, idleDebounceStart) == 0x038);
 static_assert(offsetof(TsaStatic, proxScreenOffTime) == 0x040);
 static_assert(offsetof(TsaStatic, field048) == 0x048);
 static_assert(offsetof(TsaStatic, proximityOnTime) == 0x050);
@@ -353,7 +356,6 @@ static_assert(offsetof(TsaStatic, msInitTime) == 0x080);
 static_assert(offsetof(TsaStatic, autoCalibrationStartTime) == 0x088);
 static_assert(offsetof(TsaStatic, markedLiftOffTime) == 0x090);
 static_assert(offsetof(TsaStatic, markedLiftOffPos) == 0x098);
-static_assert(offsetof(TsaStatic, activeReason) == 0x09C);
 static_assert(offsetof(TsaStatic, fullIncellHighPeakFrames) == 0x0A0);
 static_assert(offsetof(TsaStatic, resetHoldFrames) == 0x0A1);
 static_assert(offsetof(TsaStatic, specialControlFlags) == 0x0A4);
@@ -396,11 +398,13 @@ static_assert(offsetof(TsaStatic, field128) == 0x128);
 static_assert(offsetof(TsaStatic, field12C) == 0x12C);
 static_assert(offsetof(TsaStatic, field130) == 0x130);
 static_assert(offsetof(TsaStatic, field134) == 0x134);
-static_assert(offsetof(TsaStatic, field138) == 0x138);
 static_assert(offsetof(TsaStatic, sensorDataCallback) == 0x140);
 static_assert(offsetof(TsaStatic, field148) == 0x148);
+static_assert(offsetof(TsaStatic, appScenarioValid) == 0x150);
 static_assert(offsetof(TsaStatic, aftGateFlags) == 0x154);
 static_assert(offsetof(TsaStatic, prevAftGateFlags) == 0x158);
+static_assert(offsetof(TsaStatic, reportRateLevel) == 0x15C);
+static_assert(offsetof(TsaStatic, appType) == 0x160);
 static_assert(offsetof(TsaStatic, screenRotation) == 0x264);
 static_assert(offsetof(TsaStatic, field268) == 0x268);
 static_assert(offsetof(TsaStatic, field26C) == 0x26C);
@@ -489,7 +493,8 @@ struct TsaPrpt {
     uint8_t brokenByDif;  // 有格按 Dif 判为坏点
     uint8_t reserved03B[0x5];
     BrokenSensorZ8 brokenSensor[5];
-    uint8_t reserved090[0x2];
+    uint8_t rawDirectionChecked;  // 缺省机型已按首帧的 Dif 极值确认 raw 方向
+    uint8_t reserved091[0x1];
     uint16_t boundaryPositive;  // 整屏 raw 的极值
     uint16_t boundaryNegative;
     uint16_t rawMax;  // 内圈 raw 的极值
@@ -518,28 +523,13 @@ struct TsaPrpt {
     uint8_t preCmfMaxDim2;
     uint8_t preCmfMinDim1;
     uint8_t preCmfMinDim2;
-    int16_t field16C;
-    int16_t field16E;
-    uint8_t field170;
-    uint8_t field171;
-    uint8_t field172;
-    uint8_t field173;
-    uint8_t reserved174[0x4];
-    int32_t field178;
-    int32_t field17C;
-    uint16_t field180;
-    uint16_t field182;
-    uint16_t field184;
-    uint16_t field186;
-    uint8_t reserved188[0x4];
-    int16_t field18C;
-    int16_t field18E;
-    uint8_t reserved190[0x10];
-    uint16_t field1A0;
-    uint16_t field1A2;
-    uint8_t reserved1A4[0x20];
-    uint16_t field1C4;
-    uint8_t reserved1C6[0x66];
+    DifPrpt msDif;  // 互容主流程统计完属性时 dif / difCore / difInner 的副本，后续模块改写前的值
+    int16_t msUnderWaterCells;  // underWaterCells 的同期副本
+    uint8_t reserved18A[0x2];
+    DifPrpt msDifCore;
+    uint8_t reserved1A8[0x4];
+    DifPrpt msDifInner;
+    uint8_t reserved1C8[0x64];
     SelfPrpt selfCols;  // 各列的线统计极值
     SelfPrpt selfRows;  // 各行的线统计极值
     uint8_t reserved274[0x4];
@@ -593,6 +583,7 @@ static_assert(offsetof(TsaPrpt, brokenSensorNum) == 0x038);
 static_assert(offsetof(TsaPrpt, brokenByDifZ8) == 0x039);
 static_assert(offsetof(TsaPrpt, brokenByDif) == 0x03A);
 static_assert(offsetof(TsaPrpt, brokenSensor) == 0x040);
+static_assert(offsetof(TsaPrpt, rawDirectionChecked) == 0x090);
 static_assert(offsetof(TsaPrpt, boundaryPositive) == 0x092);
 static_assert(offsetof(TsaPrpt, boundaryNegative) == 0x094);
 static_assert(offsetof(TsaPrpt, rawMax) == 0x096);
@@ -617,23 +608,10 @@ static_assert(offsetof(TsaPrpt, preCmfMaxDim1) == 0x168);
 static_assert(offsetof(TsaPrpt, preCmfMaxDim2) == 0x169);
 static_assert(offsetof(TsaPrpt, preCmfMinDim1) == 0x16A);
 static_assert(offsetof(TsaPrpt, preCmfMinDim2) == 0x16B);
-static_assert(offsetof(TsaPrpt, field16C) == 0x16C);
-static_assert(offsetof(TsaPrpt, field16E) == 0x16E);
-static_assert(offsetof(TsaPrpt, field170) == 0x170);
-static_assert(offsetof(TsaPrpt, field171) == 0x171);
-static_assert(offsetof(TsaPrpt, field172) == 0x172);
-static_assert(offsetof(TsaPrpt, field173) == 0x173);
-static_assert(offsetof(TsaPrpt, field178) == 0x178);
-static_assert(offsetof(TsaPrpt, field17C) == 0x17C);
-static_assert(offsetof(TsaPrpt, field180) == 0x180);
-static_assert(offsetof(TsaPrpt, field182) == 0x182);
-static_assert(offsetof(TsaPrpt, field184) == 0x184);
-static_assert(offsetof(TsaPrpt, field186) == 0x186);
-static_assert(offsetof(TsaPrpt, field18C) == 0x18C);
-static_assert(offsetof(TsaPrpt, field18E) == 0x18E);
-static_assert(offsetof(TsaPrpt, field1A0) == 0x1A0);
-static_assert(offsetof(TsaPrpt, field1A2) == 0x1A2);
-static_assert(offsetof(TsaPrpt, field1C4) == 0x1C4);
+static_assert(offsetof(TsaPrpt, msDif) == 0x16C);
+static_assert(offsetof(TsaPrpt, msUnderWaterCells) == 0x188);
+static_assert(offsetof(TsaPrpt, msDifCore) == 0x18C);
+static_assert(offsetof(TsaPrpt, msDifInner) == 0x1AC);
 static_assert(offsetof(TsaPrpt, selfCols) == 0x22C);
 static_assert(offsetof(TsaPrpt, selfRows) == 0x250);
 static_assert(offsetof(TsaPrpt, blStage) == 0x278);

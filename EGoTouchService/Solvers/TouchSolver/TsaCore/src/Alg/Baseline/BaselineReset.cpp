@@ -17,7 +17,10 @@
 #include "Alg/Touch/TouchData.h"
 #include "Alg/TpSensor/TpSensor.h"
 #include "App/Afe.h"
+#include "App/Report.h"
+#include "App/Scenario.h"
 #include "App/Sys.h"
+#include "App/Tsa.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
@@ -80,7 +83,7 @@ constexpr size_t kBlBytes = 0x2648;
 constexpr uint8_t kMaxCmfLen = 0x50;              // TSA_MAX_DIM
 
 void Debug(uint32_t bit) { Static().blDebugFlags |= bit; }
-bool IsGame() { return static_cast<char>(TSA_IsGameScenario()) != 0; }
+bool IsGame() { return Scenario::IsGame(); }
 bool SideTouch() { return (Static().featureFlags & kFeatSideTouch) != 0; }
 bool AfterInit(uint64_t ms) { return Static().msInitTime + ms <= Static().curTimeMs; }
 
@@ -132,8 +135,8 @@ bool IsTouchToBeProtected() {
     bool r = false;
     if (prev.count == 1 && (prev.unit[0].volatileFlags & kVolatileEdgeTouch) == 0) {
         const SelfData& self = SelfBuf();
-        r = fullIncell || ((prpt.field16C < self.sum[prpt.field170] || prpt.field16C < self.sum[prpt.field171 + fl.dim1Len]) &&
-                           fl.fingerThold * 3 / 2 < prpt.field16C);
+        r = fullIncell || ((prpt.msDif.maxSig < self.sum[prpt.msDif.maxDim1] || prpt.msDif.maxSig < self.sum[prpt.msDif.maxDim2 + fl.dim1Len]) &&
+                           fl.fingerThold * 3 / 2 < prpt.msDif.maxSig);
     } else if (prev.count == 2 &&
                ((prev.unit[0].volatileFlags & kVolatileEdgeTouch) == 0 || (prev.unit[1].volatileFlags & kVolatileEdgeTouch) == 0)) {
         // 两个触点交叉位置（一个的列、另一个的行）上的 Dif 都是明显的负值
@@ -169,7 +172,7 @@ bool CheckCleanBaseline() {
 // BLReset_IsCurBaselineDirtyByDiff @ 0x6ba4aa9e
 bool IsCurBaselineDirtyByDiff() {
     const TsaPrpt& prpt = Prpt();
-    return PrmtFlash().sensorNum >> 2 < prpt.field186 && 4 < prpt.field182;
+    return PrmtFlash().sensorNum >> 2 < prpt.msDif.bigCount && 4 < prpt.msDif.negCount;
 }
 
 // BLReset_IsCurBaselineDirty @ 0x6ba4aaee
@@ -254,7 +257,7 @@ void IsLongTimeSsNoSignal() { Static().ssNoSignal = 0; }
 // BLReset_IsLongTimeSSNegativeSignal @ 0x6ba4995b（SS 被裁掉：判定恒不成立）
 void IsLongTimeSsNegativeSignal() {
     TsaStatic& stat = Static();
-    if (static_cast<char>(TSA_InStylusMode()) != 0 || !Reset::CheckNumOverNoise()) stat.ssNegSignalTimer = 0;
+    if (Tsa::InStylusMode() || !Reset::CheckNumOverNoise()) stat.ssNegSignalTimer = 0;
     stat.ssNegSignal = 0;
 }
 
@@ -292,9 +295,9 @@ bool Check() {
     const TsaPrpt& prpt = Prpt();
     bool r = false;
     if (Reset::CheckNumOverNoise()) {
-        if ((prpt.field16C * 3 < prpt.field16E * -4 || prpt.field180 * 3u < prpt.field182 * 4u) &&
-            prpt.field178 * 3 < prpt.field17C * -4 && prpt.field16C * 2 < prpt.field16E * -4 &&
-            PrmtDynamic().smallThold < -prpt.field16E && 2 < prpt.field182) {
+        if ((prpt.msDif.maxSig * 3 < prpt.msDif.minSig * -4 || prpt.msDif.posCount * 3u < prpt.msDif.negCount * 4u) &&
+            prpt.msDif.posSum * 3 < prpt.msDif.negSum * -4 && prpt.msDif.maxSig * 2 < prpt.msDif.minSig * -4 &&
+            PrmtDynamic().smallThold < -prpt.msDif.minSig && 2 < prpt.msDif.negCount) {
             r = !IsTouchToBeProtected();
         }
         if ((PrevTouches().stateFlags & kStateFlagWakeUp) != 0) r = !IsTouchToBeProtected();
@@ -330,22 +333,22 @@ bool IsAbnormalTouchDetected() {
     const TsaStatic& stat = Static();
     const uint16_t n = PrmtFlash().sensorNum;
     if (prev.abnormalShapeCount != 0) {
-        if (static_cast<char>(TSA_IsPadFeatureEnabled()) == 0) {
-            if (n >> 1 < prpt.field186) return true;
-        } else if ((n + n) / 3u < prpt.field186) {
+        if (!Report::IsPadFeatureEnabled()) {
+            if (n >> 1 < prpt.msDif.bigCount) return true;
+        } else if ((n + n) / 3u < prpt.msDif.bigCount) {
             return true;
         }
     }
     if (stat.safeDif != 0 || stat.unsafeDif == 0) return false;
     if (3 <= prev.abnormalShapeCount) return true;
-    if (prpt.field1A2 * 5u < prpt.field1A0) return false;
-    if (prpt.field18E * -4 < prpt.field18C) return false;
+    if (prpt.msDifCore.negCount * 5u < prpt.msDifCore.posCount) return false;
+    if (prpt.msDifCore.minSig * -4 < prpt.msDifCore.maxSig) return false;
     if (prev.abnormalShapeCount != 0) return true;
-    if (n >> 2 < prpt.field186) {
+    if (n >> 2 < prpt.msDif.bigCount) {
         if (1 < prev.count - prev.field00D) return true;
-        if (prev.field003 != 0 || prev.field006 == 0 || prev.abnormalShape2Count != 0) return true;
+        if (prev.liftOffCount != 0 || prev.field006 == 0 || prev.abnormalShape2Count != 0) return true;
     }
-    return n >> 1 < prpt.field186 || ConcurrentTouchDetect();
+    return n >> 1 < prpt.msDif.bigCount || ConcurrentTouchDetect();
 }
 
 // BLReset_IsAllFreqsBaselineInitializedDuringTouchLiftOff @ 0x6ba48b01
@@ -475,14 +478,14 @@ void Accumulate(bool hit, uint32_t bit, uint64_t& timer) {
 }
 
 // BLReset_IsBaselineAbnormalType1 @ 0x6ba4b083
-// 负向统计明显大于正向，且（初始化 310 s 内，或非游戏场景下 field184 超过四分之一屏）。
+// 负向统计明显大于正向，且（初始化 310 s 内，或非游戏场景下 msDif.count 超过四分之一屏）。
 void IsBaselineAbnormalType1(bool overNoise, bool protected2) {
     const TsaPrpt& prpt = Prpt();
     bool hit = overNoise && !IsBaselineClean() &&
-               (prpt.field16C * 3 < prpt.field16E * -4 || prpt.field180 * 3u < prpt.field182 * 5u) &&
-               prpt.field178 * 3 < prpt.field17C * -5 && prpt.field16C * 2 < prpt.field16E * -4 &&
-               PrmtDynamic().smallThold < -prpt.field16E && 2 < prpt.field182 && !protected2;
-    if (hit && AfterInit(kAfterInitMs)) hit = !IsGame() && PrmtFlash().sensorNum >> 2 < prpt.field184;
+               (prpt.msDif.maxSig * 3 < prpt.msDif.minSig * -4 || prpt.msDif.posCount * 3u < prpt.msDif.negCount * 5u) &&
+               prpt.msDif.posSum * 3 < prpt.msDif.negSum * -5 && prpt.msDif.maxSig * 2 < prpt.msDif.minSig * -4 &&
+               PrmtDynamic().smallThold < -prpt.msDif.minSig && 2 < prpt.msDif.negCount && !protected2;
+    if (hit && AfterInit(kAfterInitMs)) hit = !IsGame() && PrmtFlash().sensorNum >> 2 < prpt.msDif.count;
     Accumulate(hit, kDbgAbnormal1, Static().abnormalType1Timer);
 }
 
@@ -523,9 +526,9 @@ void IsBaselineAbnormalType2(bool game, bool overNoise, bool protected2) {
 void IsBaselineAbnormalType3(bool game, bool overNoise, bool protected2) {
     const TsaPrpt& prpt = Prpt();
     TsaStatic& stat = Static();
-    const bool hit = overNoise && !game && PrmtDynamic().smallThold < -prpt.field18E && 2 < prpt.field1A2 &&
-                     prpt.raw2Raw.overNoiseAfterCmf < 3 && prpt.field16C * 2 < prpt.field16E * -3 && !IsTouchToBeProtected() && !protected2 &&
-                     (prpt.field180 * 4u < prpt.field182 || prpt.field178 * 4 < -prpt.field17C);
+    const bool hit = overNoise && !game && PrmtDynamic().smallThold < -prpt.msDifCore.minSig && 2 < prpt.msDifCore.negCount &&
+                     prpt.raw2Raw.overNoiseAfterCmf < 3 && prpt.msDif.maxSig * 2 < prpt.msDif.minSig * -3 && !IsTouchToBeProtected() && !protected2 &&
+                     (prpt.msDif.posCount * 4u < prpt.msDif.negCount || prpt.msDif.posSum * 4 < -prpt.msDif.negSum);
     if (hit && !ToeSynaBl::IsWaterDetected()) {
         Debug(kDbgAbnormal3);
         stat.abnormalType3Timer = UpdateTimer(stat.abnormalType3Timer);
@@ -918,10 +921,9 @@ bool CheckAbnormalTouch(uint8_t touchIdx) {
 
 }  // namespace Solvers::Tsa::Core::Baseline
 
-// raw 的 TSA / TSAMS / TouchReport / GripFilter 还在调用的入口
+// raw 的调用方
 extern "C" {
 namespace B = Solvers::Tsa::Core::Baseline;
 bool BLReset_InDebounce(void) { return B::ResetInDebounce(); }
 uint8_t BLReset_Status(void) { return B::ResetStatus(); }
-void BLReset_FlagDisableBaselineUpdateInit(void) { B::ClearRefreshRequest(); }
 }  // extern "C"

@@ -63,8 +63,5 @@ bool IsFlickCheckPassed() { return FlickTestFailed() == 0; }
 namespace TA = Solvers::Tsa::Core::TouchAction;
 
 extern "C" {
-void TouchAction_Init(void) {}
-void TouchAction_Process(void) { TA::Process(); }
 void TouchAction_PostProcess(void) { TA::PostProcess(); }
-bool TouchAction_IsFlickCheckPassed(void) { return TA::IsFlickCheckPassed(); }
 }  // extern "C"

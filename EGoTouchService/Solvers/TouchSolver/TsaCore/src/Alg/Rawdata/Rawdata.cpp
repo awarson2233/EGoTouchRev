@@ -120,11 +120,9 @@ void GetUnNormalizedBaseline(int16_t* bl, uint32_t n) {
 
 }  // namespace Solvers::Tsa::Core::Rawdata
 
-// raw 的 TSA / AFE 还在调用的入口
+// raw 的调用方
 extern "C" {
 namespace R = Solvers::Tsa::Core::Rawdata;
 void Rawdata_Process(void) { R::Process(); }
 void Rawdata_CMF(void) { R::Cmf(); }
-void Rawdata_RetrieveBaseline(int16_t* bl, uint64_t, const int16_t* dif, uint64_t, int64_t, ...) { R::RetrieveBaseline(bl, dif); }
-void Rawdata_GetUnNormalizedBaseline(int16_t* bl, uint32_t n) { R::GetUnNormalizedBaseline(bl, n); }
 }  // extern "C"

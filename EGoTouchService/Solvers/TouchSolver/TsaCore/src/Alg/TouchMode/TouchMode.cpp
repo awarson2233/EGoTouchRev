@@ -347,7 +347,7 @@ void NewModeProcess(ModeUnit& next, const ModeUnit& prev, const Handler& h) {
         next.mode = prev.mode;
     } else if (prev.detect == 4) {
         h.process(next.detect, next.level);
-        if (Cur().field003 + Cur().count == 0) next = prev;
+        if (Cur().liftOffCount + Cur().count == 0) next = prev;
         timer.Stop();
     }
 }
@@ -412,5 +412,4 @@ void Process() {
 }  // namespace Solvers::Tsa::Core::TouchMode
 
 // raw TSA 还在调用的入口
-extern "C" void TouchMode_Init(void) { Solvers::Tsa::Core::TouchMode::Init(); }
 extern "C" void TouchMode_Process(void) { Solvers::Tsa::Core::TouchMode::Process(); }

@@ -87,11 +87,7 @@ namespace Prmt = Solvers::Tsa::Core::Prmt;
 
 extern "C" {
 
-bool TSAPrmt_Init(void) { return Prmt::Init(); }
-uint64_t TSAPrmt_LoadProject(int64_t name) { return Prmt::LoadProject(reinterpret_cast<const char*>(name)) ? 1 : 0; }
-void TSAPrmt_Reset(void) { Prmt::Reset(); }
 void TSAPrmt_PreProcess(void) { Prmt::PreProcess(); }
 void TSAPrmt_Process(void) { Prmt::Process(); }
-char* TSAPrmt_GetProjectName(void) { return const_cast<char*>(Prmt::GetProjectName()); }
 
 }  // extern "C"

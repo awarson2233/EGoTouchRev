@@ -5,10 +5,12 @@
 #include "Alg/Rawdata/Rawdata.h"
 #include "Alg/Touch/TouchData.h"
 #include "App/Sys.h"
+#include "App/Tsa.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
 #include "Common/Image.h"
+#include "Common/Memory.h"
 #include "Extension/HardwareAnalyzer/HardwareAnalyzer.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
@@ -592,9 +594,9 @@ void ScanAutoCheck() {
 
 // AFE_Malloc @ 0x6bb2c9b5
 bool Malloc() {
-    g.gridData = static_cast<uint16_t*>(TSA_MallocAndInit(GridBufSize() * 2u));
+    g.gridData = static_cast<uint16_t*>(Mem::Allocate(GridBufSize() * 2u));
     if (g.gridData == nullptr) return false;
-    g.lineData = static_cast<uint16_t*>(TSA_MallocAndInit(LineBufSize() * 2u));
+    g.lineData = static_cast<uint16_t*>(Mem::Allocate(LineBufSize() * 2u));
     return g.lineData != nullptr;
 }
 
@@ -634,6 +636,7 @@ void SetFrame(const Frame* frame) {
 void SetInfo(const void* info) { Slot().info = static_cast<const uint8_t*>(info); }
 void SetMaxScanRate(uint16_t rate) { g.scan.maxRate = rate; }
 Frame* GetFrame() { return Slot().frame; }
+const Caps* GetCaps() { return Slot().caps; }
 uint32_t FrameStatus() { return Slot().frame->status; }
 
 // AFE_ScanPreProcess @ 0x6bb2ee5e
@@ -644,7 +647,7 @@ void PreProcess() {
 
 // AFE_Process @ 0x6bb2d032
 void Process() {
-    if (!IsValid() || g.check.active || TSA_IsOKToEnterIDLEMode() != 0) return;
+    if (!IsValid() || g.check.active || Tsa::IsOkToEnterIdle()) return;
     NextScanFreqProcess();
     NextScanRateProcess();
 }
@@ -676,7 +679,7 @@ bool GetNextScanRateIndex(uint8_t* index) {
         *index = sc.nextRate;
     } else {
         const TsaStatic& s = Static();
-        if (PrmtFlash().sensorArchitecture == 3 && Touches().field003 != 0) {
+        if (PrmtFlash().sensorArchitecture == 3 && Touches().liftOffCount != 0) {
             (void)TargetRateIndex(kIdleScanRate, index);
         } else if (Sys::IsAllFreqNoisy() ||
                    ((s.featureFlags & kFeatSideTouch) != 0 && Sys::IsOkToEnterIdle() && (s.aftGateFlags & kAftIdleScanRate) == 0)) {
@@ -705,7 +708,7 @@ void AutoCheckProcess(const uint16_t* data, uint16_t size, uint32_t ctrl, uint64
     Sys::UpdateCtrlFlags(ctrl);
     s.curTimeMs = timeMs;
     ++s.frameCounter;
-    if (Sys::IsHwReset()) TSA_MSReset();
+    if (Sys::IsHwReset()) Tsa::MsReset();
     TsaBufferTable& b = Buffers();
     const size_t bytes = PrmtFlash().sensorNum * 2u;
     if (data != nullptr) CopyChecked((s.systemFlags & kSysDifBufPath) == 0 ? static_cast<void*>(b.raw) : b.dif, bytes, data, size);
@@ -743,25 +746,9 @@ bool IsIndividualBaselineForEachFreq() { return IsRawUnifiedToTargetValue(); }
 
 }  // namespace Solvers::Tsa::Core::Afe
 
-// raw 的调用方（TSA.c、ASAHostBridge.c）
+// raw 的调用方
 extern "C" {
 namespace A = Solvers::Tsa::Core::Afe;
-void AFE_Init(void) { A::Init(); }
-void AFE_SetCaps(const A::Caps* caps) { A::SetCaps(caps); }
-void AFE_SetFrame(const A::Frame* frame) { A::SetFrame(frame); }
-void AFE_SetInfo(const void* info) { A::SetInfo(info); }
-void AFE_SetMaxScanRate(uint16_t rate) { A::SetMaxScanRate(rate); }
 A::Frame* AFE_GetFrame(void) { return A::GetFrame(); }
-void AFE_PreProcess(void) { A::PreProcess(); }
-void AFE_Process(void) { A::Process(); }
-uint64_t AFE_GetNextScanFreqIndex(uint8_t* index) { return A::GetNextScanFreqIndex(index) ? 1 : 0; }
-uint64_t AFE_GetNextScanRateIndex(uint8_t* index, char*) { return A::GetNextScanRateIndex(index) ? 1 : 0; }
-void AFE_AutoCheckProcessInternal(const uint16_t* data, uint16_t size, uint32_t ctrl, uint64_t timeMs) {
-    A::AutoCheckProcess(data, size, ctrl, timeMs);
-}
-uint8_t AFE_IsInAutoCheckProcess(void) { return A::IsInAutoCheck() ? 1 : 0; }
-void AFE_ClearAutoCheckFlag(void) { A::ClearAutoCheckFlag(); }
-uint8_t AFE_AutoCheckToEnterIDLE(void) { return A::AutoCheckToEnterIdle() ? 1 : 0; }
 uint32_t AFE_IsAutoCalibration(void) { return A::IsAutoCalibration() ? 1 : 0; }
-bool AFE_IsIndividualBaselineForEachFreq(void) { return A::IsIndividualBaselineForEachFreq(); }
 }  // extern "C"

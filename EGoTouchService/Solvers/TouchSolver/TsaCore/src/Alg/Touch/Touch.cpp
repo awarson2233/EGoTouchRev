@@ -11,6 +11,7 @@
 #include "Alg/Touch/PrevTouch.h"
 #include "Alg/TouchSize/TouchSize.h"
 #include "App/Afe.h"
+#include "App/Report.h"
 #include "App/Sys.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaOut.h"
@@ -549,7 +550,7 @@ bool IsAbnormalShape3(uint8_t curIdx) {
     if (cur.exceptionType == 0x80 && cur.signalScale > refThold / 2) return false;
     if (!IsInAbnormalShapeDetectArea(curIdx)) return false;
     if (cur.majorMm > 0x31 || (cur.volatileFlags & 0x2000) != 0) return true;
-    return PrmtFlash().sensorNum / 3 < Prpt().field186 && cur.signalScale < refThold / 3 && cur.majorMm > 0x27;
+    return PrmtFlash().sensorNum / 3 < Prpt().msDif.bigCount && cur.signalScale < refThold / 3 && cur.majorMm > 0x27;
 }
 
 // Touch_IsAbnormalShape4 @ 0x6ba7532f
@@ -705,11 +706,11 @@ int IsBetaGrip(uint8_t curIdx, uint8_t prevIdx) {
 
     if (Out::DisplayXPos(curIdx) > 8) {
         const uint16_t x = Out::DisplayXPos(curIdx);
-        const uint16_t xRes = TSA_GetXRes();
+        const uint16_t xRes = Report::XRes();
         if (x < xRes - 9) beta = false;
     }
     const uint16_t y = Out::DisplayYPos(curIdx);
-    const uint16_t yRes = TSA_GetYRes();
+    const uint16_t yRes = Report::YRes();
     const auto bottomBand = static_cast<uint16_t>(TouchSize::MmToDisplayPixel(15));
     if (y < yRes - 1 - bottomBand) beta = false;
     if ((Prev(prevIdx).persistFlags & 0x1000000) != 0) beta = false;
@@ -752,7 +753,7 @@ uint8_t GetIdxBasedOnPreIdx(uint8_t prevIdx) {
 void KeepPrevTouchWithExceptionExcluded() {
     TouchTable& cur = Touches();
     PrevTouchTable& prev = PrevTouches();
-    cur.field003 = prev.field003;
+    cur.liftOffCount = prev.liftOffCount;
     cur.field004 = prev.field004;
     cur.extFlags = prev.extFlags;
     cur.newExtFlags = prev.newExtFlags;
@@ -873,8 +874,8 @@ void ProcessBetaGrip() {
 // 接近检测、拿起 / 放下手势与姿态模块在本版本中被裁掉：不置 0x80，拿起 0x100 与放下 0x200 恒置位。
 void ProcessExtInfo() {
     TouchTable& touches = Touches();
-    if (IntTrue(TSA_IsUnderWaterDetected())) touches.extFlags |= 0x20;
-    if (IntTrue(TSA_IsOutOfWaterDetected())) touches.extFlags |= 0x40;
+    if (Report::IsUnderWaterDetected()) touches.extFlags |= 0x20;
+    if (Report::IsOutOfWaterDetected()) touches.extFlags |= 0x40;
     touches.extFlags |= 0x100;
     touches.extFlags |= 0x200;
     AntiTouch_Report();
@@ -1009,13 +1010,13 @@ bool IsFullyLiftOff(uint8_t curIdx) {
 bool IsSideCoreInSameZone(uint8_t coreIdx, uint8_t sideIdx) {
     {
         const uint8_t zone = TouchesGrid().unit[coreIdx].zoneIdx;
-        const auto dim2 = static_cast<uint8_t>(TSA_SideTouchDim2Center(sideIdx));
-        const auto dim1 = static_cast<uint8_t>(TSA_SideTouchDim1Center(sideIdx));
+        const auto dim2 = static_cast<uint8_t>(Report::SideTouchDim2Center(sideIdx));
+        const auto dim1 = static_cast<uint8_t>(Report::SideTouchDim1Center(sideIdx));
         if (Sensor::IsInCoreZone(dim1, dim2, zone)) return true;
     }
     const uint8_t zone = TouchesSide().unit[sideIdx].zoneIdx;
-    const auto dim2 = static_cast<uint8_t>(TSA_CoreTouchDim2Center(coreIdx));
-    const auto dim1 = static_cast<uint8_t>(TSA_CoreTouchDim1Center(coreIdx));
+    const auto dim2 = static_cast<uint8_t>(Report::CoreTouchDim2Center(coreIdx));
+    const auto dim1 = static_cast<uint8_t>(Report::CoreTouchDim1Center(coreIdx));
     return Sensor::IsInSideZone(dim1, dim2, zone);
 }
 
@@ -1053,7 +1054,6 @@ extern "C" {
 void Touch_Init(void) { T::Init(); }
 void Touch_Clean(void) { T::Clean(); }
 void Touch_AssignPreIdxBasedOnID(void) { T::AssignPreIdxBasedOnId(); }
-uint8_t Touch_GetIdxBasedOnPreIdx(uint8_t prevIdx) { return T::GetIdxBasedOnPreIdx(prevIdx); }
 void Touch_KeepPrevTouchWithExceptionExcluded(void) { T::KeepPrevTouchWithExceptionExcluded(); }
 void Touch_UnitCopy(uint8_t curIdx, uint8_t prevIdx) { T::UnitCopy(curIdx, prevIdx); }
 void Touch_UnitRemove(uint8_t curIdx) { T::UnitRemove(curIdx); }

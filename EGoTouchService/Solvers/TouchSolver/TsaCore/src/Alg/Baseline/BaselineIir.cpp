@@ -101,9 +101,8 @@ void Reset() {
 
 }  // namespace Solvers::Tsa::Core::Baseline
 
-// raw 的 Rawdata / HardwareAnalyzer / HandGesture / TSA 还在调用的入口
+// raw 的调用方
 extern "C" {
 namespace B = Solvers::Tsa::Core::Baseline;
 void BLIIR_CalcDiffCommon(int16_t* dif, int16_t* raw, int16_t* bl) { B::CalcDiffCommon(dif, raw, bl); }
-void BLIIR_CalcRawCommon(int16_t* raw, int16_t* bl, int16_t* dif) { B::CalcRawCommon(raw, bl, dif); }
 }  // extern "C"

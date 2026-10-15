@@ -7,6 +7,7 @@
 #include "Alg/Baseline/Baseline.h"
 #include "Alg/SelfData/SelfData.h"
 #include "Alg/TouchThold/TouchThold.h"
+#include "App/Scenario.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
@@ -344,7 +345,7 @@ void Process() {
         ClearChecked(buf.commonModeNoise, GridMapBufSize() * size_t{2}, static_cast<size_t>(rows * cols) * 2);
         ProcessDim(fl.dim1Axis == 0 ? kDimCol : kDimRow, dyn.cmfThold.amp, dyn.cmfThold.grad, cols, rows);
         if (Static().blRefreshRequest == 0) Baseline::Compensation();
-        if (dyn.cmfThold.gameCommonNoise != 0 && static_cast<char>(TSA_IsGameScenario()) != 0) GameCommonNoise();
+        if (dyn.cmfThold.gameCommonNoise != 0 && Scenario::IsGame()) GameCommonNoise();
         CopyChecked(AftDim1CmfDif(), kAftCmfDifBytes, buf.dif, fl.sensorNum * size_t{2});
     }
     CopyChecked(AftCmfDif(), kAftCmfDifBytes, buf.dif, fl.sensorNum * size_t{2});
@@ -352,15 +353,11 @@ void Process() {
 
 }  // namespace Solvers::Tsa::Core::Cmf
 
-// raw 的 TSA / TSABuffer / HardwareAnalyzer 还在调用的入口
+// raw 的调用方
 extern "C" {
 namespace C = Solvers::Tsa::Core::Cmf;
-bool CMF_Malloc(void) { return C::Malloc(); }
-void CMF_Free(void) { C::Free(); }
-void CMF_Init(void) { C::Init(); }
 void CMF_Process(void) { C::Process(); }
 uint32_t CMF_GetCmfMethod(void) { return C::GetMethod(); }
-void CMF_EnablePreCMFDiffLog(uint8_t enabled) { Solvers::Tsa::Core::Image::At<uint8_t>(0x6bb7f040) = enabled; }
 void CMF_ProcessDimCommonOnBuf(int16_t* dst, const int16_t* src, int dim, int16_t thold, int16_t grad, uint8_t cols,
                                uint8_t rows, uint8_t) {
     C::ProcessDimCommonOnBuf(dst, src, dim, thold, grad, cols, rows);

@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "Alg/Touch/TouchData.h"
+#include "App/Scenario.h"
 #include "App/Sys.h"
 #include "App/TsaOut.h"
 #include "App/TsaStatic.h"
@@ -101,7 +102,7 @@ bool IsInRect(uint16_t dim1, uint16_t dim2, const Rect& r) {
 void ClearHotZones() { HotZones() = {}; }
 
 // HotZoneAdjustScenario @ 0x6baf406a
-bool IsScenarioAllowed() { return !TSA_IsTypingScenario() && static_cast<char>(Sys::IsScreenRotated()) == 0; }
+bool IsScenarioAllowed() { return !Scenario::IsTyping() && static_cast<char>(Sys::IsScreenRotated()) == 0; }
 
 // HotZoneIsInCore @ 0x6baf51b8
 // 所在格不在网格的最外一圈。
@@ -429,7 +430,4 @@ const char* GenerateAndGetDmdDescription() {
 extern "C" {
 void HotZoneAdjust_Init(void) { Solvers::Tsa::Core::HotZoneAdjust::Init(); }
 void HotZoneAdjust_Process(uint8_t curIdx, uint8_t prevIdx) { Solvers::Tsa::Core::HotZoneAdjust::Process(curIdx, prevIdx); }
-char* HotZoneAdjust_GenerateAndGetDmdDescription(void) {
-    return const_cast<char*>(Solvers::Tsa::Core::HotZoneAdjust::GenerateAndGetDmdDescription());
-}
 }  // extern "C"

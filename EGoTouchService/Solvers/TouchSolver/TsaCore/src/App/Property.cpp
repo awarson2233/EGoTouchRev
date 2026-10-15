@@ -8,6 +8,7 @@
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Image.h"
+#include "Common/Memory.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
@@ -185,12 +186,12 @@ void GetDifPrpt() {
 
 // TSAPrpt_Malloc @ 0x6baa076c
 bool Malloc() {
-    BlockIdx() = static_cast<uint8_t*>(TSA_MallocAndInit(GridBufSize()));
+    BlockIdx() = static_cast<uint8_t*>(Mem::Allocate(GridBufSize()));
     return BlockIdx() != nullptr;
 }
 
 // TSAPrpt_Free @ 0x6baa07ad
-void Free() { TSA_Free(reinterpret_cast<int64_t*>(&BlockIdx())); }
+void Free() { Mem::Release(BlockIdx()); }
 
 // TSAPrpt_Init @ 0x6baa07c8 → TSA_InitBlockIdx @ 0x6baa0b46
 void Init() {
@@ -272,11 +273,6 @@ int MaxCmfNoise() { return std::max(std::abs(Prpt().cmfNoiseMin), std::abs(Prpt(
 // raw 的调用方
 extern "C" {
 namespace P = Solvers::Tsa::Core::Property;
-bool TSAPrpt_Malloc(void) { return P::Malloc(); }
-void TSAPrpt_Free(void) { P::Free(); }
-void TSAPrpt_Init(void) { P::Init(); }
 void TSAPrpt_GetDifPreCMFPrpt(void) { P::GetDifPreCmf(); }
 void TSA_GetPrpt(int16_t* raw, int16_t* bl) { P::Get(reinterpret_cast<const uint16_t*>(raw), reinterpret_cast<const uint16_t*>(bl)); }
-int16_t TSA_GetMinSigPrpt(void) { return P::MinSig(); }
-int TSA_GetMaxCMFNoiseValue(void) { return P::MaxCmfNoise(); }
 }  // extern "C"

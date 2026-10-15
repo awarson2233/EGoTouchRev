@@ -6,6 +6,7 @@
 #include "Alg/Touch/TouchData.h"
 #include "Alg/Touch/TouchGeometry.h"
 #include "Alg/TouchSize/TouchSize.h"
+#include "App/Report.h"
 #include "App/TsaOut.h"
 #include "Common/Image.h"
 #include "Legacy/RawApi.h"
@@ -53,8 +54,8 @@ void MarkMoveInCorrected(TouchUnit& cur) {
 // ER_GetPrmt @ 0x6ba56ec0
 // 所在边的 move-in 修正区间；顺带记下这条边的边缘宽度（mm）。
 const ErEdgePrmt& EdgePrmt(uint32_t dimEdge) {
-    const auto side = static_cast<uint32_t>(TSA_DimEdgeToSide(static_cast<int>(dimEdge)));
-    const auto edge = static_cast<uint8_t>(TSA_SideToEdge(side));
+    const auto side = Report::DimEdgeToSide(dimEdge);
+    const auto edge = Report::SideToEdge(side);
     LimitMm() = PrmtFlash().erEdgeMm[edge].minDistMm;
     return PrmtFlashConst().erEdge[edge];
 }
@@ -64,7 +65,7 @@ const ErEdgePrmt& EdgePrmt(uint32_t dimEdge) {
 uint16_t MmToEdgePixel(uint8_t mm, int side) {
     const auto displayPx = static_cast<uint16_t>(TouchSize::MmToDisplayPixel(mm));
     const auto pos = static_cast<uint16_t>((displayPx >> 4) - 5);
-    const auto dimEdge = static_cast<int>(TSA_SideToDimEdge(side));
+    const auto dimEdge = static_cast<int>(Report::SideToDimEdge(side));
     return static_cast<uint16_t>(dimEdge == 1 || dimEdge == 2 ? Out::RevertDim1Pos(pos) : Out::RevertDim2Pos(pos));
 }
 
@@ -126,7 +127,7 @@ bool IsTouchNeedMoveInCorrection(uint8_t curIdx) {
     const TouchUnit& cur = Cur(curIdx);
     const Point pos = cur.rptPos;
     MoveInCorrectedButDisabled() = 0;
-    const uint32_t dimEdge = TSA_GetDimEdge(pos.dim1, pos.dim2);
+    const uint32_t dimEdge = Report::GetDimEdge(pos.dim1, pos.dim2);
     const ErEdgePrmt& prmt = EdgePrmt(dimEdge);
     const auto dist = static_cast<uint16_t>(Touch::GetDistToLogicEdge(static_cast<int>(dimEdge), static_cast<int16_t>(pos.dim1),
                                                                       static_cast<int16_t>(pos.dim2)));
@@ -265,7 +266,7 @@ void Init() {
         fc.erEdge[edge].minDist = MmToEdgePixel(static_cast<uint8_t>(fl.erEdgeMm[edge].minDistMm), kSides[edge]);
         fc.erEdge[edge].maxDist = MmToEdgePixel(static_cast<uint8_t>(fl.erEdgeMm[edge].maxDistMm), kSides[edge]);
     }
-    (void)EdgePrmt(static_cast<uint32_t>(TSA_SideToDimEdge(1)));
+    (void)EdgePrmt(Report::SideToDimEdge(1));
 }
 
 // ER_Process @ 0x6ba584b3
@@ -299,6 +300,5 @@ uint16_t GetLimit() { return static_cast<uint16_t>(static_cast<uint16_t>(TouchSi
 extern "C" {
 void ER_Init(void) { Solvers::Tsa::Core::EdgeRecovery::Init(); }
 void ER_Process(void) { Solvers::Tsa::Core::EdgeRecovery::Process(); }
-uint8_t ER_GetFlagMoveInCorrectedButDisabled(void) { return Solvers::Tsa::Core::EdgeRecovery::IsMoveInCorrectedButDisabled(); }
 uint16_t ER_GetLimit(void) { return Solvers::Tsa::Core::EdgeRecovery::GetLimit(); }
 }  // extern "C"

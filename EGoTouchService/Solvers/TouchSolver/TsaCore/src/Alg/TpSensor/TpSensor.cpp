@@ -7,6 +7,7 @@
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
 #include "Common/Image.h"
+#include "Common/Memory.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
@@ -123,22 +124,22 @@ void ScalingDif() {
 
 // TPSensor_Malloc @ 0x6ba6b9b0
 bool Malloc() {
-    FlagBuf() = static_cast<uint8_t*>(TSA_MallocAndInit(GridBufSize()));
+    FlagBuf() = static_cast<uint8_t*>(Mem::Allocate(GridBufSize()));
     if (FlagBuf() == nullptr) return false;
-    Dim1OffsetBuf() = static_cast<int8_t*>(TSA_MallocAndInit(GridBufSize()));
+    Dim1OffsetBuf() = static_cast<int8_t*>(Mem::Allocate(GridBufSize()));
     if (Dim1OffsetBuf() == nullptr) return false;
-    Dim2OffsetBuf() = static_cast<int8_t*>(TSA_MallocAndInit(GridBufSize()));
+    Dim2OffsetBuf() = static_cast<int8_t*>(Mem::Allocate(GridBufSize()));
     if (Dim2OffsetBuf() == nullptr) return false;
-    DifScaleBuf() = static_cast<uint16_t*>(TSA_MallocAndInit(GridBufSize() * 2u));
+    DifScaleBuf() = static_cast<uint16_t*>(Mem::Allocate(GridBufSize() * 2u));
     return DifScaleBuf() != nullptr;
 }
 
 // TPSensor_Free @ 0x6ba6ba80
 void Free() {
-    TSA_Free(reinterpret_cast<int64_t*>(&FlagBuf()));
-    TSA_Free(reinterpret_cast<int64_t*>(&Dim1OffsetBuf()));
-    TSA_Free(reinterpret_cast<int64_t*>(&Dim2OffsetBuf()));
-    TSA_Free(reinterpret_cast<int64_t*>(&DifScaleBuf()));
+    Mem::Release(FlagBuf());
+    Mem::Release(Dim1OffsetBuf());
+    Mem::Release(Dim2OffsetBuf());
+    Mem::Release(DifScaleBuf());
 }
 
 // TPSensor_Init @ 0x6ba6be2e
@@ -227,17 +228,3 @@ void RevertTranslateRaw(int16_t* raw, uint32_t n) {
 }
 
 }  // namespace Solvers::Tsa::Core::TpSensor
-
-// raw 的 TSA / TSABuffer / HardwareAnalyzer 还在调用的入口
-extern "C" {
-namespace TS = Solvers::Tsa::Core::TpSensor;
-uint64_t TPSensor_Malloc(void) { return TS::Malloc() ? 1 : 0; }
-void TPSensor_Free(void) { TS::Free(); }
-void TPSensor_Init(void) { TS::Init(); }
-void TPSensor_Reset(void) { TS::Reset(); }
-void TPSensor_ProcessRaw(void) { TS::ProcessRaw(); }
-void TPSensor_Process(void) { TS::Process(); }
-uint64_t TPSensor_IsSensorButNotNotch(int dim1, int dim2) { return TS::IsSensorButNotNotch(dim1, dim2) ? 1 : 0; }
-bool TPSensor_IsSensorValid(int dim1, int dim2) { return TS::IsSensorValid(dim1, dim2); }
-bool TPSensor_AddToBrokenSensorList(uint8_t dim1, uint8_t dim2, uint8_t type) { return TS::AddToBrokenSensorList(dim1, dim2, type); }
-}  // extern "C"

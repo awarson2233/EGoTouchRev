@@ -5,6 +5,7 @@
 #include "Alg/Debounce/Debounce.h"
 #include "Alg/Touch/PrevTouch.h"
 #include "Alg/Touch/Touch.h"
+#include "App/Report.h"
 #include "App/Sys.h"
 #include "App/TsaStatic.h"
 #include "Legacy/RawApi.h"
@@ -21,7 +22,7 @@ constexpr uint16_t kStrongTapCountMax = 5;
 TouchUnit& Cur(uint8_t idx) { return Touches().unit[idx]; }
 PrevTouchUnit& Prev(uint8_t idx) { return PrevTouches().unit[idx]; }
 
-bool WindowsPadEnabled() { return static_cast<char>(TSA_IsWindowsPadFeatureEnabled()) != 0; }
+bool WindowsPadEnabled() { return Report::IsWindowsPadFeatureEnabled(); }
 
 /// 本帧时间与 t 之差的低 32 位。
 uint32_t MsSince(uint64_t t) { return static_cast<uint32_t>(Static().curTimeMs - t); }
@@ -266,6 +267,5 @@ void Process() {
 }  // namespace Solvers::Tsa::Core::TouchEvent
 
 extern "C" {
-void TE_Init(void) {}
 void TE_Process(void) { Solvers::Tsa::Core::TouchEvent::Process(); }
 }  // extern "C"

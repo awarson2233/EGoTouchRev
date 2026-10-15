@@ -16,6 +16,7 @@
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
+#include "Common/Memory.h"
 #include "Extension/HardwareAnalyzer/HardwareAnalyzer.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
@@ -41,12 +42,12 @@ int16_t GetNextTime(int16_t t) {
 
 template <class T>
 bool Alloc(T*& slot, size_t count) {
-    slot = static_cast<T*>(TSA_MallocAndInit(static_cast<uint32_t>(count * sizeof(T))));
+    slot = static_cast<T*>(Mem::Allocate(static_cast<uint32_t>(count * sizeof(T))));
     return slot != nullptr;
 }
 
 template <class T>
-void Release(T*& slot) { TSA_Free(reinterpret_cast<int64_t*>(&slot)); }
+void Release(T*& slot) { Mem::Release(slot); }
 
 // TSABuffer_TzIsMergedHandle @ 0x6ba8ec68：格在区域里
 void TzIsMergedHandle(uint32_t i) {
@@ -306,8 +307,6 @@ bool InitProject() {
 extern "C" {
 namespace B = Solvers::Tsa::Core::Buffer;
 bool TSAMem_InitProject(void) { return B::InitProject(); }
-void TSAMem_Free(void) { B::FreeAll(); }
-void TSABuffer_Init(void) { B::Init(); }
 void TSABuffer_PreProcess(void) { B::PreProcess(); }
 void TSABuffer_PostProcess(void) { B::PostProcess(); }
 void TSABuffer_PrevFrameProcess(void) { B::PrevFrameProcess(); }

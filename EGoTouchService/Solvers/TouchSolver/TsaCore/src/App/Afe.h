@@ -56,6 +56,7 @@ void SetFrame(const Frame* frame);
 void SetInfo(const void* info);
 void SetMaxScanRate(uint16_t rate);
 [[nodiscard]] Frame* GetFrame();
+[[nodiscard]] const Caps* GetCaps();
 [[nodiscard]] uint32_t FrameStatus();
 
 /// 本帧开始：按帧上报的频点 / 扫描率更新当前索引。

@@ -31,5 +31,5 @@ void ReserveTouch(int keep) {
 
 }  // namespace Solvers::Tsa::Core::SigSumFilter
 
-// raw 的 TSA 还在调用的入口
+// raw 的调用方
 extern "C" void SigSumFilter_ReserveTouch(int keep) { Solvers::Tsa::Core::SigSumFilter::ReserveTouch(keep); }

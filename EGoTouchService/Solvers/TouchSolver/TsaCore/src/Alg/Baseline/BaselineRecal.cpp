@@ -100,5 +100,5 @@ void Compensation() {
 
 }  // namespace Solvers::Tsa::Core::Baseline
 
-// raw 的 CMF 还在调用的入口
+// raw 的调用方
 extern "C" void Baseline_Compensation(void) { Solvers::Tsa::Core::Baseline::Compensation(); }

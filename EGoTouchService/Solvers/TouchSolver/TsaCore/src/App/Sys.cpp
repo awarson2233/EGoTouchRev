@@ -6,6 +6,8 @@
 
 #include "Alg/Touch/TouchData.h"
 #include "Alg/Touch/TouchGeometry.h"
+#include "App/Report.h"
+#include "App/Tsa.h"
 #include "App/TsaStatic.h"
 #include "Common/Image.h"
 #include "Legacy/RawApi.h"
@@ -84,20 +86,16 @@ bool UpdateSideIdleModeOutput() {
     TsaStatic& s = Static();
     if (s.sideIdleReady == 0) {
         s.sideIdleReadyTime = kNone;
-        s.activeReason |= 2;
         return false;
     }
     if (IsJustOkToEnterSideIdle()) {
         s.sideIdleReadyTime = static_cast<int64_t>(s.curTimeMs);
-        s.activeReason |= 4;
         return false;
     }
     if (s.sideIdleReadyTime == kNone) {
-        s.activeReason |= 0x20000;
         return false;
     }
     if (static_cast<uint64_t>(s.sideIdleReadyTime) + PrmtFlash().idleEnterDelayMs < s.curTimeMs) return true;
-    s.activeReason |= 8;
     return false;
 }
 
@@ -153,7 +151,6 @@ void InitSysModule() {
     s.field12C = 0;
     s.field130 = 0;
     s.field134 = 0;
-    s.field138 = 0;
     s.resetJustCleared = 0;
     s.noisyResetAfterReset = 0;
     s.signalReverted = 0;
@@ -189,7 +186,7 @@ void InitInternalModule() {
     s.idleReadyTime = kNone;
     s.afeSideIdleExitTime = kNone;
     s.sideIdleReadyTime = kNone;
-    s.field038 = kNone;
+    s.idleDebounceStart = kNone;
     s.proxScreenOffTime = kNone;
     s.chargerTime = kNone;
     s.phoneCallTime = kNone;
@@ -217,14 +214,12 @@ void Init() {
     std::strncpy(s.logName, "TSA_DUMP", sizeof(s.logName) - 1);
     s.logName[0x31] = '\0';
     if (InitOnce() != 0) {
-        s.sensorDataCallback = reinterpret_cast<void*>(&TSA_GetSensorData);
-        s.field148 = 0;
         s.scenarioMask = 0;
         s.field11B = 1;
         s.xMin = 0;
-        s.xMax = static_cast<int16_t>(TSA_GetXRes() - 1);
+        s.xMax = static_cast<int16_t>(Report::XRes() - 1);
         s.yMin = 0;
-        s.yMax = static_cast<int16_t>(TSA_GetYRes() - 1);
+        s.yMax = static_cast<int16_t>(Report::YRes() - 1);
         s.field26C = 0;
         s.htiThold = PrmtFlash().peakFilterReferenceThreshold;
         s.proximityOnTime = kNone;
@@ -251,7 +246,6 @@ void PreProcess() {
     s.afeSideIdle = Afe::IsInSideIdle();
     s.prevNoisyBlReset = s.noisyBlReset;
     s.specialControlFlags = 0;
-    s.activeReason = 0;
     s.signalReverted = s.field3F1;
     if (!Afe::IsProximityScreenOff()) {
         s.proxScreenOffTime = kNone;
@@ -274,9 +268,9 @@ void PreProcess() {
 void PostProcess() {
     TsaStatic& s = Static();
     s.allFreqNoisy = IsAllFreqNoisy() ? 1 : 0;
-    s.okToIdle = static_cast<uint8_t>(TSA_IsOKToEnterIDLEMode());
-    s.idleReady = TSA_UpdateIDLEModeInternally() ? 1 : 0;
-    s.sideIdleReady = TSA_UpdateSideIDLEModeInternally() ? 1 : 0;
+    s.okToIdle = Tsa::IsOkToEnterIdle() ? 1 : 0;
+    s.idleReady = Tsa::UpdateIdleMode() ? 1 : 0;
+    s.sideIdleReady = Tsa::UpdateSideIdleMode() ? 1 : 0;
     s.idleRequest = UpdateIdleModeOutput() ? 1 : 0;
     s.sideIdleRequest = UpdateSideIdleModeOutput() ? 1 : 0;
     s.noisyBlReset = s.blNoisyReset;
@@ -440,11 +434,9 @@ bool DoesAfeRequireToExitIdle() {
     TsaStatic& s = Static();
     if (IsAfeJustExitIdle()) {
         s.afeIdleExitTime = static_cast<int64_t>(s.curTimeMs);
-        s.activeReason |= 0x800000;
         return true;
     }
     if (!Within(s.afeIdleExitTime, s.curTimeMs, kAfeIdleExitHoldMs)) return false;
-    s.activeReason |= 0x1000000;
     return true;
 }
 
@@ -474,7 +466,7 @@ uint32_t GetSigThold(int mode) {
 void SafeDiffCheck() {
     TsaStatic& s = Static();
     if (s.resetDiffRequested == 0 && !Afe::IsRawUnstable() && !Afe::IsRawJump()) {
-        if (s.trustedTouchCount != 0 && Touches().reportedThisFrame == 0 && Prpt().field1C4 < 0x32) {
+        if (s.trustedTouchCount != 0 && Touches().reportedThisFrame == 0 && Prpt().msDifInner.count < 0x32) {
             s.safeDif = 1;
             s.unsafeDif = 0;
         }
@@ -503,33 +495,14 @@ extern "C" {
 namespace S = Solvers::Tsa::Core::Sys;
 void TSAStatic_Init(void) { S::Init(); }
 void TSAStatic_PreProcess(void) { S::PreProcess(); }
-void TSAStatic_PostProcess(void) { S::PostProcess(); }
-void TSAStatic_UpdateCtrlFlags(uint32_t flags) { S::UpdateCtrlFlags(flags); }
-void TSAStatic_RestoreExtFeatures(uint32_t mask) { S::RestoreExtFeatures(mask); }
 bool TSAStatic_IsHWReset(void) { return S::IsHwReset(); }
-bool TSAStatic_IsHWResetPrev(void) { return S::IsHwResetPrev(); }
 uint64_t TSAStatic_GetCurrTimeStamp(void) { return S::CurrTimeStamp(); }
-uint64_t TSAStatic_GetMSTimeStamp(void) { return Solvers::Tsa::Core::Static().curTimeMs; }
-uint64_t TSAStatic_IsProximityEnabled(void) { return S::IsProximityEnabled() ? 1 : 0; }
 uint32_t TSAStatic_IsAFTModeEnabled(void) { return S::IsAftModeEnabled() ? 1 : 0; }
 uint64_t TSAStatic_IsSafeBaselineApplied(void) { return S::IsSafeBaselineApplied() ? 1 : 0; }
 uint8_t TSAStatic_IsSignalReverted(void) { return S::IsSignalReverted() ? 1 : 0; }
-bool TSAStatic_IsFreqShiftDone(void) { return S::IsFreqShiftDone(); }
 uint64_t TSAStatic_IsScreenRotated(void) { return S::IsScreenRotated() ? 1 : 0; }
 uint8_t TSAStatic_IsChargerPlugged(void) { return S::IsChargerPlugged() ? 1 : 0; }
-bool TSAStatic_IsChargerPluggedNoDebounce(void) { return S::IsChargerPluggedNoDebounce(); }
 uint8_t TSAStatic_IsAllFreqNoisy(void) { return S::IsAllFreqNoisy() ? 1 : 0; }
 uint8_t TSAStatic_IsAllFreqBecomeNoisy(void) { return S::IsAllFreqBecomeNoisy() ? 1 : 0; }
-uint8_t TSAStatic_IsAFEJustEnterIDLEMode(void) { return S::IsAfeJustEnterIdle() ? 1 : 0; }
-uint8_t TSAStatic_IsAFEJustExitIDLEMode(void) { return S::IsAfeJustExitIdle() ? 1 : 0; }
-uint8_t TSAStatic_IsAFEJustExitSideIDLEMode(void) { return S::IsAfeJustExitSideIdle() ? 1 : 0; }
-uint64_t TSAStatic_IsAFEEnterIdleTimeout(void) { return S::IsAfeEnterIdleTimeout() ? 1 : 0; }
-uint64_t TSAStatic_IsAFEEnterSideIdleTimeout(void) { return S::IsAfeEnterSideIdleTimeout() ? 1 : 0; }
-uint8_t TSAStatic_DoesAFERequireToExitIDLEMode(void) { return S::DoesAfeRequireToExitIdle() ? 1 : 0; }
-uint8_t TSAStatic_DoesAFERequireToExitSideIDLEMode(void) { return S::DoesAfeRequireToExitSideIdle() ? 1 : 0; }
-uint8_t TSAStatic_IsOKToEnterIDLEMode(void) { return S::IsOkToEnterIdle() ? 1 : 0; }
-uint8_t TSAStatic_IsOKToEnterSideIDLEMode(void) { return S::IsOkToEnterSideIdle() ? 1 : 0; }
-uint32_t TSAStatic_GetSigThold(int mode) { return S::GetSigThold(mode); }
 void TSAStatic_SafeDiffCheck(void) { S::SafeDiffCheck(); }
-void TSAStatic_ProcessAftTouchEvent(void) { S::ProcessAftTouchEvent(); }
 }  // extern "C"

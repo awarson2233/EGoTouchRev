@@ -29,5 +29,5 @@ void Process() {
 
 }  // namespace Solvers::Tsa::Core::GridIir
 
-// raw 的 TSA 还在调用的入口
+// raw 的调用方
 extern "C" void GridIIR_Process(void) { Solvers::Tsa::Core::GridIir::Process(); }

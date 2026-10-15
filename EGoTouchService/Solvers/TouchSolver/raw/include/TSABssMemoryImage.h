@@ -173,7 +173,6 @@ extern uint8_t g_tsaMemoryImage[kTsaMemoryImageSize];
 #define _refptr_g_tzAccess                         TSA_MEM_AT(0x6bbc8960ULL)
 #define _refptr_g_zValPrevToCurRatio               TSA_MEM_AT(0x6bbc0950ULL)
 #define _refptr_memset                             TSA_MEM_AT(0x6bb4e540ULL)
-#define _refptr_TSA_GetSensorData                  (&TSA_GetSensorData)
 
 // ----------------------------------------------------------------------------
 // 2. Named Global Symbols in .data / .rdata / .bss

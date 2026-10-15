@@ -240,8 +240,8 @@ void RegisterTouch(TouchZoneUnit& z) {
     t.field059 = z.gripRegion;
     t.maxMinSigOff = z.maxMinSigOff;
     t.field05C = z.field338;
-    t.field056 = z.gripRatioDim1;
-    t.field057 = z.gripRatioDim2;
+    t.gripRatioDim1 = z.gripRatioDim1;
+    t.gripRatioDim2 = z.gripRatioDim2;
     UpdateGripRatio(idx, z);
     t.curMajorMm = z.curMajorMm;
     t.majorMm = z.majorMm;
@@ -256,7 +256,7 @@ void RegisterTouch(TouchZoneUnit& z) {
     t.sigSum = z.sigSum;
     t.field090 = z.gripRegionSigSum;
     t.field098 = z.sigSumAll;
-    t.field01C = ZValue(t.sigSum);
+    t.pressure = ZValue(t.sigSum);
     t.field14A = static_cast<uint16_t>(z.sigThold);
     t.zoneSignalScale = z.maxSig;
     t.peakIdx = z.maxSigPeakIdx;

@@ -132,12 +132,9 @@ uint64_t SqMmToSqPixel(uint16_t sqMm) {
 namespace TS = Solvers::Tsa::Core::TouchSize;
 
 extern "C" {
-void TS_Init(void) {}
 void TS_Process(void) { TS::Process(); }
 void TS_PostProcess(void) { TS::PostProcess(); }
 int TS_MMToPixel(uint8_t mm) { return TS::MmToPixel(mm); }
 uint32_t TS_MMToDisplayPixel(uint8_t mm) { return TS::MmToDisplayPixel(mm); }
 int TS_PixelToMM(uint16_t pixel) { return TS::PixelToMm(pixel); }
-uint64_t TS_SQPixelToSQMM(uint32_t sqPixel) { return TS::SqPixelToSqMm(sqPixel); }
-uint64_t TS_SQMMToSQPixel(uint16_t sqMm) { return TS::SqMmToSqPixel(sqMm); }
 }  // extern "C"

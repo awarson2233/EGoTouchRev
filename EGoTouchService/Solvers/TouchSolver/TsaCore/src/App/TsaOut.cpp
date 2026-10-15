@@ -3,6 +3,8 @@
 #include "Alg/Touch/PrevTouch.h"
 #include "Alg/Touch/Touch.h"
 #include "Alg/Touch/TouchData.h"
+#include "App/Report.h"
+#include "App/Scenario.h"
 #include "App/Sys.h"
 #include "App/TsaStatic.h"
 #include "Legacy/RawApi.h"
@@ -70,9 +72,9 @@ void PostProcessUnit(uint8_t idx, uint8_t& pressCount) {
     }
     TsaStatic& s = Static();
     if (DisplayXPos(idx) < s.xMin) {
-        TSA_SetXPos(idx, s.xMin);
+        Report::SetXPos(idx, s.xMin);
     } else if (static_cast<uint16_t>(s.xMax) < DisplayXPos(idx)) {
-        TSA_SetXPos(idx, static_cast<uint16_t>(s.xMax));
+        Report::SetXPos(idx, static_cast<uint16_t>(s.xMax));
     }
     ++tt.field005;
     ++tt.field006;
@@ -97,7 +99,7 @@ void PostProcess() {
     uint8_t pressCount = 0;
     tt.field005 = 0;
     tt.field006 = 0;
-    if (tt.field003 != 0 && (Static().featureFlags & kFeatSmartCover) == 0 && static_cast<uint8_t>(TSA_IsGameScenario()) == 0) {
+    if (tt.liftOffCount != 0 && (Static().featureFlags & kFeatSmartCover) == 0 && !Scenario::IsGame()) {
         tt.count = 0;
     } else {
         for (int k = static_cast<int8_t>(tt.count) - 1; k >= 0; --k) PostProcessBefUdfpUnit(static_cast<uint8_t>(k));
@@ -203,13 +205,9 @@ void TSAOut_PostProcess(void) { O::PostProcess(); }
 uint16_t TSAOut_DisplayXPos(uint8_t idx, ...) { return O::DisplayXPos(idx); }
 uint16_t TSAOut_DisplayYPos(uint8_t idx, ...) { return O::DisplayYPos(idx); }
 uint16_t TSAOut_RptXPos(uint8_t idx) { return O::RptXPos(idx); }
-uint16_t TSAOut_RptYPos(uint8_t idx) { return O::RptYPos(idx); }
 uint16_t TSAOut_Dim1PosInternal(uint16_t pos, uint16_t scale) { return O::Dim1PosInternal(pos, scale); }
 uint16_t TSAOut_Dim2PosInternal(uint16_t pos, uint16_t scale) { return O::Dim2PosInternal(pos, scale); }
-uint16_t TSAOut_Pixel2DisplayDim1(uint16_t pos) { return O::Pixel2DisplayDim1(pos); }
-uint16_t TSAOut_Pixel2DisplayDim2(uint16_t pos) { return O::Pixel2DisplayDim2(pos); }
 uint32_t TSAOut_RevertDim1Pos(uint16_t pos) { return O::RevertDim1Pos(pos); }
-uint32_t TSAOut_RevertDim2Pos(uint16_t pos) { return O::RevertDim2Pos(pos); }
 uint32_t TSAOut_IntToExtDist(int16_t dist) { return O::IntToExtDist(dist); }
 uint64_t TSAOut_ExtToIntDist(uint16_t dist) { return O::ExtToIntDist(dist); }
 uint16_t TSAOut_Axis(int16_t axis) { return O::Axis(axis); }

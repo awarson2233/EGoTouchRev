@@ -104,11 +104,11 @@ void PostProcess() {
     PrevTouchTable& prev = PrevTouches();
 
     cur.stateFlags &= ~2u;
-    if (cur.field003 == 0 && prev.field003 != 0) cur.stateFlags |= 2;
+    if (cur.liftOffCount == 0 && prev.liftOffCount != 0) cur.stateFlags |= 2;
     cur.stateFlags &= ~4u;
-    if (cur.field003 != 0 && prev.field003 == 0) cur.stateFlags |= 4;
+    if (cur.liftOffCount != 0 && prev.liftOffCount == 0) cur.stateFlags |= 4;
 
-    prev.field003 = cur.field003;
+    prev.liftOffCount = cur.liftOffCount;
     prev.field004 = cur.field004;
     cur.newExtFlags = cur.extFlags & ~prev.extFlags;
     prev.extFlags = cur.extFlags;
@@ -347,12 +347,9 @@ void PrevTouch_AssignCurIdxBasedOnID(void) { PT::AssignCurIdxBasedOnId(); }
 uint8_t PrevTouch_GetIdxBasedOnID(char id) { return PT::GetIdxBasedOnId(static_cast<uint8_t>(id)); }
 uint8_t PrevTouch_GetIdxBasedOnCurIdx(uint8_t curIdx) { return PT::GetIdxBasedOnCurIdx(curIdx); }
 uint64_t PrevTouch_IsValidId(char id) { return PT::IsValidId(static_cast<uint8_t>(id)); }
-uint8_t PrevTouch_IsAnyExceptionDetected(void) { return PT::IsAnyExceptionDetected(); }
 void PrevTouch_PostProcess(void) { PT::PostProcess(); }
 void PrevTouch_UnitCopy(uint8_t prevIdx, uint8_t curIdx) { PT::UnitCopy(prevIdx, curIdx); }
 void PrevTouch_UnitUpdate(uint8_t prevIdx, uint8_t curIdx) { PT::UnitUpdate(prevIdx, curIdx); }
-uint8_t PrevTouch_HistoryBufferGetNum(uint8_t prevIdx) { return PT::HistoryBufferGetNum(prevIdx); }
-bool PrevTouch_IsHistoryBufferFull(uint8_t prevIdx) { return PT::IsHistoryBufferFull(prevIdx); }
 void PrevTouch_HistoryBufferClean(uint8_t prevIdx) { PT::HistoryBufferClean(prevIdx); }
 uint64_t PrevTouch_HistoryBufferPush(uint8_t prevIdx, uint64_t* entry) {
     return PT::HistoryBufferPush(prevIdx, *reinterpret_cast<const HistoryEntry*>(entry));

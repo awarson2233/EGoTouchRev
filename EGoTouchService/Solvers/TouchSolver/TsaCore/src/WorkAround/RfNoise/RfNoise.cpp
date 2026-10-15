@@ -7,6 +7,7 @@
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Image.h"
+#include "Common/Memory.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
@@ -120,20 +121,20 @@ bool Scan(bool alongDim1, int16_t& noise, uint8_t& noisyLines) {
 bool Malloc() {
     const uint32_t bytes = GridBufSize() * 2u;
     State& s = S();
-    s.prevDif = static_cast<int16_t*>(TSA_MallocAndInit(bytes));
+    s.prevDif = static_cast<int16_t*>(Mem::Allocate(bytes));
     if (s.prevDif == nullptr) return false;
-    s.dif2 = static_cast<int16_t*>(TSA_MallocAndInit(bytes));
+    s.dif2 = static_cast<int16_t*>(Mem::Allocate(bytes));
     if (s.dif2 == nullptr) return false;
-    s.dif3 = static_cast<int16_t*>(TSA_MallocAndInit(bytes));
+    s.dif3 = static_cast<int16_t*>(Mem::Allocate(bytes));
     return s.dif3 != nullptr;
 }
 
 // RFNoise_Free @ 0x6bb44483
 void Free() {
     State& s = S();
-    TSA_Free(reinterpret_cast<int64_t*>(&s.prevDif));
-    TSA_Free(reinterpret_cast<int64_t*>(&s.dif2));
-    TSA_Free(reinterpret_cast<int64_t*>(&s.dif3));
+    Mem::Release(s.prevDif);
+    Mem::Release(s.dif2);
+    Mem::Release(s.dif3);
 }
 
 // RFNoise_Init @ 0x6bb444b6
@@ -174,16 +175,3 @@ void SavePrevRaw2RawDif() {
 }
 
 }  // namespace Solvers::Tsa::Core::RfNoise
-
-// raw 的 HardwareAnalyzer / TSABuffer 还在调用的入口
-extern "C" {
-namespace R = Solvers::Tsa::Core::RfNoise;
-uint64_t RFNoise_Malloc(void) { return R::Malloc() ? 1 : 0; }
-void RFNoise_Free(void) { R::Free(); }
-void RFNoise_Init(void) { R::Init(); }
-uint8_t RFNoise_Detect(void) { return R::Detect() ? 1 : 0; }
-uint8_t RFNoise_IsDetected(void) { return R::IsDetected() ? 1 : 0; }
-int16_t RFNoise_GetNoiseValue(void) { return R::NoiseValue(); }
-uint8_t RFNoise_GetNumNoisyLine(void) { return R::NoisyLineCount(); }
-void RFNoise_CopyPrevRaw2RawDif(void) { R::SavePrevRaw2RawDif(); }
-}  // extern "C"

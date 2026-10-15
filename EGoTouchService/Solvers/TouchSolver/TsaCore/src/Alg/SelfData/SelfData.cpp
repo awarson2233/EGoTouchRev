@@ -113,8 +113,7 @@ void Reset() { ZeroFill(SelfBuf()); }
 
 }  // namespace Solvers::Tsa::Core::Self
 
-// raw 的 TSA 还在调用的入口
+// raw 的调用方
 extern "C" {
-void Self_Process(void) { Solvers::Tsa::Core::Self::Process(); }
 void Self_Reset(void) { Solvers::Tsa::Core::Self::Reset(); }
 }  // extern "C"

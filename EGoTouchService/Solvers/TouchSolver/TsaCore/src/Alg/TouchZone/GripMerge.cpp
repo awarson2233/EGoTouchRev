@@ -15,6 +15,7 @@
 #include "Alg/TouchZone/SubTouchZone.h"
 #include "Alg/TouchZone/TouchZone.h"
 #include "Alg/TouchZone/TouchZoneInternal.h"
+#include "App/Report.h"
 #include "App/Sys.h"
 #include "App/TsaBuffer.h"
 #include "Legacy/RawApi.h"
@@ -82,7 +83,7 @@ bool IsGripMergeAllowed(const TouchZoneUnit& z) {
 // TZ_GetOutEdgeSumRatio @ 0x6ba84e4c：质心所在一侧的边上信号和相对历史触点（%）。
 void GetOutEdgeSumRatio(TouchZoneUnit& z) {
     const PrevTouchUnit& prev = PrevAt(z.prevIdx);
-    const uint32_t side = TSA_GetSide(z.centroidDim1, z.centroidDim2);
+    const uint32_t side = Report::GetSide(z.centroidDim1, z.centroidDim2);
     const bool dim1 = side == kSideDim1Near || side == kSideDim1Far;
     const int32_t ref = dim1 ? prev.zoneEdgeSumDim1 : prev.zoneEdgeSumDim2;
     const int32_t cur = dim1 ? z.edgeSumDim1 : z.edgeSumDim2;
