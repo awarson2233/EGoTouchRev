@@ -167,7 +167,7 @@ void Init() {
 void Process(int16_t fingerThold, int16_t gloveThold, int16_t* peakThold, int16_t* touchThold, int16_t* touchDownThold) {
     const int16_t peak = GetPeakThold(fingerThold, gloveThold);
     const PrevTouchTable& prev = PrevTouches();
-    if (prev.count == 1 && prev.field005 == 1 && (prev.unit[0].volatileFlags & 0x1000) == 0) {
+    if (prev.count == 1 && prev.reportCount == 1 && (prev.unit[0].volatileFlags & 0x1000) == 0) {
         *peakThold = static_cast<int16_t>(peak * 3 / 4);
     } else {
         *peakThold = peak;

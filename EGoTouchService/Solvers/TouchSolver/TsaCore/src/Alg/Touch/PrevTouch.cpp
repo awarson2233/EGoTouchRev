@@ -116,12 +116,11 @@ void PostProcess() {
     prev.reportedCount = cur.reportedCount;
     prev.field002 = cur.field002;
     prev.maxCoreEllipseRate = cur.maxCoreEllipseRate;
-    prev.field005 = cur.field005;
+    prev.reportCount = cur.reportCount;
     prev.coreTouchCount = cur.coreTouchCount;
     prev.reportedThisFrame = cur.reportedThisFrame;
     prev.lastReportedId = cur.lastReportedId;
     prev.gripReportedThisFrame = cur.gripReportedThisFrame;
-    prev.field00B = cur.field00B;
     prev.field00C = cur.field00C;
     prev.field00D = cur.field00D;
     prev.field00E = cur.field00E;

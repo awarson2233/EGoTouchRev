@@ -760,9 +760,8 @@ void KeepPrevTouchWithExceptionExcluded() {
     cur.reportedCount = prev.reportedCount;
     cur.field002 = prev.field002;
     cur.maxCoreEllipseRate = prev.maxCoreEllipseRate;
-    cur.field005 = prev.field005;
+    cur.reportCount = prev.reportCount;
     cur.coreTouchCount = prev.coreTouchCount;
-    cur.field00B = prev.field00B;
     cur.field00C = prev.field00C;
     cur.field00D = prev.field00D;
     cur.field00E = prev.field00E;
@@ -1063,11 +1062,6 @@ void Touch_ProcessBetaGrip(void) { T::ProcessBetaGrip(); }
 void Touch_ProcessExtInfo(void) { T::ProcessExtInfo(); }
 void Touch_ThenarFeatureReset(void) { T::ThenarFeatureReset(); }
 void Touch_CreatePostReport(uint8_t curIdx, uint8_t) { T::CreatePostReport(curIdx); }
-void Touch_GetRptSQDistMMFromStartPos(uint8_t curIdx, uint8_t prevIdx) { T::GetRptSqDistMmFromStartPos(curIdx, prevIdx); }
-void Touch_GetRptSQDistMMFromPrevPos(uint8_t curIdx, uint8_t prevIdx) { T::GetRptSqDistMmFromPrevPos(curIdx, prevIdx); }
-void Touch_GetRptSQDistDisplayPixelFromPrevPos(uint8_t curIdx, uint8_t prevIdx) {
-    T::GetRptSqDistDisplayPixelFromPrevPos(curIdx, prevIdx);
-}
 void Touch_GetFltSQDistPixelFromPrevPos(uint8_t curIdx, uint8_t prevIdx) { T::GetFltSqDistPixelFromPrevPos(curIdx, prevIdx); }
 uint16_t Touch_GetSQDistMMInBetween(uint8_t idxA, uint8_t idxB) { return T::GetSqDistMmInBetween(idxA, idxB); }
 uint16_t Touch_GetSQDistMM(uint16_t dim1A, uint16_t dim2A, uint16_t dim1B, uint16_t dim2B) {

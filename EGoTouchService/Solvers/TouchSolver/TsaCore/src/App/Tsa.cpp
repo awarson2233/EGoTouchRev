@@ -44,6 +44,7 @@
 #include "Prmt/TsaPrmt.h"
 #include "Rejection/Asa/Asa.h"
 #include "Rejection/StylusAft/StylusAft.h"
+#include "Rejection/TouchReport/TouchReport.h"
 #include "WorkAround/BadChannel/BadChannel.h"
 #include "WorkAround/ToeSynaBl/ToeSynaBl.h"
 
@@ -97,7 +98,7 @@ void MsInitCommon(bool full) {
     TouchZone::Init();
     Property::Init();
     EdgeRecovery::Init();
-    TouchReport_Init();
+    TouchReport::Init();
     TouchMode::Init();
     Exception::Init();
     AntiTouch_Init();
@@ -207,7 +208,7 @@ void TrackAndReport() {
     TouchMode::Process();
     AntiTouch_Process();
     Touch::ProcessBetaGrip();
-    TouchReport_Process();
+    TouchReport::Process();
     Touch::ProcessExtInfo();
     HardwareAnalyzer::PostProcess();
     HandGesture_Process();

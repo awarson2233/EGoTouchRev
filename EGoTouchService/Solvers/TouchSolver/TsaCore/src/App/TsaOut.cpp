@@ -76,7 +76,7 @@ void PostProcessUnit(uint8_t idx, uint8_t& pressCount) {
     } else if (static_cast<uint16_t>(s.xMax) < DisplayXPos(idx)) {
         Report::SetXPos(idx, static_cast<uint16_t>(s.xMax));
     }
-    ++tt.field005;
+    ++tt.reportCount;
     ++tt.field006;
     if ((u.volatileFlags & kVolPress) != 0) ++pressCount;
     s.lastReportTime = static_cast<int64_t>(s.curTimeMs);
@@ -97,7 +97,7 @@ void PostProcessUnit(uint8_t idx, uint8_t& pressCount) {
 void PostProcess() {
     TouchTable& tt = Touches();
     uint8_t pressCount = 0;
-    tt.field005 = 0;
+    tt.reportCount = 0;
     tt.field006 = 0;
     if (tt.liftOffCount != 0 && (Static().featureFlags & kFeatSmartCover) == 0 && !Scenario::IsGame()) {
         tt.count = 0;

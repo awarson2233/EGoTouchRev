@@ -1005,11 +1005,7 @@ void HardwareAnalyzer_SetSoftException(void);
 
 
 
-// HotZoneAdjust_Init @ 0x6baf3fdd (Tracking\HotZoneAdjust.c)
-void HotZoneAdjust_Init(void);
 
-// HotZoneAdjust_Process @ 0x6baf729e (Tracking\HotZoneAdjust.c)
-void HotZoneAdjust_Process(byte param_1,byte param_2);
 
 
 
@@ -2014,47 +2010,21 @@ void TouchMode_Process(void);
 
 
 
-// TouchReport_GoBackMultiStep @ 0x6ba7a79b (Rejection\TouchReport.c)
-void TouchReport_GoBackMultiStep(byte param_1,byte param_2);
 
-// TouchReport_GoBackOneStep @ 0x6ba7a134 (Rejection\TouchReport.c)
-void TouchReport_GoBackOneStep(byte param_1,byte param_2);
 
 // TouchReport_GoBackReport @ 0x6ba7ae1d (Rejection\TouchReport.c)
 void TouchReport_GoBackReport(byte param_1,undefined1 param_2);
 
-// TouchReport_Init @ 0x6ba7a120 (Rejection\TouchReport.c)
-void TouchReport_Init(void);
 
-// TouchReport_IsAllTouchBack @ 0x6ba7a3d6 (Rejection\TouchReport.c)
-undefined1 TouchReport_IsAllTouchBack(void);
 
-// TouchReport_IsAnyTouchCancelByPosture @ 0x6ba7a487 (Rejection\TouchReport.c)
-undefined8 TouchReport_IsAnyTouchCancelByPosture(void);
 
-// TouchReport_IsHistoryBufferApplied @ 0x6ba7b373 (Rejection\TouchReport.c)
-undefined1 TouchReport_IsHistoryBufferApplied (byte param_1,undefined1 param_2,undefined2 *param_3,undefined2 *param_4);
 
-// TouchReport_IsMultStepBackEnable @ 0x6ba7a3b0 (Rejection\TouchReport.c)
-bool TouchReport_IsMultStepBackEnable(void);
 
-// TouchReport_IsReadyToCancel @ 0x6ba7a577 (Rejection\TouchReport.c)
-undefined8 TouchReport_IsReadyToCancel(undefined8 param_1,byte param_2);
 
-// TouchReport_PostureAntiTouch @ 0x6ba7ae86 (Rejection\TouchReport.c)
-undefined8 TouchReport_PostureAntiTouch(byte param_1,byte param_2);
 
-// TouchReport_Process @ 0x6ba7be73 (Rejection\TouchReport.c)
-void TouchReport_Process(void);
 
-// TouchReport_ProcessUnit @ 0x6ba7b86e (Rejection\TouchReport.c)
-void TouchReport_ProcessUnit(byte param_1,byte param_2);
 
-// TouchReport_ToBeReported @ 0x6ba7afbc (Rejection\TouchReport.c)
-bool TouchReport_ToBeReported(byte param_1,byte param_2);
 
-// TouchReport_UpdateStartReportPoint @ 0x6ba7b657 (Rejection\TouchReport.c)
-void TouchReport_UpdateStartReportPoint(byte param_1,byte param_2);
 
 
 
@@ -2104,14 +2074,8 @@ short Touch_GetFormattedTimeInterval(short param_1);
 
 
 
-// Touch_GetRptSQDistDisplayPixelFromPrevPos @ 0x6ba73ba1 (Tracking\Touch.c)
-void Touch_GetRptSQDistDisplayPixelFromPrevPos(byte param_1,byte param_2);
 
-// Touch_GetRptSQDistMMFromPrevPos @ 0x6ba73ac1 (Tracking\Touch.c)
-void Touch_GetRptSQDistMMFromPrevPos(byte param_1,byte param_2);
 
-// Touch_GetRptSQDistMMFromStartPos @ 0x6ba739e1 (Tracking\Touch.c)
-void Touch_GetRptSQDistMMFromStartPos(byte param_1,byte param_2);
 
 
 // Touch_GetSQDistMM @ 0x6ba734be (Tracking\Touch.c)

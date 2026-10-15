@@ -194,9 +194,7 @@ struct TouchUnit {
     uint16_t waterCells;  // 来源区域的水膜格数
     uint16_t field14A;
     uint8_t zoneIdx;  // 来源区域
-    uint8_t reserved14D[0x3];
-    uint32_t field150;
-    uint8_t reserved154[0xA];
+    uint8_t reserved14D[0x11];
     int16_t zoneSignalScale;  // 来源区域的信号刻度，锁存进 signalScale
     uint32_t trustTag;  // 1 / 2：本帧确认的可信点类别
     uint8_t field164;
@@ -337,7 +335,6 @@ static_assert(offsetof(TouchUnit, prevIdx) == 0x147);
 static_assert(offsetof(TouchUnit, waterCells) == 0x148);
 static_assert(offsetof(TouchUnit, field14A) == 0x14A);
 static_assert(offsetof(TouchUnit, zoneIdx) == 0x14C);
-static_assert(offsetof(TouchUnit, field150) == 0x150);
 static_assert(offsetof(TouchUnit, zoneSignalScale) == 0x15E);
 static_assert(offsetof(TouchUnit, trustTag) == 0x160);
 static_assert(offsetof(TouchUnit, field164) == 0x164);
@@ -495,7 +492,7 @@ struct PrevTouchUnit {
     uint8_t queueDim2[16];
     Point startPos;  // 按下消抖开始时的位置
     Point firstRptPos;  // 第一次对外报点的位置
-    uint16_t field35E;
+    uint8_t reserved35E[0x2];
     uint32_t field360;
     Point falseFlickPos;
     uint8_t reserved368[0x4];
@@ -534,10 +531,10 @@ struct PrevTouchUnit {
     uint8_t reserved3E8[0x64];
     int8_t stylusWithdrawn;  // 笔防误触：整条轨迹已撤下
     int8_t stylusSuppressFrames;  // 笔防误触：还要压制的帧数
-    uint8_t field44E;
+    uint8_t stepBackCount;  // 多步回退：已退的步数（7 为退完）
     uint8_t reserved44F[0x1];
-    SPoint field450;
-    Point field454;
+    SPoint stepBackDelta;  // 多步回退：起退时相对目标的位移
+    Point stepBackOrigin;  // 多步回退：目标位置
     uint64_t field458;
     uint16_t field460;
     uint16_t field462;
@@ -690,7 +687,6 @@ static_assert(offsetof(PrevTouchUnit, queueDim1) == 0x336);
 static_assert(offsetof(PrevTouchUnit, queueDim2) == 0x346);
 static_assert(offsetof(PrevTouchUnit, startPos) == 0x356);
 static_assert(offsetof(PrevTouchUnit, firstRptPos) == 0x35A);
-static_assert(offsetof(PrevTouchUnit, field35E) == 0x35E);
 static_assert(offsetof(PrevTouchUnit, field360) == 0x360);
 static_assert(offsetof(PrevTouchUnit, falseFlickPos) == 0x364);
 static_assert(offsetof(PrevTouchUnit, falseFlickOffset) == 0x36C);
@@ -722,9 +718,9 @@ static_assert(offsetof(PrevTouchUnit, maxField06A) == 0x3DE);
 static_assert(offsetof(PrevTouchUnit, strongZnTime) == 0x3E0);
 static_assert(offsetof(PrevTouchUnit, stylusWithdrawn) == 0x44C);
 static_assert(offsetof(PrevTouchUnit, stylusSuppressFrames) == 0x44D);
-static_assert(offsetof(PrevTouchUnit, field44E) == 0x44E);
-static_assert(offsetof(PrevTouchUnit, field450) == 0x450);
-static_assert(offsetof(PrevTouchUnit, field454) == 0x454);
+static_assert(offsetof(PrevTouchUnit, stepBackCount) == 0x44E);
+static_assert(offsetof(PrevTouchUnit, stepBackDelta) == 0x450);
+static_assert(offsetof(PrevTouchUnit, stepBackOrigin) == 0x454);
 static_assert(offsetof(PrevTouchUnit, field458) == 0x458);
 static_assert(offsetof(PrevTouchUnit, field460) == 0x460);
 static_assert(offsetof(PrevTouchUnit, field462) == 0x462);
@@ -746,13 +742,13 @@ struct TouchTable {
     uint8_t field002;
     uint8_t liftOffCount;  // 本帧对外报抬起的触点数
     uint8_t field004;
-    uint8_t field005;
+    uint8_t reportCount;  // 本帧 TouchReport 判为要报的触点数
     uint8_t field006;
     uint8_t coreTouchCount;  // HardwareAnalyzer：报过点、不贴边、非多指拆分的触点数
     uint8_t reportedThisFrame;  // 本帧对外报点且未抬起的触点数
     uint8_t lastReportedId;  // 其中最后一个的 ID
     uint8_t gripReportedThisFrame;  // 其中带握持 / 合并标记的个数
-    uint8_t field00B;
+    uint8_t reserved00B[0x1];
     uint8_t field00C;
     uint8_t field00D;
     uint8_t field00E;
@@ -781,13 +777,12 @@ static_assert(offsetof(TouchTable, reportedCount) == 0x001);
 static_assert(offsetof(TouchTable, field002) == 0x002);
 static_assert(offsetof(TouchTable, liftOffCount) == 0x003);
 static_assert(offsetof(TouchTable, field004) == 0x004);
-static_assert(offsetof(TouchTable, field005) == 0x005);
+static_assert(offsetof(TouchTable, reportCount) == 0x005);
 static_assert(offsetof(TouchTable, field006) == 0x006);
 static_assert(offsetof(TouchTable, coreTouchCount) == 0x007);
 static_assert(offsetof(TouchTable, reportedThisFrame) == 0x008);
 static_assert(offsetof(TouchTable, lastReportedId) == 0x009);
 static_assert(offsetof(TouchTable, gripReportedThisFrame) == 0x00A);
-static_assert(offsetof(TouchTable, field00B) == 0x00B);
 static_assert(offsetof(TouchTable, field00C) == 0x00C);
 static_assert(offsetof(TouchTable, field00D) == 0x00D);
 static_assert(offsetof(TouchTable, field00E) == 0x00E);
@@ -815,13 +810,13 @@ struct PrevTouchTable {
     uint8_t field002;
     uint8_t liftOffCount;  // 本帧对外报抬起的触点数
     uint8_t field004;
-    uint8_t field005;
+    uint8_t reportCount;  // 本帧 TouchReport 判为要报的触点数
     uint8_t field006;
     uint8_t coreTouchCount;  // HardwareAnalyzer：报过点、不贴边、非多指拆分的触点数
     uint8_t reportedThisFrame;  // 本帧对外报点且未抬起的触点数
     uint8_t lastReportedId;  // 其中最后一个的 ID
     uint8_t gripReportedThisFrame;  // 其中带握持 / 合并标记的个数
-    uint8_t field00B;
+    uint8_t reserved00B[0x1];
     uint8_t field00C;
     uint8_t field00D;
     uint8_t field00E;
@@ -850,13 +845,12 @@ static_assert(offsetof(PrevTouchTable, reportedCount) == 0x001);
 static_assert(offsetof(PrevTouchTable, field002) == 0x002);
 static_assert(offsetof(PrevTouchTable, liftOffCount) == 0x003);
 static_assert(offsetof(PrevTouchTable, field004) == 0x004);
-static_assert(offsetof(PrevTouchTable, field005) == 0x005);
+static_assert(offsetof(PrevTouchTable, reportCount) == 0x005);
 static_assert(offsetof(PrevTouchTable, field006) == 0x006);
 static_assert(offsetof(PrevTouchTable, coreTouchCount) == 0x007);
 static_assert(offsetof(PrevTouchTable, reportedThisFrame) == 0x008);
 static_assert(offsetof(PrevTouchTable, lastReportedId) == 0x009);
 static_assert(offsetof(PrevTouchTable, gripReportedThisFrame) == 0x00A);
-static_assert(offsetof(PrevTouchTable, field00B) == 0x00B);
 static_assert(offsetof(PrevTouchTable, field00C) == 0x00C);
 static_assert(offsetof(PrevTouchTable, field00D) == 0x00D);
 static_assert(offsetof(PrevTouchTable, field00E) == 0x00E);

@@ -136,14 +136,14 @@ void Debounce(TouchZoneUnit& zone) {
         if (any) exception = global;
     } else if (global == 8) {
         if (any) {
-            if (State().wetFinger == 0 || prev.field005 > 2) exception = 8;
+            if (State().wetFinger == 0 || prev.reportCount > 2) exception = 8;
             else prev.exceptionFlags = exception;
         }
     } else if (exception == 2) {
         if (prevException == 0x40 || prevException == Exception::kWetFinger) exception = Exception::kWetFinger;
         else if (prevException == 8) exception = 8;
     }
-    if (prev.field005 > 4 && exception != 0) exception = 8;
+    if (prev.reportCount > 4 && exception != 0) exception = 8;
     zone.exceptionType = exception;
 }
 

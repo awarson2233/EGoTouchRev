@@ -383,7 +383,8 @@ struct FlashPrmt {
     uint8_t reserved173E[0x6];
     uint32_t sensorEnabled;
     uint8_t sensorRate;
-    uint8_t reserved1749[0x7];
+    uint8_t reserved1749[0x3];
+    uint32_t touchReportFlags;  // TouchReport：bit1 姿态误触时多步回退
     uint8_t toeSynaBl;  // ToeSynaBl 工作区开关
     uint8_t toeSideCols;  // 两侧各几列算侧边
     uint8_t reserved1752[0x2];
@@ -618,6 +619,7 @@ static_assert(offsetof(FlashPrmt, motorVolumeOnWaveform) == 0x173C);
 static_assert(offsetof(FlashPrmt, motorVolumeOffWaveform) == 0x173D);
 static_assert(offsetof(FlashPrmt, sensorEnabled) == 0x1744);
 static_assert(offsetof(FlashPrmt, sensorRate) == 0x1748);
+static_assert(offsetof(FlashPrmt, touchReportFlags) == 0x174C);
 static_assert(offsetof(FlashPrmt, toeSynaBl) == 0x1750);
 static_assert(offsetof(FlashPrmt, toeSideCols) == 0x1751);
 static_assert(offsetof(FlashPrmt, toeSynaBlFlags) == 0x1754);

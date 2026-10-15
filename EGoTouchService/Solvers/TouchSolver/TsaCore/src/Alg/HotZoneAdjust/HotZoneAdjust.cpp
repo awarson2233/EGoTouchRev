@@ -427,8 +427,3 @@ const char* GenerateAndGetDmdDescription() {
 }
 
 }  // namespace Solvers::Tsa::Core::HotZoneAdjust
-
-extern "C" {
-void HotZoneAdjust_Init(void) { Solvers::Tsa::Core::HotZoneAdjust::Init(); }
-void HotZoneAdjust_Process(uint8_t curIdx, uint8_t prevIdx) { Solvers::Tsa::Core::HotZoneAdjust::Process(curIdx, prevIdx); }
-}  // extern "C"
