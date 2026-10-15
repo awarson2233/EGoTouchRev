@@ -91,7 +91,6 @@ jobs:
                 -DCMAKE_C_COMPILER_TARGET=arm64-pc-windows-msvc `
                 -DCMAKE_CXX_COMPILER_TARGET=arm64-windows-msvc `
                 -DHIMAX_ENABLE_NEON=ON `
-                -DEGO_BUILD_TESTS=OFF `
                 -DEGO_BUILD_TOOLS=OFF
 
       - name: CMake Build

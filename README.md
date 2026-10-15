@@ -14,20 +14,19 @@ Developed entirely through clean-room reverse engineering, this project aims to 
 
 * **Native System Service (`EGoTouchService`)**: A rock-solid, C++ driven Windows service (`LocalSystem`) handling continuous touch frame acquisition, lifecycle monitoring, and seamless HID report injection.
 * **Hardware Integration**: Deep protocol-level integration with **Himax capacitive chips** for ultra-responsive multi-touch handling. *(Note: Active Stylus / BT-MCU integration is temporarily disconnected in this branch to focus on core touch stability)*.
-* **Custom Processing Pipeline**: Overhauled from scratch with anti-jitter, anti-bounce, and 1 Euro filtering for unparalleled touch smoothing and coordinate accuracy.
-* **Advanced Diagnostics**: Ships with `EGoTouchApp`, a native diagnostic GUI application (Diagnostics Workbench) for real-time visualization, raw data monitoring, and event logging.
+* **Stock Finger Algorithm**: A C++ reimplementation of the stock TSACore finger pipeline, bit-exact against the original DLL and checked frame by frame against reference replays.
 * **100% ARM64 Native Deployment**: Fully customized WiX v4 build toolkit ensuring that no WOW64 emulation is required—deployment is completely native to modern ARM64 systems.
 
 ---
 
 ## 💻 Installation
 
-We provide **Pure ARM64 MSI Installers** packaged using WiX Toolset v4. Commit and PR builds only compile and run smoke tests; release installers are built from `vMAJOR.MINOR.PATCH` tags and attached directly to GitHub Releases.
+We provide **Pure ARM64 MSI Installers** packaged using WiX Toolset v4. Commit and PR builds only compile; release installers are built from `vMAJOR.MINOR.PATCH` tags and attached directly to GitHub Releases.
 
 ### Easy Install (End-Users)
 1. Download the latest `EGoTouchSetup_arm64_vX.Y.Z.msi` from the [Releases](#) page.
    - `EGoTouchSetup_arm64_vX.Y.Z.msi`: core service installer.
-   - `EGoTouchTestSetup_arm64_vX.Y.Z.msi`: service plus diagnostic tools.
+   - `EGoTouchTestSetup_arm64_vX.Y.Z.msi`: service plus the BT MCU test tool.
 2. Double click to run the setup wizard.
 3. The installer will automatically deploy the binaries and configure `EGoTouchService` to launch silently in the background.
 
@@ -43,8 +42,7 @@ cmake -G "Ninja" -S . -B build `
       -DCMAKE_BUILD_TYPE=Release `
       -DCMAKE_C_COMPILER=clang-cl `
       -DCMAKE_CXX_COMPILER=clang-cl `
-      -DHIMAX_ENABLE_NEON=ON `
-      -DEGO_BUILD_TESTS=ON
+      -DHIMAX_ENABLE_NEON=ON
 cmake --build build --config Release --parallel
 
 # 2. Package the MSI Installer (Requires .NET and WiX)
@@ -60,9 +58,9 @@ wix build -ext WixToolset.UI.wixext -arch arm64 -d BuildVersion=1.2.3 scripts\EG
 
 - `EGoTouchService/` - The core Windows Service engine fetching and computing hardware reports.
   - `Device/` - Hardware abstraction layers (Himax, BT/MCU protocols).
-  - `Engine/` - The algorithmic heartbeat (Touch pipelines, 1 Euro Filters, pressure parsing).
+  - `Solvers/` - Frame parsing, the TSACore finger solver (`TouchSolver/TsaCore`) and the stylus pipeline.
   - `Host/` - System and Windows OS interfaces (HID Injection, ACPI/Lid monitoring).
-- `Tools/EGoTouchApp/` - The visual diagnostic dashboard for monitoring sensor states.
+- `Tools/TsaRawReplay/` - Offline replay of `.dvrbin` recordings, reference comparison and benchmarking.
 - `scripts/` - Inno Setup / WiX installation scripts and environment configuration tools.
 
 ---

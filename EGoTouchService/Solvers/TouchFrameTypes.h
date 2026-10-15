@@ -9,14 +9,8 @@
 #include <vector>
 
 #include "SolverBuildConfig.h"
-#include "TouchSolver/TouchSharedTypes.h"
 
 namespace Solvers {
-
-namespace Touch {
-class StylusTouchSuppressor;
-struct TouchBigFrame;
-}
 
 enum TouchContactState : int {
     TouchStateDown = 0,
@@ -179,17 +173,6 @@ struct TouchPeak {
     uint8_t id = 0;
 };
 
-// Represents a connected component in the heatmap greater than a global threshold
-struct MacroZone {
-    std::span<const int> pixels{}; // 1D indices (r * cols + c), owned by MacroZoneDetector arena
-    int area = 0;
-    int signalSum = 0;
-    int minR = 39;
-    int maxR = 0;
-    int minC = 59;
-    int maxC = 0;
-};
-
 #if EGOTOUCH_DIAG
 struct TouchDebugRect {
     int minR = 39;
@@ -235,42 +218,11 @@ struct TouchDebugFrame {
 };
 #endif
 
-// ── 运行时中间态（Pipeline 各阶段的共享数据总线）──────────────────────
-// 全部使用 span/pointer 零拷贝引用模块内部存储，frame 与 pipeline 同生命周期。
-struct TouchRuntimeState {
-    // Phase 3: MacroZoneDetector → PeakDetector / TouchClassifier / PalmBoxSuppressor
-    const std::vector<MacroZone>*              macroZones = nullptr;
-
-    // Phase 3: PeakDetector → TouchClassifier / PalmBoxSuppressor / ContactExtractor
-    std::span<const Touch::Peak>               peaks;
-    int16_t                                    peakThreshold = 0;
-
-    // Phase 4: PalmBoxSuppressor → ContactExtractor
-    std::span<const Touch::PeakEvaluation>     peakEvaluations;
-
-    // Phase 4: TouchClassifier → PalmBoxSuppressor
-    std::span<const Touch::MacroZoneFeature>   zoneFeatures;
-
-    // Phase 5: ContactExtractor → EdgeCompensator / EdgeRejector
-    std::span<const ZoneEdgeInfo>              edgeInfos;
-    const EdgeBounds*                          edgeBounds = nullptr;
-
-    // 跨帧标志：Phase 6 写入 → 下一帧 Phase 2 读取
-    bool                                       hasLiveTouchState = false;
-
-    // Stylus 抑制器配置指针
-    const Touch::StylusTouchSuppressor*        stylusSuppress = nullptr;
-};
-
 struct TouchFrameData {
     TouchOutputState output{};
-    TouchRuntimeState runtime{};
-    Touch::TouchBigFrame* bigFrame = nullptr;
 #if EGOTOUCH_DIAG
     TouchDebugFrame debug{};
 #endif
-
-    inline void ResetRuntime() { runtime = {}; }
 };
 
 } // namespace Solvers

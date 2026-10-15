@@ -62,19 +62,7 @@ jobs:
                 -DCMAKE_CXX_COMPILER=clang++ `
                 -DCMAKE_C_COMPILER_TARGET=arm64-pc-windows-msvc `
                 -DCMAKE_CXX_COMPILER_TARGET=arm64-pc-windows-msvc `
-                -DHIMAX_ENABLE_NEON=ON `
-                -DEGO_BUILD_TESTS=ON
+                -DHIMAX_ENABLE_NEON=ON
 
       - name: CMake Build
         run: cmake --build build --config Release --parallel
-
-      - name: Run Unit Tests (Native)
-        # Since we are on an ARM64 host, we can run hardware-independent tests.
-        working-directory: build
-        run: |
-          # Only running HostSystemStateMonitorTest as it doesn't require hardware.
-          if (Test-Path "HostSystemStateMonitorTest.exe") {
-            .\HostSystemStateMonitorTest.exe
-          } else {
-            Write-Host "HostSystemStateMonitorTest.exe not found; skipping smoke test."
-          }

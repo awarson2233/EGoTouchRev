@@ -182,7 +182,7 @@ if ($Benchmark) {
     try {
         Invoke-Native 'configure benchmark build' {
             # 发布构建的录制读取器不保留原始 SPI 帧（--afe 回放没有输入），整体打开诊断字段；TsaCore 算法不受它影响
-            cmake --preset $BenchPreset -B $benchDir '-DEGO_BUILD_TESTS=ON' '-DEGO_TSACORE_PROFILE=ON' '-DCMAKE_CXX_FLAGS=-DEGOTOUCH_DIAGNOSTICS'
+            cmake --preset $BenchPreset -B $benchDir '-DEGO_TSACORE_PROFILE=ON' '-DCMAKE_CXX_FLAGS=-DEGOTOUCH_DIAGNOSTICS'
         }
         Invoke-Native 'benchmark build' { cmake --build $benchDir --target TsaRawReplay }
     } finally {

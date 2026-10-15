@@ -1,99 +1,81 @@
 # EGoTouchRev 项目架构总览
 
-> 最后更新：2026-06-10
+## 概念
 
-## 1. 项目概述
+- **EGoTouchService**：Windows ARM64 原生服务（LocalSystem），负责取帧、解算，再经 VHF 注入 HID 报告。
+- **TSACore**：原厂 `TSACore.dll` 的 C++ 复刻，是唯一的手指解算器，见 [tsacore-cpp-rewrite.md](finger_algorithms/tsacore-cpp-rewrite.md)。
+- **StylusPipeline**：主动笔（ASA）坐标解算。笔的状态同时送进 TSACore，供手指侧的防误触使用。
+- **parser-only 模式**：经 IPC 打开后，只解析帧、不解算手指，用于看原始热力图。
 
-EGoTouchRev 是 Windows ARM64 原生触摸驱动和服务套件，为 Himax 电容触摸控制器和配套蓝牙手写笔提供 Service、算法管线、VHF HID 注入和诊断上位机。
-
-| 领域 | 技术选型 |
-| --- | --- |
-| 语言 | C++23 |
-| 构建系统 | CMake / Ninja |
-| 日志 | spdlog |
-| GUI | ImGui + DirectX 11 |
-| 配置 | 代码默认值 + Debug/上位机会话内动态调整 |
-
-## 2. 系统架构
+## 架构
 
 ```mermaid
 graph TB
-    App[EGoTouchApp Debug Workbench]
-    Host[ServiceHost]
-    Runtime[DeviceRuntime]
-    Touch[TouchPipeline]
-    Stylus[StylusPipeline]
-    IPC[IPCCore Named Pipe]
-    Shared[Shared Memory Debug Frames]
-    DVR[DVRCore]
+    Host[ServiceHost<br/>SCM 生命周期 / IPC 分发]
+    Runtime[DeviceRuntime<br/>取帧线程与电源状态机]
+    Parser[MasterFrameParser<br/>热力图 / suffix]
+    Tsa[TsaCoreSolver<br/>TSACore 手指]
+    Stylus[StylusPipeline<br/>笔]
+    Vhf[VhfReporter<br/>HID 注入]
+    IPC[IPCCore<br/>命名管道 + 共享内存]
+    DVR[DVRCore<br/>.dvrbin 录制格式]
+    Replay[TsaRawReplay<br/>离线回放与比对]
 
-    App --> IPC
-    App --> Shared
-    App --> DVR
-    IPC --> Host
     Host --> Runtime
-    Runtime --> Touch
+    Runtime --> Parser
     Runtime --> Stylus
-    Host --> Shared
+    Runtime --> Tsa
+    Stylus --> Tsa
+    Tsa --> Vhf
+    Stylus --> Vhf
+    Host --> IPC
+    DVR --> Replay
+    Replay --> Tsa
 ```
 
-| 层次 | 职责 |
+| 目录 | 职责 |
 | --- | --- |
-| `EGoTouchService` | SCM 生命周期、IPC 分发、设备运行时编排 |
-| `DeviceRuntime` | 硬件生命周期、采集线程、pipeline apply |
-| `Solvers` | Touch/Stylus 解算与运行时参数应用 |
-| `EGoTouchApp` | Debug 可视化、session-only 参数调整、DVR |
-| `Common` | 日志、ConfigStore/Catalog/TLV、DVR、IPC ABI |
+| [EGoTouchService/source](/EGoTouchService/source) | 服务入口、ServiceHost、运行时配置 |
+| [EGoTouchService/Device](/EGoTouchService/Device) | Himax 芯片、BT MCU、VHF、DeviceRuntime |
+| [EGoTouchService/Solvers](/EGoTouchService/Solvers) | 帧类型与解析、TSACore（`TouchSolver/TsaCore`）、StylusSolver |
+| [EGoTouchService/Host](/EGoTouchService/Host) | 系统状态（屏幕、合盖等）监听 |
+| [Common](/Common) | 日志、ConfigStore / Catalog / TLV、DVRCore、IPCCore |
+| [Tools/TsaRawReplay](/Tools/TsaRawReplay) | 录制回放、与参考版本比对、Benchmark |
+| [Tools/BtMcuTestTool](/Tools/BtMcuTestTool) | BT MCU 协议调试界面 |
 
-## 3. 配置边界
+## 分点解释
 
-当前配置链路：
+### 1. 每帧数据流
 
 ```mermaid
 sequenceDiagram
-    participant Service as EGoTouchService
-    participant Runtime as ConfigRuntime
-    participant App as EGoTouchApp
-
-    Service->>Runtime: Initialize() from code defaults
-    App->>Runtime: GetConfigCatalogV3
-    App->>Runtime: GetConfigSnapshotV3
-    App->>Runtime: ApplyConfigPatchV3
-    Runtime-->>App: current-session result
-    App->>Runtime: PersistConfigV3
-    Runtime-->>App: UnsupportedCommand
+    participant C as Himax Chip
+    participant R as DeviceRuntime
+    participant P as MasterFrameParser
+    participant S as StylusPipeline
+    participant T as TsaCoreSolver
+    participant V as VhfReporter
+    C->>R: GetFrame（master 可能被跳过）
+    R->>S: Process（笔坐标）
+    R->>P: Process（仅读到 master 的帧）
+    R->>T: Process（每一帧，parser-only 时跳过）
+    T-->>R: dispatchTouch + AFE 动作
+    R->>V: DispatchTouch / 笔报告
+    R->>C: 执行 AFE 动作（跳频、IDLE、重新校准）
 ```
 
-关键事实：
+帧解析的结果（`heatmapMatrix`、master / slave suffix）供 IPC 共享内存、DVR 和 VHF 使用；TSACore 自己从原始帧取数据，不读解析结果。接入细节见 [tsacore-raw-integration.md](finger_algorithms/tsacore-raw-integration.md)。
 
-- Service 默认值来自 `WithRuntimeConfigDefaults()`，见 [ConfigRuntime.cpp:111-128](../EGoTouchService/source/ConfigRuntime.cpp#L111-L128)。
-- Service 初始化不读取配置文件，见 [ConfigRuntime.cpp:361-385](../EGoTouchService/source/ConfigRuntime.cpp#L361-L385)。
-- App 初始化只使用内建 defaults，不读取本地配置文件 fallback，见 [ServiceProxy.Config.cpp:406-456](../Tools/EGoTouchApp/source/ServiceProxy.Config.cpp#L406-L456)。
-- `PersistConfigV3()` 返回不支持，见 [ConfigRuntime.cpp:694-701](../EGoTouchService/source/ConfigRuntime.cpp#L694-L701)。
+### 2. 配置
 
-## 4. 部署结构
+服务的默认值完全内建（`WithRuntimeConfigDefaults()`，[ConfigRuntime.cpp](/EGoTouchService/source/ConfigRuntime.cpp)），不读取配置文件；Debug 构建可经 IPC 在当前会话内修改，`PersistConfigV3()` 返回不支持。手指侧没有运行时配置项，TSACore 的参数来自内置的机型参数表；可配置的只有服务开关和笔管线参数。
 
-Service 安装目录不再包含配置文件目录：
+### 3. 构建与部署
 
-```text
-EGoTouchRev/
-├── EGoTouchService.exe
-└── EGoTouchApp.exe
-```
+- 构建开关只有一个：`EGO_BUILD_TOOLS`，默认 ON，控制是否编出 BtMcuTestTool 与 TsaRawReplay。发布 CI 会把它关掉。
+- 仓库里没有单元测试。验收靠编译，加上 [Compare-Reference.ps1](/Tools/TsaRawReplay/Compare-Reference.ps1) 的逐帧比对。
+- 安装目录里只有 `EGoTouchService.exe`；测试版安装包另外附带 `BtMcuTestTool.exe`。
 
-WiX 不再声明配置文件 component；CMake install 只安装可执行目标，见 [CMakeLists.txt:312-339](../CMakeLists.txt#L312-L339)。
+### 4. 正在淘汰的部分
 
-## 5. 文档索引
-
-| 文档 | 说明 |
-| --- | --- |
-| [api/config_framework_api.md](api/config_framework_api.md) | Config v3 当前 API 与边界 |
-| [api/ipc_protocol.md](api/ipc_protocol.md) | IPC wire 协议 |
-| [ipc_interface_protocol.md](ipc_interface_protocol.md) | IPC 命令索引 |
-| [touch_pipeline_architecture.md](touch_pipeline_architecture.md) | TouchPipeline 处理链 |
-
-## 小结
-
-- 运行时默认配置完全内建。
-- Debug 上位机可以 session-only 修改当前 Service 实例。
-- 文件配置、文件持久化和安装包配置资产已从当前架构中移除。
+诊断上位机 EGoTouchApp 已经删除。服务端的 IPC 与共享内存帧推送暂时保留，协议见 [api/ipc_protocol.md](api/ipc_protocol.md)。`frame.touch.debug` 里的峰、区域与框不再有人填写，字段只是为了保持格式兼容。

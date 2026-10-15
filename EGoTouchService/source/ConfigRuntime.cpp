@@ -1,7 +1,6 @@
 #include "ConfigRuntime.h"
 
 #include "Logger.h"
-#include "TouchPipeline.h"
 #include "StylusPipeline.h"
 #include "config/ConfigBinder.h"
 #include "config/ConfigCatalog.h"
@@ -104,10 +103,8 @@ template<typename Callback>
 decltype(auto) WithRuntimeConfigDefaults(Callback&& callback) {
     Config::ConfigBinder binder;
     ServiceConfigState serviceDefaults;
-    Solvers::TouchPipeline touchDefaults;
     Solvers::StylusPipeline stylusDefaults;
     RegisterServiceConfigBindings(binder, serviceDefaults);
-    touchDefaults.registerBindings(binder);
     stylusDefaults.registerBindings(binder);
     Config::registerRuntimeKeyMappings(binder);
 

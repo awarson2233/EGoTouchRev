@@ -470,24 +470,21 @@ Config::ValidationResult DeviceRuntime::ValidateConfigStore(
     const Config::ConfigStore &store) const {
   std::lock_guard<std::mutex> lk(m_pipelineMu);
 
-  // Build schema from fresh pipeline instances so validation remains read-only
+  // Build schema from a fresh pipeline instance so validation remains read-only
   // and cannot accidentally strip setters from the runtime apply path.
-  Solvers::TouchPipeline touchPipeline;
   Solvers::StylusPipeline stylusPipeline;
   Config::ConfigBinder binder;
-  touchPipeline.registerBindings(binder);
   stylusPipeline.registerBindings(binder);
   return Config::SchemaValidator::validate(store, binder);
 }
 
 void DeviceRuntime::ApplyConfigStore(const Config::ConfigStore& store) {
   std::lock_guard<std::mutex> lk(m_pipelineMu);
-  m_touchPipeline.applyConfig(store);
   m_stylusPipeline.applyConfig(store);
   m_vhfReporter.SetStylusPacketSensorRows(m_stylusPipeline.GetPacketSensorRows());
   m_vhfReporter.SetStylusPacketSensorCols(m_stylusPipeline.GetPacketSensorCols());
   m_vhfReporter.SetStylusPacketEmitWhenInvalid(m_stylusPipeline.GetEmitPacketWhenInvalid());
-  LOG_INFO("Runtime", __func__, "Config", "Applied ConfigStore to touch/stylus pipelines.");
+  LOG_INFO("Runtime", __func__, "Config", "Applied ConfigStore to the stylus pipeline.");
 }
 
 #endif
@@ -536,20 +533,6 @@ void DeviceRuntime::SetMasterParserOnlyMode(bool enabled) {
     std::lock_guard<std::mutex> lk(m_pipelineMu);
     m_vhfReporter.FlushTouchAllUp();
   }
-}
-
-void DeviceRuntime::SetTsaCoreSolverEnabled(bool enabled) {
-  const bool wasEnabled =
-      m_useTsaCoreSolver.exchange(enabled, std::memory_order_acq_rel);
-  if (wasEnabled != enabled) {
-    // 两个解算器各自维护触点 ID，切换时先让 HID 侧全部抬起
-    std::lock_guard<std::mutex> lk(m_pipelineMu);
-    m_vhfReporter.FlushTouchAllUp();
-  }
-}
-
-bool DeviceRuntime::IsTsaCoreSolverEnabled() const {
-  return m_useTsaCoreSolver.load(std::memory_order_relaxed);
 }
 
 void DeviceRuntime::IngestBtMcuPressure(uint16_t p) {
@@ -1308,10 +1291,8 @@ void DeviceRuntime::LeaveStreaming(const char *reason) {
 }
 
 void DeviceRuntime::OnStreaming() {
-  const bool tsaActive = m_useTsaCoreSolver.load(std::memory_order_relaxed) &&
-                         !m_masterParserOnly.load(std::memory_order_relaxed);
-  // IDLE 的进入由当前解算器决定：TSACore 自己会请求，TouchPipeline 靠芯片的无输入计数
-  m_chip.SetAutoIdleEnabled(!tsaActive);
+  // IDLE 由 TSACore 请求；parser-only 模式下不解算，改由芯片按无输入帧计数自己进
+  m_chip.SetAutoIdleEnabled(m_masterParserOnly.load(std::memory_order_relaxed));
 
   // 取帧不分 Normal / IDLE：IC 在 IDLE 里慢慢出帧，这一步就跟着慢；IDLE 帧照常进解算器，
   // 帧尾的 IDLE 位由 TSACore 的宿主层翻成控制标志（与 ApDaemon 一致）。
@@ -1361,27 +1342,16 @@ void DeviceRuntime::OnStreaming() {
     // 3. Stylus pipeline — reads rawPtr, writes frame.stylus
     m_stylusPipeline.Process(touchFrame);
 
-    // 4. Touch pipeline — reads frame, writes contacts/packets.
-    // Skipped-master frames carry fresh stylus/slave data only; do not feed
-    // them into touch modules, otherwise BaselineTracker treats the missing
-    // master as invalid input and clears cross-frame finger visualization state.
-    // TSACore 是例外：原版每一帧都调用它，跳过 master 的帧只跑笔相关的手指侧逻辑
-    // （StylusAft 的抑制计数按调用次数走）。
-    if (m_masterParserOnly.load(std::memory_order_relaxed)) {
-      if (touchFrame.masterWasRead) {
-        m_touchPipeline.ProcessMasterParserOnly(touchFrame);
-      }
-    } else if (m_useTsaCoreSolver.load(std::memory_order_relaxed)) {
-      // 解析器仍由 TouchPipeline 负责（热力图 / suffix 供诊断与 IPC 使用），
-      // 触点改由 TSACore 解算。
-      if (touchFrame.masterWasRead) {
-        m_touchPipeline.ProcessMasterParserOnly(touchFrame);
-      }
+    // 4. 热力图与 suffix 只在读到 master 的帧上解析（供诊断、IPC 与 DVR）。
+    // 手指由 TSACore 解算：原版每一帧都调用它，跳过 master 的帧只跑笔相关的手指侧逻辑
+    // （StylusAft 的抑制计数按调用次数走）。parser-only 模式只解析、不解算。
+    if (touchFrame.masterWasRead) {
+      m_frameParser.Process(touchFrame);
+    }
+    if (!m_masterParserOnly.load(std::memory_order_relaxed)) {
       m_tsaCoreSolver.SetStylusConnected(m_chip.IsStylusConnected());
       dispatchTouch = m_tsaCoreSolver.Process(touchFrame);
       afeActions = m_tsaCoreSolver.PendingAfeActions();
-    } else if (touchFrame.masterWasRead) {
-      dispatchTouch = m_touchPipeline.Process(touchFrame);
     }
 
     // Serialized re-check: if parser-only was enabled between pipeline

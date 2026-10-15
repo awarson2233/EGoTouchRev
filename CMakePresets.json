@@ -61,25 +61,13 @@
     },
     {
       "name": "arm64-Debug-TsaCore",
-      "displayName": "arm64 Debug (TSACore finger solver)",
-      "inherits": "arm64-Debug",
-      "cacheVariables": {
-        "EGO_TOUCH_SOLVER_TSACORE": {
-          "type": "BOOL",
-          "value": "ON"
-        }
-      }
+      "displayName": "arm64 Debug (same as arm64-Debug; build dir used by Compare-Reference)",
+      "inherits": "arm64-Debug"
     },
     {
       "name": "arm64-Release-TsaCore",
-      "displayName": "arm64 Release (TSACore finger solver)",
-      "inherits": "arm64-Release",
-      "cacheVariables": {
-        "EGO_TOUCH_SOLVER_TSACORE": {
-          "type": "BOOL",
-          "value": "ON"
-        }
-      }
+      "displayName": "arm64 Release (same as arm64-Release; build dir used by install_service.bat)",
+      "inherits": "arm64-Release"
     }
   ],
   "buildPresets": [

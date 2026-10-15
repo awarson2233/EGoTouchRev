@@ -9,7 +9,7 @@
 //        宿主执行并回报 ◄──┴── AFE 动作 ◄────┘              │
 //                     frame.touch.output.contacts ◄─ TsaOutputMapper
 //
-// 调用面与 TouchPipeline::Process 相同：返回值表示本帧是否需要走 VHF 上报。
+// Process 的返回值表示本帧是否需要走 VHF 上报。
 // 笔的坐标仍由 StylusSolver 解算；这里把它的结果连同驱动的笔帧状态送进 TSACore，
 // 手指侧依赖笔状态的逻辑（StylusAft 的手掌 / 笔尖误触抑制、笔模式下不进 IDLE、
 // 不跳频）按原版运行。调用前 frame.stylus 必须已经由 StylusPipeline 处理过。

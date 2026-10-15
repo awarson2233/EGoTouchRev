@@ -146,7 +146,7 @@ namespace Himax {
             bool ReopenDevices();
             /// 面板电源真值：SPB 驱动的 ACPI 读取，bit0 = 屏幕已上电。读取失败返回空。
             std::optional<bool> ReadPanelPower();
-            /// true：连续无输入帧够多时 Chip 自己进 IDLE（TouchPipeline 用）。TSACore 解算时关掉，
+            /// true：连续无输入帧够多时 Chip 自己进 IDLE（parser-only 模式不解算时用）。TSACore 解算时关掉，
             /// 改由 TSACore 的 IDLE 请求下发 EnterIdle。
             void SetAutoIdleEnabled(bool enabled) noexcept { m_autoIdle = enabled; }
             /// IC 在最近一帧的帧尾里自报的模式（word0 == 1 即 IDLE）。宿主不维护自己的 IDLE 状态。
