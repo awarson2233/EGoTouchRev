@@ -1,3 +1,4 @@
+#include "App/Property.h"
 #include "App/Sys.h"
 #include "Extension/HardwareAnalyzer/HardwareAnalyzer.h"
 
@@ -140,7 +141,7 @@ void PostProcessRaw() {
     const TsaStatic& stat = Static();
     if ((stat.systemFlags & kSysDifBufPath) == 0 && (Sys::IsChargerPlugged() == 0 || FullIncell())) RawLimitProcess();
     if (stat.rawJumpDetected != 0) SetException(kExcRaw2RawNoise);
-    if (PrmtFlash().fingerThold < static_cast<uint16_t>(TSA_GetMaxCMFNoiseValue()) && FullIncell()) {
+    if (PrmtFlash().fingerThold < static_cast<uint16_t>(Property::MaxCmfNoise()) && FullIncell()) {
         SetException(kExcDisplayNoise);
     }
 }
@@ -241,7 +242,7 @@ void AfeRawUnstable() {
 void BackLightShift() {
     const TsaPrpt& prpt = Prpt();
     if (ToeSynaBl::BackLightShiftUnit(0x41) && PrmtFlash().sensorNum >> 2 < prpt.field184 &&
-        PrmtDynamic().smallThold < prpt.sigPeakPositive) {
+        PrmtDynamic().smallThold < prpt.dif.maxSig) {
         SetException(kExcBackLightShift);
     }
 }

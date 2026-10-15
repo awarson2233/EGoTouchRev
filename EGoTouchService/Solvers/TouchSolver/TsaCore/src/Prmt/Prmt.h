@@ -257,7 +257,7 @@ struct FlashPrmt {
     uint8_t reserved922[0x2];
     ErEdgeMmPrmt erEdgeMm[4];  // ER：上、下、左、右四条逻辑边
     uint8_t wetFingerMinWaterCells;  // FIException：判湿手指所需的最少水膜格数
-    uint8_t waterSigLowPercent;  // 水膜格的 Dif 区间：sigPeakPositive 的百分比
+    uint8_t waterSigLowPercent;  // 水膜格的 Dif 区间：dif.maxSig 的百分比
     uint8_t waterSigHighPercent;
     uint8_t reserved93F[0x1];
     int16_t chargerNoiseTholdPercent;  // Hybrid Incell 充电噪声门限相对 HTI 门限的百分比；也是 DynPrmt 初值块（0x940..0x94c）的开头

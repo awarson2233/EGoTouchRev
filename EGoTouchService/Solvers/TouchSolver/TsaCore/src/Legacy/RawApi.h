@@ -38,10 +38,6 @@ uint64_t AFE_IsCoreTouchDetected(void);
 uint8_t AFE_IsFrequentlyHopping(void);
 bool AFE_IsIndividualBaselineForEachFreq(void);
 
-// Core/TSAPrpt.c
-bool TSAPrpt_Malloc(void);
-void TSAPrpt_Free(void);
-
 // Rejection/HandGesture.c
 uint64_t HandGesture_Malloc(void);
 void HandGesture_Free(void);
@@ -52,8 +48,6 @@ uint16_t TSA_GetYRes(void);
 uint32_t TSA_IsUnderWaterDetected(void);
 uint32_t TSA_IsOutOfWaterDetected(void);
 char* TSA_GetPrmtName(void);
-int TSA_GetMaxCMFNoiseValue(void);
-int16_t TSA_GetMinSigPrpt(void);
 uint64_t TSA_IsGameScenario(void);
 uint32_t TSA_IsWindowsPadFeatureEnabled(void);
 bool TSA_IsTypingScenario(void);

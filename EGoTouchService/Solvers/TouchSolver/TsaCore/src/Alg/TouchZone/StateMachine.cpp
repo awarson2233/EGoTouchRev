@@ -49,7 +49,7 @@ int16_t Scale128(uint8_t mult, int sig) { return static_cast<int16_t>(mult * sig
 // TZ_IsSD @ 0x6ba8a67e
 // 设备悬浮（SD）：全局峰值不高、上一帧全局异常为悬浮，或对应的历史触点是长大手指、已报点且信号刻度低。
 bool IsSd(const TouchZoneUnit& z) {
-    if (PrmtFlash().peakFilterReferenceThreshold * 2 < Prpt().sigPeakPositive * 3) return false;
+    if (PrmtFlash().peakFilterReferenceThreshold * 2 < Prpt().dif.maxSig * 3) return false;
     const PrevTouchTable& prev = PrevTouches();
     if (prev.exceptionFlags == kExcFloating) return true;
     if (z.prevIdx == kNoTouch) return false;

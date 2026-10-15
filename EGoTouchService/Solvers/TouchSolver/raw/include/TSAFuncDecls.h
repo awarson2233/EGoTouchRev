@@ -3006,9 +3006,6 @@ undefined4 TSA_ASAAFEStatus(void);
 // TSA_AppTypeToScenario @ 0x6ba90318 (Core\TSA.c)
 void TSA_AppTypeToScenario(void);
 
-// TSA_CombineBlock @ 0x6baa0da1 (Core\TSA.c)
-void TSA_CombineBlock(undefined8 *param_1,uint param_2);
-
 // TSA_CoreTouchDim1Center @ 0x6ba8f893 (Core\TSA.c)
 ushort TSA_CoreTouchDim1Center(byte param_1);
 
@@ -3054,9 +3051,6 @@ ulonglong TSA_GetASADim1Res(void);
 // TSA_GetASADim2Res @ 0x6ba9d41c (Core\TSA.c)
 ulonglong TSA_GetASADim2Res(void);
 
-// TSA_GetDifPrpt @ 0x6baa121d (Core\TSA.c)
-void TSA_GetDifPrpt(void);
-
 // TSA_GetDifPrptCommon @ 0x6baa1035 (Core\TSA.c)
 void TSA_GetDifPrptCommon(void);
 
@@ -3078,20 +3072,8 @@ undefined4 TSA_GetDimEdge(ushort param_1,ushort param_2);
 // TSA_GetFeatures @ 0x6ba9f329 (Core\TSA.c)
 TSA_FeatureFlags TSA_GetFeatures(void);
 
-// TSA_GetMaxCMFNoiseValue @ 0x6ba9e207 (Core\TSA.c)
-int TSA_GetMaxCMFNoiseValue(void);
-
-// TSA_GetMinSigPrpt @ 0x6baa07dc (Core\TSA.c)
-short TSA_GetMinSigPrpt(void);
-
 // TSA_GetPrmtName @ 0x6ba9e911 (Core\TSA.c)
 char* TSA_GetPrmtName(void);
-
-// TSA_GetPrpt @ 0x6baa1353 (Core\TSA.c)
-void TSA_GetPrpt(short *pRawGrid,short *pBaselineGrid);
-
-// TSA_GetRawPrpt @ 0x6baa08ab (Core\TSA.c)
-void TSA_GetRawPrpt(longlong param_1,longlong param_2);
 
 // TSA_GetScenarioInternal @ 0x6ba8fd76 (Core\TSA.c)
 uint TSA_GetScenarioInternal(void);
@@ -3122,12 +3104,6 @@ undefined8 TSA_InStylusMode(void);
 
 // TSA_InitAFEProject_UI @ 0x6ba99dc7 (Core\TSA.c)
 undefined8 TSA_InitAFEProject_UI(longlong param_1,longlong param_2,longlong param_3);
-
-// TSA_InitBlockIdx @ 0x6baa0b82 (Core\TSA.c)
-void TSA_InitBlockIdx(void);
-
-// TSA_InitBlockPrpt @ 0x6baa0ac9 (Core\TSA.c)
-void TSA_InitBlockPrpt(void);
 
 // TSA_InitCommonUI @ 0x6ba99ce0 (Core\TSA.c)
 void TSA_InitCommonUI(void);

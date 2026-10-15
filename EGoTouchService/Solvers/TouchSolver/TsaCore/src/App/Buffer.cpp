@@ -11,6 +11,7 @@
 #include "Alg/Touch/TouchData.h"
 #include "Alg/TouchZone/TouchZone.h"
 #include "Alg/TpSensor/TpSensor.h"
+#include "App/Property.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
@@ -277,7 +278,7 @@ void FreeAll() {
     ToeSynaBl::Free();
     HardwareAnalyzer::Free();
     BadChannel::Free();
-    TSAPrpt_Free();
+    Property::Free();
     Free();
     TpSensor::Free();
     Cmf::Free();
@@ -294,7 +295,7 @@ bool InitProject() {
     LineBufSize() = static_cast<uint16_t>(fl.dim1Len + fl.dim2Len);
     MaxDimSize() = std::max(fl.dim1Len, fl.dim2Len);
     return RfNoise::Malloc() && HandGesture_Malloc() != 0 && ToeSynaBl::Malloc() && HardwareAnalyzer::Malloc() &&
-           BadChannel::Malloc() && TSAPrpt_Malloc() && Alloc(SideTz(), GridBufSize()) && Malloc() && TpSensor::Malloc() &&
+           BadChannel::Malloc() && Property::Malloc() && Alloc(SideTz(), GridBufSize()) && Malloc() && TpSensor::Malloc() &&
            Cmf::Malloc() && Exception::Malloc() && TouchZone::Malloc() && AFE_Malloc() != 0;
 }
 

@@ -59,7 +59,7 @@ bool IsFullIncellSdDetected() {
     }
     if (stat.curTimeMs - stat.fullIncellHighPeakTime < 1001) return false;
     if (peaks.maxSig < cap * 2) {
-        if (flash.peakFilterReferenceThreshold * 2 < Prpt().field0C8) {
+        if (flash.peakFilterReferenceThreshold * 2 < Prpt().difCore.sum) {
             for (uint8_t i = 0; i < peaks.count; ++i) {
                 if (peaks.count > 4) detected = true;
                 if (IsFullIncellInsideSensor(i) && peaks.maxSig * 3 < peaks.entry[i].sig * 4) detected = true;

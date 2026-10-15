@@ -190,7 +190,7 @@ bool IsEdgeMerged(const TouchZoneUnit& z, uint8_t d1, uint8_t d2) {
 // TZ_GetEdgeSigThold @ 0x6ba87e84
 // 取出格子时判「边缘」的门限：全局峰值的 1/4 与起点峰值的一半中较小者，不低于生长门限。
 int16_t EdgeSigThold(int16_t seedSig, int16_t thold) {
-    auto t = static_cast<int16_t>(Prpt().sigPeakPositive / 4);
+    auto t = static_cast<int16_t>(Prpt().dif.maxSig / 4);
     t = std::min(t, static_cast<int16_t>(seedSig / 2));
     return std::max(t, thold);
 }
@@ -437,7 +437,7 @@ void PeakBasedTraversal(TouchZoneUnit& z, int16_t thold, uint8_t dim1, uint8_t d
     TraversalCtx ctx{};
     ctx.map = TzAccess().map;
     ctx.thold = thold;
-    ctx.halfPeak = static_cast<int16_t>(Prpt().sigPeakPositive / 2);
+    ctx.halfPeak = static_cast<int16_t>(Prpt().dif.maxSig / 2);
     ctx.seedAge = buf.tzAge[seed];
     if (centroidSigOffset) {
         ctx.centroidOffDim1 = fl.centroidSigOffsetDim1;

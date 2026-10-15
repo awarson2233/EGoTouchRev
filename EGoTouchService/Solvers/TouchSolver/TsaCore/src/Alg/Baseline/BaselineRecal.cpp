@@ -62,7 +62,7 @@ void Process() {
     } else if (stat.recalFrames < kRecalCheckFrames) {
         ++stat.recalFrames;
         const int16_t finger = PrmtFlash().fingerThold;
-        if (prpt.sigPeakPositive < finger && -prpt.sigPeakNegative < finger && BoundaryOut()) ++stat.recalBoundaryHits;
+        if (prpt.dif.maxSig < finger && -prpt.dif.minSig < finger && BoundaryOut()) ++stat.recalBoundaryHits;
     } else {
         if (kRecalMinHits <= stat.recalBoundaryHits && !AutoCalibration()) {
             stat.justExitedSpecialCtrlMode = 1;

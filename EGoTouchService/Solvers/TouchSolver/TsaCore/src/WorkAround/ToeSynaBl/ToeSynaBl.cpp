@@ -197,7 +197,7 @@ bool SsIsDim2NoSignal() {
 bool IsLongTimeSsNoSignal() {
     TsaStatic& stat = Static();
     bool r = false;
-    if (!SsIsDim2NoSignal() || !B::Reset::CheckNumOverNoise() || Prpt().field0E0 <= PrmtFlash().fingerThold / 2 ||
+    if (!SsIsDim2NoSignal() || !B::Reset::CheckNumOverNoise() || Prpt().difInner.maxSig <= PrmtFlash().fingerThold / 2 ||
         (stat.featureFlags & kFeatSmartCover) != 0) {
         stat.toeSsNoSignalTimer = 0;
     } else {
@@ -365,13 +365,13 @@ void GetSidePrpt() {
 // ToeSyna_PorpertyGetMaxSig @ 0x6bb47483
 int16_t PropertyMaxSig(int16_t v) {
     if (S().excludeSide == 0) return v;
-    return SideTouch() ? Prpt().field0E0 : Prpt().field0C0;
+    return SideTouch() ? Prpt().difInner.maxSig : Prpt().difCore.maxSig;
 }
 
 // ToeSyna_PorpertyGetMinSig @ 0x6bb47412
 int16_t PropertyMinSig(int16_t v) {
     if (static_cast<char>(Sys::IsSafeBaselineApplied()) != 0 || S().excludeSide == 0) return v;
-    return SideTouch() ? Prpt().field0E2 : Prpt().field0C2;
+    return SideTouch() ? Prpt().difInner.minSig : Prpt().difCore.minSig;
 }
 
 // ToeSynaBl_BackLightShiftUnit @ 0x6bb45dd1

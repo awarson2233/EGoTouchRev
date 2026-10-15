@@ -95,6 +95,37 @@ static_assert(offsetof(SelfPrpt, minNegSum) == 0x018);
 static_assert(offsetof(SelfPrpt, minNegSumIdx) == 0x01C);
 static_assert(offsetof(SelfPrpt, strongSumTotal) == 0x020);
 
+/// 一组格上 Dif 的统计（TSA_CombineBlock）：极值与所在格，以及 |Dif| 不低于噪声门限的正负格的和与个数。
+struct DifPrpt {
+    int16_t maxSig;
+    int16_t minSig;
+    uint8_t maxDim1;
+    uint8_t maxDim2;
+    uint8_t minDim1;
+    uint8_t minDim2;
+    int32_t sum;  // posSum + negSum
+    int32_t posSum;
+    int32_t negSum;
+    int16_t posCount;
+    int16_t negCount;
+    int16_t count;
+    uint16_t bigCount;  // |Dif| 超过 100 的格数
+};
+static_assert(sizeof(DifPrpt) == 0x01C);
+static_assert(offsetof(DifPrpt, maxSig) == 0x000);
+static_assert(offsetof(DifPrpt, minSig) == 0x002);
+static_assert(offsetof(DifPrpt, maxDim1) == 0x004);
+static_assert(offsetof(DifPrpt, maxDim2) == 0x005);
+static_assert(offsetof(DifPrpt, minDim1) == 0x006);
+static_assert(offsetof(DifPrpt, minDim2) == 0x007);
+static_assert(offsetof(DifPrpt, sum) == 0x008);
+static_assert(offsetof(DifPrpt, posSum) == 0x00C);
+static_assert(offsetof(DifPrpt, negSum) == 0x010);
+static_assert(offsetof(DifPrpt, posCount) == 0x014);
+static_assert(offsetof(DifPrpt, negCount) == 0x016);
+static_assert(offsetof(DifPrpt, count) == 0x018);
+static_assert(offsetof(DifPrpt, bigCount) == 0x01A);
+
 /// g_tsaStaticGrid（经 g_tsaStaticPtr 选用）：系统级运行状态。
 struct TsaStatic {
     uint8_t pressCount;  // TSAOut：本帧报出的触点里刚按下（volatileFlags bit2）的个数
@@ -459,40 +490,34 @@ struct TsaPrpt {
     uint8_t reserved03B[0x5];
     BrokenSensorZ8 brokenSensor[5];
     uint8_t reserved090[0x2];
-    uint16_t boundaryPositive;  // raw 的上下边界
+    uint16_t boundaryPositive;  // 整屏 raw 的极值
     uint16_t boundaryNegative;
-    uint16_t rawMax;
+    uint16_t rawMax;  // 内圈 raw 的极值
     uint16_t rawMin;
-    uint16_t field09A;
+    uint16_t rawAvg;  // 内圈（去掉最外一圈）raw 的平均
     uint8_t boundaryPositiveDim1;  // boundaryPositive / Negative 所在的格
     uint8_t boundaryPositiveDim2;
     uint8_t boundaryNegativeDim1;
     uint8_t boundaryNegativeDim2;
-    int16_t sigPeakPositive;  // Dif 的正向极值
-    int16_t sigPeakNegative;  // Dif 的负向极值
-    uint8_t specialThreshCol;  // 用特殊门限的列
-    uint8_t specialThreshRow;
-    uint8_t nextSideThreshCol;
-    uint8_t nextSideThreshRow;
-    uint8_t reserved0A8[0x4];
-    int32_t field0AC;
-    int32_t field0B0;
-    uint8_t reserved0B4[0x4];
-    uint16_t field0B8;
-    uint8_t reserved0BA[0x2];
+    DifPrpt dif;  // 整屏（featureFlags 0x8000 时去掉最外两列，raw 不稳定时再隔行取）
     int16_t underWaterCells;  // Dif 落在水下门限区间内的格数
     int16_t underWaterNegCells;  // -Dif 落在该区间内的格数
-    int16_t field0C0;
-    int16_t field0C2;
-    uint8_t reserved0C4[0x4];
-    int32_t field0C8;
-    uint8_t reserved0CC[0x14];
-    int16_t field0E0;
-    int16_t field0E2;
-    uint8_t reserved0E4[0x7C];
+    DifPrpt difCore;  // 去掉最外两列与上下两行的边角
+    uint8_t reserved0DC[0x4];
+    DifPrpt difInner;  // 内部（不含最外两列与上下两行）
+    uint8_t reserved0FC[0x4];
+    DifPrpt difSnapshot;  // dif 刚统计出来时的副本（之后 dif 会被各模块改写）
+    uint8_t reserved11C[0x24];
+    DifPrpt difEdge;  // 最外一列（featureFlags 0x8000 时加上其余边缘）
+    uint8_t reserved15C[0x4];
     int16_t preCmfMaxAbsDif;  // TSAPrpt_GetDifPreCMFPrpt：CMF 前 Dif 的最大绝对值
     uint16_t preCmfOverCount;  // CMF 前 |Dif| 不低于门限的格数
-    uint8_t reserved164[0x8];
+    int16_t preCmfMaxDif;
+    int16_t preCmfMinDif;
+    uint8_t preCmfMaxDim1;
+    uint8_t preCmfMaxDim2;
+    uint8_t preCmfMinDim1;
+    uint8_t preCmfMinDim2;
     int16_t field16C;
     int16_t field16E;
     uint8_t field170;
@@ -527,7 +552,7 @@ struct TsaPrpt {
     uint8_t reserved28C[0x4];
     uint64_t blStageTime;  // 当前阶段的累计时间（ms）
     uint8_t reserved298[0x2];
-    uint16_t field29A;
+    uint16_t blAvg;  // 内圈基线的平均
     uint8_t allFreqInitCount;  // 抬起期间按各频点初始化基线的次数（到 3 为止）
     uint8_t reserved29D[0x3];
     uint32_t blPropertyState;  // 基线复位的原因
@@ -572,29 +597,26 @@ static_assert(offsetof(TsaPrpt, boundaryPositive) == 0x092);
 static_assert(offsetof(TsaPrpt, boundaryNegative) == 0x094);
 static_assert(offsetof(TsaPrpt, rawMax) == 0x096);
 static_assert(offsetof(TsaPrpt, rawMin) == 0x098);
-static_assert(offsetof(TsaPrpt, field09A) == 0x09A);
+static_assert(offsetof(TsaPrpt, rawAvg) == 0x09A);
 static_assert(offsetof(TsaPrpt, boundaryPositiveDim1) == 0x09C);
 static_assert(offsetof(TsaPrpt, boundaryPositiveDim2) == 0x09D);
 static_assert(offsetof(TsaPrpt, boundaryNegativeDim1) == 0x09E);
 static_assert(offsetof(TsaPrpt, boundaryNegativeDim2) == 0x09F);
-static_assert(offsetof(TsaPrpt, sigPeakPositive) == 0x0A0);
-static_assert(offsetof(TsaPrpt, sigPeakNegative) == 0x0A2);
-static_assert(offsetof(TsaPrpt, specialThreshCol) == 0x0A4);
-static_assert(offsetof(TsaPrpt, specialThreshRow) == 0x0A5);
-static_assert(offsetof(TsaPrpt, nextSideThreshCol) == 0x0A6);
-static_assert(offsetof(TsaPrpt, nextSideThreshRow) == 0x0A7);
-static_assert(offsetof(TsaPrpt, field0AC) == 0x0AC);
-static_assert(offsetof(TsaPrpt, field0B0) == 0x0B0);
-static_assert(offsetof(TsaPrpt, field0B8) == 0x0B8);
+static_assert(offsetof(TsaPrpt, dif) == 0x0A0);
 static_assert(offsetof(TsaPrpt, underWaterCells) == 0x0BC);
 static_assert(offsetof(TsaPrpt, underWaterNegCells) == 0x0BE);
-static_assert(offsetof(TsaPrpt, field0C0) == 0x0C0);
-static_assert(offsetof(TsaPrpt, field0C2) == 0x0C2);
-static_assert(offsetof(TsaPrpt, field0C8) == 0x0C8);
-static_assert(offsetof(TsaPrpt, field0E0) == 0x0E0);
-static_assert(offsetof(TsaPrpt, field0E2) == 0x0E2);
+static_assert(offsetof(TsaPrpt, difCore) == 0x0C0);
+static_assert(offsetof(TsaPrpt, difInner) == 0x0E0);
+static_assert(offsetof(TsaPrpt, difSnapshot) == 0x100);
+static_assert(offsetof(TsaPrpt, difEdge) == 0x140);
 static_assert(offsetof(TsaPrpt, preCmfMaxAbsDif) == 0x160);
 static_assert(offsetof(TsaPrpt, preCmfOverCount) == 0x162);
+static_assert(offsetof(TsaPrpt, preCmfMaxDif) == 0x164);
+static_assert(offsetof(TsaPrpt, preCmfMinDif) == 0x166);
+static_assert(offsetof(TsaPrpt, preCmfMaxDim1) == 0x168);
+static_assert(offsetof(TsaPrpt, preCmfMaxDim2) == 0x169);
+static_assert(offsetof(TsaPrpt, preCmfMinDim1) == 0x16A);
+static_assert(offsetof(TsaPrpt, preCmfMinDim2) == 0x16B);
 static_assert(offsetof(TsaPrpt, field16C) == 0x16C);
 static_assert(offsetof(TsaPrpt, field16E) == 0x16E);
 static_assert(offsetof(TsaPrpt, field170) == 0x170);
@@ -621,7 +643,7 @@ static_assert(offsetof(TsaPrpt, blResetFrames) == 0x284);
 static_assert(offsetof(TsaPrpt, blSinceResetFrames) == 0x286);
 static_assert(offsetof(TsaPrpt, blStageFrames) == 0x288);
 static_assert(offsetof(TsaPrpt, blStageTime) == 0x290);
-static_assert(offsetof(TsaPrpt, field29A) == 0x29A);
+static_assert(offsetof(TsaPrpt, blAvg) == 0x29A);
 static_assert(offsetof(TsaPrpt, allFreqInitCount) == 0x29C);
 static_assert(offsetof(TsaPrpt, blPropertyState) == 0x2A0);
 static_assert(offsetof(TsaPrpt, prevBlPropertyState) == 0x2A4);

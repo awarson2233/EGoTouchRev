@@ -111,7 +111,7 @@ bool SafeBaselineApplied() { return static_cast<char>(Sys::IsSafeBaselineApplied
 // 基线偏离基线参考值比 raw 偏离 raw 参考值更远。
 bool CheckAbnormal(uint16_t raw, uint16_t bl) {
     const TsaPrpt& prpt = Prpt();
-    return std::abs(static_cast<int>(raw - prpt.field09A)) < std::abs(static_cast<int>(bl - prpt.field29A));
+    return std::abs(static_cast<int>(raw - prpt.rawAvg)) < std::abs(static_cast<int>(bl - prpt.blAvg));
 }
 
 // BLReset_IsBaselineClean @ 0x6ba47e09
@@ -139,10 +139,10 @@ bool IsTouchToBeProtected() {
         const Point& p0 = prev.unit[0].rptPos;
         const Point& p1 = prev.unit[1].rptPos;
         const int16_t* dif = Buffers().dif;
-        const int half = prpt.sigPeakPositive / 2;
+        const int half = prpt.dif.maxSig / 2;
         r = fullIncell || (half < -dif[GridIndex(static_cast<uint8_t>(p0.dim1 >> 8), static_cast<uint8_t>(p1.dim2 >> 8))] &&
                            half < -dif[GridIndex(static_cast<uint8_t>(p1.dim1 >> 8), static_cast<uint8_t>(p0.dim2 >> 8))] &&
-                           -prpt.field0B0 < prpt.field0AC);
+                           -prpt.dif.negSum < prpt.dif.posSum);
     }
     if (r) Debug(kDbgProtected);
     return r;
@@ -589,7 +589,7 @@ bool IsAfeRawJump() {
 void CheckTouchTrustability() {
     PrevTouchTable& prev = PrevTouches();
     const InnerPeak inner;
-    const int negPeak = -Prpt().sigPeakNegative;
+    const int negPeak = -Prpt().dif.minSig;
     for (uint16_t i = 0; i < prev.count; ++i) {
         PrevTouchUnit& u = prev.unit[i];
         const bool trusted = inner(u) && (u.persistFlags & kPersistSmallTouch) != 0 && u.ellipseRate <= 0xc && negPeak < u.maxPeakSig * 2;
@@ -606,7 +606,7 @@ void CheckTouchTrustability() {
 // 确认 0x65 ms 都没有触点即把当前基线存为干净基线（0x10）。中途超噪声格变多则判基线可疑并回到 1。
 void BaselineStateMachine(bool touched) {
     TsaStatic& stat = Static();
-    const uint16_t overNoise = Prpt().field0B8;
+    const uint16_t overNoise = Prpt().dif.count;
     switch (stat.cleanState) {
     case 0:
         if (stat.cleanFrames < 6) {
@@ -854,7 +854,7 @@ bool IsTouchToBeProtected2(bool needTwo) {
     for (uint16_t i = 0; i < prev.count; ++i) {
         const PrevTouchUnit& u = prev.unit[i];
         if (!inner(u) || (u.persistFlags & kPersistSmallTouch) == 0 || 0xd <= u.ellipseRate || u.signalScale <= peakLimit ||
-            u.maxPeakSig * 2 <= -prpt.sigPeakNegative) {
+            u.maxPeakSig * 2 <= -prpt.dif.minSig) {
             continue;
         }
         const PeakEntry& pk = Peaks().entry[u.peakIdx];

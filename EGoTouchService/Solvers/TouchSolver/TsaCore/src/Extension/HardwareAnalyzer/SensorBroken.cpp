@@ -138,11 +138,11 @@ void DebounceBrokenSensorByDifZ8(uint8_t dim1, uint8_t dim2) {
 void BrokenSensorStatByDifZ8() {
     TsaPrpt& prpt = Prpt();
     prpt.brokenByDifZ8 = 0;
-    if (IsSensorBrokenByDifZ8(prpt.specialThreshCol, prpt.specialThreshRow)) {
-        DebounceBrokenSensorByDifZ8(prpt.specialThreshCol, prpt.specialThreshRow);
+    if (IsSensorBrokenByDifZ8(prpt.dif.maxDim1, prpt.dif.maxDim2)) {
+        DebounceBrokenSensorByDifZ8(prpt.dif.maxDim1, prpt.dif.maxDim2);
     }
-    if (IsSensorBrokenByDifZ8(prpt.nextSideThreshCol, prpt.nextSideThreshRow)) {
-        DebounceBrokenSensorByDifZ8(prpt.nextSideThreshCol, prpt.nextSideThreshRow);
+    if (IsSensorBrokenByDifZ8(prpt.dif.minDim1, prpt.dif.minDim2)) {
+        DebounceBrokenSensorByDifZ8(prpt.dif.minDim1, prpt.dif.minDim2);
     }
     for (auto k = static_cast<int8_t>(prpt.brokenSensorNum - 1); k >= 0; --k) {
         int64_t& t = prpt.brokenSensor[k].timerMs;
@@ -304,11 +304,11 @@ void SensorBrokenDifProcess() {
     const int16_t* dif = Buffers().dif;
     const int ref = fl.peakFilterReferenceThreshold;
     int thold = ref / 2;
-    const int peak = prpt.sigPeakPositive * 0x5a / 100;
+    const int peak = prpt.dif.maxSig * 0x5a / 100;
     if (thold < peak) thold = peak;
     for (uint8_t c = 0; c < fl.dim1Len; ++c) {
         for (uint8_t r = 0; r < fl.dim2Len; ++r) {
-            if (-ref <= prpt.sigPeakNegative * 8 && thold <= dif[Cell(c, r)] && TpSensor::IsSensorValid(c, r)) {
+            if (-ref <= prpt.dif.minSig * 8 && thold <= dif[Cell(c, r)] && TpSensor::IsSensorValid(c, r)) {
                 CheckCrossAround(c, r);
             }
         }

@@ -43,7 +43,7 @@ bool SafeBaselineApplied() { return static_cast<char>(Sys::IsSafeBaselineApplied
 bool IsNextToEdge(uint8_t col) { return col == 1 || col == PrmtFlash().dim1Len - 2; }
 
 // BLSM_ProcessUseNextSideThold @ 0x6ba4cf41
-bool UseNextSideThold() { return ToeUseSpecialThold() && IsNextToEdge(Prpt().nextSideThreshCol); }
+bool UseNextSideThold() { return ToeUseSpecialThold() && IsNextToEdge(Prpt().dif.minDim1); }
 
 // BLSM_GetNoTouchBlStep @ 0x6ba4cf9c
 // 无触摸时的门限与步长：侧边相邻列用侧边的一组。IDLE 扫描时步长改按极值的 1/16，不超过门限的 1/4。
@@ -59,7 +59,7 @@ void NoTouchStep(int16_t& thold, int16_t& step) {
         return;
     }
     const TsaPrpt& prpt = Prpt();
-    const int peak = std::max<int>(prpt.sigPeakPositive, -prpt.sigPeakNegative);
+    const int peak = std::max<int>(prpt.dif.maxSig, -prpt.dif.minSig);
     step = static_cast<int16_t>(static_cast<int16_t>(peak) / 16);
     if (thold / 4 < step) step = static_cast<int16_t>(thold / 4);
 }
@@ -106,7 +106,7 @@ void GetProperty(bool resetReq, bool refreshReq) {
     } else if (ResetInDebounce()) {
         flags = kPropDebounce;
     } else {
-        if (ToeUseSpecialThold() && IsNextToEdge(prpt.specialThreshCol)) NextEdgeSmallThold() = 1;
+        if (ToeUseSpecialThold() && IsNextToEdge(prpt.dif.maxDim1)) NextEdgeSmallThold() = 1;
         const bool edge = NextEdgeSmallThold() != 0;
         flags = kPropTouched;
         if (maxSig < dyn.noiseThold && static_cast<char>(AFE_IsCoreTouchDetected()) == 0 &&
@@ -194,7 +194,7 @@ void UpdateStage() {
         const int16_t thold = NextEdgeSmallThold() != 0 ? PrmtDynamic().sideSmallThold : PrmtDynamic().smallThold;
         if (touched) {
             restart(kStageTouched);
-        } else if (timeout || (prpt.sigPeakPositive < thold && -prpt.sigPeakNegative < thold)) {
+        } else if (timeout || (prpt.dif.maxSig < thold && -prpt.dif.minSig < thold)) {
             restart(kStageNoTouch);
         }
         break;
@@ -244,9 +244,9 @@ void ProcessStage() {
     }
     case kStageNegative: {
         // 负信号的 1/16 为步长，不超过小门限的 1/4
-        auto step = static_cast<int16_t>(-prpt.sigPeakNegative / 16);
+        auto step = static_cast<int16_t>(-prpt.dif.minSig / 16);
         if (dyn.smallThold / 4 < step) step = static_cast<int16_t>(dyn.smallThold / 4);
-        Iir::Update(true, static_cast<int16_t>(-prpt.sigPeakNegative), step);
+        Iir::Update(true, static_cast<int16_t>(-prpt.dif.minSig), step);
         stat.blUpdatedThisFrame = 1;
         break;
     }
@@ -365,19 +365,19 @@ bool IsBaselineOk() {
 }
 
 // BLSM_GetMaxSig @ 0x6ba4d41d
-// 正向极值；不用安全基线时，基线可疑的 Toe 机型在极值不大时改看 field0C0，再交给 ToeSyna 的属性。
+// 正向极值；不用安全基线时，基线可疑的 Toe 机型在极值不大时改看 difCore.maxSig，再交给 ToeSyna 的属性。
 int16_t MaxSig() {
-    int16_t v = Prpt().sigPeakPositive;
+    int16_t v = Prpt().dif.maxSig;
     if (SafeBaselineApplied()) return v;
-    if (ToeUseSpecialThold() && !IsGame() && Static().blSuspect != 0 && v < kToeSuspectSig) v = Prpt().field0C0;
+    if (ToeUseSpecialThold() && !IsGame() && Static().blSuspect != 0 && v < kToeSuspectSig) v = Prpt().difCore.maxSig;
     return ToeSynaBl::PropertyMaxSig(v);
 }
 
 // BLSM_GetMinSig @ 0x6ba4d4a0
 int16_t MinSig() {
-    int16_t v = Prpt().sigPeakNegative;
+    int16_t v = Prpt().dif.minSig;
     if (SafeBaselineApplied()) return v;
-    if (ToeUseSpecialThold() && !IsGame() && Static().blSuspect != 0 && -kToeSuspectSig < v) v = Prpt().field0C2;
+    if (ToeUseSpecialThold() && !IsGame() && Static().blSuspect != 0 && -kToeSuspectSig < v) v = Prpt().difCore.minSig;
     return ToeSynaBl::PropertyMinSig(v);
 }
 

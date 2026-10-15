@@ -94,7 +94,7 @@ int16_t CountWaterCell(uint8_t prevIdx, uint8_t slot, int16_t count, int16_t low
 }
 
 // FIException_CheckWetFinger @ 0x6ba59919
-// 区域对应的历史触点先把当前位置推进轨迹队列，再沿整条轨迹数水膜格（Dif 在 sigPeakPositive 的
+// 区域对应的历史触点先把当前位置推进轨迹队列，再沿整条轨迹数水膜格（Dif 在 dif.maxSig 的
 // 两个百分比之间、周围没有更大信号的格）。水膜格够多、形状够长、且区域不贴屏幕边时判湿手指。
 bool IsWetFinger(TouchZoneUnit& zone) {
     const uint8_t prevIdx = zone.prevIdx;
@@ -104,7 +104,7 @@ bool IsWetFinger(TouchZoneUnit& zone) {
     PrevTouch::HistoryQueuePush(prevIdx, unit.iirPos.dim1, unit.iirPos.dim2);
 
     const FlashPrmt& fl = PrmtFlash();
-    const int16_t sig = Prpt().sigPeakPositive;
+    const int16_t sig = Prpt().dif.maxSig;
     if (sig < fl.fingerThold) return false;
     std::memset(Reached(), 0, GridBufSize());
     const auto low = static_cast<int16_t>(sig * fl.waterSigLowPercent / 100);

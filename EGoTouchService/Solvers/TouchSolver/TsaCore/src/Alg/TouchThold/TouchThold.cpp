@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "Alg/Touch/TouchData.h"
+#include "App/Property.h"
 #include "App/Sys.h"
 #include "App/TsaStatic.h"
 #include "Legacy/RawApi.h"
@@ -82,14 +83,14 @@ int16_t GetNoiseThold(int16_t fingerThold, int16_t gloveThold) {
 int16_t BasedOnExperience(int16_t thold) {
     const FlashPrmt& flash = PrmtFlash();
     if (flash.sensorArchitecture == kFullIncell) return thold;
-    const int16_t minSig = TSA_GetMinSigPrpt();
+    const int16_t minSig = Property::MinSig();
     if (flash.sensorArchitecture == kFullIncell) return thold;
     const TsaPrpt& prpt = Prpt();
     const uint32_t exceptions = PrevTouches().exceptionFlags;
-    auto result = static_cast<int16_t>(std::min(flash.peakFilterReferenceThreshold, prpt.sigPeakPositive) / 4);
+    auto result = static_cast<int16_t>(std::min(flash.peakFilterReferenceThreshold, prpt.dif.maxSig) / 4);
     if (exceptions == 0x100 || Static().noiseLevel == 2) {
         if (result < -minSig) result = static_cast<int16_t>(-minSig);
-        const auto cap = static_cast<int16_t>(prpt.sigPeakPositive * 3 / 4);
+        const auto cap = static_cast<int16_t>(prpt.dif.maxSig * 3 / 4);
         result = std::min(result, cap);
     } else if ((exceptions & 0xc8) == 0) {
         result = std::max(result, static_cast<int16_t>(-minSig / 2));
@@ -124,7 +125,7 @@ int16_t GetTouchDownThold(int16_t touchThold) {
     if (flash.sensorArchitecture != kFullIncell) return touchThold;
     int16_t result = touchThold;
     if ((Static().featureFlags & 0x1000) == 0) {
-        result = static_cast<int16_t>(std::min(Prpt().sigPeakPositive, flash.peakFilterReferenceThreshold) / 3);
+        result = static_cast<int16_t>(std::min(Prpt().dif.maxSig, flash.peakFilterReferenceThreshold) / 3);
     }
     return std::max(result, touchThold);
 }
