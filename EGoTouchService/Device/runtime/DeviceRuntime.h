@@ -354,6 +354,8 @@ public:
 
     RuntimeSnapshot GetSnapshot() const;
     RuntimePenState GetPenStateSnapshot() const;
+    /// 第一次建链时从显示驱动 OTP 读到的面板型号；还没建链或读失败为空
+    std::optional<Himax::PanelIdentity> GetPanelIdentity() const { return m_chip.GetPanelIdentity(); }
     PenAfeReplayState GetPenAfeReplayStateSnapshot() const;
     std::vector<HistoryEntry> GetHistory(std::size_t n = 200) const;
     void ClearHistory();
