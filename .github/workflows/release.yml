@@ -36,7 +36,7 @@ jobs:
       RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
       MSI_VERSION: ${{ needs.release-please.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.release-please.outputs.tag_name }}
           submodules: recursive
