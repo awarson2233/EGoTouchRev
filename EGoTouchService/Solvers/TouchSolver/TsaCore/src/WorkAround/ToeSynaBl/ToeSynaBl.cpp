@@ -1,3 +1,4 @@
+#include "App/Sys.h"
 #include "WorkAround/ToeSynaBl/ToeSynaBl.h"
 
 #include <cstddef>
@@ -343,7 +344,7 @@ void Free() {
 // ToeSynaBl_GetSidePrpt @ 0x6bb471b0
 // 两侧列 raw 有变化时重新抓取；侧边 raw 受保护的时间离现在超过 1 s（或 2 s）即排除侧边。
 void GetSidePrpt() {
-    if (static_cast<char>(TSAStatic_IsSafeBaselineApplied()) != 0 || !Enabled()) return;
+    if (static_cast<char>(Sys::IsSafeBaselineApplied()) != 0 || !Enabled()) return;
     TsaStatic& stat = Static();
     const uint8_t cols = PrmtFlash().dim1Len;
     const uint8_t side = SideTouch() ? 1 : 0;
@@ -369,7 +370,7 @@ int16_t PropertyMaxSig(int16_t v) {
 
 // ToeSyna_PorpertyGetMinSig @ 0x6bb47412
 int16_t PropertyMinSig(int16_t v) {
-    if (static_cast<char>(TSAStatic_IsSafeBaselineApplied()) != 0 || S().excludeSide == 0) return v;
+    if (static_cast<char>(Sys::IsSafeBaselineApplied()) != 0 || S().excludeSide == 0) return v;
     return SideTouch() ? Prpt().field0E2 : Prpt().field0C2;
 }
 

@@ -1,3 +1,4 @@
+#include "App/Sys.h"
 #include "Extension/HardwareAnalyzer/HardwareAnalyzer.h"
 
 #include <cstdlib>
@@ -112,7 +113,7 @@ void ProcessByRaw2Raw() {
     const bool balanced = r.posSum < r.negSum * -4 && -r.negSum < r.posSum * 4;
     if (n <= r.overBigNoiseCount * 100u) SetException(kExcBigNoise);
     if (n >> 2 < r.overHtiCount) SetException(kExcRaw2RawNoise);
-    if (TSAStatic_IsChargerPlugged() == 0 || FullIncell()) {
+    if (Sys::IsChargerPlugged() == 0 || FullIncell()) {
         if (n >> 1 < r.overLtiCount) SetException(kExcRaw2RawNoise);
         const uint16_t over = FullIncell() ? r.overNoiseCount : r.overNoiseAfterCmf;
         if (n >> 1 < over && balanced) SetException(kExcRaw2RawNoise);
@@ -137,7 +138,7 @@ void RawLimitProcess() {
 // HardwareAnalyzer_PostProcessRaw @ 0x6baf2005
 void PostProcessRaw() {
     const TsaStatic& stat = Static();
-    if ((stat.systemFlags & kSysDifBufPath) == 0 && (TSAStatic_IsChargerPlugged() == 0 || FullIncell())) RawLimitProcess();
+    if ((stat.systemFlags & kSysDifBufPath) == 0 && (Sys::IsChargerPlugged() == 0 || FullIncell())) RawLimitProcess();
     if (stat.rawJumpDetected != 0) SetException(kExcRaw2RawNoise);
     if (PrmtFlash().fingerThold < static_cast<uint16_t>(TSA_GetMaxCMFNoiseValue()) && FullIncell()) {
         SetException(kExcDisplayNoise);
@@ -170,7 +171,7 @@ void GetMaxEllipseRateInCore() {
 void PostProcessTouch() {
     if (Prpt().blPropertyState == 9) SetException(kExcAbnormalShape);
     GetMaxEllipseRateInCore();
-    if (FullIncell() && static_cast<uint8_t>(TSAStatic_IsAFTModeEnabled()) == 0 &&
+    if (FullIncell() && static_cast<uint8_t>(Sys::IsAftModeEnabled()) == 0 &&
         (Touches().stateFlags & kTouchStateBadEllipse) != 0) {
         SetException(kExcAbnormalShape);
     }
@@ -259,7 +260,7 @@ void GetCouplingNoiseLevel() {
 
 // HardwareAnalyzer_LargeDisplayNoise @ 0x6baf0e82
 void LargeDisplayNoise() {
-    if (Static().largeDisplayNoise != 0 && TSAStatic_IsChargerPlugged() == 0) SetException(kExcDisplayNoise);
+    if (Static().allFreqNoisy != 0 && Sys::IsChargerPlugged() == 0) SetException(kExcDisplayNoise);
 }
 
 // PostProcess 里的环境温度异常：手套 / 指关节模式锁定、且按 zTholdFlags 启用时（智能皮套除外）。
@@ -412,7 +413,7 @@ void Process() {
     st.cur = 0;
     ClearExceptionDescription();
     GetRaw2RawPrpt();
-    if (TSAStatic_IsHWReset()) {
+    if (Sys::IsHwReset()) {
         Init();
     } else if ((Static().systemFlags & kSysDifBufPath) == 0) {
         SensorBrokenRawProcess();
@@ -437,7 +438,7 @@ void ProcessDif() { SensorBrokenDifProcess(); }
 
 // HardwareAnalyzer_PostProcess @ 0x6baf2151（安全基线、EventAnalyzer 被裁掉）
 void PostProcess() {
-    if (!TSAStatic_IsHWReset()) {
+    if (!Sys::IsHwReset()) {
         PostProcessRaw();
         const uint32_t ex = TouchExceptionFlags();
         if ((ex & kTouchExcBaselineReset) != 0) SetException(kExcBaselineReset);

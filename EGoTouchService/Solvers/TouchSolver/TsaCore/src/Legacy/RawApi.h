@@ -19,6 +19,12 @@ int Misc_SqrtUint32(uint32_t value);
 double SinXDivX(double x);
 
 // Core/AFE.c
+uint8_t AFE_IsAllFreqNoisy(void);
+char AFE_IsFreqShiftDone(void);
+bool AFE_IsInIDLEMode(void);
+uint32_t AFE_IsInProximityScreenOffState(void);
+uint32_t AFE_IsInSideIDLEMode(void);
+uint32_t AFE_IsRawUnstable(void);
 uint32_t AFE_IsRawJump(void);
 uint16_t AFE_GetColNum(void);
 uint16_t AFE_GetRowNum(void);
@@ -57,36 +63,14 @@ void TSA_Free(int64_t* ptr);
 uint32_t TSA_GetSide(uint16_t dim1, uint16_t dim2);
 uint64_t TSA_InStylusMode(void);
 uint32_t TSA_IsPadFeatureEnabled(void);
+char TSA_IsGripOKToIDLE(void);
+uint8_t TSA_IsOKToEnterIDLEMode(void);
+bool TSA_UpdateIDLEModeInternally(void);
+bool TSA_UpdateSideIDLEModeInternally(void);
+int64_t TSA_GetSensorData(void);
+void TSA_SetXPos(uint8_t idx, uint16_t x);
 
-// Core/TSAOut.c
-uint16_t TSAOut_Dim1PosInternal(uint16_t pos, uint16_t scale);
-uint16_t TSAOut_Dim2PosInternal(uint16_t pos, uint16_t scale);
-uint16_t TSAOut_DisplayXPos(uint8_t idx, ...);
-uint16_t TSAOut_DisplayYPos(uint8_t idx, ...);
-uint16_t TSAOut_Pixel2DisplayDim1(uint16_t pos);
-uint16_t TSAOut_Pixel2DisplayDim2(uint16_t pos);
-uint32_t TSAOut_RevertDim1Pos(uint16_t pos);
-uint32_t TSAOut_RevertDim2Pos(uint16_t pos);
-uint64_t TSAOut_ExtToIntDist(uint16_t dist);
-uint32_t TSAOut_IntToExtDist(int16_t dist);
-char TSAOut_Angle(char angle);
 
-// Core/TSAStatic.c
-uint8_t TSAStatic_IsChargerPlugged(void);
-uint64_t TSAStatic_IsSafeBaselineApplied(void);
-void TSAStatic_ProcessAftTouchEvent(void);
-uint64_t TSAStatic_IsScreenRotated(void);
-uint8_t TSAStatic_IsAFEJustEnterIDLEMode(void);
-uint8_t TSAStatic_IsAFEJustExitIDLEMode(void);
-bool TSAStatic_IsFreqShiftDone(void);
-uint64_t TSAStatic_IsProximityEnabled(void);
-uint8_t TSAStatic_IsSignalReverted(void);
-uint32_t TSAStatic_IsAFTModeEnabled(void);
-uint32_t TSAStatic_GetSigThold(int mode);
-uint8_t TSAStatic_IsAllFreqNoisy(void);
-uint8_t TSAStatic_IsAllFreqBecomeNoisy(void);
-bool TSAStatic_IsHWReset(void);
-bool TSAStatic_IsChargerPluggedNoDebounce(void);
 
 // Core/TSAPrunedImpl.c
 void CMFRemap_Init(void);
@@ -108,8 +92,6 @@ uint8_t GripFilter_IsMergeHandlerSensorEnabled(uint8_t dim1, uint8_t dim2);
 
 // Rejection/Thenar.c
 void Thenar_UnitCopy(uint8_t* dst, uint8_t* src);
-
-
-
+bool Thenar_UpdateExternalInfo(void);
 
 }  // extern "C"

@@ -9,6 +9,7 @@
 #include "Alg/TouchZone/SubTouchZone.h"
 #include "Alg/TouchZone/TouchZone.h"
 #include "Alg/TouchZone/TouchZoneInternal.h"
+#include "App/Sys.h"
 #include "App/TsaBuffer.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
@@ -183,7 +184,7 @@ void JudgeFfOrMf(TouchZoneUnit& z) {
 // TZ_DFSProcess @ 0x6ba832d9
 // 全频噪声或最强峰不到手指门限时为大手指；否则先按峰对应的历史形状消抖，消抖不出结论再按几何判定。
 void DfsProcess(TouchZoneUnit& z) {
-    if (TSAStatic_IsAllFreqNoisy() != 0) {
+    if (Sys::IsAllFreqNoisy() != 0) {
         z.shape = kShapeFatFinger;
         return;
     }

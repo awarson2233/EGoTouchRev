@@ -9,6 +9,7 @@
 #include "Alg/Touch/TouchData.h"
 #include "Alg/TouchZone/TouchZone.h"
 #include "Alg/TouchZone/TouchZoneData.h"
+#include "App/Sys.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Image.h"
@@ -98,7 +99,7 @@ int16_t CountWaterCell(uint8_t prevIdx, uint8_t slot, int16_t count, int16_t low
 bool IsWetFinger(TouchZoneUnit& zone) {
     const uint8_t prevIdx = zone.prevIdx;
     if (prevIdx >= kNoTouch) return false;
-    if (static_cast<uint8_t>(TSAStatic_IsProximityEnabled()) != 0) return false;
+    if (static_cast<uint8_t>(Sys::IsProximityEnabled()) != 0) return false;
     const PrevTouchUnit& unit = Prev(prevIdx);
     PrevTouch::HistoryQueuePush(prevIdx, unit.iirPos.dim1, unit.iirPos.dim2);
 

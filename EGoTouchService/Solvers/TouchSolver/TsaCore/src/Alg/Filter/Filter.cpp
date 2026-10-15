@@ -8,6 +8,7 @@
 #include "Alg/Touch/PrevTouch.h"
 #include "Alg/Touch/Touch.h"
 #include "Alg/Touch/TouchData.h"
+#include "App/TsaOut.h"
 #include "App/TsaStatic.h"
 #include "Common/Image.h"
 #include "Legacy/RawApi.h"
@@ -355,8 +356,8 @@ void IirPDims(uint8_t c, uint8_t p) {
         IirDim(cur.pos.dim2, prev.iirPos.dim2, prev.iirRemDim2, coef, cur.iirPos.dim2, cur.iirRemDim2);
     }
     const uint16_t scale = PrmtFlash().outputResScale;
-    PosAftIirDim1() = TSAOut_Dim1PosInternal(cur.iirPos.dim1, scale);
-    PosAftIirDim2() = TSAOut_Dim2PosInternal(cur.iirPos.dim2, scale);
+    PosAftIirDim1() = Out::Dim1PosInternal(cur.iirPos.dim1, scale);
+    PosAftIirDim2() = Out::Dim2PosInternal(cur.iirPos.dim2, scale);
 }
 
 // ── 点击抑制 ─────────────────────────────────────────────────────────────
@@ -374,7 +375,7 @@ void LockClick(uint8_t c, uint8_t p) {
 // Filter_ReportClickToFlickDim1OffsetCheck @ 0x6ba5e149 / Dim2 @ 0x6ba5e409
 // 每帧最多收回 min(IIR 位移 / 4, clickToFlickStep) 的偏移；偏移收回到不足一步时返回 true。
 bool RecoverClickOffset(uint16_t& iir, uint16_t prevIir, int16_t& offset) {
-    const auto stepLimit = static_cast<int16_t>(TSAOut_ExtToIntDist(PrmtDynamic().clickToFlickStep));
+    const auto stepLimit = static_cast<int16_t>(Out::ExtToIntDist(PrmtDynamic().clickToFlickStep));
     const int moved = std::abs(static_cast<int>(static_cast<uint32_t>(iir) - prevIir));
     const auto step = static_cast<int16_t>(std::min(moved / 4, static_cast<int>(stepLimit)));
     if (step <= offset) {
@@ -484,8 +485,8 @@ void ReportedProcessUnit(uint8_t c, uint8_t p) {
 void ProcessUnit(uint8_t curIdx, uint8_t prevIdx) {
     TouchUnit& cur = Cur(curIdx);
     const uint16_t scale = PrmtFlash().outputResScale;
-    PosPreFilterDim1() = TSAOut_Dim1PosInternal(cur.pos.dim1, scale);
-    PosPreFilterDim2() = TSAOut_Dim2PosInternal(cur.pos.dim2, scale);
+    PosPreFilterDim1() = Out::Dim1PosInternal(cur.pos.dim1, scale);
+    PosPreFilterDim2() = Out::Dim2PosInternal(cur.pos.dim2, scale);
     if ((cur.persistFlags & kPersistReported) == 0) {
         cur.iirPos = cur.pos;
         cur.jitPos = cur.pos;

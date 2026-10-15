@@ -5,6 +5,7 @@
 #include "Alg/Debounce/Debounce.h"
 #include "Alg/Touch/PrevTouch.h"
 #include "Alg/Touch/Touch.h"
+#include "App/Sys.h"
 #include "App/TsaStatic.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
@@ -258,7 +259,7 @@ void Process() {
     }
     if ((Static().processingState & kProcMsActive) != 0) {
         Touch::ProcessAftTouchEvent();
-        TSAStatic_ProcessAftTouchEvent();
+        Sys::ProcessAftTouchEvent();
     }
 }
 

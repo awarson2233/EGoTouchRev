@@ -6,6 +6,7 @@
 #include "Alg/Touch/TouchData.h"
 #include "Alg/Touch/TouchGeometry.h"
 #include "Alg/TouchSize/TouchSize.h"
+#include "App/TsaOut.h"
 #include "Common/Image.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
@@ -64,15 +65,15 @@ uint16_t MmToEdgePixel(uint8_t mm, int side) {
     const auto displayPx = static_cast<uint16_t>(TouchSize::MmToDisplayPixel(mm));
     const auto pos = static_cast<uint16_t>((displayPx >> 4) - 5);
     const auto dimEdge = static_cast<int>(TSA_SideToDimEdge(side));
-    return static_cast<uint16_t>(dimEdge == 1 || dimEdge == 2 ? TSAOut_RevertDim1Pos(pos) : TSAOut_RevertDim2Pos(pos));
+    return static_cast<uint16_t>(dimEdge == 1 || dimEdge == 2 ? Out::RevertDim1Pos(pos) : Out::RevertDim2Pos(pos));
 }
 
 // ER_IsInBottomZone @ 0x6ba572bf
 // 显示坐标在底边 kBottomZoneHeight 以内，且离左右两边都超过 kBottomZoneSideMargin。
 bool IsInBottomZone(Point pos) {
     const FlashPrmt& fl = PrmtFlash();
-    const uint16_t x = TSAOut_Pixel2DisplayDim1(pos.dim1);
-    const uint16_t y = TSAOut_Pixel2DisplayDim2(pos.dim2);
+    const uint16_t x = Out::Pixel2DisplayDim1(pos.dim1);
+    const uint16_t y = Out::Pixel2DisplayDim2(pos.dim2);
     return y >= static_cast<uint16_t>(fl.field09A) - kBottomZoneHeight &&
            x >= static_cast<uint16_t>(fl.field094) + kBottomZoneSideMargin &&
            x < static_cast<uint16_t>(fl.field096) - kBottomZoneSideMargin;

@@ -125,14 +125,20 @@ struct FlashPrmt {
     uint8_t reserved030[0x4];
     uint32_t sensorArchitecture;  // OnCell(1)、Hybrid Incell(2)、Full Incell(3)
     uint8_t reportRateHz;  // 0 时按 8 ms 一帧
-    uint8_t reserved039[0x3];
+    uint8_t reserved039[0x1];
+    uint16_t idleEnterDelayMs;  // 可以进 IDLE 之后再等多久才对外请求
     uint16_t dbEnterIdle;  // 允许进入 IDLE 后的防抖时间（ms）
     uint8_t reserved03E[0x6];
     uint8_t field044;  // TouchMode：为 0 时手指 → 无物体的切换防抖 60 帧，否则立即切换
-    uint8_t reserved045[0x3];
+    uint8_t reserved045[0x1];
+    uint16_t idleAfterInitMs;  // 互容主流程初始化后多久之内不进 IDLE
     uint16_t recalRawCenter;  // BLRecal：raw 上下边界的目标中心与允许范围
     uint16_t recalRawRange;
-    uint8_t reserved04C[0x14];
+    uint8_t reserved04C[0x4];
+    uint32_t featureFlagsDefault;  // TsaStatic::featureFlags 的初值（再或上 featureFlagsForce）
+    uint32_t featureFlagsForce;
+    uint32_t featureFlags2Default;
+    uint32_t featureFlags2Force;
     uint32_t antiTouchScenarios;  // 哪些场景启用防误触
     uint32_t proximityScenarios;  // 哪些场景启用接近检测
     uint8_t cmfEnabled;
@@ -152,7 +158,10 @@ struct FlashPrmt {
     int16_t field09A;
     uint8_t reserved09C[0x504];
     uint16_t outputResScale;  // 对外坐标的分辨率倍数（TSA 可设置），TSAOut 的显示坐标按它放大
-    uint8_t reserved5A2[0x4];
+    uint8_t dim1Flip;  // 显示坐标在 Dim1 方向翻转
+    uint8_t dim2Flip;
+    uint8_t displaySwapXy;  // 与 dim1Axis ^ displayXAxis 相等时 X 取 Dim1
+    uint8_t reserved5A5[0x1];
     uint16_t dim1Res;  // Dim1 方向的显示分辨率
     uint16_t dim2Res;
     uint8_t reserved5AA[0x4];
@@ -160,7 +169,8 @@ struct FlashPrmt {
     int8_t dim1ClipHigh;
     int8_t dim2ClipLow;
     int8_t dim2ClipHigh;
-    uint8_t reserved5B2[0x2];
+    int8_t dim2EdgeLow;  // Dim2 两端裁剪为负（向外延伸）时的边缘缩放参考
+    int8_t dim2EdgeHigh;
     int16_t peakFilterReferenceThreshold;
     int16_t fingerThold;  // finger 模式的按下门限
     uint8_t reserved5B8[0x2];
@@ -388,10 +398,16 @@ static_assert(offsetof(FlashPrmt, sensorNum) == 0x02C);
 static_assert(offsetof(FlashPrmt, field02E) == 0x02E);
 static_assert(offsetof(FlashPrmt, sensorArchitecture) == 0x034);
 static_assert(offsetof(FlashPrmt, reportRateHz) == 0x038);
+static_assert(offsetof(FlashPrmt, idleEnterDelayMs) == 0x03A);
 static_assert(offsetof(FlashPrmt, dbEnterIdle) == 0x03C);
 static_assert(offsetof(FlashPrmt, field044) == 0x044);
+static_assert(offsetof(FlashPrmt, idleAfterInitMs) == 0x046);
 static_assert(offsetof(FlashPrmt, recalRawCenter) == 0x048);
 static_assert(offsetof(FlashPrmt, recalRawRange) == 0x04A);
+static_assert(offsetof(FlashPrmt, featureFlagsDefault) == 0x050);
+static_assert(offsetof(FlashPrmt, featureFlagsForce) == 0x054);
+static_assert(offsetof(FlashPrmt, featureFlags2Default) == 0x058);
+static_assert(offsetof(FlashPrmt, featureFlags2Force) == 0x05C);
 static_assert(offsetof(FlashPrmt, antiTouchScenarios) == 0x060);
 static_assert(offsetof(FlashPrmt, proximityScenarios) == 0x064);
 static_assert(offsetof(FlashPrmt, cmfEnabled) == 0x068);
@@ -409,12 +425,17 @@ static_assert(offsetof(FlashPrmt, field096) == 0x096);
 static_assert(offsetof(FlashPrmt, field098) == 0x098);
 static_assert(offsetof(FlashPrmt, field09A) == 0x09A);
 static_assert(offsetof(FlashPrmt, outputResScale) == 0x5A0);
+static_assert(offsetof(FlashPrmt, dim1Flip) == 0x5A2);
+static_assert(offsetof(FlashPrmt, dim2Flip) == 0x5A3);
+static_assert(offsetof(FlashPrmt, displaySwapXy) == 0x5A4);
 static_assert(offsetof(FlashPrmt, dim1Res) == 0x5A6);
 static_assert(offsetof(FlashPrmt, dim2Res) == 0x5A8);
 static_assert(offsetof(FlashPrmt, dim1ClipLow) == 0x5AE);
 static_assert(offsetof(FlashPrmt, dim1ClipHigh) == 0x5AF);
 static_assert(offsetof(FlashPrmt, dim2ClipLow) == 0x5B0);
 static_assert(offsetof(FlashPrmt, dim2ClipHigh) == 0x5B1);
+static_assert(offsetof(FlashPrmt, dim2EdgeLow) == 0x5B2);
+static_assert(offsetof(FlashPrmt, dim2EdgeHigh) == 0x5B3);
 static_assert(offsetof(FlashPrmt, peakFilterReferenceThreshold) == 0x5B4);
 static_assert(offsetof(FlashPrmt, fingerThold) == 0x5B6);
 static_assert(offsetof(FlashPrmt, sigRatioToDirectReport) == 0x5BA);

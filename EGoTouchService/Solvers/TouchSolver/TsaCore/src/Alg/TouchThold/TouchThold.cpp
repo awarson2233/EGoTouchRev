@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "Alg/Touch/TouchData.h"
+#include "App/Sys.h"
 #include "App/TsaStatic.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
@@ -71,7 +72,7 @@ int16_t GetNoiseThold(int16_t fingerThold, int16_t gloveThold) {
     }
     auto noise = static_cast<int16_t>(GetTholdBasedOnSnr(base));
     const int16_t byTouchMode = GetTholdBasedOnTouchMode(fingerThold, gloveThold);
-    if (static_cast<char>(TSAStatic_IsSafeBaselineApplied()) != 0) noise = std::max(noise, byTouchMode);
+    if (static_cast<char>(Sys::IsSafeBaselineApplied()) != 0) noise = std::max(noise, byTouchMode);
     Prpt().noiseThold = noise;
     return noise;
 }

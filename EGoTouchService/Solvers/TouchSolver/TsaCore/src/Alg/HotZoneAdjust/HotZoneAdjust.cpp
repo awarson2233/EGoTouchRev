@@ -6,6 +6,8 @@
 #include <utility>
 
 #include "Alg/Touch/TouchData.h"
+#include "App/Sys.h"
+#include "App/TsaOut.h"
 #include "App/TsaStatic.h"
 #include "Common/Image.h"
 #include "Legacy/RawApi.h"
@@ -87,7 +89,7 @@ TouchUnit& Cur(uint8_t idx) { return Touches().unit[idx]; }
 // 原代码不检查历史下标：为 kNoTouch 时照样按下标读写，落在历史表之后的内存上。
 PrevTouchUnit& Prev(uint8_t idx) { return PrevTouches().unit[idx]; }
 
-uint16_t ExtToIntDist(uint16_t dist) { return static_cast<uint16_t>(TSAOut_ExtToIntDist(dist)); }
+uint16_t ExtToIntDist(uint16_t dist) { return static_cast<uint16_t>(Out::ExtToIntDist(dist)); }
 
 bool IsEmpty(const Rect& r) { return r.dim1Min == 0 && r.dim1Max == 0 && r.dim2Min == 0 && r.dim2Max == 0; }
 
@@ -99,7 +101,7 @@ bool IsInRect(uint16_t dim1, uint16_t dim2, const Rect& r) {
 void ClearHotZones() { HotZones() = {}; }
 
 // HotZoneAdjustScenario @ 0x6baf406a
-bool IsScenarioAllowed() { return !TSA_IsTypingScenario() && static_cast<char>(TSAStatic_IsScreenRotated()) == 0; }
+bool IsScenarioAllowed() { return !TSA_IsTypingScenario() && static_cast<char>(Sys::IsScreenRotated()) == 0; }
 
 // HotZoneIsInCore @ 0x6baf51b8
 // 所在格不在网格的最外一圈。
@@ -114,10 +116,10 @@ RectTable ToInternal() {
     RectTable out{};
     const RectTable& zones = HotZones();
     for (uint8_t i = 0; i < kRectNum && !IsEmpty(zones[i]); ++i) {
-        out[i].dim1Min = static_cast<uint16_t>(TSAOut_RevertDim1Pos(zones[i].dim1Min));
-        out[i].dim1Max = static_cast<uint16_t>(TSAOut_RevertDim1Pos(zones[i].dim1Max));
-        out[i].dim2Min = static_cast<uint16_t>(TSAOut_RevertDim2Pos(zones[i].dim2Min));
-        out[i].dim2Max = static_cast<uint16_t>(TSAOut_RevertDim2Pos(zones[i].dim2Max));
+        out[i].dim1Min = static_cast<uint16_t>(Out::RevertDim1Pos(zones[i].dim1Min));
+        out[i].dim1Max = static_cast<uint16_t>(Out::RevertDim1Pos(zones[i].dim1Max));
+        out[i].dim2Min = static_cast<uint16_t>(Out::RevertDim2Pos(zones[i].dim2Min));
+        out[i].dim2Max = static_cast<uint16_t>(Out::RevertDim2Pos(zones[i].dim2Max));
     }
     return out;
 }
@@ -156,8 +158,8 @@ bool SearchNearest(uint8_t curIdx, const RectTable& zones, uint8_t& nearest) {
 // CalculateSizeIndex @ 0x6baf46dd
 // 与热区面积（外部单位）最接近的尺寸档。
 uint16_t SizeIndex(const Rect& r) {
-    const auto halfDim1 = static_cast<int16_t>(TSAOut_IntToExtDist(static_cast<int16_t>((r.dim1Max - r.dim1Min) / 2)));
-    const auto halfDim2 = static_cast<int16_t>(TSAOut_IntToExtDist(static_cast<int16_t>((r.dim2Max - r.dim2Min) / 2)));
+    const auto halfDim1 = static_cast<int16_t>(Out::IntToExtDist(static_cast<int16_t>((r.dim1Max - r.dim1Min) / 2)));
+    const auto halfDim2 = static_cast<int16_t>(Out::IntToExtDist(static_cast<int16_t>((r.dim2Max - r.dim2Min) / 2)));
     const auto area = static_cast<uint32_t>(halfDim2 * halfDim1 * 4);
     const FlashPrmt& fl = PrmtFlash();
     uint32_t bestDiff = UINT32_MAX;

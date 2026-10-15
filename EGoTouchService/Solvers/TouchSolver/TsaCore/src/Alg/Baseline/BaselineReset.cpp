@@ -16,6 +16,7 @@
 #include "Alg/SelfData/SelfData.h"
 #include "Alg/Touch/TouchData.h"
 #include "Alg/TpSensor/TpSensor.h"
+#include "App/Sys.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
@@ -104,7 +105,7 @@ struct InnerPeak {
     }
 };
 
-bool SafeBaselineApplied() { return static_cast<char>(TSAStatic_IsSafeBaselineApplied()) != 0; }
+bool SafeBaselineApplied() { return static_cast<char>(Sys::IsSafeBaselineApplied()) != 0; }
 
 // BLReset_CheckAbnormal @ 0x6ba481e9
 // 基线偏离基线参考值比 raw 偏离 raw 参考值更远。
@@ -226,7 +227,7 @@ bool IsLongTimeRawJumpDetected() {
         return false;
     }
     bool r = false;
-    if (prpt.raw2Raw.overNoiseCount < 0x28 && fl.sensorNum >> 1 < prpt.field162) {
+    if (prpt.raw2Raw.overNoiseCount < 0x28 && fl.sensorNum >> 1 < prpt.preCmfOverCount) {
         if (!IsTouchProtectOnRawJump()) {
             if (stat.rawJumpTimer < 0x54) {
                 AddInterval(stat.rawJumpTimer);

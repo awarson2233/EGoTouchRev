@@ -1,6 +1,7 @@
 #include "Alg/Touch/TouchGeometry.h"
 
 #include "Alg/TouchSize/TouchSize.h"
+#include "App/Sys.h"
 #include "App/TsaStatic.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
@@ -103,12 +104,12 @@ int16_t GetFormattedTimeInterval(int16_t dt) {
     }
     if (dt < 1) {
         if (Static().frameCounter == 0) return 0;
-        if (dt < -7 && static_cast<char>(TSAStatic_IsAFEJustEnterIDLEMode()) == 0) {
+        if (dt < -7 && static_cast<char>(Sys::IsAfeJustEnterIdle()) == 0) {
             return dt > -1001 ? dt : int16_t{-1000};
         }
         return -8;
     }
-    if (dt > 7 && static_cast<char>(TSAStatic_IsAFEJustExitIDLEMode()) == 0) {
+    if (dt > 7 && static_cast<char>(Sys::IsAfeJustExitIdle()) == 0) {
         return dt < 1001 ? dt : int16_t{1000};
     }
     return 8;

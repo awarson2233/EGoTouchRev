@@ -9,6 +9,7 @@
 #include "Alg/SelfData/SelfData.h"
 #include "Alg/Touch/TouchData.h"
 #include "Alg/TouchThold/TouchThold.h"
+#include "App/Sys.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
@@ -36,7 +37,7 @@ uint8_t& NextEdgeSmallThold() { return Image::At<uint8_t>(0x6bb7f020); }
 
 bool ToeUseSpecialThold() { return TouchThold::ToeUseSpecialThold(); }
 bool IsGame() { return static_cast<char>(TSA_IsGameScenario()) != 0; }
-bool SafeBaselineApplied() { return static_cast<char>(TSAStatic_IsSafeBaselineApplied()) != 0; }
+bool SafeBaselineApplied() { return static_cast<char>(Sys::IsSafeBaselineApplied()) != 0; }
 
 /// 列 col 是侧边相邻的列（第 1 列或倒数第 2 列）。
 bool IsNextToEdge(uint8_t col) { return col == 1 || col == PrmtFlash().dim1Len - 2; }

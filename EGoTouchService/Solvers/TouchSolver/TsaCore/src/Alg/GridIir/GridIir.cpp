@@ -3,6 +3,7 @@
 #include "Alg/GridIir/GridIir.h"
 
 #include "Alg/Filter/IirFilter.h"
+#include "App/Sys.h"
 #include "App/TsaBuffer.h"
 #include "Common/Assert.h"
 #include "Legacy/RawApi.h"
@@ -15,9 +16,9 @@ namespace Solvers::Tsa::Core::GridIir {
 void Process() {
     const TsaBufferTable& buf = Buffers();
     const uint16_t n = PrmtFlash().sensorNum;
-    if (TSAStatic_IsAllFreqBecomeNoisy() != 0) {
+    if (Sys::IsAllFreqBecomeNoisy() != 0) {
         CopyChecked(buf.gridIirDif, 0x2648, buf.dif, n * size_t{2});
-    } else if (TSAStatic_IsAllFreqNoisy() != 0) {
+    } else if (Sys::IsAllFreqNoisy() != 0) {
         const uint8_t weight = PrmtFlash().gridIirWeight;
         for (uint16_t i = 0; i < n; ++i) {
             buf.dif[i] = static_cast<int16_t>(Iir::ProcessConverging(buf.dif[i], buf.gridIirDif[i], weight, 8));

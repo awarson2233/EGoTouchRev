@@ -15,6 +15,7 @@
 #include "Alg/TouchZone/SubTouchZone.h"
 #include "Alg/TouchZone/TouchZone.h"
 #include "Alg/TouchZone/TouchZoneInternal.h"
+#include "App/Sys.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Legacy/RawApi.h"
@@ -83,10 +84,10 @@ int16_t GetSigThold(const TouchZoneUnit& z, uint8_t peak) {
         t = fl.gripModeSigThold;
     } else if ((Static().processingState & kProcIdleScan) != 0) {
         t = static_cast<int16_t>(RefSig(peak) >> 1);
-    } else if (static_cast<uint8_t>(TSAStatic_IsAFTModeEnabled()) != 0) {
+    } else if (static_cast<uint8_t>(Sys::IsAftModeEnabled()) != 0) {
         t = static_cast<int16_t>(RefSig(peak) >> (Peak::NeedUdfpLargeFingerWorkaround() ? 1 : 2));
     } else if (PrevTouches().exceptionFlags == Exception::kNoiseLevel2 || Static().noiseLevel == 2 ||
-               TSAStatic_IsChargerPlugged() != 0) {
+               Sys::IsChargerPlugged() != 0) {
         t = SigTholdForCharger(peak);
     } else {
         t = SigTholdCommon(z, peak);

@@ -10,7 +10,9 @@
 #include "Alg/Sensor/Sensor.h"
 #include "Alg/Touch/PrevTouch.h"
 #include "Alg/TouchSize/TouchSize.h"
+#include "App/Sys.h"
 #include "App/TsaBuffer.h"
+#include "App/TsaOut.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
 #include "Extension/HardwareAnalyzer/HardwareAnalyzer.h"
@@ -99,8 +101,8 @@ void SetEdgeFlag(uint8_t curIdx) {
 // Touch_SetRegion @ 0x6ba72bce
 // 显示坐标所在象限：0 左上、1 左下、2 右上、3 右下（以显示 X / Y 的中线划分）。
 void SetRegion(uint8_t curIdx) {
-    const uint16_t x = TSAOut_DisplayXPos(curIdx);
-    const uint16_t y = TSAOut_DisplayYPos(curIdx);
+    const uint16_t x = Out::DisplayXPos(curIdx);
+    const uint16_t y = Out::DisplayYPos(curIdx);
     const FlashPrmt& flash = PrmtFlash();
     const uint16_t xRes = IsDim1DisplayX() ? flash.dim1Res : flash.dim2Res;
     const uint16_t yRes = IsDim1DisplayX() ? flash.dim2Res : flash.dim1Res;
@@ -279,7 +281,7 @@ void GetPeakSumPosSig(uint8_t curIdx, uint8_t prevIdx) {
 // 信号和最大那一帧的倾角在 (15°, 75°) 为 4，在 (-75°, -15°) 为 8，否则沿用上一帧。
 void UpdateHandEnum(uint8_t curIdx, uint8_t prevIdx) {
     TouchUnit& cur = Cur(curIdx);
-    const auto angle = [&cur] { return static_cast<int8_t>(TSAOut_Angle(static_cast<char>(cur.maxSigSumAngle))); };
+    const auto angle = [&cur] { return static_cast<int8_t>(Out::Angle(static_cast<char>(cur.maxSigSumAngle))); };
     if (angle() > 15 && angle() < 75) {
         cur.handEnum = 4;
         return;
@@ -360,7 +362,7 @@ void SetVolatileFlagFalseFlickDetected(uint8_t curIdx, uint8_t prevIdx) {
 void SetPersistFlagMoveOver(uint8_t curIdx, uint16_t dim1, uint16_t dim2, uint8_t extDist, uint32_t flag) {
     TouchUnit& cur = Cur(curIdx);
     const uint32_t sqDist = GetSqDistPixel(cur.pos.dim1, cur.pos.dim2, dim1, dim2);
-    const uint32_t dist = static_cast<uint16_t>(TSAOut_ExtToIntDist(extDist));
+    const uint32_t dist = static_cast<uint16_t>(Out::ExtToIntDist(extDist));
     if (dist * dist < sqDist) cur.persistFlags |= flag;
 }
 
@@ -692,7 +694,7 @@ void ProcessAftTouchEventUnit(uint8_t curIdx) {
 // Touch_IsBetaGrip @ 0x6ba76d53
 // 屏幕左右边缘（显示 X 在 9 像素内）、底部 15 mm 以内的稳定强触点：左侧 4，右侧 8，否则 0。
 int IsBetaGrip(uint8_t curIdx, uint8_t prevIdx) {
-    const bool charger = TSAStatic_IsChargerPlugged() != 0;
+    const bool charger = Sys::IsChargerPlugged() != 0;
     const TouchUnit& cur = Cur(curIdx);
     const int16_t peakSig = PeakOf(cur).sig;
     const auto refThold = PrmtFlash().peakFilterReferenceThreshold;
@@ -700,19 +702,19 @@ int IsBetaGrip(uint8_t curIdx, uint8_t prevIdx) {
     const bool exception = IsException(curIdx, prevIdx);
     bool beta = !exception && event == TouchEvent::kMove && refThold / 2 <= peakSig && !charger;
 
-    if (TSAOut_DisplayXPos(curIdx) > 8) {
-        const uint16_t x = TSAOut_DisplayXPos(curIdx);
+    if (Out::DisplayXPos(curIdx) > 8) {
+        const uint16_t x = Out::DisplayXPos(curIdx);
         const uint16_t xRes = TSA_GetXRes();
         if (x < xRes - 9) beta = false;
     }
-    const uint16_t y = TSAOut_DisplayYPos(curIdx);
+    const uint16_t y = Out::DisplayYPos(curIdx);
     const uint16_t yRes = TSA_GetYRes();
     const auto bottomBand = static_cast<uint16_t>(TouchSize::MmToDisplayPixel(15));
     if (y < yRes - 1 - bottomBand) beta = false;
     if ((Prev(prevIdx).persistFlags & 0x1000000) != 0) beta = false;
 
     if (!beta) return 0;
-    return TSAOut_DisplayXPos(curIdx) < 9 ? 4 : 8;
+    return Out::DisplayXPos(curIdx) < 9 ? 4 : 8;
 }
 
 }  // namespace
@@ -937,10 +939,10 @@ void GetRptSqDistMmFromPrevPos(uint8_t curIdx, uint8_t prevIdx) {
 void GetRptSqDistDisplayPixelFromPrevPos(uint8_t curIdx, uint8_t prevIdx) {
     TouchUnit& cur = Cur(curIdx);
     const PrevTouchUnit& prev = Prev(prevIdx);
-    const uint32_t curDim1 = TSAOut_Pixel2DisplayDim1(cur.rptPos.dim1);
-    const uint32_t prevDim1 = TSAOut_Pixel2DisplayDim1(prev.rptPos.dim1);
-    const uint32_t curDim2 = TSAOut_Pixel2DisplayDim2(cur.rptPos.dim2);
-    const uint32_t prevDim2 = TSAOut_Pixel2DisplayDim2(prev.rptPos.dim2);
+    const uint32_t curDim1 = Out::Pixel2DisplayDim1(cur.rptPos.dim1);
+    const uint32_t prevDim1 = Out::Pixel2DisplayDim1(prev.rptPos.dim1);
+    const uint32_t curDim2 = Out::Pixel2DisplayDim2(cur.rptPos.dim2);
+    const uint32_t prevDim2 = Out::Pixel2DisplayDim2(prev.rptPos.dim2);
     cur.rptSqDistDisplayPxFromPrev =
         (curDim2 - prevDim2) * (curDim2 - prevDim2) + (curDim1 - prevDim1) * (curDim1 - prevDim1);
 }

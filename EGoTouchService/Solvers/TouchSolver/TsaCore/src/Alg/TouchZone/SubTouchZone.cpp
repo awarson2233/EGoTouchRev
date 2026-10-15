@@ -10,6 +10,7 @@
 #include "Alg/TouchSize/TouchSize.h"
 #include "Alg/TouchZone/TouchZone.h"
 #include "Alg/TouchZone/TouchZoneData.h"
+#include "App/Sys.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Legacy/RawApi.h"
@@ -168,7 +169,7 @@ bool IsOnEdge(const PeakEntry& p) {
 // 原代码在悬浮大手指或带 kExcIgnoreZoneBound 异常时先看 SD 补偿，SignalDisparity 在本机型上裁掉了（从不补偿），这一支不保留。
 int16_t GrowThold(const TouchZoneUnit& zone) {
     int16_t thold = zone.sigThold;
-    if (static_cast<uint8_t>(TSAStatic_IsAFTModeEnabled()) == 0) {
+    if (static_cast<uint8_t>(Sys::IsAftModeEnabled()) == 0) {
         const FlashPrmt& fl = PrmtFlash();
         const PeakEntry& strongest = Peaks().entry[zone.maxSigPeakIdx];
         const PeakEntry& weakest = Peaks().entry[zone.minSigPeakIdx];

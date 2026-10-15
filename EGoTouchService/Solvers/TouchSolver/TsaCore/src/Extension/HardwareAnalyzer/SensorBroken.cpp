@@ -9,6 +9,7 @@
 
 #include "Alg/Touch/TouchData.h"
 #include "Alg/TpSensor/TpSensor.h"
+#include "App/Sys.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
@@ -274,7 +275,7 @@ void SensorBrokenRawProcess() {
     const FlashPrmt& fl = PrmtFlash();
     const TsaPrpt& prpt = Prpt();
     const uint32_t f2 = Static().featureFlags2;
-    if (prpt.raw2Raw.overNoiseAfterCmf < 5 && (FullIncell() || !TSAStatic_IsChargerPluggedNoDebounce()) &&
+    if (prpt.raw2Raw.overNoiseAfterCmf < 5 && (FullIncell() || !Sys::IsChargerPluggedNoDebounce()) &&
         fl.rawUpperLimit != 0 && (f2 & kFeat2BaliSensorBroken) == 0 && fl.rawLowerLimit != 0) {
         if (IsSensorBrokenByRawRange(prpt.boundaryPositiveDim1, prpt.boundaryPositiveDim2)) SetException(kExcSensorBrokenByRaw);
         if (IsSensorBrokenByRawRange(prpt.boundaryNegativeDim1, prpt.boundaryNegativeDim2)) SetException(kExcSensorBrokenByRaw);

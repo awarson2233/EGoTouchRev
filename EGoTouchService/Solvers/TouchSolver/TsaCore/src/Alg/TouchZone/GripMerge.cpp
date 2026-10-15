@@ -15,6 +15,7 @@
 #include "Alg/TouchZone/SubTouchZone.h"
 #include "Alg/TouchZone/TouchZone.h"
 #include "Alg/TouchZone/TouchZoneInternal.h"
+#include "App/Sys.h"
 #include "App/TsaBuffer.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
@@ -253,7 +254,7 @@ bool IsAbnormalShape(const TouchZoneUnit& z, const SubTouchZone::Unit& u) {
     }
     if (!Peak::IsOnInnerEdgeDim1(u.peakIdx)) return false;
     if (u.maxDim1 == u.minDim1 && 2 < u.maxDim2 - u.minDim2) return true;
-    return u.maxDim1 - u.minDim1 < 2 && PeakAt(u.peakIdx).sig < static_cast<int16_t>(TSAStatic_GetSigThold(1));
+    return u.maxDim1 - u.minDim1 < 2 && PeakAt(u.peakIdx).sig < static_cast<int16_t>(Sys::GetSigThold(1));
 }
 
 }  // namespace

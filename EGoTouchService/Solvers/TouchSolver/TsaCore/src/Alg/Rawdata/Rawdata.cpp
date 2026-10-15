@@ -5,6 +5,7 @@
 #include "Alg/Baseline/Baseline.h"
 #include "Alg/Cmf/Cmf.h"
 #include "Alg/TpSensor/TpSensor.h"
+#include "App/Sys.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
@@ -71,7 +72,7 @@ void Process() {
 
 // Rawdata_CMF @ 0x6ba69381
 void Cmf() {
-    if (TSAStatic_IsHWReset()) return;
+    if (Sys::IsHwReset()) return;
     const TsaBufferTable& buf = Buffers();
     Baseline::CalcDiffCommon(buf.dif, buf.raw, buf.bl);
     Cmf::Process();
