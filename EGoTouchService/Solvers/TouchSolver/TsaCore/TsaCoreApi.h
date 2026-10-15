@@ -58,7 +58,7 @@ void     TSA_SetScreenRotateState(int state);
 uint64_t TSA_InStylusMode(void);
 uint64_t TSA_RptASAInRange(void);
 
-// 宿主桥（raw/Rejection/ASAHostBridge.c）：本帧的笔报告，在 TSA_ProcessingAFEFrame 之前送入。
+// 宿主桥（TsaCore/src/Rejection/Asa）：本帧的笔报告，在 TSA_ProcessingAFEFrame 之前送入。
 // statusFlags：bit0 悬停在场，bit1 书写。坐标是 ASA 坐标系（与 TSACore 的触点同向），量程为显示像素。
 void     TSAHost_SetStylusReport(uint32_t statusFlags, uint16_t x, uint16_t y, int16_t tiltX, int16_t tiltY,
                                  uint16_t pressure);

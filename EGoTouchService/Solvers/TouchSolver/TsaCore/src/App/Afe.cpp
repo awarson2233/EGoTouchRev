@@ -749,6 +749,5 @@ bool IsIndividualBaselineForEachFreq() { return IsRawUnifiedToTargetValue(); }
 // raw 的调用方
 extern "C" {
 namespace A = Solvers::Tsa::Core::Afe;
-A::Frame* AFE_GetFrame(void) { return A::GetFrame(); }
 uint32_t AFE_IsAutoCalibration(void) { return A::IsAutoCalibration() ? 1 : 0; }
 }  // extern "C"

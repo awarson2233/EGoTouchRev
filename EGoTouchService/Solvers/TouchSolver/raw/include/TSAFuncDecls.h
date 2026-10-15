@@ -12,62 +12,26 @@ extern "C" {
 // AIIR_GetCoef @ 0x6ba60040 (Filter\AIIR.c)
 char AIIR_GetCoef(ushort param_1);
 
-// ASACalibration_Init @ 0x6baab7b0 (Rejection\ASACalibration.c)
-void ASACalibration_Init(void);
 
-// ASAStaticInit @ 0x6bac8481 (Rejection\ASA.c)
-void ASAStaticInit(longlong param_1);
 
 // ASA_GetBluetoothConnectStatus @ 0x6bac77ec (Rejection\ASA.c)
 undefined4 ASA_GetBluetoothConnectStatus(void);
 
-// ASA_GetDim1Res @ 0x6bac760d (Rejection\ASA.c)
-ushort ASA_GetDim1Res(void);
 
-// ASA_GetDim2Res @ 0x6bac761d (Rejection\ASA.c)
-ushort ASA_GetDim2Res(void);
 
-// ASA_GetRptInRange @ 0x6bac757f (Rejection\ASA.c)
-bool ASA_GetRptInRange(void);
 
-// ASA_GetRptPressure @ 0x6bac767e (Rejection\ASA.c)
-ushort ASA_GetRptPressure(void);
 
-// ASA_GetRptXPos @ 0x6bac762e (Rejection\ASA.c)
-ushort ASA_GetRptXPos(void);
 
-// ASA_GetRptXTilt @ 0x6bac7656 (Rejection\ASA.c)
-short ASA_GetRptXTilt(void);
 
-// ASA_GetRptYPos @ 0x6bac7642 (Rejection\ASA.c)
-ushort ASA_GetRptYPos(void);
 
-// ASA_GetRptYTilt @ 0x6bac766a (Rejection\ASA.c)
-short ASA_GetRptYTilt(void);
 
-// ASA_InitAFEProject @ 0x6bac4eb9 (Rejection\ASA.c)
-undefined8 ASA_InitAFEProject(undefined8 param_1,undefined8 param_2);
 
-// ASA_InitProjectFromTsa @ 0x6bac4e99 (Rejection\ASA.c)
-undefined8 ASA_InitProjectFromTsa(undefined8 param_1);
 
-// ASA_IsEnterStylusHPP2 @ 0x6bac6fe8 (Rejection\ASA.c)
-bool ASA_IsEnterStylusHPP2(void);
 
-// ASA_IsEnterStylusHPP3 @ 0x6bac701a (Rejection\ASA.c)
-undefined8 ASA_IsEnterStylusHPP3(void);
 
-// ASA_LoadProjectPrmt @ 0x6bac4c75 (Rejection\ASA.c)
-void ASA_LoadProjectPrmt(undefined8 param_1, void *param_2);
 
-// ASA_LoadProjectPrmtFromTsa @ 0x6bac4c13 (Rejection\ASA.c)
-void ASA_LoadProjectPrmtFromTsa(longlong param_1);
 
-// ASA_LoadStylusHWPrmt @ 0x6bac4abc (Rejection\ASA.c)
-void ASA_LoadStylusHWPrmt(byte param_1);
 
-// ASA_Reset @ 0x6bac4e3b (Rejection\ASA.c)
-undefined8 ASA_Reset(void);
 
 
 // AdjustByHistory @ 0x6baf540d (Tracking\HotZoneAdjust.c)
@@ -1022,8 +986,6 @@ void HardwareAnalyzer_Process(void);
 
 
 
-// HardwareAnalyzer_ReportToTSA @ 0x6baf159b (Signal\HardwareAnalyzer.c)
-void HardwareAnalyzer_ReportToTSA(void);
 
 
 
@@ -1193,8 +1155,6 @@ void PosnSpecial_Put(ushort param_1);
 
 
 
-// PrevPeak_Init @ 0x6ba68f10 (Detection\PrevPeak.c)
-void PrevPeak_Init(void);
 
 
 
@@ -1236,8 +1196,6 @@ undefined8 PrevTouch_HistoryBufferPush(byte param_1,undefined8 *param_2);
 undefined8 PrevTouch_HistoryQueuePush(byte param_1,ushort param_2,ushort param_3);
 
 
-// PrevTouch_Init @ 0x6ba6db42 (Tracking\PrevTouch.c)
-void PrevTouch_Init(void);
 
 
 
@@ -2219,8 +2177,6 @@ int Touch_GetTimeOn(byte param_1);
 
 
 
-// Touch_Init @ 0x6ba6f503 (Tracking\Touch.c)
-void Touch_Init(void);
 
 
 
@@ -2352,8 +2308,6 @@ void Thenar_FeatureUnitPostUpdate(byte param_1,undefined2 param_2,undefined2 par
 void Self_Reset(void);
 
 // --- ASA 侧被手指管线读写的那一层（Rejection\ASAHostBridge.c） ---
-// TSA_ASAProcess @ 0x6ba99e8d (Core\TSA.c)
-void TSA_ASAProcess(uint param_1);
 // TSA_RptASAInRange @ 0x6ba9c7e9 (Core\TSA.c)
 undefined8 TSA_RptASAInRange(void);
 // TSA_SetASABluetoothConnectStatus @ 0x6ba9cd02 (Core\TSA.c)
@@ -2362,42 +2316,6 @@ void TSA_SetASABluetoothConnectStatus(undefined4 param_1);
 void TSA_SetASABluetoothPenStatus(undefined1 param_1);
 // TSA_SetASABluetoothPressure @ 0x6ba9cc65 (Core\TSA.c)
 void TSA_SetASABluetoothPressure(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
-// ASA_SetBluetoothStatus @ 0x6bac72d3 (Rejection\ASA.c)
-void ASA_SetBluetoothStatus(uint param_1);
-// ASA_SetBluetoothPenStatus @ 0x6bac7135 (Rejection\ASA.c)
-void ASA_SetBluetoothPenStatus(undefined1 param_1);
-// ASA_SetBluetoothPressure @ 0x6bac714d (Rejection\ASA.c)
-void ASA_SetBluetoothPressure(ushort param_1,ushort param_2,ushort param_3,ushort param_4);
-// ASA_IsHpp3TouchEnableFeatureEnabled @ 0x6bac8a70 (Rejection\ASA.c)
-bool ASA_IsHpp3TouchEnableFeatureEnabled(void);
-// ASA_IsTouchNull @ 0x6bac704c (Rejection\ASA.c)
-undefined8 ASA_IsTouchNull(longlong param_1);
-// ASA_NeedRecordTrigger @ 0x6bac7780 (Rejection\ASA.c)
-bool ASA_NeedRecordTrigger(void);
-// ValidJudgment @ 0x6bac4efc (Rejection\ASA.c)
-bool ValidJudgment(stylusFrame *pStylusFrame);
-// GetRealtime @ 0x6bac8400 (Rejection\ASA.c)
-ulonglong GetRealtime(void);
-// ASAStaticCounterClean @ 0x6bac8414 (Rejection\ASA.c)
-void ASAStaticCounterClean(void);
-// ASAStaticPreProcess @ 0x6bac89f0 (Rejection\ASA.c)
-void ASAStaticPreProcess(void);
-// ASAStaticPostProcess @ 0x6bac8a04 (Rejection\ASA.c)
-void ASAStaticPostProcess(void);
-// ASAStaticStatusPreProcess @ 0x6bac883d (Rejection\ASA.c)
-void ASAStaticStatusPreProcess(uint auxStatusFlags);
-// EnterActiveStylusMode @ 0x6bac858b (Rejection\ASA.c)
-void EnterActiveStylusMode(void);
-// ExitActiveStylusMode @ 0x6bac87b1 (Rejection\ASA.c)
-void ExitActiveStylusMode(void);
-// ASAOutClean @ 0x6bac30f0 (Rejection\ASA.c)
-void ASAOutClean(void);
-// HPP3_BtStatusProcess @ 0x6bab778a (Rejection\HPP3.c)
-void HPP3_BtStatusProcess(void);
-// BtPressureInit @ 0x6babf350 (Rejection\HPP3.c)
-void BtPressureInit(void);
-// HardwareAnalyzer_ASA_Process @ 0x6baf1bc2 (Signal\HardwareAnalyzer.c)
-void HardwareAnalyzer_ASA_Process(void);
 // 宿主桥：每帧在 TSA_ProcessingAFEFrame 之前送入 StylusSolver 解出的笔报告
 void TSAHost_SetStylusReport(uint dwStatusFlags,ushort wXPos,ushort wYPos,short nXTilt,short nYTilt,ushort wPressure);
 

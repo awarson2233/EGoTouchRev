@@ -42,6 +42,7 @@
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 #include "Prmt/TsaPrmt.h"
+#include "Rejection/Asa/Asa.h"
 #include "WorkAround/BadChannel/BadChannel.h"
 #include "WorkAround/ToeSynaBl/ToeSynaBl.h"
 
@@ -126,8 +127,7 @@ bool MsInitProject(const char* project) {
 
 void InitAsa(const Afe::Caps* caps) {
     if (!AsaEnabled()) return;
-    ASA_InitProjectFromTsa(reinterpret_cast<uint64_t>(&PrmtFlash()));
-    ASA_InitAFEProject(reinterpret_cast<uint64_t>(caps), reinterpret_cast<uint64_t>(&Image::At<uint8_t>(0x6bca7bc0)));
+    Asa::InitAfeProject(caps, &Image::At<uint8_t>(0x6bca7bc0));  // g_tsaPrmtFlashAsa
 }
 
 // TSA_InitProject_UI @ 0x6ba99d4e / TSA_InitCommonUI @ 0x6ba99ce0
@@ -193,13 +193,13 @@ uint32_t AsaAfeStatus() {
 // 记下笔在场的时间与最近的笔坐标（换算到触摸分辨率），再对未报抬起的触点做笔防误触。
 void StylusAftProcess() {
     StylusAftInput& in = StylusAft();
-    if ((AsaAfeStatus() & kAsaStylusInRange) != 0 && ASA_GetRptInRange()) in.lastInRangeTime = Static().curTimeMs;
-    if (ASA_GetRptPressure() != 0) {
+    if ((AsaAfeStatus() & kAsaStylusInRange) != 0 && Asa::RptInRange()) in.lastInRangeTime = Static().curTimeMs;
+    if (Asa::RptPressure() != 0) {
         const FlashPrmt& fl = PrmtFlash();
-        in.x = static_cast<int32_t>(static_cast<uint32_t>(ASA_GetRptXPos()) * fl.dim1Res) / static_cast<int32_t>(ASA_GetDim1Res());
-        in.y = static_cast<int32_t>(static_cast<uint32_t>(ASA_GetRptYPos()) * fl.dim2Res) / static_cast<int32_t>(ASA_GetDim2Res());
-        in.tiltX = ASA_GetRptXTilt();
-        in.tiltY = ASA_GetRptYTilt();
+        in.x = static_cast<int32_t>(static_cast<uint32_t>(Asa::RptX()) * fl.dim1Res) / static_cast<int32_t>(Asa::Dim1Res());
+        in.y = static_cast<int32_t>(static_cast<uint32_t>(Asa::RptY()) * fl.dim2Res) / static_cast<int32_t>(Asa::Dim2Res());
+        in.tiltX = Asa::RptTiltX();
+        in.tiltY = Asa::RptTiltY();
     }
     const TouchTable& tt = Touches();
     for (uint8_t k = 0; k < tt.count; ++k) {
@@ -345,7 +345,7 @@ void Processing(const int16_t* raw, uint32_t ctrl, uint64_t timeMs) {
     if ((s.systemFlags & kSysSkipMs) == 0) MsProcess(raw);
     Thenar_ProcessInfoByDif();
     if (AsaEnabled()) {
-        TSA_ASAProcess(ctrl);
+        Asa::Process(ctrl);
         if ((s.featureFlags & kFeatStylusAft) != 0 && (s.aftGateFlags & 4) == 0) StylusAftProcess();
     }
     Out::PostProcess();
@@ -493,7 +493,7 @@ bool UpdateSideIdleMode() {
 }
 
 // TSA_InStylusMode @ 0x6ba9c771
-bool InStylusMode() { return AsaEnabled() && (ASA_IsEnterStylusHPP2() || static_cast<uint8_t>(ASA_IsEnterStylusHPP3()) != 0); }
+bool InStylusMode() { return AsaEnabled() && (Asa::IsHpp2() || Asa::IsHpp3()); }
 
 // TSA_GetAFEScanFreqIndex @ 0x6ba9f998
 bool GetAfeScanFreqIndex(uint8_t* index) {
@@ -512,7 +512,7 @@ bool GetAfeScanRateIndex(uint8_t* index) {
 // 第一次系统复位（AFE 不自己校准时）、检出需要校准、或各频点独立基线且基线复位完成时需要。
 bool IsReCalibNeeded() {
     static bool firstReset = true;
-    if (AsaEnabled() && ASA_IsEnterStylusHPP2()) return false;
+    if (AsaEnabled() && Asa::IsHpp2()) return false;
     bool need = false;
     if (firstReset && (Static().systemFlags & 1) != 0 && !Afe::IsAutoCalibration()) {
         need = true;

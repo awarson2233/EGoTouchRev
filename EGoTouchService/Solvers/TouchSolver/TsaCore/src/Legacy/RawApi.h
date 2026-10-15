@@ -22,20 +22,6 @@ void HandGesture_Free(void);
 // Alg/Exception/Exception.cpp（被裁掉的充电噪声检测，恒为 0）
 uint64_t Exception_GetDetectedChargerNoise(void);
 
-// Rejection/ASA.c、ASAHostBridge.c
-uint16_t ASA_GetDim1Res(void);
-uint16_t ASA_GetDim2Res(void);
-bool ASA_GetRptInRange(void);
-uint16_t ASA_GetRptPressure(void);
-uint16_t ASA_GetRptXPos(void);
-int16_t ASA_GetRptXTilt(void);
-uint16_t ASA_GetRptYPos(void);
-int16_t ASA_GetRptYTilt(void);
-uint64_t ASA_InitAFEProject(uint64_t caps, uint64_t flashAsa);
-uint64_t ASA_InitProjectFromTsa(uint64_t flash);
-bool ASA_IsEnterStylusHPP2(void);
-uint64_t ASA_IsEnterStylusHPP3(void);
-void TSA_ASAProcess(uint32_t ctrl);
 // Rejection/StylusAft.c
 void StylusAft_Init(void);
 void StylusAft_PostProcessUnit(uint8_t idx);

@@ -67,6 +67,5 @@ bool IsOnOuterEdge(uint8_t idx) {
 namespace PP = Solvers::Tsa::Core::PrevPeak;
 
 extern "C" {
-void PrevPeak_Init(void) { PP::Init(); }
 void PrevPeak_Process(void) { PP::Process(); }
 }  // extern "C"

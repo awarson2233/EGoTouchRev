@@ -501,7 +501,6 @@ extern "C" {
 namespace HA = Solvers::Tsa::Core::HardwareAnalyzer;
 void HardwareAnalyzer_Process(void) { HA::Process(); }
 void HardwareAnalyzer_GetRaw2RawPrpt(void) { HA::GetRaw2RawPrpt(); }
-void HardwareAnalyzer_ReportToTSA(void) { HA::ReportToTsa(); }
 void HardwareAnalyzer_SetSoftException(void) { HA::SetSoftException(); }
 int HardwareAnalyzer_GetDetectedException(void) { return HA::GetDetectedException(); }
 // 描述串靠 StrPrintf 拼写，StrPrintf 被裁掉后为空操作。

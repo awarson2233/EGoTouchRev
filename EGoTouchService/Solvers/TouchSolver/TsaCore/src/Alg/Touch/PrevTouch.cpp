@@ -341,7 +341,6 @@ namespace PT = Solvers::Tsa::Core::PrevTouch;
 using Solvers::Tsa::Core::HistoryEntry;
 
 extern "C" {
-void PrevTouch_Init(void) { PT::Init(); }
 void PrevTouch_Release(void) { PT::Release(); }
 void PrevTouch_AssignCurIdxBasedOnID(void) { PT::AssignCurIdxBasedOnId(); }
 uint8_t PrevTouch_GetIdxBasedOnID(char id) { return PT::GetIdxBasedOnId(static_cast<uint8_t>(id)); }

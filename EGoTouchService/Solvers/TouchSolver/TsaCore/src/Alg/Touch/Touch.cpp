@@ -1051,7 +1051,6 @@ int GetTimeRpt(uint8_t curIdx) {
 namespace T = Solvers::Tsa::Core::Touch;
 
 extern "C" {
-void Touch_Init(void) { T::Init(); }
 void Touch_Clean(void) { T::Clean(); }
 void Touch_AssignPreIdxBasedOnID(void) { T::AssignPreIdxBasedOnId(); }
 void Touch_KeepPrevTouchWithExceptionExcluded(void) { T::KeepPrevTouchWithExceptionExcluded(); }
