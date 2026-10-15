@@ -43,6 +43,7 @@
 #include "Prmt/Prmt.h"
 #include "Prmt/TsaPrmt.h"
 #include "Rejection/Asa/Asa.h"
+#include "Rejection/StylusAft/StylusAft.h"
 #include "WorkAround/BadChannel/BadChannel.h"
 #include "WorkAround/ToeSynaBl/ToeSynaBl.h"
 
@@ -63,11 +64,9 @@ constexpr uint32_t kFeatUnderWater = 0x800;
 constexpr uint32_t kFeatAsa = 0x10000;
 
 constexpr uint32_t kGripRegionPass = 0x400;            // FlashPrmt::gripFlags：GripFilter 的区域处理阶段
-constexpr uint32_t kEventRptOff = 0x20;                // TouchUnit::event：已报抬起
 
 constexpr uint32_t kTouchExcHw = 0x400;                // TouchTable::exceptionFlags：只有硬件异常
 constexpr uint32_t kTouchExcRecal = 0x1000;            // 检出需要重新校准
-constexpr uint32_t kAsaStylusInRange = 0x10;           // AFE 笔帧状态
 
 constexpr int64_t kNoTime = -1;
 constexpr uint16_t kRptScale = 0x100;            // 报点坐标是 Q8.8 的格坐标
@@ -79,13 +78,6 @@ std::array<uint16_t, 0x2648 / 2> g_rawFrame{};
 /// 笔离开后 3 s 内不进 IDLE（g_flagOKtoDelay3sToIdle / g_lastStylusTimeStamp）。
 bool g_stylusSeen = false;
 uint64_t g_lastStylusTime = 0;
-
-/// StylusAft 读的最近一次笔报告（g_stylusAftLastStylusTimeStamp、g_lastStylusX ...）。
-struct StylusAftInput {
-    uint64_t lastInRangeTime;
-    int32_t x, y, tiltX, tiltY;
-};
-StylusAftInput& StylusAft() { return Image::At<StylusAftInput>(0x6bbaa150); }
 
 bool AsaEnabled() { return (Static().featureFlags & kFeatAsa) != 0; }
 
@@ -135,7 +127,7 @@ bool InitProject(const char* project) {
     if (!MsInitProject(project)) return false;
     InitAsa(Afe::GetCaps());
     Afe::Init();
-    StylusAft_Init();
+    StylusAft::Init();
     return true;
 }
 
@@ -177,33 +169,6 @@ void PitchSizeRemap() {
         Point& p = tt.unit[k].rptPos;
         p.dim1 = static_cast<uint16_t>(PitchSizeMap(p.dim1, fl.dim1PitchMap, kRptScale));
         p.dim2 = static_cast<uint16_t>(PitchSizeMap(p.dim2, fl.dim2PitchMap, kRptScale));
-    }
-}
-
-// TSA_ASAAFEStatus @ 0x6ba9c607：AFE 帧里笔的状态，没有笔帧时为 -10
-uint32_t AsaAfeStatus() {
-    const auto* stylus = static_cast<const uint8_t*>(Afe::GetFrame()->stylusData);
-    if (stylus == nullptr) return static_cast<uint32_t>(-10);
-    uint32_t v;
-    std::memcpy(&v, stylus + 0x1c, sizeof(v));
-    return v;
-}
-
-// TSA_StylusAftProcess @ 0x6bb22b1c
-// 记下笔在场的时间与最近的笔坐标（换算到触摸分辨率），再对未报抬起的触点做笔防误触。
-void StylusAftProcess() {
-    StylusAftInput& in = StylusAft();
-    if ((AsaAfeStatus() & kAsaStylusInRange) != 0 && Asa::RptInRange()) in.lastInRangeTime = Static().curTimeMs;
-    if (Asa::RptPressure() != 0) {
-        const FlashPrmt& fl = PrmtFlash();
-        in.x = static_cast<int32_t>(static_cast<uint32_t>(Asa::RptX()) * fl.dim1Res) / static_cast<int32_t>(Asa::Dim1Res());
-        in.y = static_cast<int32_t>(static_cast<uint32_t>(Asa::RptY()) * fl.dim2Res) / static_cast<int32_t>(Asa::Dim2Res());
-        in.tiltX = Asa::RptTiltX();
-        in.tiltY = Asa::RptTiltY();
-    }
-    const TouchTable& tt = Touches();
-    for (uint8_t k = 0; k < tt.count; ++k) {
-        if ((tt.unit[k].event & kEventRptOff) == 0) StylusAft_PostProcessUnit(k);
     }
 }
 
@@ -346,7 +311,7 @@ void Processing(const int16_t* raw, uint32_t ctrl, uint64_t timeMs) {
     Thenar_ProcessInfoByDif();
     if (AsaEnabled()) {
         Asa::Process(ctrl);
-        if ((s.featureFlags & kFeatStylusAft) != 0 && (s.aftGateFlags & 4) == 0) StylusAftProcess();
+        if ((s.featureFlags & kFeatStylusAft) != 0 && (s.aftGateFlags & 4) == 0) StylusAft::Process();
     }
     Out::PostProcess();
     ReportHwException();

@@ -22,9 +22,6 @@ void HandGesture_Free(void);
 // Alg/Exception/Exception.cpp（被裁掉的充电噪声检测，恒为 0）
 uint64_t Exception_GetDetectedChargerNoise(void);
 
-// Rejection/StylusAft.c
-void StylusAft_Init(void);
-void StylusAft_PostProcessUnit(uint8_t idx);
 // Rejection/TouchReport.c
 void TouchReport_Init(void);
 void TouchReport_Process(void);

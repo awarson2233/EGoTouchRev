@@ -8,7 +8,6 @@
 #include "Alg/Touch/TouchData.h"
 #include "App/Afe.h"
 #include "App/TsaStatic.h"
-#include "Common/Image.h"
 #include "Extension/HardwareAnalyzer/HardwareAnalyzer.h"
 
 namespace Solvers::Tsa::Core::Asa {
@@ -95,9 +94,9 @@ uint64_t g_lastBtCmdMs = 0;
 bool g_prevInRange = false;
 uint8_t g_disableTouchFrames = 0;
 
-/// 蓝牙连接状态（0 断开、1 连接、2 超时）与笔状态字，StylusAft 直接从镜像读。
-int32_t& BtConnect() { return Image::At<int32_t>(0x6bb9e604); }
-uint8_t& BtPenStatus() { return Image::At<uint8_t>(0x6bc4ddc0); }
+/// 蓝牙连接状态（0 断开、1 连接、2 超时）与宿主送来的笔状态字。
+int32_t g_btConnect = 0;
+uint8_t g_btPenStatus = 0;
 
 bool AsaEnabled() { return (Static().featureFlags & kFeatAsaEnabled) != 0; }
 
@@ -106,7 +105,7 @@ void Reset() { g_cur = {}; }
 
 // HPP3_BtStatusProcess @ 0x6bab778a：一分钟没有蓝牙消息时置为超时
 void BtStatusProcess() {
-    if (g_lastBtCmdMs + kBtIdleTimeoutMs < g_realtimeMs && BtConnect() == 1) BtConnect() = 2;
+    if (g_lastBtCmdMs + kBtIdleTimeoutMs < g_realtimeMs && g_btConnect == 1) g_btConnect = 2;
 }
 
 // ValidJudgment @ 0x6bac4efc：只能选一种协议；模式位不能全空或全有；HPP2 非网格模式时要有 TX1 线数据
@@ -252,6 +251,11 @@ uint16_t RptPressure() { return g_cur.pressure; }
 uint16_t Dim1Res() { return g_dim1Res; }
 uint16_t Dim2Res() { return g_dim2Res; }
 
+// ASA_GetBluetoothConnectStatus @ 0x6bac77ec
+int32_t BtConnectStatus() { return g_btConnect; }
+uint8_t BtPenStatus() { return g_btPenStatus; }
+void ClearBtPenStatus() { g_btPenStatus = 0; }
+
 // ASA_IsEnterStylusHPP2 / HPP3 @ 0x6bac6fe8
 bool IsHpp2() { return (g_state.aux & kAuxHpp2) != 0 && g_state.activeFrames != 0; }
 bool IsHpp3() { return (g_state.aux & kAuxHpp3) != 0 && g_state.activeFrames != 0; }
@@ -271,24 +275,22 @@ void TSAHost_SetStylusReport(uint32_t status, uint16_t x, uint16_t y, int16_t ti
 void TSA_SetASABluetoothConnectStatus(uint32_t status) {
     if (!As::AsaEnabled()) return;
     As::g_lastBtCmdMs = As::g_realtimeMs;
-    As::BtConnect() = (status & 1) != 0 ? 1 : 0;
+    As::g_btConnect = (status & 1) != 0 ? 1 : 0;
 }
 
 // TSA_SetASABluetoothPenStatus @ 0x6ba9cc2d
 void TSA_SetASABluetoothPenStatus(uint8_t status) {
-    if (As::AsaEnabled()) As::BtPenStatus() = status;
+    if (As::AsaEnabled()) As::g_btPenStatus = status;
 }
 
 // TSA_SetASABluetoothPressure @ 0x6ba9cc65：压力包只给 ASA 解算本体用，这里只记下蓝牙在线
 void TSA_SetASABluetoothPressure(uint16_t, uint16_t, uint16_t, uint16_t) {
     if (!As::AsaEnabled()) return;
     As::g_lastBtCmdMs = As::g_realtimeMs;
-    As::BtConnect() = 1;
+    As::g_btConnect = 1;
 }
 
 // TSA_RptASAInRange @ 0x6ba9c7e9
 uint64_t TSA_RptASAInRange(void) { return As::AsaEnabled() && As::RptInRange() ? 1 : 0; }
 
-// ASA_GetBluetoothConnectStatus @ 0x6bac77ec（StylusAft）
-uint32_t ASA_GetBluetoothConnectStatus(void) { return static_cast<uint32_t>(As::BtConnect()); }
 }  // extern "C"

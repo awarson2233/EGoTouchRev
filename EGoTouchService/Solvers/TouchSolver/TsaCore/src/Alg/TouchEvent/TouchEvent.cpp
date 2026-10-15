@@ -182,8 +182,8 @@ void TouchDownProcess(uint8_t curIdx) {
     prev.curIdx = curIdx;
     prev.age = 0;
     prev.field380 = Static().curTimeMs;
-    prev.field44C = 0;
-    prev.field44D = 0;
+    prev.stylusWithdrawn = 0;
+    prev.stylusSuppressFrames = 0;
     cur.prevIdx = prevIdx;
     TouchDownDebounce(curIdx, prevIdx);
     ++prevTable.count;

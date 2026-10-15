@@ -23,6 +23,11 @@ void Process(uint32_t ctrl);
 [[nodiscard]] uint16_t Dim1Res();
 [[nodiscard]] uint16_t Dim2Res();
 
+/// 蓝牙连接状态（0 断开、1 连接、2 一分钟无消息）与笔状态字（bit0 休眠、bit1 吸附）。
+[[nodiscard]] int32_t BtConnectStatus();
+[[nodiscard]] uint8_t BtPenStatus();
+void ClearBtPenStatus();
+
 /// AFE 报告笔以 HPP2 / HPP3 协议在场（且已进入主动笔模式）。
 [[nodiscard]] bool IsHpp2();
 [[nodiscard]] bool IsHpp3();

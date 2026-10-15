@@ -14,8 +14,6 @@ char AIIR_GetCoef(ushort param_1);
 
 
 
-// ASA_GetBluetoothConnectStatus @ 0x6bac77ec (Rejection\ASA.c)
-undefined4 ASA_GetBluetoothConnectStatus(void);
 
 
 
@@ -1275,62 +1273,24 @@ byte Sensor_GetZoneIndex(byte param_1,byte param_2);
 void SigSumFilter_ReserveTouch(int param_1);
 
 
-// StylusAft_BtStatusPenAttach @ 0x6bb20932 (Rejection\StylusAft.c)
-bool StylusAft_BtStatusPenAttach(void);
 
-// StylusAft_BtStatusPenHibernate @ 0x6bb2098f (Rejection\StylusAft.c)
-undefined8 StylusAft_BtStatusPenHibernate(void);
 
-// StylusAft_CurrentDomainJudge @ 0x6bb21047 (Rejection\StylusAft.c)
-undefined8 StylusAft_CurrentDomainJudge(byte param_1);
 
-// StylusAft_DistBetweenPoints @ 0x6bb20d54 (Rejection\StylusAft.c)
-int StylusAft_DistBetweenPoints(int param_1,int param_2,int param_3,int param_4);
 
-// StylusAft_EarlyPalmJudge @ 0x6bb2145c (Rejection\StylusAft.c)
-undefined8 StylusAft_EarlyPalmJudge(byte param_1);
 
-// StylusAft_EdgePalmJudge @ 0x6bb214eb (Rejection\StylusAft.c)
-undefined8 StylusAft_EdgePalmJudge(byte param_1);
 
-// StylusAft_FanAreaJudge @ 0x6bb20f58 (Rejection\StylusAft.c)
-undefined8 StylusAft_FanAreaJudge(byte param_1);
 
-// StylusAft_GetPalmLevel @ 0x6bb209fb (Rejection\StylusAft.c)
-undefined8 StylusAft_GetPalmLevel(byte param_1);
 
-// StylusAft_InEdge @ 0x6bb21cc0 (Rejection\StylusAft.c)
-undefined1 StylusAft_InEdge(undefined1 param_1);
 
-// StylusAft_InFanArea @ 0x6bb20d9b (Rejection\StylusAft.c)
-undefined8 StylusAft_InFanArea(undefined4 param_1,undefined4 param_2);
 
-// StylusAft_Init @ 0x6bb208d0 (Rejection\StylusAft.c)
-void StylusAft_Init(void);
 
-// StylusAft_PalmJudge @ 0x6bb20eb3 (Rejection\StylusAft.c)
-undefined8 StylusAft_PalmJudge(undefined1 param_1);
 
-// StylusAft_PalmLocationJudge @ 0x6bb20c5e (Rejection\StylusAft.c)
-undefined8 StylusAft_PalmLocationJudge(undefined1 param_1,byte param_2);
 
-// StylusAft_PostDomainJudge @ 0x6bb21364 (Rejection\StylusAft.c)
-undefined8 StylusAft_PostDomainJudge(byte param_1);
 
-// StylusAft_PostProcessUnit @ 0x6bb223ef (Rejection\StylusAft.c)
-void StylusAft_PostProcessUnit(byte param_1);
 
-// StylusAft_ProcessSuppress @ 0x6bb21ac8 (Rejection\StylusAft.c)
-void StylusAft_ProcessSuppress(byte param_1,byte param_2);
 
-// StylusAft_ProcessWithdraw @ 0x6bb216da (Rejection\StylusAft.c)
-void StylusAft_ProcessWithdraw(byte param_1,byte param_2,undefined1 *param_3);
 
-// StylusAft_Sqrt @ 0x6bb20d02 (Rejection\StylusAft.c)
-int StylusAft_Sqrt(uint param_1);
 
-// StylusAft_SuppressBaseContext @ 0x6bb21dfd (Rejection\StylusAft.c)
-void StylusAft_SuppressBaseContext(byte param_1,char param_2);
 
 
 
@@ -1728,8 +1688,6 @@ uint TSA_RptIsLiftOff(byte param_1);
 // TSA_RptIsTouchDown @ 0x6ba9b112 (Core\TSA.c)
 uint TSA_RptIsTouchDown(byte param_1);
 
-// TSA_RptLONum @ 0x6ba9b0eb (Core\TSA.c)
-undefined1 TSA_RptLONum(void);
 
 
 

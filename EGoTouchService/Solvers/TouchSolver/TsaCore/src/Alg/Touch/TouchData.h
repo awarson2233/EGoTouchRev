@@ -532,8 +532,8 @@ struct PrevTouchUnit {
     uint16_t maxField06A;
     uint64_t strongZnTime;  // 本帧峰 Zn 不低于轨迹最大值 70% 时记下的时间（ms）
     uint8_t reserved3E8[0x64];
-    int8_t field44C;
-    int8_t field44D;
+    int8_t stylusWithdrawn;  // 笔防误触：整条轨迹已撤下
+    int8_t stylusSuppressFrames;  // 笔防误触：还要压制的帧数
     uint8_t field44E;
     uint8_t reserved44F[0x1];
     SPoint field450;
@@ -720,8 +720,8 @@ static_assert(offsetof(PrevTouchUnit, minField06A) == 0x3DA);
 static_assert(offsetof(PrevTouchUnit, maxField068) == 0x3DC);
 static_assert(offsetof(PrevTouchUnit, maxField06A) == 0x3DE);
 static_assert(offsetof(PrevTouchUnit, strongZnTime) == 0x3E0);
-static_assert(offsetof(PrevTouchUnit, field44C) == 0x44C);
-static_assert(offsetof(PrevTouchUnit, field44D) == 0x44D);
+static_assert(offsetof(PrevTouchUnit, stylusWithdrawn) == 0x44C);
+static_assert(offsetof(PrevTouchUnit, stylusSuppressFrames) == 0x44D);
 static_assert(offsetof(PrevTouchUnit, field44E) == 0x44E);
 static_assert(offsetof(PrevTouchUnit, field450) == 0x450);
 static_assert(offsetof(PrevTouchUnit, field454) == 0x454);
