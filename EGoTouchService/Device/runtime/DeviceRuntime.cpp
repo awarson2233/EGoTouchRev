@@ -1376,9 +1376,8 @@ void DeviceRuntime::OnStreaming() {
   ExecuteSolverAfeActions(afeActions);
 
 #ifdef _DEBUG
-  // 6. Debug frame push (IPC visualization)
-  // Hold callback mutex through invocation so disable() waits for in-flight
-  // callback to finish.
+  // 6. 逐帧回调（IPC 可视化、EGoTouchRecorder 录制），只在 Debug 构建里有。持锁调用，
+  // 清除回调时会等正在进行的那一次结束。
   std::lock_guard<std::mutex> lk(m_framePushCbMu);
   if (m_framePushCb) {
     m_framePushCb(touchFrame);

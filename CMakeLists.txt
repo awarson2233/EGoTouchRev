@@ -427,3 +427,13 @@ if (EGO_BUILD_TOOLS)
         target_link_options(TsaRawReplay PRIVATE -fprofile-instr-generate)
     endif()
 endif()
+
+# --- EGoTouchRecorder：给测试者的只读录制工具（触摸帧 + BT MCU → .dvrbin）。只在 Debug 下构建，
+# DeviceRuntime 的逐帧回调只在 Debug 里编入 ---
+if (EGO_BUILD_TOOLS AND CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_executable(EGoTouchRecorder Tools/EGoTouchRecorder/main.cpp)
+    target_link_libraries(EGoTouchRecorder PRIVATE Device DVRCore Solvers Host Common shell32 ole32 advapi32)
+    if (WIN32)
+        target_link_options(EGoTouchRecorder PRIVATE "LINKER:/MANIFESTUAC:level='requireAdministrator'")
+    endif()
+endif()
