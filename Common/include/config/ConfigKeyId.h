@@ -21,7 +21,7 @@ enum class ConfigKeyId : uint16_t {
     SvcPenButtonRoute    = 0x0004,
 
     // ── Touch (0x0100-0x01FF)：整个分区已退役 ──
-    // 手指管线的每一个参数都取自 TSACore 的 W273AS2700 Flash 整定表，不接受上位机
+    // 手指管线的每一个参数都取自 TSACore 按面板机型装入的 Flash 整定表，不接受上位机
     // 覆盖，因此这里不再定义任何键。该 ID 段保留不复用，避免与旧版本 IPC 快照撞号。
 
     // ── Stylus: reserved legacy HPP2 config key range (0x0200-0x022F) ──

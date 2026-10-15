@@ -515,7 +515,11 @@ int main(int argc, char** argv) {
         const fs::path dvrPath = outDir / "recording.dvrbin";
         const auto schema = BuildBtSchema();
         uint32_t flags = 0;
-        const bool dvrOk = Dvr::WriteBinaryFile(dvrPath, rec.frames, &schema, &rec.btFrames, nullptr, &flags);
+        // 回放按录制里的面板 id 选面板配置；OTP 没读出来就不写，回放走缺省机型
+        const auto config = panel ? Dvr::RuntimeConfigSnapshot::WithPanelProjectId(panel->projectId)
+                                  : Dvr::RuntimeConfigSnapshot{};
+        const bool dvrOk = Dvr::WriteBinaryFile(dvrPath, rec.frames, &schema, &rec.btFrames,
+                                                config.Empty() ? nullptr : &config, &flags);
         size_t packetCount = 0;
         const bool csvOk = g_packets.WriteCsv(outDir / "btmcu.csv", packetCount);
         size_t withMaster = 0;

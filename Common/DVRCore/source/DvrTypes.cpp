@@ -21,7 +21,34 @@ std::string ConfigPathForField(const RuntimeConfigField& field) {
     return field.section + "." + field.key;
 }
 
+constexpr char kPanelSection[] = "Device";
+constexpr char kPanelProjectIdKey[] = "panel_project_id";
+
 } // namespace
+
+RuntimeConfigSnapshot RuntimeConfigSnapshot::WithPanelProjectId(const std::string& projectId) {
+    RuntimeConfigSnapshot snapshot;
+    RuntimeConfigField& field = snapshot.fields.emplace_back();
+    field.fieldId = 1;
+    field.section = kPanelSection;
+    field.key = kPanelProjectIdKey;
+    field.displayName = "Panel project id";
+    RuntimeConfigValue& value = snapshot.values.emplace_back();
+    value.fieldId = field.fieldId;
+    value.valid = true;
+    value.stringValue = projectId;
+    return snapshot;
+}
+
+std::string RuntimeConfigSnapshot::PanelProjectId() const {
+    for (const auto& field : fields) {
+        if (field.section != kPanelSection || field.key != kPanelProjectIdKey) continue;
+        for (const auto& value : values) {
+            if (value.fieldId == field.fieldId && value.valid) return value.stringValue;
+        }
+    }
+    return {};
+}
 
 Config::ConfigStore RuntimeConfigSnapshot::toConfigStore() const {
     Config::ConfigStore store;

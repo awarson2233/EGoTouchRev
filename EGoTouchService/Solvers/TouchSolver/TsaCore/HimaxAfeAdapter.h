@@ -20,6 +20,7 @@
 #include <cstdint>
 
 #include "FrameLayout.h"
+#include "PanelProfile.h"
 
 namespace Solvers::Tsa {
 
@@ -63,12 +64,18 @@ public:
     static constexpr uint16_t kScanFreqTable[2] = {75, 113};
     static constexpr uint16_t kScanRate = 120;
 
-    HimaxAfeAdapter() noexcept { Reset(); }
+    HimaxAfeAdapter() noexcept {
+        SetPanelGain(PanelGain::Csot);
+        Reset();
+    }
 
     void Reset() noexcept;
 
     /// thp_afe_set_charger：充电器插入时启用帧间阻尼，并换用另一组正向阈值 / 缩放。
     void SetChargerPlugged(bool plugged) noexcept;
+
+    /// thp_afe_open_project 按面板选的 PixelGain 表（默认 CSOT）。
+    void SetPanelGain(PanelGain gain) noexcept;
 
     /// thp_afe_set_stylus_connect：笔是否已连接（g_StylusConnectFlag）。
     void SetStylusConnected(bool connected) noexcept { m_stylusConnected = connected; }
@@ -113,6 +120,7 @@ private:
     uint16_t m_lastScanFreq = 0;               // g_FrameOut +0x30
     uint32_t m_checksumErrors = 0;             // g_HandChecksumErrorCount
     bool     m_stylusConnected = false;        // g_StylusConnectFlag
+    const uint16_t* m_gainTable[2];            // g_PixelGainTable1Ptr / g_PixelGainTable2Ptr，按扫描频点
     Frame::MasterSuffixView m_suffix{};        // g_MasterSuffixDebugCache：最近一次有效 master 的 suffix
     uint16_t m_stylusGrid[Frame::kMatrixCells * 2];  // g_StylusUnpackedMatrixBuffer：TX1 在前，TX2 在后
 };

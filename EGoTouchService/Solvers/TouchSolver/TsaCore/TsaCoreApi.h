@@ -34,6 +34,9 @@ void TsaCore_ProfileSteps(int enable);
 uint64_t TSA_InitAFEProject_UI(int64_t projectName, int64_t afeStruct, int64_t caps);
 int      TSA_ProcessingAFEFrame(void* frame, uint32_t ctrl, uint64_t timestampMs);
 
+// 实际装入的机型参数表名（TSAPrmt 没有专表的机型落到 "DFLT000000"）。
+const char* TSA_GetPrmtName(void);
+
 uint32_t TSA_GetFeatures(void);
 uint32_t TSA_SetFeatures(uint32_t features);
 void     TSA_SetXRes(uint16_t res);

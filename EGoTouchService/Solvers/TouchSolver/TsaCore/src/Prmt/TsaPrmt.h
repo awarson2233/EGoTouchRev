@@ -13,9 +13,8 @@ namespace Solvers::Tsa::Core {
 
 namespace Prmt {
 
-/// 装入本机型（W273AS2700）的参数后重新初始化全部参数表。总是成功。
-bool Init();
-/// 宿主指定机型时调用；名字为空时失败。缺省机型 "DFLT000000" 的阵列尺寸取自 AFE。
+/// 按宿主给的机型名装入参数后重新初始化全部参数表；名字为空时失败。
+/// 缺省机型 "DFLT000000" 的阵列尺寸取自 AFE。
 bool LoadProject(const char* name);
 /// 重新计算动态门限（TSA 复位时）。
 void Reset();

@@ -84,6 +84,11 @@ struct RuntimeConfigSnapshot {
 
     bool Empty() const { return fields.empty() || values.empty(); }
     Config::ConfigStore toConfigStore() const;
+
+    /// 录制时的面板机型（显示驱动 OTP 的 project id，Device.panel_project_id），回放按它选面板配置。
+    static RuntimeConfigSnapshot WithPanelProjectId(const std::string& projectId);
+    /// 没有这一项（旧录制）时返回空串。
+    std::string PanelProjectId() const;
 };
 
 } // namespace Dvr

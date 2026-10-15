@@ -1,12 +1,13 @@
 // TsaRawReplay —— 把一段 .dvrbin 录制灌进 TsaCoreSolver（反编译的 TSACore 手指管线），
 // 逐帧打印 frame.touch.output.contacts（TSACore 是进程级单例，A/B 只能分进程跑）。
 //
-//   TsaRawReplay.exe <file.dvrbin> [--to N] [--dump N] [--charger] [--quiet]
+//   TsaRawReplay.exe <file.dvrbin> [--panel ID] [--to N] [--dump N] [--charger] [--quiet]
 //                    [--afe] [--idle-exit N] [--hold N K]
 //                    [--pen X Y A B] [--pen-hover] [--pen-tilt TX TY] [--pen-word W] [--pen-interleave]
 //                    [--stylus-solver] [--state-digest FILE] [--state-dump STEP FILE] [--profile]
 //   TsaRawReplay.exe --state-diff A B [SYMBOL]
 //
+//   --panel ID     面板机型（W273AS2700 / 2710 / 1300 / 1310），默认取录制里记的；旧录制没记就是 W273AS2700
 //   --afe          把 TSACore 的闭环请求与要下发的 AFE 动作打到 stderr（请求只在变化时打印）
 //   --idle-exit N  在第 N 帧之前注入一次「宿主观察到 IDLE 退出」
 //   --hold N K     把第 N 帧额外重复喂 K 次（模拟长时间静止）
@@ -223,7 +224,7 @@ int main(int argc, char** argv) {
         return TsaReplay::DiffSnapshots(a, b, TSA_RAW_ROOT, argc == 5 ? argv[4] : "") == 0 ? 0 : 1;
     }
     if (argc < 2) {
-        std::fprintf(stderr, "usage: TsaRawReplay <file.dvrbin> [--to N] [--dump N] [--charger] [--quiet] "
+        std::fprintf(stderr, "usage: TsaRawReplay <file.dvrbin> [--panel ID] [--to N] [--dump N] [--charger] [--quiet] "
                              "[--afe] [--idle-exit N] [--hold N K] [--pen X Y A B] [--pen-hover] "
                              "[--pen-tilt TX TY] [--pen-word W] [--pen-interleave] [--stylus-solver] "
                              "[--state-digest FILE] [--state-dump STEP FILE] [--profile | --profile-frame]\n"
@@ -251,8 +252,10 @@ int main(int argc, char** argv) {
     const char* dumpPath = nullptr;
     int dumpStep = -1;
     int heapSkew = 0;
+    const char* panelArg = nullptr;
     for (int i = 2; i < argc; ++i) {
         if (std::strcmp(argv[i], "--to") == 0 && i + 1 < argc) to = std::atoi(argv[++i]);
+        else if (std::strcmp(argv[i], "--panel") == 0 && i + 1 < argc) panelArg = argv[++i];
         else if (std::strcmp(argv[i], "--dump") == 0 && i + 1 < argc) dump = std::atoi(argv[++i]);
         else if (std::strcmp(argv[i], "--idle-exit") == 0 && i + 1 < argc) idleExit = std::atoi(argv[++i]);
         else if (std::strcmp(argv[i], "--hold") == 0 && i + 2 < argc) {
@@ -295,12 +298,16 @@ int main(int argc, char** argv) {
     std::vector<Solvers::HeatmapFrame> frames;
     int version = 0;
     std::string err;
-    if (!Dvr::ReadBinaryFile(argv[1], frames, version, nullptr, &err)) {
+    Dvr::RuntimeConfigSnapshot config;
+    if (!Dvr::ReadBinaryFile(argv[1], frames, version, nullptr, &err, nullptr, nullptr, &config)) {
         std::fprintf(stderr, "read failed: %s\n", err.c_str());
         return 1;
     }
     if (to < 0 || to > static_cast<int>(frames.size())) to = static_cast<int>(frames.size());
-    std::fprintf(stderr, "loaded %zu frames (dvr v%d), solver=%s\n", frames.size(), version, "TsaCoreSolver");
+    const std::string recordedPanel = config.PanelProjectId();
+    const std::string panel(Solvers::Tsa::ResolvePanelProjectId(panelArg != nullptr ? panelArg : recordedPanel));
+    std::fprintf(stderr, "loaded %zu frames (dvr v%d), solver=%s, panel=%s (recorded: %s)\n", frames.size(), version,
+                 "TsaCoreSolver", panel.c_str(), recordedPanel.empty() ? "none" : recordedPanel.c_str());
 
     // 比对工具自检：先占掉一些大小不一的堆块，让后面所有对象换个地址。状态摘要不应随之改变
     std::vector<std::unique_ptr<char[]>> skew;
@@ -310,6 +317,7 @@ int main(int argc, char** argv) {
     auto tsa = std::make_unique<Solvers::Tsa::TsaCoreSolver>();
     auto stylus = std::make_unique<Solvers::StylusPipeline>();
     uint32_t btSeqSeen = 0;
+    tsa->SetPanelProjectId(panel);
     tsa->SetChargerPlugged(charger);
     if (pen || stylusSolver) {
         tsa->SetStylusConnected(true);

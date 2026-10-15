@@ -1267,6 +1267,21 @@ void DeviceRuntime::EnterStreaming(const PowerInputs &in) {
   {
     // 芯片刚重新初始化：TSACore 下一帧按首帧处理并重建基线，闭环与输出记账归零
     std::lock_guard<std::mutex> lk(m_pipelineMu);
+    // 面板机型在第一次建链时从 OTP 读出；读不出或不认识时按缺省机型（原厂此时打不开 AFE）
+    const auto panel = m_chip.GetPanelIdentity();
+    const std::string_view projectId = Solvers::Tsa::ResolvePanelProjectId(panel ? panel->projectId : "");
+    if (!panel || panel->projectId != projectId) {
+      LOG_WARN("PowerSM", __func__, "panel", "Panel project id unavailable ({}), using {}.",
+               panel ? panel->projectId : std::string("OTP read failed"), projectId);
+    }
+    if (projectId != m_tsaCoreSolver.PanelProjectId()) {
+      if (m_tsaCoreSolver.SetPanelProjectId(projectId)) {
+        LOG_INFO("PowerSM", __func__, "panel", "TSACore panel profile: {}.", projectId);
+      } else {
+        LOG_WARN("PowerSM", __func__, "panel", "Panel changed to {} after TSACore loaded {}; keeping it.",
+                 projectId, m_tsaCoreSolver.PanelProjectId());
+      }
+    }
     m_tsaCoreSolver.OnAfeStarted();
   }
   m_link.provenEpoch = in.downEpoch;

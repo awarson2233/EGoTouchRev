@@ -366,7 +366,7 @@ bool SafeMode(HalDevice* dev, bool on) {
 }
 
 // hx_validate_ProjectID 的已知型号表
-constexpr std::array<const char*, 4> kKnownProjectIds = {"W273AS2700", "W273AS2710", "W273AS1310", "W273AS1300"};
+constexpr std::array<const char*, 4> kKnownProjectIds = {"W273AS2700", "W273AS2710", "W273AS1310", "W273AS1300"};  // 同 Solvers::Tsa::kPanelProjectIds
 // getProjectID_OTP 依次试的三个 OTP 槽
 constexpr std::array<uint16_t, 3> kOtpProjectSlots = {0x0F18, 0x0F3A, 0x0F5C};
 
