@@ -204,7 +204,6 @@ extern "C" {
 namespace O = Solvers::Tsa::Core::Out;
 void TSAOut_PostProcess(void) { O::PostProcess(); }
 uint16_t TSAOut_DisplayXPos(uint8_t idx, ...) { return O::DisplayXPos(idx); }
-uint16_t TSAOut_DisplayYPos(uint8_t idx, ...) { return O::DisplayYPos(idx); }
 uint16_t TSAOut_RptXPos(uint8_t idx) { return O::RptXPos(idx); }
 uint16_t TSAOut_Dim1PosInternal(uint16_t pos, uint16_t scale) { return O::Dim1PosInternal(pos, scale); }
 uint16_t TSAOut_Dim2PosInternal(uint16_t pos, uint16_t scale) { return O::Dim2PosInternal(pos, scale); }

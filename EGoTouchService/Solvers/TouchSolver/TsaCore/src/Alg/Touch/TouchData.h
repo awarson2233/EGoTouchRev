@@ -509,8 +509,8 @@ struct PrevTouchUnit {
     int32_t posDeltaSumDim1;
     int32_t posDeltaSumDim2;
     uint16_t debounceFrames;  // 按下 / 抬起消抖已累计的帧数
-    uint8_t field3A6;
-    uint8_t field3A7;
+    uint8_t antiTouchSuspectFrames;  // AntiTouch：可疑帧数（到 10 锁定）
+    uint8_t antiTouchClearFrames;  // AntiTouch：不可疑且像正常手指的帧数（到 10 锁定）
     uint16_t betaGripFrames;
     uint8_t reserved3AA[0x2];
     uint8_t blTrustFrames;  // BLReset：未贴边、标记 0x20000000 的小触点持续可信的帧数（0..15）
@@ -701,8 +701,8 @@ static_assert(offsetof(PrevTouchUnit, posDelta2) == 0x398);
 static_assert(offsetof(PrevTouchUnit, posDeltaSumDim1) == 0x39C);
 static_assert(offsetof(PrevTouchUnit, posDeltaSumDim2) == 0x3A0);
 static_assert(offsetof(PrevTouchUnit, debounceFrames) == 0x3A4);
-static_assert(offsetof(PrevTouchUnit, field3A6) == 0x3A6);
-static_assert(offsetof(PrevTouchUnit, field3A7) == 0x3A7);
+static_assert(offsetof(PrevTouchUnit, antiTouchSuspectFrames) == 0x3A6);
+static_assert(offsetof(PrevTouchUnit, antiTouchClearFrames) == 0x3A7);
 static_assert(offsetof(PrevTouchUnit, betaGripFrames) == 0x3A8);
 static_assert(offsetof(PrevTouchUnit, blTrustFrames) == 0x3AC);
 static_assert(offsetof(PrevTouchUnit, clickToFlickOffset) == 0x3AE);

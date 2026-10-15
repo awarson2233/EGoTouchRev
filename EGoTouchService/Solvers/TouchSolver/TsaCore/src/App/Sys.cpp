@@ -496,7 +496,6 @@ namespace S = Solvers::Tsa::Core::Sys;
 void TSAStatic_Init(void) { S::Init(); }
 void TSAStatic_PreProcess(void) { S::PreProcess(); }
 bool TSAStatic_IsHWReset(void) { return S::IsHwReset(); }
-uint64_t TSAStatic_GetCurrTimeStamp(void) { return S::CurrTimeStamp(); }
 uint32_t TSAStatic_IsAFTModeEnabled(void) { return S::IsAftModeEnabled() ? 1 : 0; }
 uint64_t TSAStatic_IsSafeBaselineApplied(void) { return S::IsSafeBaselineApplied() ? 1 : 0; }
 uint8_t TSAStatic_IsSignalReverted(void) { return S::IsSignalReverted() ? 1 : 0; }

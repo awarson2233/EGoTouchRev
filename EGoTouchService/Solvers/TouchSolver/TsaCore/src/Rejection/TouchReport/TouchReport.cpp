@@ -268,8 +268,3 @@ void GoBack(uint8_t curIdx, uint8_t prevIdx) {
 }
 
 }  // namespace Solvers::Tsa::Core::TouchReport
-
-// raw 的调用方（AntiTouch）
-extern "C" void TouchReport_GoBackReport(uint8_t curIdx, uint8_t prevIdx) {
-    Solvers::Tsa::Core::TouchReport::GoBack(curIdx, prevIdx);
-}

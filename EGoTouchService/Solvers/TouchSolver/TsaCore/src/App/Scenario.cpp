@@ -255,5 +255,4 @@ uint64_t TSA_IsGameScenario(void) { return Sc::IsGame() ? 1 : 0; }
 bool TSA_IsTypingScenario(void) { return Sc::IsTyping(); }
 uint64_t TSA_IsJustEnterTypingScenario(void) { return Sc::IsJustEnterTyping() ? 1 : 0; }
 bool TSA_IsVideoScenario(void) { return Sc::IsVideo(); }
-uint64_t TSA_IsScreenLockScenario(void) { return Sc::IsScreenLock() ? 1 : 0; }
 }  // extern "C"

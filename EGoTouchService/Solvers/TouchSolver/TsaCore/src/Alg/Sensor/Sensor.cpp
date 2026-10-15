@@ -89,9 +89,3 @@ bool IsInDifferentZones(uint8_t dim1A, uint8_t dim2A, uint8_t dim1B, uint8_t dim
 }
 
 }  // namespace Solvers::Tsa::Core::Sensor
-
-// raw 的调用方
-extern "C" {
-namespace S = Solvers::Tsa::Core::Sensor;
-uint8_t Sensor_GetZoneIndex(uint8_t dim1, uint8_t dim2) { return S::ZoneIndex(dim1, dim2); }
-}  // extern "C"

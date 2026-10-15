@@ -194,9 +194,6 @@ uint32_t TSA_RptTouchPressure(uint8_t idx) { return R::TouchPressure(idx); }
 uint32_t TSA_RptIsTouchDown(uint8_t idx) { return R::IsTouchDown(idx); }
 uint32_t TSA_RptIsLiftOff(uint8_t idx) { return R::IsLiftOff(idx); }
 uint64_t TSA_RptDiffPtr(void) { return reinterpret_cast<uint64_t>(Solvers::Tsa::Core::Buffers().dif); }
-uint16_t TSA_RptTouchXCenter(uint8_t idx) { return R::TouchXCenter(idx); }
-uint16_t TSA_RptTouchYCenter(uint8_t idx) { return R::TouchYCenter(idx); }
-uint8_t TSA_RptTouchYGripCtd(uint8_t idx) { return R::TouchYGripRatio(idx); }
 uint16_t TSA_GetXRes(void) { return R::XRes(); }
 void TSA_SetXRes(uint16_t res) { R::SetXRes(res); }
 void TSA_SetYRes(uint16_t res) { R::SetYRes(res); }

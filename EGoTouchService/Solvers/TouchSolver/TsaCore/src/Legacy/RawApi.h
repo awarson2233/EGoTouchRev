@@ -25,10 +25,6 @@ uint64_t Exception_GetDetectedChargerNoise(void);
 // Rejection/HandGesture.c
 void HandGesture_Init(void);
 void HandGesture_Process(void);
-// Rejection/AntiTouch.c
-void AntiTouch_Init(void);
-void AntiTouch_Process(void);
-void AntiTouch_Report(void);
 
 // Rejection/GripFilter.c
 void GripFilter_Init(void);

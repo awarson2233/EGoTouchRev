@@ -380,7 +380,9 @@ struct FlashPrmt {
     uint32_t powerGestureSet;
     uint8_t motorVolumeOnWaveform;
     uint8_t motorVolumeOffWaveform;
-    uint8_t reserved173E[0x6];
+    uint8_t reserved173E[0x4];
+    uint8_t antiTouchProxMode;  // AntiTouch：非 0 时按本帧接近状态直接报 extFlags（锁屏除外）
+    uint8_t reserved1743[0x1];
     uint32_t sensorEnabled;
     uint8_t sensorRate;
     uint8_t reserved1749[0x3];
@@ -617,6 +619,7 @@ static_assert(offsetof(FlashPrmt, powerTouchMax) == 0x1734);
 static_assert(offsetof(FlashPrmt, powerGestureSet) == 0x1738);
 static_assert(offsetof(FlashPrmt, motorVolumeOnWaveform) == 0x173C);
 static_assert(offsetof(FlashPrmt, motorVolumeOffWaveform) == 0x173D);
+static_assert(offsetof(FlashPrmt, antiTouchProxMode) == 0x1742);
 static_assert(offsetof(FlashPrmt, sensorEnabled) == 0x1744);
 static_assert(offsetof(FlashPrmt, sensorRate) == 0x1748);
 static_assert(offsetof(FlashPrmt, touchReportFlags) == 0x174C);

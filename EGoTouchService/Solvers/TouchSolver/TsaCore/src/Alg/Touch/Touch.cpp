@@ -22,6 +22,7 @@
 #include "Extension/Thenar/ThenarData.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
+#include "Rejection/AntiTouch/AntiTouch.h"
 
 namespace Solvers::Tsa::Core::Touch {
 
@@ -878,7 +879,7 @@ void ProcessExtInfo() {
     if (Report::IsOutOfWaterDetected()) touches.extFlags |= 0x40;
     touches.extFlags |= 0x100;
     touches.extFlags |= 0x200;
-    AntiTouch_Report();
+    AntiTouch::Report();
 }
 
 // Touch_CreatePostReport @ 0x6ba76a03

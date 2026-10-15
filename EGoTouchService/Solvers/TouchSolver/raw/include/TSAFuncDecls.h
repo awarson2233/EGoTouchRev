@@ -35,56 +35,22 @@ char AIIR_GetCoef(ushort param_1);
 // AdjustByHistory @ 0x6baf540d (Tracking\HotZoneAdjust.c)
 void AdjustByHistory(byte param_1,byte param_2);
 
-// AntiTouch_CheckProximityFlag @ 0x6bad6aee (Rejection\AntiTouch.c)
-void AntiTouch_CheckProximityFlag(undefined1 param_1);
 
-// AntiTouch_CommonProcess @ 0x6bad7ad0 (Rejection\AntiTouch.c)
-void AntiTouch_CommonProcess(void);
 
-// AntiTouch_GetAxisMajorThold @ 0x6bad697c (Rejection\AntiTouch.c)
-undefined1 AntiTouch_GetAxisMajorThold(byte param_1);
 
-// AntiTouch_GetEllipseRateThold @ 0x6bad6a5a (Rejection\AntiTouch.c)
-undefined2 AntiTouch_GetEllipseRateThold(byte param_1);
 
-// AntiTouch_GetPersistFlag @ 0x6bad6b3d (Rejection\AntiTouch.c)
-bool AntiTouch_GetPersistFlag(byte param_1,byte param_2);
 
-// AntiTouch_Init @ 0x6bad6010 (Rejection\AntiTouch.c)
-void AntiTouch_Init(void);
 
-// AntiTouch_IsGrip @ 0x6bad6640 (Rejection\AntiTouch.c)
-bool AntiTouch_IsGrip(byte param_1);
 
-// AntiTouch_IsToGoBackReport @ 0x6bad6021 (Rejection\AntiTouch.c)
-undefined8 AntiTouch_IsToGoBackReport(byte param_1);
 
-// AntiTouch_IsToProtectProximity @ 0x6bad66e6 (Rejection\AntiTouch.c)
-bool AntiTouch_IsToProtectProximity(byte param_1);
 
-// AntiTouch_IsTouchCloseToUdfpArea @ 0x6bad689b (Rejection\AntiTouch.c)
-undefined8 AntiTouch_IsTouchCloseToUdfpArea(byte param_1);
 
-// AntiTouch_PostReport @ 0x6bad65e6 (Rejection\AntiTouch.c)
-void AntiTouch_PostReport(void);
 
-// AntiTouch_PostReportUnit @ 0x6bad6099 (Rejection\AntiTouch.c)
-void AntiTouch_PostReportUnit(byte param_1,byte param_2);
 
-// AntiTouch_PreProcess @ 0x6bad67d3 (Rejection\AntiTouch.c)
-void AntiTouch_PreProcess(void);
 
-// AntiTouch_Process @ 0x6bad7bbb (Rejection\AntiTouch.c)
-void AntiTouch_Process(void);
 
-// AntiTouch_ProcessProximityUnit @ 0x6bad6f59 (Rejection\AntiTouch.c)
-void AntiTouch_ProcessProximityUnit(byte param_1,byte param_2);
 
-// AntiTouch_ProcessUnit @ 0x6bad7719 (Rejection\AntiTouch.c)
-void AntiTouch_ProcessUnit(byte param_1,byte param_2);
 
-// AntiTouch_Report @ 0x6bad7bf7 (Rejection\AntiTouch.c)
-void AntiTouch_Report(void);
 
 
 // BLIIR_CalcDiffCommon @ 0x6ba46f4c (Baseline\BLIIR.c)
@@ -1254,8 +1220,6 @@ bool SearchNearest(byte param_1,undefined8 param_2,undefined1 param_3,undefined8
 
 
 
-// Sensor_GetZoneIndex @ 0x6ba672a6 (Detection\Sensor.c)
-byte Sensor_GetZoneIndex(byte param_1,byte param_2);
 
 
 
@@ -1408,8 +1372,6 @@ undefined2 TSAOut_Dim2PosInternal(ushort param_1,ushort param_2);
 // TSAOut_DisplayXPos @ 0x6ba6a241 (Core\TSAOut.c)
 ushort TSAOut_DisplayXPos(undefined1 param_1, ...);
 
-// TSAOut_DisplayYPos @ 0x6ba6a293 (Core\TSAOut.c)
-ushort TSAOut_DisplayYPos(undefined1 param_1, ...);
 
 
 // TSAOut_ExtToIntDist @ 0x6ba69bc3 (Core\TSAOut.c)
@@ -1470,8 +1432,6 @@ void TSARTPrmt_SetKeyValue(undefined8 param_1,undefined4 param_2);
 
 
 
-// TSAStatic_GetCurrTimeStamp @ 0x6baa2cfe (Core\TSAStatic.c)
-void * TSAStatic_GetCurrTimeStamp(void);
 
 
 
@@ -1632,8 +1592,6 @@ undefined1 TSA_IsOKToEnterIDLEMode(void);
 undefined1 TSA_IsReCalibNeeded(void);
 
 
-// TSA_IsScreenLockScenario @ 0x6ba8fb7c (Core\TSA.c)
-undefined8 TSA_IsScreenLockScenario(void);
 
 
 // TSA_IsTypingScenario @ 0x6ba8fe17 (Core\TSA.c)
@@ -1696,17 +1654,11 @@ uint TSA_RptTouchNum(void);
 // TSA_RptTouchPressure @ 0x6ba9bc34 (Core\TSA.c)
 uint TSA_RptTouchPressure(byte param_1);
 
-// TSA_RptTouchXCenter @ 0x6ba9b9f0 (Core\TSA.c)
-ushort TSA_RptTouchXCenter(undefined1 param_1);
 
 // TSA_RptTouchXPos @ 0x6ba9b428 (Core\TSA.c)
 ulonglong TSA_RptTouchXPos(byte param_1);
 
-// TSA_RptTouchYCenter @ 0x6ba9ba35 (Core\TSA.c)
-ushort TSA_RptTouchYCenter(undefined1 param_1);
 
-// TSA_RptTouchYGripCtd @ 0x6ba9b8a3 (Core\TSA.c)
-undefined1 TSA_RptTouchYGripCtd(byte param_1);
 
 // TSA_RptTouchYPos @ 0x6ba9b482 (Core\TSA.c)
 ulonglong TSA_RptTouchYPos(byte param_1);
@@ -2012,8 +1964,6 @@ void TouchMode_Process(void);
 
 
 
-// TouchReport_GoBackReport @ 0x6ba7ae1d (Rejection\TouchReport.c)
-void TouchReport_GoBackReport(byte param_1,undefined1 param_2);
 
 
 

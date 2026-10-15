@@ -43,6 +43,7 @@
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 #include "Prmt/TsaPrmt.h"
+#include "Rejection/AntiTouch/AntiTouch.h"
 #include "Rejection/Asa/Asa.h"
 #include "Rejection/StylusAft/StylusAft.h"
 #include "Rejection/TouchReport/TouchReport.h"
@@ -102,7 +103,7 @@ void MsInitCommon(bool full) {
     TouchReport::Init();
     TouchMode::Init();
     Exception::Init();
-    AntiTouch_Init();
+    AntiTouch::Init();
     HardwareAnalyzer::Init();
     GripFilter_Init();
     BadChannel::Init();
@@ -207,7 +208,7 @@ void TrackAndReport() {
     Exception::Process();
     GripFilter_Process();
     TouchMode::Process();
-    AntiTouch_Process();
+    AntiTouch::Process();
     Touch::ProcessBetaGrip();
     TouchReport::Process();
     Touch::ProcessExtInfo();
