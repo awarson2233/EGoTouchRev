@@ -2160,48 +2160,6 @@ int Misc_SqrtUint32(uint param_1);
 // Misc_SqrtUint64 @ 0x6ba64ddd (Common\MISC.c)
 longlong Misc_SqrtUint64(ulonglong param_1);
 
-// MtDiff_MsLinearCorrectionFilterCore @ 0x6ba55131 (Tracking\MtDiff.c)
-void MtDiff_MsLinearCorrectionFilterCore (longlong param_1,longlong param_2,undefined8 param_3,longlong *param_4);
-
-// MtLsm_CalcMatrixB @ 0x6ba54882 (Tracking\MtLsm.c)
-void MtLsm_CalcMatrixB(longlong param_1,longlong param_2,ushort param_3,longlong param_4);
-
-// MtLsm_GetF @ 0x6ba54260 (Tracking\MtLsm.c)
-float MtLsm_GetF(undefined8 param_1,undefined8 param_2);
-
-// MtLsm_GetFDeriv @ 0x6ba542cc (Tracking\MtLsm.c)
-float MtLsm_GetFDeriv(undefined8 param_1,undefined8 param_2,undefined8 param_3,undefined8 param_4, undefined4 param_5);
-
-// MtLsm_GetInvATA @ 0x6ba541a0 (Tracking\MtLsm.c)
-void MtLsm_GetInvATA(undefined8 param_1,undefined8 param_2,undefined8 param_3,undefined4 param_4);
-
-// MtLsm_GetP @ 0x6ba54204 (Tracking\MtLsm.c)
-void MtLsm_GetP(undefined8 param_1,undefined8 param_2,undefined8 param_3,undefined8 param_4, undefined4 param_5);
-
-// MtLsm_GetStateByAllSensor @ 0x6ba54c29 (Tracking\MtLsm.c)
-void MtLsm_GetStateByAllSensor(longlong param_1,undefined8 *param_2);
-
-// MtLsm_GetStateByWeightSensor @ 0x6ba54cfe (Tracking\MtLsm.c)
-void MtLsm_GetStateByWeightSensor(undefined8 param_1,longlong *param_2);
-
-// MtLsm_LinearReconstruct @ 0x6ba5453b (Tracking\MtLsm.c)
-void MtLsm_LinearReconstruct (undefined2 *param_1,byte param_2,float *param_3,int param_4,float *param_5);
-
-// MtLsm_LinearRegressionCalcState @ 0x6ba55037 (Tracking\MtLsm.c)
-void MtLsm_LinearRegressionCalcState(longlong param_1);
-
-// MtLsm_LinearRegressionWeight @ 0x6ba550d4 (Tracking\MtLsm.c)
-void MtLsm_LinearRegressionWeight(longlong param_1,undefined8 param_2,undefined1 param_3);
-
-// MtLsm_Solve @ 0x6ba54158 (Tracking\MtLsm.c)
-void MtLsm_Solve(undefined8 param_1,undefined8 param_2,undefined8 param_3);
-
-// MtLsm_SolveWithConstrain @ 0x6ba543cb (Tracking\MtLsm.c)
-void MtLsm_SolveWithConstrain (undefined8 param_1,undefined8 param_2,undefined8 param_3,longlong param_4);
-
-// MtLst_GetVectorA @ 0x6ba540e0 (Tracking\MtLst.c)
-void MtLst_GetVectorA(longlong param_1,int param_2,longlong param_3);
-
 // Peak_CalcZn @ 0x6ba67c89 (Detection\Peak.c)
 void Peak_CalcZn(byte param_1);
 

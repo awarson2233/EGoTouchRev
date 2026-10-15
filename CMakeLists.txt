@@ -296,8 +296,6 @@ file(GLOB TSACORE_RAW_SOURCES CONFIGURE_DEPENDS
     "${TSACORE_RAW_ROOT}/Filter/*.c"
     "${TSACORE_RAW_ROOT}/Prmt/*.c"
     "${TSACORE_RAW_ROOT}/Rejection/*.c"
-    "${TSACORE_RAW_ROOT}/Signal/*.c"
-    "${TSACORE_RAW_ROOT}/Tracking/*.c"
 )
 add_library(TSACoreRaw STATIC ${TSACORE_RAW_SOURCES} ${TSACORE_CPP_SOURCES})
 set_target_properties(TSACoreRaw PROPERTIES C_STANDARD 17 C_EXTENSIONS ON)
