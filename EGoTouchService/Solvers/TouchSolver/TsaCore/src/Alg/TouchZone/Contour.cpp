@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <climits>
 #include <cmath>
 #include <vector>
@@ -40,59 +41,13 @@ Kernel& Kernels() { return Slot<Kernel>(Bss().afu); }
 /// edgeDot_11595：镜像补全用的轮廓点副本。
 EdgeDot* MirrorDots() { return &Slot<EdgeDot>(Bss().contourEdgeDot); }
 
-using Window = std::array<std::array<int, 4>, 4>;
-
 // TZ_BiCubicInterEdge @ 0x6ba85db3 的取窗部分
-// 以 (dim1, dim2) 为左上角的 4×4 窗口；窗口越出屏幕的一侧（每个方向最多一侧）用相邻行列补齐。
-void LoadWindow(int dim1, int dim2, Window& w) {
-    const FlashPrmt& fl = PrmtFlash();
-    const int16_t* sig = ZoneSig();
-    int c0 = 0, c1 = 4, r0 = 0, r1 = 4;
-    if (dim1 < 0) {
-        c0 = 1;
-    } else if (fl.dim1Len - 4 < dim1) {
-        c1 = 3;
-    }
-    if (dim2 < 0) {
-        r0 = 1;
-    } else if (fl.dim2Len - 4 < dim2) {
-        r1 = 3;
-    }
-    w = {};
-    for (int r = r0; r < r1; ++r) {
-        for (int c = c0; c < c1; ++c) w[r][c] = sig[static_cast<uint16_t>(fl.dim1Len * (r + dim2) + c + dim1)];
-    }
-    if (c0 != 0) {
-        for (auto& row : w) row[0] = row[1];
-    }
-    if (c1 != 4) {
-        for (auto& row : w) row[3] = row[2];
-    }
-    if (r0 != 0) w[0] = w[1];
-    if (r1 != 4) w[3] = w[2];
-}
-
-// TZ_BiCubicInter4x4 @ 0x6ba85c95（求和次序按原汇编：w3·v3 + ((w0·v0 + w1·v1) + w2·v2)）
-float Weighted(const Window& w, const float (&wDim1)[4], const float (&wDim2)[4]) {
-    float acc = 0.0f;
-    for (int r = 0; r < 4; ++r) {
-        const auto& v = w[r];
-        const float row = wDim1[3] * static_cast<float>(v[3]) +
-                          ((wDim1[0] * static_cast<float>(v[0]) + wDim1[1] * static_cast<float>(v[1])) + wDim1[2] * static_cast<float>(v[2]));
-        acc = acc + row * wDim2[r];
-    }
-    return acc;
-}
-
-// TZ_GetDifHR @ 0x6ba85fac / TZ_BiCubicInter @ 0x6ba85a85
-// 高分辨率点 (x, y) 处的插值信号；超出区域的插值范围时为 0。
-int HighResSig(const TouchZoneUnit& z, int x, int y) {
-    if (x < z.hrMinDim1 || z.hrMaxDim1 < x || y < z.hrMinDim2 || z.hrMaxDim2 < y) return 0;
-    const int cellDim1 = x / kHrScale;
-    const int cellDim2 = y / kHrScale;
-    Window w;
-    LoadWindow(cellDim1 - 1, cellDim2 - 1, w);
-    return static_cast<int>(Weighted(w, Kernels()[x - cellDim1 * kHrScale], Kernels()[y - cellDim2 * kHrScale]));
+// 以 first 为起点的 4 条线（行或列）；窗口越出屏幕的一侧（每个方向最多一侧）用相邻的线补齐。返回第 k 条
+// 实际取的线号。
+int WindowLine(int first, int k, int len) {
+    if (first < 0) return k == 0 ? first + 1 : first + k;
+    if (len - 4 < first) return k == 3 ? first + 2 : first + k;
+    return first + k;
 }
 
 // TZ_Interpolate @ 0x6ba8613f
@@ -106,31 +61,74 @@ void SetInterpolationRange(TouchZoneUnit& z) {
     z.hrMaxDim2 = static_cast<int16_t>(std::min(z.maxDim2 + 1, fl.dim2Len - 1) * kHrScale);
 }
 
-/// 一次轮廓跟踪里 HighResSig 的备忘：跟踪的相邻步会反复插值同一个点。插值只取决于点坐标与本区域的
-/// 插值范围、区域信号（跟踪期间不变），按插值范围开一张表，结果与每次现算相同。
+/// 一次轮廓跟踪里的高分辨率插值（TZ_GetDifHR @ 0x6ba85fac / TZ_BiCubicInter @ 0x6ba85a85）：点 (x, y) 处
+/// 的双三次插值，超出区域的插值范围时为 0。插值先按行求出 4 条行的横向插值，再按纵向的核加权
+/// （TZ_BiCubicInter4x4 @ 0x6ba85c95，求和次序按原汇编：w3·v3 + ((w0·v0 + w1·v1) + w2·v2)，纵向从 0 起逐行累加）。
+/// 跟踪的相邻步会反复插值同一个点、同一条行，两者都按区域的插值范围备忘；插值只取决于坐标与区域信号
+/// （跟踪期间不变），浮点运算次序不变，结果与逐点现算相同。
 class HighResCache {
 public:
     explicit HighResCache(const TouchZoneUnit& z)
-        : z_(z), x0_(z.hrMinDim1), y0_(z.hrMinDim2), w_(std::max(z.hrMaxDim1 - z.hrMinDim1 + 1, 0)),
-          h_(std::max(z.hrMaxDim2 - z.hrMinDim2 + 1, 0)) {
-        Memo().assign(static_cast<size_t>(w_) * h_, kUnset);
+        : sig_(ZoneSig()), dim1Len_(PrmtFlash().dim1Len), dim2Len_(PrmtFlash().dim2Len), x0_(z.hrMinDim1),
+          y0_(z.hrMinDim2), w_(std::max(z.hrMaxDim1 - z.hrMinDim1 + 1, 0)), h_(std::max(z.hrMaxDim2 - z.hrMinDim2 + 1, 0)) {
+        PointMemo().assign(static_cast<size_t>(w_) * h_, kUnset);
+        // 行备忘覆盖插值范围内各点可能取到的行：所在格行的上一行到下两行
+        rowBase_ = y0_ / kHrScale - 1;
+        rows_ = h_ == 0 ? 0 : (y0_ + h_ - 1) / kHrScale + 2 - rowBase_ + 1;
+        RowMemo().assign(static_cast<size_t>(w_) * std::max(rows_, 0), kRowUnset);
     }
 
     int operator()(int x, int y) const {
-        if (x < x0_ || y < y0_ || x - x0_ >= w_ || y - y0_ >= h_) return HighResSig(z_, x, y);
-        int& v = Memo()[static_cast<size_t>(y - y0_) * w_ + (x - x0_)];
-        if (v == kUnset) v = HighResSig(z_, x, y);
+        if (x < x0_ || y < y0_ || x - x0_ >= w_ || y - y0_ >= h_) return 0;
+        int& v = PointMemo()[static_cast<size_t>(y - y0_) * w_ + (x - x0_)];
+        if (v == kUnset) v = Compute(x, y);
         return v;
     }
 
 private:
     static constexpr int kUnset = INT32_MIN;  // 插值结果是 int16 信号的加权和，不会取到它
-    static std::vector<int>& Memo() {
+    static constexpr uint32_t kRowUnset = 0x7fc00001;  // 一个 NaN 位型；有限整数的加权和不会是 NaN
+
+    int Compute(int x, int y) const {
+        const int cellDim2 = y / kHrScale;
+        const float(&wDim2)[4] = Kernels()[y - cellDim2 * kHrScale];
+        float acc = 0.0f;
+        for (int k = 0; k < 4; ++k) acc = acc + Row(x, WindowLine(cellDim2 - 1, k, dim2Len_)) * wDim2[k];
+        return static_cast<int>(acc);
+    }
+
+    /// 第 row 行在 x 处的横向插值。
+    float Row(int x, int row) const {
+        const int r = row - rowBase_;
+        uint32_t* slot = nullptr;
+        if (0 <= r && r < rows_) {
+            slot = &RowMemo()[static_cast<size_t>(r) * w_ + (x - x0_)];
+            if (*slot != kRowUnset) return std::bit_cast<float>(*slot);
+        }
+        const int cellDim1 = x / kHrScale;
+        const float(&wDim1)[4] = Kernels()[x - cellDim1 * kHrScale];
+        float v[4];
+        for (int k = 0; k < 4; ++k) {
+            const int col = WindowLine(cellDim1 - 1, k, dim1Len_);
+            v[k] = static_cast<float>(sig_[static_cast<uint16_t>(dim1Len_ * row + col)]);
+        }
+        const float value = wDim1[3] * v[3] + ((wDim1[0] * v[0] + wDim1[1] * v[1]) + wDim1[2] * v[2]);
+        if (slot != nullptr) *slot = std::bit_cast<uint32_t>(value);
+        return value;
+    }
+
+    static std::vector<int>& PointMemo() {
         static std::vector<int> memo;
         return memo;
     }
-    const TouchZoneUnit& z_;
+    static std::vector<uint32_t>& RowMemo() {
+        static std::vector<uint32_t> memo;
+        return memo;
+    }
+    const int16_t* sig_;
+    int dim1Len_, dim2Len_;
     int x0_, y0_, w_, h_;
+    int rowBase_ = 0, rows_ = 0;
 };
 
 // TZ_FindContourFirstDotDim2 @ 0x6ba86380

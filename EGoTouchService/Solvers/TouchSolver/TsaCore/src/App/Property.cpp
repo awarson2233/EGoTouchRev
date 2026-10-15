@@ -65,6 +65,8 @@ int FirstIndexOf(const int16_t* p, int begin, int v) {
 // （极值都取扫描顺序第一次出现的格）。
 void Accumulate(Blocks& blocks) {
     const int thold = Prpt().noiseThold;
+    const auto thold16 = static_cast<int16_t>(thold);
+    const auto negThold16 = static_cast<int16_t>(std::clamp<int>(-thold, INT16_MIN, INT16_MAX));
     const int16_t* dif = Buffers().dif;
     const int cols = PrmtFlash().dim1Len;
     for (const Run& run : g_runs) {
@@ -94,20 +96,26 @@ void Accumulate(Blocks& blocks) {
             }
             continue;
         }
-        int mx = INT16_MIN;
-        int mn = INT16_MAX;
-        int posSum = 0, negSum = 0, posCount = 0, negCount = 0, bigCount = 0;
+        // 极值与计数在 int16 宽度里做（段长不超过一行，计数放得下；-thold 夹到 int16 范围不改变比较结果），
+        // 只有正负和要 int32；分成两遍，前一遍能按 8 个 lane 向量化。
+        int16_t mx = INT16_MIN;
+        int16_t mn = INT16_MAX;
+        int16_t posCount = 0, negCount = 0, bigCount = 0;
         for (int i = run.begin; i < run.end; ++i) {
-            const int v = dif[i];
+            const int16_t v = dif[i];
             mx = std::max(mx, v);
             mn = std::min(mn, v);
+            const bool pos = thold16 <= v;
+            posCount = static_cast<int16_t>(posCount + (pos ? 1 : 0));
+            negCount = static_cast<int16_t>(negCount + (!pos && v <= negThold16 ? 1 : 0));
+            bigCount = static_cast<int16_t>(bigCount + (kBigSig < v || v < -kBigSig ? 1 : 0));
+        }
+        int posSum = 0, negSum = 0;
+        for (int i = run.begin; i < run.end; ++i) {
+            const int v = dif[i];
             const bool pos = thold <= v;
-            const bool neg = !pos && v <= -thold;
             posSum += pos ? v : 0;
-            posCount += pos ? 1 : 0;
-            negSum += neg ? v : 0;
-            negCount += neg ? 1 : 0;
-            bigCount += kBigSig < v || v < -kBigSig ? 1 : 0;
+            negSum += !pos && v <= -thold ? v : 0;
         }
         BlockAcc& b = blocks[run.block];
         const int rowStart = run.row * cols;
@@ -196,8 +204,11 @@ void GetRawPrpt(const uint16_t* raw, const uint16_t* bl) {
     for (uint16_t run = 0; first < n && run < raw[first]; ++first) run = raw[first];
     uint16_t hi = 0;
     uint16_t lo = 0xffff;
-    for (int i = 0; i < n; ++i) hi = std::max(hi, raw[i]);
-    for (int i = first; i < n; ++i) lo = std::min(lo, raw[i]);
+    for (int i = 0; i < first; ++i) hi = std::max(hi, raw[i]);
+    for (int i = first; i < n; ++i) {
+        hi = std::max(hi, raw[i]);
+        lo = std::min(lo, raw[i]);
+    }
     p.boundaryPositive = hi;
     p.boundaryNegative = lo;
     p.boundaryPositiveDim1 = 0;
@@ -216,12 +227,15 @@ void GetRawPrpt(const uint16_t* raw, const uint16_t* bl) {
     }
     uint16_t innerHi = 0, innerLo = 0xffff;
     uint32_t rawSum = 0, blSum = 0;
+    // 极值（uint16 宽度）与和（uint32）分开两个循环，各自按满宽度向量化
     for (int r = 1; r < rows - 1; ++r) {
+        for (int i = r * cols + 1; i < r * cols + cols - 1; ++i) {
+            innerHi = std::max(innerHi, raw[i]);
+            innerLo = std::min(innerLo, raw[i]);
+        }
         for (int i = r * cols + 1; i < r * cols + cols - 1; ++i) {
             rawSum += raw[i];
             blSum += bl[i];
-            innerHi = std::max(innerHi, raw[i]);
-            innerLo = std::min(innerLo, raw[i]);
         }
     }
     const uint32_t inner = (fl.dim1Len - 2u) * (fl.dim2Len - 2u);

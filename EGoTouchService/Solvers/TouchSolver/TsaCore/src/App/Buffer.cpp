@@ -36,6 +36,16 @@ constexpr uint16_t kAtEdgeQ8 = 0x20;
 
 uint16_t SensorNum() { return PrmtFlash().sensorNum; }
 
+constexpr int kChunk = 64;  // 逐格查表前按块粗筛的块长
+
+/// [begin, end) 里有非 0 的元素（无分支，可向量化）。
+template <class T>
+bool AnyNonZero(const T* p, int begin, int end) {
+    T acc = 0;
+    for (int i = begin; i < end; ++i) acc = static_cast<T>(acc | p[i]);
+    return acc != 0;
+}
+
 /// 计时加 dt，饱和到 int16。
 int16_t AddTime(int16_t t, int dt) { return static_cast<int16_t>(std::clamp(t + dt, -0x8000, 0x7fff)); }
 
@@ -72,7 +82,15 @@ void TzIdProcess() {
         std::fill_n(tzId, n, int8_t{0});
         return;
     }
-    for (int i = 0; i < n; ++i) tzId[i] = idOfCode[static_cast<uint8_t>(subTz[i])];
+    // 编码 0（未访问）对应 ID 0：整块未访问时直接清零，有访问的块才查表
+    for (int base = 0; base < n; base += kChunk) {
+        const int end = std::min(base + kChunk, n);
+        if (!AnyNonZero(subTz, base, end)) {
+            std::fill(tzId + base, tzId + end, int8_t{0});
+            continue;
+        }
+        for (int i = base; i < end; ++i) tzId[i] = idOfCode[static_cast<uint8_t>(subTz[i])];
+    }
 }
 
 // TSABuffer_TimeRptProcess @ 0x6ba8e9b0
@@ -93,9 +111,17 @@ void TimeRptProcess() {
     const int n = SensorNum();
     const uint8_t* zone = b.tzZone;
     int16_t* timeRpt = b.timeRpt;
-    for (int i = 0; i < n; ++i) {
-        const int16_t next = AddTime(timeRpt[i], dt);  // 先无条件算出，选择表达式里不放读取，循环才能向量化
-        timeRpt[i] = reported[zone[i]] == 0 ? next : int16_t{0};
+    // 区域编码 0 的格不会被标为已报点（reported[0] 恒为 0）：整块都是 0 时只推进计时（可向量化），否则查表
+    for (int base = 0; base < n; base += kChunk) {
+        const int end = std::min(base + kChunk, n);
+        if (!AnyNonZero(zone, base, end)) {
+            for (int i = base; i < end; ++i) timeRpt[i] = AddTime(timeRpt[i], dt);
+            continue;
+        }
+        for (int i = base; i < end; ++i) {
+            const int16_t next = AddTime(timeRpt[i], dt);
+            timeRpt[i] = reported[zone[i]] == 0 ? next : int16_t{0};
+        }
     }
 }
 
