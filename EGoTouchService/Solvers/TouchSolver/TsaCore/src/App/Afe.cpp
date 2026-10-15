@@ -535,7 +535,7 @@ void ProximityAutoCheck() {
     switch (c.proxState) {
     case 0:
         ext |= kExtProximity;
-        (void)TargetRateIndex(PrmtFlash().proximityEnterScanRate, &g.scan.nextRate);
+        (void)TargetRateIndex(PrmtFlash().callScanRateProxOn, &g.scan.nextRate);
         c.proxState = 1;
         c.proxEnterFrames = 0;
         break;
@@ -553,7 +553,7 @@ void ProximityAutoCheck() {
         break;
     case 4:
         ext &= ~kExtProximity;
-        (void)TargetRateIndex(PrmtFlash().proximityExitScanRate, &g.scan.nextRate);
+        (void)TargetRateIndex(PrmtFlash().callScanRateProxOff, &g.scan.nextRate);
         c.proxState = 5;
         c.proxExitFrames = 0;
         break;

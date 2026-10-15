@@ -2718,9 +2718,6 @@ ushort TSA_CoreTouchDim2Center(byte param_1);
 // TSA_DelayToIdleModeHPPx @ 0x6ba9e3c6 (Core\TSA.c)
 undefined8 TSA_DelayToIdleModeHPPx(void);
 
-// TSA_DetectedNoiseLevel @ 0x6ba9d789 (Core\TSA.c)
-uint TSA_DetectedNoiseLevel(void);
-
 // TSA_DimEdgeToSide @ 0x6ba8f5e5 (Core\TSA.c)
 undefined8 TSA_DimEdgeToSide(int param_1);
 

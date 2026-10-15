@@ -1685,18 +1685,6 @@ uint TSA_RptTouchNum(void)
 
 
 // ============================================================================
-// Function: TSA_DetectedNoiseLevel @ 6ba9d789
-// ============================================================================
-
-uint TSA_DetectedNoiseLevel(void)
-
-{
-                    /* 0x5d789  1825  TSA_DetectedNoiseLevel */
-  return *(uint *)(*(longlong *)_refptr_g_touchesPtr + 0x20) & 0x100;
-}
-
-
-// ============================================================================
 // Function: TSA_GetAFEScanFreqIndex @ 6ba9f998
 // ============================================================================
 
