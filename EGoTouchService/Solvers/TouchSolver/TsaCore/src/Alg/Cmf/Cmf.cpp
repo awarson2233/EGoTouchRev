@@ -11,7 +11,7 @@
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
-#include "Common/Image.h"
+#include "Common/Bss.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::Cmf {
@@ -54,14 +54,14 @@ struct NoiseState {
 };
 static_assert(sizeof(NoiseState) == 0xc0);
 
-NoiseState& Noise() { return Image::At<NoiseState>(0x6bb7f080); }
-uint8_t& PreCmfDifLogEnabled() { return Image::At<uint8_t>(0x6bb7f040); }
+NoiseState& Noise() { return Slot<NoiseState>(Bss().cmfNoise); }
+uint8_t& PreCmfDifLogEnabled() { return Slot<uint8_t>(Bss().preCMFDiffLogEnabled); }
 /// 每条线相邻格之差与二阶差（方向随 dim1Axis）。
-int16_t* OneOrderDiff() { return &Image::At<int16_t>(0x6bc16080); }
-int16_t* TwoOrderDiff() { return &Image::At<int16_t>(0x6bc32180); }
+int16_t* OneOrderDiff() { return &Slot<int16_t>(Bss().bufOneOrderDiffRx); }
+int16_t* TwoOrderDiff() { return &Slot<int16_t>(Bss().bufTwoOrderDiffRx); }
 /// Dim1 方向 CMF 之后、全部 CMF 之后的 Dif。
-int16_t* AftDim1CmfDif() { return &Image::At<int16_t>(0x6bc40240); }
-int16_t* AftCmfDif() { return &Image::At<int16_t>(0x6bc21a00); }
+int16_t* AftDim1CmfDif() { return &Slot<int16_t>(Bss().bufAftDim1CMFDif); }
+int16_t* AftCmfDif() { return &Slot<int16_t>(Bss().bufAftCMFDif); }
 
 // CMF_InitNoiseData @ 0x6ba4d9e0
 void InitNoiseData(const int32_t* data) {

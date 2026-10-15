@@ -5,7 +5,7 @@
 #include "Alg/TpSensor/TpSensor.h"
 #include "App/TsaBuffer.h"
 #include "Common/Assert.h"
-#include "Common/Image.h"
+#include "Common/Bss.h"
 #include "Common/Memory.h"
 #include "Prmt/Prmt.h"
 
@@ -18,7 +18,7 @@ constexpr uint8_t kDebounceFrames = 0x78;
 constexpr uint8_t kBrokenByBadChannel = 2;
 
 /// 每格的坏点防抖帧数（g_badChannelDebounce）。
-uint8_t*& Debounce() { return Image::At<uint8_t*>(0x6bbbf530); }
+uint8_t*& Debounce() { return Slot<uint8_t*>(Bss().badChannelDebounce); }
 
 uint16_t RawAt(uint16_t i) { return static_cast<uint16_t>(Buffers().raw[i]); }
 

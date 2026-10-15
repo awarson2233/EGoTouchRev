@@ -12,7 +12,7 @@ constexpr uint32_t kPersistReported = 0x08;   // TouchUnit::persistFlags：曾�
 constexpr uint16_t kFlickMinSqDistMm = 0x14;  // 轻扫测试：离第一次报点的最小距离平方（mm²）
 
 /// g_flickTestFailed
-uint8_t& FlickTestFailed() { return Image::At<uint8_t>(0x6bb80f80); }
+uint8_t& FlickTestFailed() { return Slot<uint8_t>(Bss().flickTestFailed); }
 
 // TouchAction_ProcessUnit @ 0x6ba77226
 // 已是滑动的保持；按点击处理的触点，persistFlags bit8 置位或自按下消抖开始超过 clickDuration 后改为滑动。

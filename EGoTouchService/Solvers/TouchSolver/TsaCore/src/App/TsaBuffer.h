@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "Common/Image.h"
+#include "Common/Bss.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core {
@@ -102,17 +102,17 @@ static_assert(offsetof(TsaBufferTable, gripTime) == 0x140);
 static_assert(offsetof(TsaBufferTable, gripTimeOff) == 0x148);
 static_assert(offsetof(TsaBufferTable, gripRegion) == 0x150);
 
-[[nodiscard]] inline TsaBufferTable& Buffers() noexcept { return Image::At<TsaBufferTable>(0x6bb81280); }
+[[nodiscard]] inline TsaBufferTable& Buffers() noexcept { return Slot<TsaBufferTable>(Bss().bufferTable); }
 
 /// 网格缓冲的元素个数（g_gridBufSize），以及按它推出的几种尺寸（TSAMem_InitProject 设置）。
-[[nodiscard]] inline uint16_t& GridBufSize() noexcept { return Image::At<uint16_t>(0x6bc34a80); }
-[[nodiscard]] inline uint16_t& GridMapBufSize() noexcept { return Image::At<uint16_t>(0x6bc1f348); }  // 1.5 倍网格
-[[nodiscard]] inline uint16_t& LineBufSize() noexcept { return Image::At<uint16_t>(0x6bc3db80); }     // dim1Len + dim2Len
-[[nodiscard]] inline uint16_t& MaxDimSize() noexcept { return Image::At<uint16_t>(0x6bc44f08); }      // max(dim1Len, dim2Len)
+[[nodiscard]] inline uint16_t& GridBufSize() noexcept { return Slot<uint16_t>(Bss().gridBufSize); }
+[[nodiscard]] inline uint16_t& GridMapBufSize() noexcept { return Slot<uint16_t>(Bss().gridMapBufSize); }  // 1.5 倍网格
+[[nodiscard]] inline uint16_t& LineBufSize() noexcept { return Slot<uint16_t>(Bss().lineBufSize); }     // dim1Len + dim2Len
+[[nodiscard]] inline uint16_t& MaxDimSize() noexcept { return Slot<uint16_t>(Bss().maxDimSize); }      // max(dim1Len, dim2Len)
 
 /// 缓冲表之外的两块网格缓冲：CMF 前的 Dif，侧边区域图。
-[[nodiscard]] inline int16_t*& PreCmfDif() noexcept { return Image::At<int16_t*>(0x6bc38448); }
-[[nodiscard]] inline int8_t*& SideTz() noexcept { return Image::At<int8_t*>(0x6bbaa0e0); }
+[[nodiscard]] inline int16_t*& PreCmfDif() noexcept { return Slot<int16_t*>(Bss().bufPreCMFDif); }
+[[nodiscard]] inline int8_t*& SideTz() noexcept { return Slot<int8_t*>(Bss().bufTzSide); }
 
 /// 传感器 (dim1, dim2) 在网格缓冲里的下标，按 16 位截断。
 [[nodiscard]] inline uint16_t GridIndex(uint8_t dim1, uint8_t dim2) noexcept {
@@ -120,9 +120,9 @@ static_assert(offsetof(TsaBufferTable, gripRegion) == 0x150);
 }
 
 /// 缓冲表之外，另有两块固定地址的自容 Dif（SS 模块写，SS 被裁掉）。元素按 Dim1 的列在前、Dim2 的行在后排成一维。
-[[nodiscard]] inline int32_t* SsPreCmfDif() noexcept { return &Image::At<int32_t>(0x6bc3ad80); }      // g_tsaBufSSPreCMFDif
-[[nodiscard]] inline int32_t* SsDifForBl() noexcept { return &Image::At<int32_t>(0x6bc3d900); }       // g_tsaBufSsDifForBl
+[[nodiscard]] inline int32_t* SsPreCmfDif() noexcept { return &Slot<int32_t>(Bss().bufSSPreCMFDif); }      // g_tsaBufSSPreCMFDif
+[[nodiscard]] inline int32_t* SsDifForBl() noexcept { return &Slot<int32_t>(Bss().bufSsDifForBl); }       // g_tsaBufSsDifForBl
 /// 接近检测用的基线（g_tsaBufProxBL）；接近检测被裁掉后仍随基线复位同步。
-[[nodiscard]] inline int16_t*& ProxBl() noexcept { return Image::At<int16_t*>(0x6bba3f90); }
+[[nodiscard]] inline int16_t*& ProxBl() noexcept { return Slot<int16_t*>(Bss().bufProxBL); }
 
 }  // namespace Solvers::Tsa::Core

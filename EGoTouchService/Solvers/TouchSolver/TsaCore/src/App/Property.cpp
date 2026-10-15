@@ -7,7 +7,7 @@
 
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
-#include "Common/Image.h"
+#include "Common/Bss.h"
 #include "Common/Memory.h"
 #include "Prmt/Prmt.h"
 
@@ -40,7 +40,7 @@ struct BlockAcc {
 };
 using Blocks = std::array<BlockAcc, kBlockNum>;
 
-uint8_t*& BlockIdx() { return Image::At<uint8_t*>(0x6bb81a00); }  // g_tsaBlockIdx
+uint8_t*& BlockIdx() { return Slot<uint8_t*>(Bss().blockIdx); }  // g_tsaBlockIdx
 
 // TSA_GetDifPrptCommon @ 0x6baa1035
 // |Dif| 不低于噪声门限的格按正负累计和与个数。

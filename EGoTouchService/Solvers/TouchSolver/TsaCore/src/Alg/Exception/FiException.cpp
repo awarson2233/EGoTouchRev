@@ -12,7 +12,7 @@
 #include "App/Sys.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
-#include "Common/Image.h"
+#include "Common/Bss.h"
 #include "Common/Memory.h"
 #include "Prmt/Prmt.h"
 
@@ -27,7 +27,7 @@ constexpr int kQueueSize = 16;
 ExceptionState& State() { return Static().fiException; }
 
 /// g_reached：本帧数水膜格时已经数过的格。
-uint8_t*& Reached() { return Image::At<uint8_t*>(0x6bb806d0); }
+uint8_t*& Reached() { return Slot<uint8_t*>(Bss().reached); }
 
 // 原代码不检查历史下标：为 kNoTouch 以外的越界值时照样按下标读，落在历史表之后的内存上。
 const PrevTouchUnit& Prev(uint8_t idx) { return PrevTouches().unit[idx]; }

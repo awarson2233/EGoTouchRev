@@ -33,9 +33,9 @@ constexpr uint32_t kExcFloating = 0x8;         // 全局异常：悬浮
 constexpr uint32_t kFeatStylus = 0x1000;
 
 /// g_tsaDistanceMapBuf：TZ_Transform 的距离图；g_tsaFlagAfterDilate / Erode：区域图膨胀 / 腐蚀一格后的结果。
-int8_t* DistanceMap() { return &Image::At<int8_t>(0x6bc34ac0); }
-int8_t* FlagAfterDilate() { return &Image::At<int8_t>(0x6bc2ae00); }
-int8_t* FlagAfterErode() { return &Image::At<int8_t>(0x6bc2e7c0); }
+int8_t* DistanceMap() { return &Slot<int8_t>(Bss().distanceMapBuf); }
+int8_t* FlagAfterDilate() { return &Slot<int8_t>(Bss().flagAfterDilate); }
+int8_t* FlagAfterErode() { return &Slot<int8_t>(Bss().flagAfterErode); }
 
 const PeakEntry& PeakAt(uint8_t idx) { return Peaks().entry[idx]; }
 

@@ -24,7 +24,7 @@
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
-#include "Common/Image.h"
+#include "Common/Bss.h"
 #include "Prmt/Prmt.h"
 #include "WorkAround/ToeSynaBl/ToeSynaBl.h"
 
@@ -404,7 +404,7 @@ bool IsTriggered2AfeWakeUp() {
 // 打开智能皮套后 250 ms 内超噪声格少的累计时间超过 0x7c ms 即复位。
 bool IsSmartCoverOff() {
     TsaStatic& stat = Static();
-    uint64_t& stopTime = Image::At<uint64_t>(0x6bb7f018);
+    uint64_t& stopTime = Slot<uint64_t>(Bss().blStopCheckTime);
     const bool was = (stat.prevFeatureFlags & kFeatSmartCover) != 0;
     const bool is = (stat.featureFlags & kFeatSmartCover) != 0;
     if (!was && is) {
@@ -441,7 +441,7 @@ bool IsAfeSideTouchToBeProtected() {
         uint8_t reserved0A2[0x1a];
         int16_t field0BC;
     };
-    const auto& blk = Image::At<DifBlockPrpt>(0x6bc4a980);
+    const auto& blk = Slot<DifBlockPrpt>(Bss().difBlockPrpt);
     if (!SideTouch() || 4 < static_cast<uint16_t>(blk.field0BC + blk.field014 + blk.field0A0) ||
         (Static().afeStatus & kAfeSideTouch) == 0) {
         return false;

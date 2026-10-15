@@ -11,9 +11,7 @@
 
 extern "C" {
 
-void TsaCore_InitImage(void);
-
-// 算法状态所在的全部内存（Common/Memory.cpp），回放比对用。镜像块的 va 是原 DLL 的地址；
+// 算法状态所在的全部内存（Common/Memory.cpp），回放比对用。.bss 块的 va 是它在原 DLL 里的地址；
 // 堆缓冲的 va 为 0。返回块数；capacity 不够时只返回需要的块数，登记表溢出时返回 (size_t)-1。
 typedef struct TsaCore_StateBlock {
     const uint8_t* data;

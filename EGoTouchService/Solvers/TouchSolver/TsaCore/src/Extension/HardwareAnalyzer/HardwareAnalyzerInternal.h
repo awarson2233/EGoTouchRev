@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "Common/Image.h"
+#include "Common/Bss.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::HardwareAnalyzer {
@@ -68,8 +68,8 @@ static_assert(offsetof(Counters, ellipseRateTimerMs) == 0x20);
 static_assert(offsetof(Counters, difDebounce) == 0x30);
 static_assert(offsetof(Counters, initOnce) == 0x48);
 
-[[nodiscard]] inline State& St() noexcept { return Image::At<State>(0x6bc8c9c0); }
-[[nodiscard]] inline Counters& Cnt() noexcept { return Image::At<Counters>(0x6bba3530); }
+[[nodiscard]] inline State& St() noexcept { return Slot<State>(Bss().hwAnalyzer); }
+[[nodiscard]] inline Counters& Cnt() noexcept { return Slot<Counters>(Bss().cntRepeat); }
 
 [[nodiscard]] inline bool FullIncell() noexcept { return PrmtFlash().sensorArchitecture == 3; }
 

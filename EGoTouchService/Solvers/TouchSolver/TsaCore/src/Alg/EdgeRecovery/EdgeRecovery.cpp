@@ -8,7 +8,7 @@
 #include "Alg/TouchSize/TouchSize.h"
 #include "App/Report.h"
 #include "App/TsaOut.h"
-#include "Common/Image.h"
+#include "Common/Bss.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::EdgeRecovery {
@@ -40,8 +40,8 @@ TouchUnit& Cur(uint8_t idx) { return Touches().unit[idx]; }
 // 原代码不检查历史下标：为 kNoTouch 时照样按下标读写，落在历史表之后的内存上。
 PrevTouchUnit& Prev(uint8_t idx) { return PrevTouches().unit[idx]; }
 
-uint16_t& LimitMm() { return Image::At<uint16_t>(0x6bb806c0); }                 // g_erLimit
-uint8_t& MoveInCorrectedButDisabled() { return Image::At<uint8_t>(0x6bb806c2); }  // g_flagMoveInCorrectedButDisabled
+uint16_t& LimitMm() { return Slot<uint16_t>(Bss().erLimit); }                 // g_erLimit
+uint8_t& MoveInCorrectedButDisabled() { return Slot<uint8_t>(Bss().flagMoveInCorrectedButDisabled); }  // g_flagMoveInCorrectedButDisabled
 
 Point PosOf(const HistoryEntry& e) { return {static_cast<uint16_t>(e.pos.dim1), static_cast<uint16_t>(e.pos.dim2)}; }
 

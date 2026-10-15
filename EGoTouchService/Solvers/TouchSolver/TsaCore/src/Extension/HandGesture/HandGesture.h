@@ -6,7 +6,7 @@
 
 #include <cstdint>
 
-#include "Common/Image.h"
+#include "Common/Bss.h"
 
 namespace Solvers::Tsa::Core {
 
@@ -20,7 +20,7 @@ struct HandBuffers {
     int16_t* dif;        // 按手势基线算的 Dif（只算两侧边缘几列）
 };
 
-[[nodiscard]] inline HandBuffers& HandBufs() noexcept { return Image::At<HandBuffers>(0x6bba3500); }
+[[nodiscard]] inline HandBuffers& HandBufs() noexcept { return Slot<HandBuffers>(Bss().handBuffers); }
 
 }  // namespace Solvers::Tsa::Core
 

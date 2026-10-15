@@ -9,7 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "Common/Image.h"
+#include "Common/Bss.h"
 #include "Common/Types.h"
 #include "Extension/Thenar/ThenarData.h"
 
@@ -876,11 +876,13 @@ struct RetiredTouchIds {
 };
 
 /// 当前在用的触点表（g_touchesPtr 所指）。
-[[nodiscard]] inline TouchTable& Touches() noexcept { return *Image::At<TouchTable*>(0x6bb4f1d0); }
-[[nodiscard]] inline TouchTable& TouchesGrid() noexcept { return Image::At<TouchTable>(0x6bbc6900); }
-[[nodiscard]] inline TouchTable& TouchesSide() noexcept { return Image::At<TouchTable>(0x6bc8d1c0); }
+extern TouchTable* g_touches;  // 当前数据集（App/DataSwitch.cpp）
+[[nodiscard]] inline TouchTable& Touches() noexcept { return *g_touches; }
+[[nodiscard]] inline TouchTable& TouchesGrid() noexcept { return Slot<TouchTable>(Bss().touchesGrid); }
+[[nodiscard]] inline TouchTable& TouchesSide() noexcept { return Slot<TouchTable>(Bss().touchesSide); }
 /// 当前在用的历史触点表（g_prevTouchesPtr 所指）。
-[[nodiscard]] inline PrevTouchTable& PrevTouches() noexcept { return *Image::At<PrevTouchTable*>(0x6bb4f1c0); }
-[[nodiscard]] inline RetiredTouchIds& RetiredIds() noexcept { return Image::At<RetiredTouchIds>(0x6bbc68e0); }
+extern PrevTouchTable* g_prevTouches;
+[[nodiscard]] inline PrevTouchTable& PrevTouches() noexcept { return *g_prevTouches; }
+[[nodiscard]] inline RetiredTouchIds& RetiredIds() noexcept { return Slot<RetiredTouchIds>(Bss().prevTouchInvalidID); }
 
 }  // namespace Solvers::Tsa::Core

@@ -17,8 +17,8 @@ namespace TsaReplay {
 
 namespace {
 
-// 规范地址的高 16 位区分三类目标；镜像块自身的地址就是原 VA，不带标记
-constexpr uint64_t kImagePointerTag = 0x494D000000000000ull;   // 指向镜像：低位是 VA
+// 规范地址的高 16 位区分三类目标；.bss 块自身的地址就是原 VA，不带标记
+constexpr uint64_t kBssPointerTag = 0x494D000000000000ull;     // 指向 .bss：低位是 VA
 constexpr uint64_t kHeapTag = 0x4850000000000000ull;           // 堆缓冲：槽位 VA << 20 | 偏移
 constexpr uint64_t kOrphanTag = 0x4F52000000000000ull;         // 无主缓冲：分配次序 << 20 | 偏移
 constexpr int kHeapOffsetBits = 20;                            // TSA_MallocAndInit 单块不超过 64 KB
@@ -159,9 +159,9 @@ bool StateSnapshot::Capture() {
     std::vector<TsaCore_StateBlock> raw(count);
     if (TsaCore_StateBlocks(raw.data(), raw.size()) != count) return false;
 
-    const uint8_t* const image = raw[0].data;
-    const uint64_t imageSize = raw[0].size;
-    const uint64_t imageVa = raw[0].va;
+    const uint8_t* const bss = raw[0].data;
+    const uint64_t bssSize = raw[0].size;
+    const uint64_t bssVa = raw[0].va;
 
     std::vector<HeapBlock> heap(count - 1);
     for (size_t i = 1; i < count; ++i) {
@@ -184,13 +184,13 @@ bool StateSnapshot::Capture() {
         return v - reinterpret_cast<uintptr_t>(it->data) <= it->size ? &*it : nullptr;
     };
 
-    // 缓冲的主人：镜像里第一个（VA 最小的）正好指向缓冲起点的槽位
-    for (uint64_t off = 0; off + 8 <= imageSize; off += 8) {
-        const uint64_t v = LoadWord(image + off);
+    // 缓冲的主人：.bss 里第一个（VA 最小的）正好指向缓冲起点的槽位
+    for (uint64_t off = 0; off + 8 <= bssSize; off += 8) {
+        const uint64_t v = LoadWord(bss + off);
         if (v < heapLo || v >= heapHi) continue;
         HeapBlock* b = findHeap(v);
         if (b != nullptr && b->address == 0 && v == reinterpret_cast<uintptr_t>(b->data)) {
-            b->address = kHeapTag | ((imageVa + off) << kHeapOffsetBits);
+            b->address = kHeapTag | ((bssVa + off) << kHeapOffsetBits);
         }
     }
     for (HeapBlock& b : heap) {
@@ -199,11 +199,11 @@ bool StateSnapshot::Capture() {
         ++orphanHeapBlocks;
     }
 
-    const uintptr_t imageLo = reinterpret_cast<uintptr_t>(image);
+    const uintptr_t bssLo = reinterpret_cast<uintptr_t>(bss);
     const AddressRange stack = CurrentStack();
     const AddressRange module = HostModule();
     const auto canonical = [&](uint64_t v) -> uint64_t {
-        if (v - imageLo < imageSize) return kImagePointerTag | (imageVa + (v - imageLo));
+        if (v - bssLo < bssSize) return kBssPointerTag | (bssVa + (v - bssLo));
         if (const HeapBlock* b = findHeap(v)) return b->address + (v - reinterpret_cast<uintptr_t>(b->data));
         if (module.Contains(v)) return kModulePointer;
         return v;
@@ -220,9 +220,9 @@ bool StateSnapshot::Capture() {
         }
         blocks.push_back(std::move(block));
     };
-    addBlock(imageVa, image, imageSize);
+    addBlock(bssVa, bss, bssSize);
     for (const uint64_t slot : kStackPointerSlots) {
-        uint8_t* p = blocks[0].bytes.data() + (slot - imageVa);
+        uint8_t* p = blocks[0].bytes.data() + (slot - bssVa);
         if (stack.Contains(LoadWord(p))) std::memcpy(p, &kStackPointer, sizeof(kStackPointer));
     }
     for (const HeapBlock& b : heap) addBlock(b.address, b.data, b.size);

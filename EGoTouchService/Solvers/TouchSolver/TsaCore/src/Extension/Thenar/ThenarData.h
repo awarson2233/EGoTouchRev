@@ -4,7 +4,6 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "Common/Image.h"
 
 namespace Solvers::Tsa::Core {
 
@@ -52,6 +51,7 @@ static_assert(sizeof(ThenarExternalInfo) == 0x18);
 static_assert(offsetof(ThenarExternalInfo, side) == 0x04);
 static_assert(offsetof(ThenarExternalInfo, betaGripLeftCount) == 0x10);
 
-[[nodiscard]] inline ThenarExternalInfo& ThenarExternal() noexcept { return Image::At<ThenarExternalInfo>(0x6bb4f2a0); }
+extern ThenarExternalInfo g_thenarExternal;  // Extension/Thenar/Thenar.cpp
+[[nodiscard]] inline ThenarExternalInfo& ThenarExternal() noexcept { return g_thenarExternal; }
 
 }  // namespace Solvers::Tsa::Core

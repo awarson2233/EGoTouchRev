@@ -6,7 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "Common/Image.h"
+#include "Common/Bss.h"
 
 namespace Solvers::Tsa::Core {
 struct TouchZoneUnit;
@@ -70,11 +70,13 @@ struct Table {
 static_assert(sizeof(Table) == 0x2D8);
 static_assert(offsetof(Table, unit) == 0x08);
 
-[[nodiscard]] inline Table& Global() noexcept { return Image::At<Table>(0x6bbc8680); }
+[[nodiscard]] inline Table& Global() noexcept { return Slot<Table>(Bss().subTZ); }
 /// 第 i 个子区域。原代码不检查下标是否超过 kMaxUnitNum，这里按地址取，越界时的内存行为与原代码一致。
-[[nodiscard]] inline Unit& UnitAt(uint32_t i) noexcept { return Image::At<Unit>(0x6bbc8688 + i * sizeof(Unit)); }
+[[nodiscard]] inline Unit& UnitAt(uint32_t i) noexcept {
+    return *std::launder(reinterpret_cast<Unit*>(Bss().subTZ + offsetof(Table, unit) + size_t{i} * sizeof(Unit)));
+}
 /// g_pkAccessedFlagSubTZ：已归入某个子区域的峰（峰表下标的位图），TZ 每帧清零。
-[[nodiscard]] inline uint32_t& PeakAccessed() noexcept { return Image::At<uint32_t>(0x6bbc8958); }
+[[nodiscard]] inline uint32_t& PeakAccessed() noexcept { return Slot<uint32_t>(Bss().pkAccessedFlagSubTZ); }
 
 /// 对一个 TZ 区域拆分子区域，结果写入 Global()。
 void Process(TouchZoneUnit& zone);

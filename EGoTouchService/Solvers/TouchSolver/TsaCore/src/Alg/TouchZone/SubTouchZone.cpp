@@ -38,7 +38,7 @@ struct Offset {
 constexpr std::array<Offset, 9> kNeighbors = {{{0, 0}, {1, -1}, {1, 0}, {1, 1}, {0, 1}, {-1, 1}, {-1, 0}, {-1, -1}, {0, -1}}};
 
 /// g_tsaBufTemp：遍历读信号的缓冲，每次遍历前指向 Dif。
-int16_t*& SigBuf() { return Image::At<int16_t*>(0x6bc2e788); }
+int16_t*& SigBuf() { return Slot<int16_t*>(Bss().bufTemp); }
 
 // SubTZ_UnitInit @ 0x6ba7d2e0
 void InitUnit(Unit& u) {

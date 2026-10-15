@@ -2,7 +2,7 @@
 
 #include <cstdlib>
 
-#include "Common/Image.h"
+#include "Common/Bss.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::Sensor {
@@ -10,10 +10,10 @@ namespace Solvers::Tsa::Core::Sensor {
 namespace {
 
 // 区域图：本帧、上一帧、Grid（核心区）、Side（侧边区）
-const int8_t* ZoneMap() noexcept { return Image::At<const int8_t*>(0x6bb81318); }
-const int8_t* PrevZoneMap() noexcept { return Image::At<const int8_t*>(0x6bb81390); }
-const int8_t* CoreZoneMap() noexcept { return Image::At<const int8_t*>(0x6bb81360); }
-const int8_t* SideZoneMap() noexcept { return Image::At<const int8_t*>(0x6bbaa0e0); }
+const int8_t* ZoneMap() noexcept { return Slot<const int8_t*, 0x98>(Bss().bufferTable); }
+const int8_t* PrevZoneMap() noexcept { return Slot<const int8_t*, 0x110>(Bss().bufferTable); }
+const int8_t* CoreZoneMap() noexcept { return Slot<const int8_t*, 0xe0>(Bss().bufferTable); }
+const int8_t* SideZoneMap() noexcept { return Slot<const int8_t*>(Bss().bufTzSide); }
 
 uint16_t Cell(uint8_t dim1, uint8_t dim2) noexcept { return static_cast<uint16_t>(dim1 + dim2 * PrmtFlash().dim1Len); }
 

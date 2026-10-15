@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "Common/Image.h"
+#include "Common/Bss.h"
 
 namespace Solvers::Tsa::Core {
 
@@ -306,9 +306,9 @@ struct ZoneMapAccess {
 static_assert(sizeof(ZoneMapAccess) == 0x10);
 static_assert(offsetof(ZoneMapAccess, tag) == 0x09);
 
-[[nodiscard]] inline ZoneMapAccess& TzAccess() noexcept { return Image::At<ZoneMapAccess>(0x6bbc8960); }
-[[nodiscard]] inline ZoneMapAccess& SubTzAccess() noexcept { return Image::At<ZoneMapAccess>(0x6bbc8970); }
+[[nodiscard]] inline ZoneMapAccess& TzAccess() noexcept { return Slot<ZoneMapAccess>(Bss().tzAccess); }
+[[nodiscard]] inline ZoneMapAccess& SubTzAccess() noexcept { return Slot<ZoneMapAccess>(Bss().subTZAccess); }
 /// g_ptrAccess
-[[nodiscard]] inline ZoneMapAccess*& CurrentAccess() noexcept { return Image::At<ZoneMapAccess*>(0x6bb80fa0); }
+[[nodiscard]] inline ZoneMapAccess*& CurrentAccess() noexcept { return Slot<ZoneMapAccess*>(Bss().ptrAccess); }
 
 }  // namespace Solvers::Tsa::Core

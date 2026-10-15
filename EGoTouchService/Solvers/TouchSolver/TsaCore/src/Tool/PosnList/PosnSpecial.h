@@ -7,7 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "Common/Image.h"
+#include "Common/Bss.h"
 
 namespace Solvers::Tsa::Core::PosnSpecial {
 
@@ -52,7 +52,7 @@ static_assert(offsetof(List, sumEdgeSensor) == 0x18);
 static_assert(offsetof(List, lastSign) == 0x1C);
 static_assert(offsetof(List, zone) == 0x20);
 
-[[nodiscard]] inline List& Global() noexcept { return Image::At<List>(0x6bcac4c0); }
+[[nodiscard]] inline List& Global() noexcept { return Slot<List>(Bss().list); }
 
 void Init(uint16_t* cells, uint16_t capacity);
 /// 清零 Record / Record2 的计数。

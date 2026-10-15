@@ -8,6 +8,13 @@
 #include "Extension/Thenar/ThenarData.h"
 #include "Prmt/Prmt.h"
 
+namespace Solvers::Tsa::Core {
+
+// g_thenarExternalInfo 的初值：+0x0c 处是 100（无人读）
+ThenarExternalInfo g_thenarExternal{{}, 0, {0, 0, 0, 0, 100}, 0, 0};
+
+}  // namespace Solvers::Tsa::Core
+
 namespace Solvers::Tsa::Core::Thenar {
 
 namespace {

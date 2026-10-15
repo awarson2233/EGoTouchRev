@@ -11,7 +11,7 @@
 #include "App/Scenario.h"
 #include "App/TsaOut.h"
 #include "App/TsaStatic.h"
-#include "Common/Image.h"
+#include "Common/Bss.h"
 #include "Common/TsaMath.h"
 #include "Prmt/Prmt.h"
 
@@ -48,11 +48,11 @@ constexpr uint8_t kPredictMaxFrames = 12;
 constexpr uint8_t kPostReportCoefMax = 0x20;
 
 /// 调试观测量（只写）：滤波前、IIR 后的显示坐标，抬起检测的 Z 值降幅。
-uint32_t& PosPreFilterDim1() { return Image::At<uint32_t>(0x6bbc0958); }
-uint32_t& PosPreFilterDim2() { return Image::At<uint32_t>(0x6bbc0960); }
-uint32_t& PosAftIirDim1() { return Image::At<uint32_t>(0x6bbc095c); }
-uint32_t& PosAftIirDim2() { return Image::At<uint32_t>(0x6bbc0954); }
-uint32_t& ZValPrevToCurRatio() { return Image::At<uint32_t>(0x6bbc0950); }
+uint32_t& PosPreFilterDim1() { return Slot<uint32_t>(Bss().xPosPreFilter); }
+uint32_t& PosPreFilterDim2() { return Slot<uint32_t>(Bss().yPosPreFilter); }
+uint32_t& PosAftIirDim1() { return Slot<uint32_t>(Bss().xPosAftIirFilter); }
+uint32_t& PosAftIirDim2() { return Slot<uint32_t>(Bss().yPosAftIirFilter); }
+uint32_t& ZValPrevToCurRatio() { return Slot<uint32_t>(Bss().zValPrevToCurRatio); }
 
 TouchUnit& Cur(uint8_t idx) { return Touches().unit[idx]; }
 PrevTouchUnit& Prev(uint8_t idx) { return PrevTouches().unit[idx]; }

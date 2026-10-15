@@ -9,7 +9,7 @@
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
-#include "Common/Image.h"
+#include "Common/Bss.h"
 #include "Common/Memory.h"
 #include "Extension/HardwareAnalyzer/HardwareAnalyzer.h"
 #include "Prmt/Prmt.h"
@@ -48,7 +48,7 @@ struct Slots {
     Caps* caps;
     Frame* frame;
 };
-Slots& Slot() { return Image::At<Slots>(0x6bbaa5c0); }
+Slots& AfeSlots() { return Slot<Slots>(Bss().afeSlots); }
 
 // 频点调度的状态位
 constexpr uint32_t kScanSwitching = 0x1;  // 已决定切换，等 AFE 报到新频点
@@ -116,8 +116,8 @@ struct State {
 State g;
 
 uint64_t Now() { return Static().curTimeMs; }
-const Caps* CapsPtr() { return Slot().caps; }
-bool FrameFlag(uint32_t bit) { return Slot().frame != nullptr && (Slot().frame->status & bit) != 0; }
+const Caps* CapsPtr() { return AfeSlots().caps; }
+bool FrameFlag(uint32_t bit) { return AfeSlots().frame != nullptr && (AfeSlots().frame->status & bit) != 0; }
 bool NoiseDetected() { return (Touches().exceptionFlags & kExceptionNoise) != 0; }
 
 bool IsAlpsProject() {
@@ -125,9 +125,9 @@ bool IsAlpsProject() {
     return std::strcmp(name, "ALPS491000") == 0 || std::strcmp(name, "ALPS491600") == 0;
 }
 
-const char* VersionInfo() { return Slot().info == nullptr ? "UnKnown" : reinterpret_cast<const char*>(Slot().info + 0x40); }
+const char* VersionInfo() { return AfeSlots().info == nullptr ? "UnKnown" : reinterpret_cast<const char*>(AfeSlots().info + 0x40); }
 
-bool IsValid() { return CapsPtr() != nullptr && Slot().frame != nullptr && Slot().info != nullptr; }
+bool IsValid() { return CapsPtr() != nullptr && AfeSlots().frame != nullptr && AfeSlots().info != nullptr; }
 
 // ── 扫描率 ──────────────────────────────────────────────────────────────
 
@@ -172,7 +172,7 @@ void UpdateCurrRate() {
     if (caps == nullptr) return;
     bool found = false;
     for (uint8_t i = 0; i < caps->numScanRate; ++i) {
-        if (caps->scanRate[i] == Slot().frame->scanRate) {
+        if (caps->scanRate[i] == AfeSlots().frame->scanRate) {
             found = true;
             g.scan.curRate = i;
             break;
@@ -269,7 +269,7 @@ void UpdateCurrFreq() {
     bool found = false;
     uint8_t i = 0;
     for (; i < caps->numScanFreq; ++i) {
-        if (caps->scanFreq[i] == Slot().frame->scanFreq) {
+        if (caps->scanFreq[i] == AfeSlots().frame->scanFreq) {
             found = true;
             break;
         }
@@ -384,7 +384,7 @@ void Simulate() {
     g.simuFrame.scanFreq = p.freq[0];
     g.simuFrame.scanRate = p.rate[0];
     std::strncpy(reinterpret_cast<char*>(g.simuInfo), p.name, 0x20);
-    Slot() = {g.simuInfo, &g.simuCaps, &g.simuFrame};
+    AfeSlots() = {g.simuInfo, &g.simuCaps, &g.simuFrame};
 }
 
 // ── 自检 ────────────────────────────────────────────────────────────────
@@ -603,7 +603,7 @@ bool Malloc() {
 void Init() {
     g.internalFrame = {};
     g.internalCaps = {};
-    Slot() = {nullptr, &g.internalCaps, &g.internalFrame};
+    AfeSlots() = {nullptr, &g.internalCaps, &g.internalFrame};
     Simulate();
     ScanInit();
     AutoCheckInit();
@@ -611,16 +611,16 @@ void Init() {
 
 // AFE_SetCaps @ 0x6bb2cb53
 void SetCaps(const Caps* caps) {
-    if (Slot().caps == nullptr) Slot().caps = &g.internalCaps;
-    *Slot().caps = *caps;
+    if (AfeSlots().caps == nullptr) AfeSlots().caps = &g.internalCaps;
+    *AfeSlots().caps = *caps;
     TsaAssert(caps->numScanFreq <= kMaxScanNum);
     TsaAssert(caps->numScanRate <= kMaxScanNum);
 }
 
 // AFE_SetFrame @ 0x6bb2cb9d
 void SetFrame(const Frame* frame) {
-    if (Slot().frame == nullptr) Slot().frame = &g.internalFrame;
-    Frame& f = *Slot().frame;
+    if (AfeSlots().frame == nullptr) AfeSlots().frame = &g.internalFrame;
+    Frame& f = *AfeSlots().frame;
     f = *frame;
     if (f.rawData != nullptr) {
         std::memcpy(g.gridData, f.rawData, GridBufSize() * 2u);
@@ -632,11 +632,11 @@ void SetFrame(const Frame* frame) {
     }
 }
 
-void SetInfo(const void* info) { Slot().info = static_cast<const uint8_t*>(info); }
+void SetInfo(const void* info) { AfeSlots().info = static_cast<const uint8_t*>(info); }
 void SetMaxScanRate(uint16_t rate) { g.scan.maxRate = rate; }
-Frame* GetFrame() { return Slot().frame; }
-const Caps* GetCaps() { return Slot().caps; }
-uint32_t FrameStatus() { return Slot().frame->status; }
+Frame* GetFrame() { return AfeSlots().frame; }
+const Caps* GetCaps() { return AfeSlots().caps; }
+uint32_t FrameStatus() { return AfeSlots().frame->status; }
 
 // AFE_ScanPreProcess @ 0x6bb2ee5e
 void PreProcess() {
@@ -712,7 +712,7 @@ void AutoCheckProcess(const uint16_t* data, uint16_t size, uint32_t ctrl, uint64
     const size_t bytes = PrmtFlash().sensorNum * 2u;
     if (data != nullptr) CopyChecked((s.systemFlags & kSysDifBufPath) == 0 ? static_cast<void*>(b.raw) : b.dif, bytes, data, size);
     Rawdata::Process();
-    g.check.frameStatus = Slot().frame->status;
+    g.check.frameStatus = AfeSlots().frame->status;
     PreProcess();
     if (100u < static_cast<uint32_t>(s.frameCounter)) {
         HardwareAnalyzer::GetRaw2RawPrpt();

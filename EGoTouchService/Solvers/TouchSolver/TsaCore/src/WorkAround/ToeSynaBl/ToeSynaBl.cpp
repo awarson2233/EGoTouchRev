@@ -13,7 +13,7 @@
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
-#include "Common/Image.h"
+#include "Common/Bss.h"
 #include "Common/Memory.h"
 #include "Prmt/Prmt.h"
 
@@ -47,7 +47,7 @@ struct State {
 };
 static_assert(offsetof(State, excludeSide) == 0x18);
 
-State& S() { return Image::At<State>(0x6bbbf590); }
+State& S() { return Slot<State>(Bss().toeSynaBl); }
 
 bool Enabled() { return PrmtFlash().toeSynaBl != 0; }
 bool Flag(uint32_t bit) { return (PrmtFlash().toeSynaBlFlags & bit) != 0; }

@@ -6,7 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "Common/Image.h"
+#include "Common/Bss.h"
 
 namespace Solvers::Tsa::Core {
 
@@ -35,8 +35,8 @@ static_assert(offsetof(SelfData, innerStrongAbsSum) == 0x1180);
 static_assert(offsetof(SelfData, commonNoise) == 0x1680);
 static_assert(offsetof(SelfData, field1900) == 0x1900);
 
-[[nodiscard]] inline SelfData& SelfBuf() noexcept { return Image::At<SelfData>(0x6bc18880); }
-[[nodiscard]] inline SelfData& SelfForBlReset() noexcept { return Image::At<SelfData>(0x6bc24080); }
+[[nodiscard]] inline SelfData& SelfBuf() noexcept { return Slot<SelfData>(Bss().bufSelf); }
+[[nodiscard]] inline SelfData& SelfForBlReset() noexcept { return Slot<SelfData>(Bss().bufSelfForBlRst); }
 
 namespace Self {
 

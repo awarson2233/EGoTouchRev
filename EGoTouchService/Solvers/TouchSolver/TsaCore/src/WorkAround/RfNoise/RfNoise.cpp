@@ -6,7 +6,7 @@
 
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
-#include "Common/Image.h"
+#include "Common/Bss.h"
 #include "Common/Memory.h"
 #include "Prmt/Prmt.h"
 
@@ -28,7 +28,7 @@ struct State {
 static_assert(offsetof(State, noise) == 0x18);
 static_assert(offsetof(State, noisyLines) == 0x1c);
 
-State& S() { return Image::At<State>(0x6bbbf570); }
+State& S() { return Slot<State>(Bss().rfNoise); }
 
 /// 扫描方向：dim1Axis 非 0 时逐行（沿 Dim1）扫，否则逐列（沿 Dim2）扫。
 bool AlongDim1() { return PrmtFlash().dim1Axis != 0; }

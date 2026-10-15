@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <cstring>
 
-#include "Common/Image.h"
+#include "Common/Bss.h"
 
 namespace Solvers::Tsa::Core {
 
@@ -894,15 +894,15 @@ using TtPrmtTable = std::array<TuningEntry, kTtPrmtNum>;
 static_assert(sizeof(RtPrmtTable) == 0x180);
 static_assert(sizeof(TtPrmtTable) == 0xA08);
 
-[[nodiscard]] inline FlashPrmt& PrmtFlash() noexcept { return Image::At<FlashPrmt>(0x6bca8a00); }
-[[nodiscard]] inline FlashConstPrmt& PrmtFlashConst() noexcept { return Image::At<FlashConstPrmt>(0x6bcab600); }
-[[nodiscard]] inline DynamicPrmt& PrmtDynamic() noexcept { return Image::At<DynamicPrmt>(0x6bcab680); }
-[[nodiscard]] inline RamPrmt& PrmtRam() noexcept { return Image::At<RamPrmt>(0x6bcab720); }
-[[nodiscard]] inline RamConstPrmt& PrmtRamConst() noexcept { return Image::At<RamConstPrmt>(0x6bcab664); }
+[[nodiscard]] inline FlashPrmt& PrmtFlash() noexcept { return Slot<FlashPrmt>(Bss().prmtFlash); }
+[[nodiscard]] inline FlashConstPrmt& PrmtFlashConst() noexcept { return Slot<FlashConstPrmt>(Bss().prmtFlashConst); }
+[[nodiscard]] inline DynamicPrmt& PrmtDynamic() noexcept { return Slot<DynamicPrmt>(Bss().prmtDynamic); }
+[[nodiscard]] inline RamPrmt& PrmtRam() noexcept { return Slot<RamPrmt>(Bss().prmtRam); }
+[[nodiscard]] inline RamConstPrmt& PrmtRamConst() noexcept { return Slot<RamConstPrmt>(Bss().prmtRamConst); }
 /// 运行时参数：场景处理按键名改写的当前表，与每帧从机型参数重建的缺省表。
-[[nodiscard]] inline RtPrmtTable& PrmtRunTime() noexcept { return Image::At<RtPrmtTable>(0x6bcab780); }
-[[nodiscard]] inline RtPrmtTable& PrmtRunTimeDefault() noexcept { return Image::At<RtPrmtTable>(0x6bcab900); }
-[[nodiscard]] inline TtPrmtTable& PrmtTuning() noexcept { return Image::At<TtPrmtTable>(0x6bcaba80); }
+[[nodiscard]] inline RtPrmtTable& PrmtRunTime() noexcept { return Slot<RtPrmtTable>(Bss().rtPrmt); }
+[[nodiscard]] inline RtPrmtTable& PrmtRunTimeDefault() noexcept { return Slot<RtPrmtTable>(Bss().rtPrmtDefault); }
+[[nodiscard]] inline TtPrmtTable& PrmtTuning() noexcept { return Slot<TtPrmtTable>(Bss().ttPrmt); }
 
 /// 机型名（参数表开头的字符串，Prmt::GetProjectName / TSA_GetPrmtName）。
 [[nodiscard]] inline const char* ProjectName() noexcept { return reinterpret_cast<const char*>(&PrmtFlash()); }

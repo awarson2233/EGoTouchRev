@@ -10,7 +10,7 @@
 #include "Alg/Touch/TouchData.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
-#include "Common/Image.h"
+#include "Common/Bss.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::TouchMode {
@@ -78,13 +78,26 @@ struct SwTimer {
 static_assert(sizeof(SwTimer) == 0x8);
 
 /// g_tmSwitchTimer：模式切换的防抖计时。
-SwTimer& SwitchTimer() { return Image::At<SwTimer>(0x6bbc8660); }
+SwTimer& SwitchTimer() { return Slot<SwTimer>(Bss().tmSwitchTimer); }
 /// g_tmSwitchDebounce：[上一帧模式][新模式] 的切换防抖帧数。
 using DebounceTable = std::array<std::array<uint16_t, kModeNum>, kModeNum>;
-DebounceTable& SwitchDebounce() { return Image::At<DebounceTable>(0x6bb4f200); }
+constexpr uint16_t kNever = 0xffff;
+DebounceTable g_switchDebounce{{
+    {0, kNever, kNever, kNever},
+    {kNever, 0, kNever, kNever},
+    {kNever, kNever, 0, kNever},
+    {kNever, kNever, kNever, 0},
+}};
+DebounceTable& SwitchDebounce() { return g_switchDebounce; }
 /// g_tmSwitchPriority：[上一帧模式] 下依次尝试的模式。
 using PriorityTable = std::array<std::array<uint32_t, kModeNum>, kModeNum>;
-PriorityTable& SwitchPriority() { return Image::At<PriorityTable>(0x6bb4f240); }
+PriorityTable g_switchPriority{{
+    {kFinger, kStylus, kGlove, kNoObj},
+    {kFinger, kStylus, kGlove, kNoObj},
+    {kFinger, kGlove, kStylus, kNoObj},
+    {kStylus, kFinger, kGlove, kNoObj},
+}};
+PriorityTable& SwitchPriority() { return g_switchPriority; }
 
 TouchTable& Cur() { return Touches(); }
 bool StylusOff() { return (Static().featureFlags & kFeatStylus) == 0; }

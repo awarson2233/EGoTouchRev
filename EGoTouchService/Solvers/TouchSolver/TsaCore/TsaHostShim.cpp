@@ -49,7 +49,6 @@ bool TsaHostShim::Initialize() {
     g_host.frame = &g_frame;
     std::strcpy(g_host.name, "himax_thp_drv");
 
-    TsaCore_InitImage();
     if (TSA_InitAFEProject_UI(reinterpret_cast<int64_t>(kProjectName),
                               reinterpret_cast<int64_t>(&g_host),
                               reinterpret_cast<int64_t>(&g_caps)) != 0) {

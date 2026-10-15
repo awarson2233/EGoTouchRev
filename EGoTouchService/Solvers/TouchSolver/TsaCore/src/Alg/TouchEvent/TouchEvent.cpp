@@ -52,7 +52,7 @@ uint32_t LiftOffEventOf(uint8_t curIdx, uint8_t prevIdx, uint32_t liftOffEvent) 
 // TE_GetNextID @ 0x6ba77536
 // 从 prevOccupiedID（原代码里没有写入者，恒为 0）之后轮询 1..20，取第一个历史表与当前表都没在用的 ID；都占用时为 0。
 uint8_t GetNextId() {
-    const uint8_t base = Image::At<uint8_t>(0x6bb80f90);
+    const uint8_t base = Slot<uint8_t>(Bss().prevOccupiedId);
     const TouchTable& touches = Touches();
     for (uint8_t step = 1; step <= kMaxTouchNum; ++step) {
         auto id = static_cast<uint8_t>(step + base);

@@ -5,7 +5,7 @@
 #include "Alg/Touch/TouchData.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
-#include "Common/Image.h"
+#include "Common/Bss.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::PressureDrift {
@@ -18,7 +18,7 @@ struct State {
     uint32_t debounce;          // 触点不多时沿用上次结论的帧数
 };
 
-State& S() { return Image::At<State>(0x6bbbf560); }
+State& S() { return Slot<State>(Bss().pressureDrift); }
 
 constexpr uint64_t kHoldMs = 0x19;     // 上次判为漂移后这段时间内沿用
 constexpr uint32_t kMaxHoldFrames = 0x33;

@@ -4,7 +4,7 @@
 // ctrl flags 维护、TSA_ProcessingAFEFrame 调用与帧后的请求查询，以及笔会话
 // 状态的下发（ApDaemon 的 DriverThp::GetStatus 与 stylus3 / stylusaft 监听）。
 //
-// TSACore 的全部状态都在进程级的内存镜像里，所以整个进程只能有一个 shim
+// TSACore 的全部状态都是进程级的全局对象，所以整个进程只能有一个 shim
 // 处于已初始化状态；第二个实例的 Initialize 会失败。
 // ══════════════════════════════════════════════════════════════════════
 
@@ -65,7 +65,7 @@ public:
     TsaHostShim(const TsaHostShim&) = delete;
     TsaHostShim& operator=(const TsaHostShim&) = delete;
 
-    /// 镜像初始化 + TSA_InitAFEProject_UI + 分辨率 / feature。已有别的实例占用时返回 false。
+    /// TSA_InitAFEProject_UI + 分辨率 / feature。已有别的实例占用时返回 false。
     bool Initialize();
     [[nodiscard]] bool IsInitialized() const noexcept { return m_initialized; }
 

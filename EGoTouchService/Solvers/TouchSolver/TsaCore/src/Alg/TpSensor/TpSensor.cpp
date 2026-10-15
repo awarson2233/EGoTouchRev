@@ -6,7 +6,7 @@
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
-#include "Common/Image.h"
+#include "Common/Bss.h"
 #include "Common/Memory.h"
 #include "Prmt/Prmt.h"
 
@@ -31,11 +31,11 @@ struct BrokenSensorList {
 };
 static_assert(sizeof(BrokenSensorList) == 1 + 3 * kMaxBrokenSensorNum);
 
-uint8_t*& FlagBuf() { return Image::At<uint8_t*>(0x6bb80e00); }
-int8_t*& Dim1OffsetBuf() { return Image::At<int8_t*>(0x6bb80e08); }
-int8_t*& Dim2OffsetBuf() { return Image::At<int8_t*>(0x6bb80e10); }
-uint16_t*& DifScaleBuf() { return Image::At<uint16_t*>(0x6bb80e18); }
-BrokenSensorList& Broken() { return Image::At<BrokenSensorList>(0x6bb80e40); }
+uint8_t*& FlagBuf() { return Slot<uint8_t*>(Bss().tpSensorFlag); }
+int8_t*& Dim1OffsetBuf() { return Slot<int8_t*>(Bss().tpSensorDim1Offset); }
+int8_t*& Dim2OffsetBuf() { return Slot<int8_t*>(Bss().tpSensorDim2Offset); }
+uint16_t*& DifScaleBuf() { return Slot<uint16_t*>(Bss().tpSensorDifScale); }
+BrokenSensorList& Broken() { return Slot<BrokenSensorList>(Bss().tpSensorBrokenList); }
 
 uint16_t Cell(int dim1, int dim2) { return static_cast<uint16_t>(PrmtFlash().dim1Len * dim2 + dim1); }
 

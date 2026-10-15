@@ -10,7 +10,7 @@
 #include "Alg/TouchZone/TouchZoneData.h"
 #include "App/TsaBuffer.h"
 #include "Common/Assert.h"
-#include "Common/Image.h"
+#include "Common/Bss.h"
 
 namespace Solvers::Tsa::Core::TouchZone {
 
@@ -35,14 +35,14 @@ inline constexpr uint32_t kPeakNotInGrip = 0x800;
 inline constexpr uint8_t kNoPeak = kMaxPeakNum;
 
 /// g_pkAccessedFlag / g_pkBeforeSDCAccessedFlag：已归入某个区域的峰（峰表下标的位图）。
-[[nodiscard]] inline uint32_t& PeakAccessed() noexcept { return Image::At<uint32_t>(0x6bc139d4); }
-[[nodiscard]] inline uint32_t& SdcPeakAccessed() noexcept { return Image::At<uint32_t>(0x6bc139d0); }
+[[nodiscard]] inline uint32_t& PeakAccessed() noexcept { return Slot<uint32_t>(Bss().pkAccessedFlag); }
+[[nodiscard]] inline uint32_t& SdcPeakAccessed() noexcept { return Slot<uint32_t>(Bss().pkBeforeSDCAccessedFlag); }
 /// g_tzBuffer：生长时遍历到的格子的 Dif，轮廓插值的输入。
-[[nodiscard]] inline int16_t*& ZoneSig() noexcept { return Image::At<int16_t*>(0x6bb80fc0); }
+[[nodiscard]] inline int16_t*& ZoneSig() noexcept { return Slot<int16_t*>(Bss().tzBuffer); }
 /// g_peaksBeforeSwitchDifBuffer：切换 Dif 前的峰表。
-[[nodiscard]] inline PeakTable& PeaksBeforeSwitchDif() noexcept { return Image::At<PeakTable>(0x6bbc0b40); }
+[[nodiscard]] inline PeakTable& PeaksBeforeSwitchDif() noexcept { return Slot<PeakTable>(Bss().peaksBeforeSwitchDifBuf); }
 /// g_tsaBufTimeHand：每格自手掌按下以来的时间。
-[[nodiscard]] inline int16_t* TimeHand() noexcept { return Image::At<int16_t*>(0x6bba3518); }
+[[nodiscard]] inline int16_t* TimeHand() noexcept { return Slot<int16_t*, 0x18>(Bss().handBuffers); }
 /// g_tsaBufSelf 里 TZ 借用的两段（每个区域重新清零），下标 dim1，或 dim1Len + dim2：
 /// 每列 / 行遍历到的信号和，与未达门限的格数。
 [[nodiscard]] inline int32_t* LineSigSum() noexcept { return SelfBuf().field1400; }

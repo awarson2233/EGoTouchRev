@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "Common/Image.h"
+#include "Common/Bss.h"
 #include "Common/Types.h"
 
 namespace Solvers::Tsa::Core {
@@ -657,7 +657,7 @@ inline constexpr uint32_t kFeatSmartCover = 0x00000002u;
 inline constexpr uint32_t kFeatKnuckle = 0x00000010u;
 inline constexpr uint32_t kFeatSideTouch = 0x00008000u;
 
-[[nodiscard]] inline TsaStatic& Static() noexcept { return *Image::At<TsaStatic*>(0x6bb4f290); }
-[[nodiscard]] inline TsaPrpt& Prpt() noexcept { return Image::At<TsaPrpt>(0x6bc4a640); }
+[[nodiscard]] inline TsaStatic& Static() noexcept { return Slot<TsaStatic>(Bss().staticGrid); }
+[[nodiscard]] inline TsaPrpt& Prpt() noexcept { return Slot<TsaPrpt>(Bss().prpt); }
 
 }  // namespace Solvers::Tsa::Core

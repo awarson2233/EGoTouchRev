@@ -13,7 +13,7 @@
 //   --hold N K     把第 N 帧额外重复喂 K 次（模拟长时间静止）
 //
 // 判断两份实现是否等价（重构前后各跑一遍，见 Compare-Reference.ps1）：
-//   --state-digest FILE     每喂一帧，把 TSACore 全部算法状态（镜像 + 堆缓冲，指针已规范化）的摘要写一行
+//   --state-digest FILE     每喂一帧，把 TSACore 全部算法状态（.bss + 堆缓冲，指针已规范化）的摘要写一行
 //   --state-dump STEP FILE  把第 STEP 次喂帧之后的完整状态写成快照文件
 //   --state-diff A B [SYM]  比较两份快照，按符号名列出不同的区间（给了 SYM 就只列名字含它的）；有差异时退出码为 1
 //   --heap-skew N           自检用：先分配 N 个大小不一的堆块再建解算器，摘要不应因此改变

@@ -15,7 +15,7 @@
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
-#include "Common/Image.h"
+#include "Common/Bss.h"
 #include "Prmt/Prmt.h"
 #include "WorkAround/ToeSynaBl/ToeSynaBl.h"
 
@@ -34,7 +34,7 @@ constexpr int16_t kToeSuspectSig = 0x514;         // 基线可疑时极值在 ±
 constexpr int16_t kRawUnstableStep = 0x11;
 
 /// 本帧是否按「侧边相邻列」的小门限处理（0x6bb7f020）。
-uint8_t& NextEdgeSmallThold() { return Image::At<uint8_t>(0x6bb7f020); }
+uint8_t& NextEdgeSmallThold() { return Slot<uint8_t>(Bss().blsmNextEdgeSmallThresh); }
 
 bool ToeUseSpecialThold() { return TouchThold::ToeUseSpecialThold(); }
 bool IsGame() { return Scenario::IsGame(); }

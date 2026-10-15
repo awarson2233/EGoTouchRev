@@ -6,35 +6,49 @@
 #include "Alg/Touch/TouchData.h"
 #include "App/DataSwitch.h"
 #include "App/TsaBuffer.h"
-#include "Common/Image.h"
+#include "Common/Bss.h"
 
-namespace Solvers::Tsa::Core::DataSwitch {
+namespace Solvers::Tsa::Core {
+
+// 当前数据集，初值是 Grid
+TouchTable* g_touches = &Slot<TouchTable>(Bss().touchesGrid);
+PrevTouchTable* g_prevTouches = &Slot<PrevTouchTable>(Bss().prevTouchesGrid);
+PeakTable* g_peaks = &Slot<PeakTable>(Bss().peaksGrid);
+PrevPeakTable* g_prevPeaks = &Slot<PrevPeakTable>(Bss().prevPeaksGrid);
+
+namespace DataSwitch {
 
 namespace {
 
 struct DataSet {
-    uint64_t tz;          // 区域图缓冲指针所在的槽
-    uint64_t touches;
-    uint64_t prevTouches;
-    uint64_t peaks;
-    uint64_t prevPeaks;
+    int8_t* const& tz;  // 区域图缓冲指针
+    TouchTable& touches;
+    PrevTouchTable& prevTouches;
+    PeakTable& peaks;
+    PrevPeakTable& prevPeaks;
 };
-constexpr DataSet kGrid{0x6bb81360, 0x6bbc6900, 0x6bbc0e40, 0x6bbc0980, 0x6bbc0d00};
-constexpr DataSet kHand{0x6bba3508, 0x6bc84f40, 0x6bc86f00, 0x6bc86d00, 0x6bc84e40};
 
 void Switch(const DataSet& d) {
-    Buffers().tz = Image::At<int8_t*>(d.tz);
-    Image::At<TouchTable*>(0x6bb4f1d0) = &Image::At<TouchTable>(d.touches);
-    Image::At<PrevTouchTable*>(0x6bb4f1c0) = &Image::At<PrevTouchTable>(d.prevTouches);
-    Image::At<PeakTable*>(0x6bb4f100) = &Image::At<PeakTable>(d.peaks);
-    Image::At<PrevPeakTable*>(0x6bb4f110) = &Image::At<PrevPeakTable>(d.prevPeaks);
+    Buffers().tz = d.tz;
+    g_touches = &d.touches;
+    g_prevTouches = &d.prevTouches;
+    g_peaks = &d.peaks;
+    g_prevPeaks = &d.prevPeaks;
 }
 
 }  // namespace
 
 // DataSwitch_ToGrid @ 0x6ba906d0
-void ToGrid() { Switch(kGrid); }
+void ToGrid() {
+    Switch({Buffers().tzGrid, Slot<TouchTable>(Bss().touchesGrid), Slot<PrevTouchTable>(Bss().prevTouchesGrid),
+            Slot<PeakTable>(Bss().peaksGrid), Slot<PrevPeakTable>(Bss().prevPeaksGrid)});
+}
 // DataSwitch_ToHand @ 0x6ba907ce
-void ToHand() { Switch(kHand); }
+void ToHand() {
+    Switch({Slot<int8_t*, 0x8>(Bss().handBuffers), Slot<TouchTable>(Bss().touchesHand), Slot<PrevTouchTable>(Bss().prevTouchesHand),
+            Slot<PeakTable>(Bss().peaksHand), Slot<PrevPeakTable>(Bss().prevPeaksHand)});
+}
 
-}  // namespace Solvers::Tsa::Core::DataSwitch
+}  // namespace DataSwitch
+
+}  // namespace Solvers::Tsa::Core

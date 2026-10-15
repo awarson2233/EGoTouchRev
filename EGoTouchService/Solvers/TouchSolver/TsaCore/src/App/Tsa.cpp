@@ -36,7 +36,7 @@
 #include "App/TsaOut.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
-#include "Common/Image.h"
+#include "Common/Bss.h"
 #include "Common/Memory.h"
 #include "Extension/HandGesture/HandGesture.h"
 #include "Extension/HardwareAnalyzer/HardwareAnalyzer.h"
@@ -123,7 +123,7 @@ bool MsInitProject(const char* project) {
 
 void InitAsa(const Afe::Caps* caps) {
     if (!AsaEnabled()) return;
-    Asa::InitAfeProject(caps, &Image::At<uint8_t>(0x6bca7bc0));  // g_tsaPrmtFlashAsa
+    Asa::InitAfeProject(caps, &Slot<uint8_t>(Bss().prmtFlashAsa));  // g_tsaPrmtFlashAsa
 }
 
 // TSA_InitProject_UI @ 0x6ba99d4e / TSA_InitCommonUI @ 0x6ba99ce0

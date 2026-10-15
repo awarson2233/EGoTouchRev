@@ -8,7 +8,7 @@
 #include "Alg/Peak/PeakData.h"
 #include "Alg/TouchZone/TouchZone.h"
 #include "Alg/TouchZone/TouchZoneInternal.h"
-#include "Common/Image.h"
+#include "Common/Bss.h"
 #include "Common/TsaMath.h"
 #include "Prmt/Prmt.h"
 
@@ -36,12 +36,12 @@ constexpr std::array<Offset, 8> kDirs = {{{0, -1}, {-1, -1}, {-1, 0}, {-1, 1}, {
 
 using Kernel = float[kPhaseNum][4];
 /// g_afu：双三次插值核，[相位][抽头]。
-Kernel& Kernels() { return Image::At<Kernel>(0x6bc13980); }
+Kernel& Kernels() { return Slot<Kernel>(Bss().afu); }
 /// g_tzBufferHighRes / g_tzBufferBin：插值结果与按门限二值化的结果，行宽 dim1Len × 4（只写不读）。
-int16_t* HighResDif() { return &Image::At<int16_t>(0x6bbe1980); }
-uint8_t* HighResBin() { return &Image::At<uint8_t>(0x6bbc8980); }
+int16_t* HighResDif() { return &Slot<int16_t>(Bss().tzBufferHighRes); }
+uint8_t* HighResBin() { return &Slot<uint8_t>(Bss().tzBufferBin); }
 /// edgeDot_11595：镜像补全用的轮廓点副本。
-EdgeDot* MirrorDots() { return &Image::At<EdgeDot>(0x6bb81000); }
+EdgeDot* MirrorDots() { return &Slot<EdgeDot>(Bss().contourEdgeDot); }
 
 using Window = std::array<std::array<int, 4>, 4>;
 

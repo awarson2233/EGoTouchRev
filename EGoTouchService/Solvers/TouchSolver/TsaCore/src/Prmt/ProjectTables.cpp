@@ -4,7 +4,7 @@
 
 #include <cstring>
 
-#include "Common/Image.h"
+#include "Common/Bss.h"
 
 namespace Solvers::Tsa::Core::Prmt {
 
@@ -947,17 +947,19 @@ alignas(64) constexpr uint8_t kAsaPrmt[0xe40] = {
     /* +0x0e30 */ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
-constexpr uint64_t kFlashPrmtVa = 0x6bca8a00;   // g_tsaPrmtFlash
-constexpr uint64_t kCmfPcaPrmtVa = 0x6bcaa2c0;  // g_tsaPrmtFlashCmfPca
-constexpr uint64_t kAsaPrmtVa = 0x6bca7bc0;     // g_tsaPrmtFlashAsa
+template <size_t N, size_t M>
+void Load(std::byte (&slot)[N], const uint8_t (&table)[M]) {
+    static_assert(M <= N);
+    std::memcpy(slot, table, M);
+}
 
 }  // namespace
 
 // TSAPrmt_FlashPrmtLoadProject：本移植只带 W273AS2700 一个机型
 void LoadProjectTables() {
-    std::memcpy(&Image::At<uint8_t>(kFlashPrmtVa), kFlashPrmt, sizeof(kFlashPrmt));
-    std::memcpy(&Image::At<uint8_t>(kCmfPcaPrmtVa), kCmfPcaPrmt, sizeof(kCmfPcaPrmt));
-    std::memcpy(&Image::At<uint8_t>(kAsaPrmtVa), kAsaPrmt, sizeof(kAsaPrmt));
+    Load(Bss().prmtFlash, kFlashPrmt);
+    Load(Bss().prmtFlashCmfPca, kCmfPcaPrmt);
+    Load(Bss().prmtFlashAsa, kAsaPrmt);
 }
 
 }  // namespace Solvers::Tsa::Core::Prmt

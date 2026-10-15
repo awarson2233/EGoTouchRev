@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "Common/Image.h"
+#include "Common/Bss.h"
 #include "Common/Types.h"
 
 namespace Solvers::Tsa::Core {
@@ -80,10 +80,12 @@ static_assert(offsetof(PrevPeakTable, maxSig) == 0x002);
 static_assert(offsetof(PrevPeakTable, entry) == 0x004);
 
 /// 当前在用的峰表（g_peaksPtr 所指）。
-[[nodiscard]] inline PeakTable& Peaks() noexcept { return *Image::At<PeakTable*>(0x6bb4f100); }
+extern PeakTable* g_peaks;  // 当前数据集（App/DataSwitch.cpp）
+[[nodiscard]] inline PeakTable& Peaks() noexcept { return *g_peaks; }
 /// g_peaksGrid：Grid 的峰表（TZ 在上面标握持峰）。
-[[nodiscard]] inline PeakTable& PeaksGrid() noexcept { return Image::At<PeakTable>(0x6bbc0980); }
+[[nodiscard]] inline PeakTable& PeaksGrid() noexcept { return Slot<PeakTable>(Bss().peaksGrid); }
 /// 上一帧峰表（g_prevPeaksPtr 所指）。
-[[nodiscard]] inline PrevPeakTable& PrevPeaks() noexcept { return *Image::At<PrevPeakTable*>(0x6bb4f110); }
+extern PrevPeakTable* g_prevPeaks;
+[[nodiscard]] inline PrevPeakTable& PrevPeaks() noexcept { return *g_prevPeaks; }
 
 }  // namespace Solvers::Tsa::Core

@@ -10,7 +10,7 @@
 #include "App/Sys.h"
 #include "App/TsaOut.h"
 #include "App/TsaStatic.h"
-#include "Common/Image.h"
+#include "Common/Bss.h"
 #include "Common/TsaMath.h"
 #include "Prmt/Prmt.h"
 
@@ -81,10 +81,13 @@ static_assert(offsetof(Analyzer, stat) == 0x650);
 
 using RectTable = std::array<Rect, kRectNum>;
 
-Analyzer& TheAnalyzer() { return Image::At<Analyzer>(0x6bba3580); }
+Analyzer& TheAnalyzer() { return Slot<Analyzer>(Bss().hotZoneAnalyzer); }
 /// 上层下发的热区（显示坐标），全 0 的项为表尾。
-RectTable& HotZones() { return Image::At<RectTable>(0x6bba3c80); }
-const std::array<const char*, kAppNum>& AppList() { return Image::At<std::array<const char*, kAppNum>>(0x6bb4f980); }
+RectTable& HotZones() { return Slot<RectTable>(Bss().hotZoneRect); }
+/// g_appList：统计分组对应的应用包名。
+constexpr std::array<const char*, kAppNum> kAppList{
+    "all", "com.tencent.mm", "com.sina.weibo", "com.taobao.taobao", "com.ss.android.article.news", "com.baidu.searchbox",
+};
 
 TouchUnit& Cur(uint8_t idx) { return Touches().unit[idx]; }
 // 原代码不检查历史下标：为 kNoTouch 时照样按下标读写，落在历史表之后的内存上。
@@ -341,7 +344,7 @@ void Record(uint8_t prevIdx) {
     Analyzer& an = TheAnalyzer();
     an.appIdx = kUnknownApp;
     for (uint8_t k = 1; k < kAppNum; ++k) {
-        if (an.appName != nullptr && std::strcmp(an.appName, AppList()[k]) == 0) an.appIdx = k;
+        if (an.appName != nullptr && std::strcmp(an.appName, kAppList[k]) == 0) an.appIdx = k;
     }
     const uint8_t app = an.appIdx;
     const PrevTouchUnit& prev = Prev(prevIdx);

@@ -9,7 +9,7 @@
 #include "App/Report.h"
 #include "App/Tsa.h"
 #include "App/TsaStatic.h"
-#include "Common/Image.h"
+#include "Common/Bss.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::Sys {
@@ -28,10 +28,12 @@ constexpr uint64_t kAfeIdleExitHoldMs = 100;
 constexpr uint64_t kIdleTimeoutMs = 4000;
 
 // 一次性初始化与 IDLE 超时的时间戳（函数内静态量）
-uint8_t& InitOnce() { return Image::At<uint8_t>(0x6bb4f2b8); }    // flagOnceOnly_10264
-uint8_t& HtiFirst() { return Image::At<uint8_t>(0x6bb4f2b9); }    // flagOnceOnly_10424
-uint64_t& IdleTimeoutStamp() { return Image::At<uint64_t>(0x6bb81a10); }
-uint64_t& SideIdleTimeoutStamp() { return Image::At<uint64_t>(0x6bb81a18); }
+uint8_t g_initOnce = 1;   // flagOnceOnly_10264
+uint8_t g_htiFirst = 1;   // flagOnceOnly_10424
+uint8_t& InitOnce() { return g_initOnce; }
+uint8_t& HtiFirst() { return g_htiFirst; }
+uint64_t& IdleTimeoutStamp() { return Slot<uint64_t>(Bss().idleTimeoutStamp); }
+uint64_t& SideIdleTimeoutStamp() { return Slot<uint64_t>(Bss().sideIdleTimeoutStamp); }
 
 /// t != -1 且 now ∈ [t, t + span)。
 bool Within(int64_t t, uint64_t now, uint64_t span) {

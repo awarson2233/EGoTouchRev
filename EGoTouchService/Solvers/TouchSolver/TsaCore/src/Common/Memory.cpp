@@ -4,7 +4,7 @@
 #include <cstdlib>
 
 #include "../TsaCoreApi.h"
-#include "Common/Image.h"
+#include "Common/Bss.h"
 
 namespace Solvers::Tsa::Core::Mem {
 
@@ -61,14 +61,14 @@ void Free(void* p) {
 
 extern "C" {
 
-// 宿主（回放）：镜像在前，堆缓冲按分配次序。
+// 宿主（回放）：.bss 在前，堆缓冲按分配次序。
 size_t TsaCore_StateBlocks(TsaCore_StateBlock* out, size_t capacity) {
     namespace M = Solvers::Tsa::Core::Mem;
-    namespace I = Solvers::Tsa::Core::Image;
+    namespace C = Solvers::Tsa::Core;
     if (M::g_overflowed) return static_cast<size_t>(-1);
     const size_t count = M::g_blockCount + 1;
     if (out == nullptr || capacity < count) return count;
-    out[0] = {g_tsaMemoryImage, I::kSize, I::kBaseVa};
+    out[0] = {reinterpret_cast<const uint8_t*>(&C::g_bss), sizeof(C::g_bss), C::kBssVa};
     for (size_t i = 0; i < M::g_blockCount; ++i) {
         out[i + 1] = {static_cast<const uint8_t*>(M::g_blocks[i].ptr), M::g_blocks[i].size, 0};
     }
