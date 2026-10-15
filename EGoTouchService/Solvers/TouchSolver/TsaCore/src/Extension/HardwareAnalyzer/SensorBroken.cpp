@@ -4,6 +4,7 @@
 // - Dif（只在 Full Incell、基线与公共噪声都干净时）：强信号格的十字邻格若孤立地凹陷（Type3）、
 //   或格本身信号落在可疑区间（Type4），防抖 5 帧后记为坏点并报给 TPSensor。
 
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 
@@ -209,9 +210,8 @@ int8_t DetectType3(uint8_t dim1, uint8_t dim2) {
 
 // HardwareAnalyzer_DetectType4 @ 0x6baf37f5
 // |Dif| 不超过 ref/2 时不判；(ref/2, 6ref/5] 判为正常；超过 2ref 判为坏点；其间不判。
-int8_t DetectType4(uint8_t dim1, uint8_t dim2) {
-    const int a = std::abs(Buffers().dif[Cell(dim1, dim2)]);
-    const int ref = PrmtFlash().peakFilterReferenceThreshold;
+int8_t DetectType4(int16_t dif, int ref) {
+    const int a = std::abs(dif);
     if (a * 5 <= ref || a * 2 <= ref) return kTypeNone;
     if (a * 5 <= ref * 6) return 0;
     return ref * 2 < a ? 1 : kTypeNone;
@@ -239,10 +239,12 @@ void CopyBadChannelList() {
     const FlashPrmt& fl = PrmtFlash();
     const uint8_t* state = Cnt().difState;
     for (uint8_t r = 0; r < fl.dim2Len; ++r) {
-        for (uint8_t c = 0; c < fl.dim1Len; ++c) {
-            if (state[Cell(c, r)] != 1) continue;
+        const uint8_t* row = state + r * fl.dim1Len;
+        const uint8_t* end = row + fl.dim1Len;
+        for (auto* p = static_cast<const uint8_t*>(std::memchr(row, 1, fl.dim1Len)); p != nullptr;
+             p = p + 1 < end ? static_cast<const uint8_t*>(std::memchr(p + 1, 1, end - p - 1)) : nullptr) {
             Prpt().brokenByDif = 1;
-            if (!TpSensor::AddToBrokenSensorList(c, r, kBrokenByDif)) break;
+            if (!TpSensor::AddToBrokenSensorList(static_cast<uint8_t>(p - row), r, kBrokenByDif)) break;
         }
     }
 }
@@ -296,6 +298,8 @@ void SensorBrokenPreDifProcess() {
 
 // HardwareAnalyzer_SensorBrokenDifProcess @ 0x6baf3975
 // 只看 Dif 不低于 max(ref/2, 90% 正向极值) 的有效格（且负向极值不太深）的十字邻格。
+// 原代码按列优先扫格；各格的判定只读 Dif、防抖只改本格的计数，checked 标志与扫描次序无关，这里按行扫。
+// 两遍扫描（十字邻格的 Type3、全部格的 Type4）的先后不变。
 void SensorBrokenDifProcess() {
     TsaPrpt& prpt = Prpt();
     prpt.brokenByDif = 0;
@@ -303,20 +307,36 @@ void SensorBrokenDifProcess() {
     const FlashPrmt& fl = PrmtFlash();
     const int16_t* dif = Buffers().dif;
     const int ref = fl.peakFilterReferenceThreshold;
+    const int cols = fl.dim1Len;
+    const int n = cols * fl.dim2Len;
     int thold = ref / 2;
     const int peak = prpt.dif.maxSig * 0x5a / 100;
     if (thold < peak) thold = peak;
-    for (uint8_t c = 0; c < fl.dim1Len; ++c) {
-        for (uint8_t r = 0; r < fl.dim2Len; ++r) {
-            if (-ref <= prpt.dif.minSig * 8 && thold <= dif[Cell(c, r)] && TpSensor::IsSensorValid(c, r)) {
-                CheckCrossAround(c, r);
+    // 两遍都只有少数格（有信号的格）要细判：先按 kChunk 格一块无分支地粗筛（可向量化），块里有候选再逐格判。
+    constexpr int kChunk = 16;
+    const auto any = [&](int begin, int end, auto pred) {
+        bool hit = false;
+        for (int i = begin; i < end; ++i) hit |= pred(static_cast<int>(dif[i]));
+        return hit;
+    };
+    if (-ref <= prpt.dif.minSig * 8) {
+        for (int base = 0; base < n; base += kChunk) {
+            const int end = std::min(base + kChunk, n);
+            if (!any(base, end, [&](int v) { return thold <= v; })) continue;
+            for (int i = base; i < end; ++i) {
+                if (thold <= dif[i] && TpSensor::IsSensorValid(i % cols, i / cols)) {
+                    CheckCrossAround(static_cast<uint8_t>(i % cols), static_cast<uint8_t>(i / cols));
+                }
             }
         }
     }
-    for (uint8_t c = 0; c < fl.dim1Len; ++c) {
-        for (uint8_t r = 0; r < fl.dim2Len; ++r) {
-            const int8_t type = DetectType4(c, r);
-            if (type != kTypeNone) DebounceBrokenSensorByDif(static_cast<uint16_t>(c + r * fl.dim1Len), type);
+    for (int base = 0; base < n; base += kChunk) {
+        const int end = std::min(base + kChunk, n);
+        // 判了的格一定有 ref < 2|Dif|
+        if (!any(base, end, [&](int v) { return ref < std::abs(v) * 2; })) continue;
+        for (int i = base; i < end; ++i) {
+            const int8_t type = DetectType4(dif[i], ref);
+            if (type != kTypeNone) DebounceBrokenSensorByDif(static_cast<uint16_t>(i), type);
         }
     }
     CopyBadChannelList();
