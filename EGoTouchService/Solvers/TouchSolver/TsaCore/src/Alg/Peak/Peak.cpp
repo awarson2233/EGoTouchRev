@@ -1,5 +1,7 @@
 #include "Alg/Peak/Peak.h"
 
+#include <algorithm>
+#include <climits>
 #include <utility>
 
 #include "Alg/IDTracking/IdTracking.h"
@@ -133,8 +135,15 @@ void DetectInRange(int16_t thold, uint8_t firstRow, uint8_t lastRow, uint8_t fir
     bool toeSpecial = false;
     Clean();
     if (IsToExcludeSideRegion() && TouchThold::ToeUseSpecialThold()) toeSpecial = true;
+    // 峰至少要达到门限：整行（firstCol..lastCol）的最大值低于最低门限时这一行不可能有峰，先无分支地求行最大值筛掉。
+    const int minThold = toeSpecial ? std::min<int>(thold, PrmtDynamic().edgePeakThold) : thold;
+    const int width = lastCol - firstCol + 1;
 
     for (uint8_t row = firstRow; row <= lastRow; ++row) {
+        const int16_t* line = dif + static_cast<uint16_t>(firstCol + row * flash.dim1Len);
+        int rowMax = INT16_MIN;
+        for (int k = 0; k < width; ++k) rowMax = std::max<int>(rowMax, line[k]);
+        if (rowMax < minThold) continue;
         auto cell = static_cast<uint16_t>(firstCol + row * flash.dim1Len - 1);
         for (uint8_t col = firstCol; col <= lastCol; ++col) {
             ++cell;

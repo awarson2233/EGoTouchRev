@@ -22,23 +22,23 @@ bool DifBufPath() { return (Static().systemFlags & kSysDifBufPath) != 0; }
 int32_t Scale() { return static_cast<int32_t>(PrmtFlashConst().field038); }
 int32_t Offset() { return static_cast<int32_t>(PrmtFlashConst().field03C); }
 
-// Rawdata_NormalizeGridUnit @ 0x6ba693f0
-// raw × 比例 / 0x3fff + 偏移；rawForceNormalize 时 raw 按有符号值算。
-uint16_t NormalizeUnit(uint16_t raw) {
-    const uint32_t v = PrmtFlash().rawForceNormalize == 0 ? raw : static_cast<uint32_t>(static_cast<int16_t>(raw));
-    return static_cast<uint16_t>(static_cast<int>(static_cast<uint32_t>(Scale()) * v) / kUnitScale + Offset());
-}
-
-// Rawdata_NormalizeGrid @ 0x6ba6946a
+// Rawdata_NormalizeGrid @ 0x6ba6946a（逐格 Rawdata_NormalizeGridUnit @ 0x6ba693f0）
+// raw × 比例 / 0x3fff + 偏移；rawForceNormalize 时 raw 按有符号值算。参数先取到局部量：
+// 写 int16 网格时编译器不能假定参数不变（-fno-strict-aliasing），否则每格都要重读。
 void NormalizeGrid(const int16_t* src, uint32_t n, int16_t* dst, uint32_t capacity) {
     if (!IsProcessNeeded()) {
         if (src != dst) CopyChecked(dst, capacity * size_t{2}, src, n * size_t{2});
         return;
     }
     const FlashPrmt& fl = PrmtFlash();
-    uint16_t i = 0;
-    for (uint8_t r = 0; r < fl.dim2Len; ++r) {
-        for (uint8_t c = 0; c < fl.dim1Len; ++c, ++i) dst[i] = static_cast<int16_t>(NormalizeUnit(static_cast<uint16_t>(src[i])));
+    const auto scale = static_cast<uint32_t>(Scale());
+    const int offset = Offset();
+    const bool signedRaw = fl.rawForceNormalize != 0;
+    const int cells = fl.dim1Len * fl.dim2Len;
+    for (int i = 0; i < cells; ++i) {
+        const auto raw = static_cast<uint16_t>(src[i]);
+        const uint32_t v = signedRaw ? static_cast<uint32_t>(static_cast<int16_t>(raw)) : raw;
+        dst[i] = static_cast<int16_t>(static_cast<uint16_t>(static_cast<int>(scale * v) / kUnitScale + offset));
     }
 }
 
@@ -61,12 +61,9 @@ void Process() {
     }
     const FlashPrmt& fl = PrmtFlash();
     const auto scale = static_cast<uint32_t>(std::abs(Scale()));
-    uint16_t i = 0;
-    for (uint8_t r = 0; r < fl.dim2Len; ++r) {
-        for (uint8_t c = 0; c < fl.dim1Len; ++c, ++i) {
-            buf.dif[i] = static_cast<int16_t>(static_cast<int>(scale * static_cast<uint32_t>(buf.dif[i])) / kUnitScale);
-        }
-    }
+    const int cells = fl.dim1Len * fl.dim2Len;
+    int16_t* dif = buf.dif;
+    for (int i = 0; i < cells; ++i) dif[i] = static_cast<int16_t>(static_cast<int>(scale * static_cast<uint32_t>(dif[i])) / kUnitScale);
 }
 
 // Rawdata_CMF @ 0x6ba69381

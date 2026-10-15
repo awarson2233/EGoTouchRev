@@ -3,7 +3,9 @@
 
 #include <algorithm>
 #include <array>
+#include <climits>
 #include <cmath>
+#include <vector>
 
 #include "Alg/Peak/PeakData.h"
 #include "Alg/TouchZone/TouchZone.h"
@@ -104,12 +106,39 @@ void SetInterpolationRange(TouchZoneUnit& z) {
     z.hrMaxDim2 = static_cast<int16_t>(std::min(z.maxDim2 + 1, fl.dim2Len - 1) * kHrScale);
 }
 
+/// 一次轮廓跟踪里 HighResSig 的备忘：跟踪的相邻步会反复插值同一个点。插值只取决于点坐标与本区域的
+/// 插值范围、区域信号（跟踪期间不变），按插值范围开一张表，结果与每次现算相同。
+class HighResCache {
+public:
+    explicit HighResCache(const TouchZoneUnit& z)
+        : z_(z), x0_(z.hrMinDim1), y0_(z.hrMinDim2), w_(std::max(z.hrMaxDim1 - z.hrMinDim1 + 1, 0)),
+          h_(std::max(z.hrMaxDim2 - z.hrMinDim2 + 1, 0)) {
+        Memo().assign(static_cast<size_t>(w_) * h_, kUnset);
+    }
+
+    int operator()(int x, int y) const {
+        if (x < x0_ || y < y0_ || x - x0_ >= w_ || y - y0_ >= h_) return HighResSig(z_, x, y);
+        int& v = Memo()[static_cast<size_t>(y - y0_) * w_ + (x - x0_)];
+        if (v == kUnset) v = HighResSig(z_, x, y);
+        return v;
+    }
+
+private:
+    static constexpr int kUnset = INT32_MIN;  // 插值结果是 int16 信号的加权和，不会取到它
+    static std::vector<int>& Memo() {
+        static std::vector<int> memo;
+        return memo;
+    }
+    const TouchZoneUnit& z_;
+    int x0_, y0_, w_, h_;
+};
+
 // TZ_FindContourFirstDotDim2 @ 0x6ba86380
 // 从峰所在行往上找，返回最上面一个仍达到门限的点（到插值范围顶端为止）。
-int FirstDotDim2(const TouchZoneUnit& z, int x, int thold, uint8_t peak) {
+int FirstDotDim2(const TouchZoneUnit& z, const HighResCache& sig, int x, int thold, uint8_t peak) {
     for (int y = Peaks().entry[peak].dim2 * kHrScale;; --y) {
         if (y < z.hrMinDim2) return y;
-        if (HighResSig(z, x, y) < thold) return y + 1;
+        if (sig(x, y) < thold) return y + 1;
         if (y == z.hrMinDim2) return y;
     }
 }
@@ -127,8 +156,9 @@ void PushEdgeDot(TouchZoneUnit& z, int x, int y) {
 void TraceEdge(TouchZoneUnit& z) {
     const int thold = z.sigThold;
     const uint8_t peak = z.maxSigPeakIdx;
+    const HighResCache sig(z);
     int x = Peaks().entry[peak].dim1 * kHrScale;
-    int y = FirstDotDim2(z, x, thold, peak);
+    int y = FirstDotDim2(z, sig, x, thold, peak);
     z.edgeDotCount = 0;
     PushEdgeDot(z, x, y);
     uint32_t back = 0;
@@ -139,7 +169,7 @@ void TraceEdge(TouchZoneUnit& z) {
             const int nx = x + kDirs[d].dim1;
             const int ny = y + kDirs[d].dim2;
             if (z.edgeDot[0].dim1 == nx && z.edgeDot[0].dim2 == ny) break;
-            if (thold < HighResSig(z, nx, ny)) {
+            if (thold < sig(nx, ny)) {
                 moved = true;
                 x = nx;
                 y = ny;

@@ -363,25 +363,38 @@ void GetRaw2RawPrpt() {
     int posSum = 0;
     int negSum = 0;
     const int16_t* dif = buf.raw2RawDif;
+    const bool alongDim1 = fl.dim1Axis != 0;  // 扫描线沿 dim1：线内的格连续
+    const uint32_t cols = fl.dim1Len;
+    // 线内步长写成模板参数，连续的情形编译成连续访问；累加量放在局部（不经引用），循环才能向量化。
+    struct LineAcc {
+        int over, pos, neg, lti, hti, big;
+    };
+    const auto scan = [&]<uint32_t kStep>(const int16_t* p, uint32_t step) {
+        int n = 0, pos = 0, neg = 0, lti = 0, hti = 0, big = 0;
+        for (uint32_t k = 0; k < lineLen; ++k) {
+            const int v = p[k * (kStep != 0 ? kStep : step)];
+            const int a = std::abs(v);
+            const bool o = noise < a;
+            n += o ? 1 : 0;
+            pos += o && 0 < v ? v : 0;
+            neg += o && v < 1 ? v : 0;
+            lti += o && finger < a ? 1 : 0;
+            hti += o && finger < a && ref < a ? 1 : 0;
+            big += o && finger < a && ref < a && bigNoise < a ? 1 : 0;
+        }
+        return LineAcc{n, pos, neg, lti, hti, big};
+    };
     for (uint32_t line = 0; line < lineNum; ++line) {
         const uint8_t g = fl.field62C[line];
         if (g >= groupNum) continue;
         ++lines[g];
-        const uint32_t first = fl.dim1Axis == 0 ? line : line * fl.dim1Len;
-        const uint32_t step = fl.dim1Axis == 0 ? fl.dim1Len : 1;
-        int n = 0;
-        for (uint32_t k = 0; k < lineLen; ++k) {
-            const int v = dif[first + k * step];
-            const int a = std::abs(v);
-            const bool o = noise < a;
-            n += o ? 1 : 0;
-            posSum += o && 0 < v ? v : 0;
-            negSum += o && v < 1 ? v : 0;
-            overLti += o && finger < a ? 1 : 0;
-            overHti += o && finger < a && ref < a ? 1 : 0;
-            overBigNoise += o && finger < a && ref < a && bigNoise < a ? 1 : 0;
-        }
-        over[g] += n;
+        const LineAcc a = alongDim1 ? scan.operator()<1>(dif + line * cols, 1) : scan.operator()<0>(dif + line, cols);
+        over[g] += a.over;
+        posSum += a.pos;
+        negSum += a.neg;
+        overLti += a.lti;
+        overHti += a.hti;
+        overBigNoise += a.big;
     }
     int16_t total = 0;
     uint8_t maxPercent = 0;
