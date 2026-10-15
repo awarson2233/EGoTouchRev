@@ -39,10 +39,10 @@
   不做比较，改为统计这批录制与场景对当前算法代码的覆盖率，结果写到 build/tsa-coverage。
 
 .PARAMETER Benchmark
-  不做比较，改为计时：以 -O2 加 EGO_TSACORE_PROFILE 构建到 build/tsa-bench，逐个串行回放（纯回放场景），
-  跑 -Rounds 轮取最快的一轮，打印每帧耗时与耗时最多的 -Top 个步骤（步骤耗时含其子步骤）。回放钉在
-  -Affinity 指定的核上（默认 0xF0，Snapdragon 8cx Gen 3 的四个大核）并以高优先级运行。
-  回放工具只有 Debug 配置（调试版 CRT），绝对值比服务的 Release 构建略高，用来看相对变化。
+  不做比较，改为计时：以服务实际安装的配置 -BenchPreset（默认 arm64-Release-TsaCore）加 EGO_TSACORE_PROFILE
+  构建到 build/tsa-bench-release，逐个串行回放（纯回放场景），跑 -Rounds 轮取最快的一轮，打印每帧耗时与
+  耗时最多的 -Top 个步骤（步骤耗时含其子步骤）。回放钉在 -Affinity 指定的核上（默认 0xF0，Snapdragon
+  8cx Gen 3 的四个大核）并以高优先级运行。
 
 .EXAMPLE
   pwsh Tools/TsaRawReplay/Compare-Reference.ps1
@@ -53,6 +53,7 @@
 param(
     [string]$Reference = 'tsa-reference',
     [string]$Preset = 'arm64-Debug-TsaCore',
+    [string]$BenchPreset = 'arm64-Release-TsaCore',
     [string[]]$Recordings = @('C:\ProgramData\EGoTouchRev\exports\dvr'),
     [string]$Only = '',
     [switch]$SelfCheck,
@@ -174,12 +175,13 @@ function Get-Scenarios {
 # ── 计时 ────────────────────────────────────────────────────────────────
 
 if ($Benchmark) {
-    $benchDir = Join-Path $root 'build/tsa-bench'
-    Write-Host 'building benchmark (-O2, EGO_TSACORE_PROFILE)...'
+    $benchDir = Join-Path $root 'build/tsa-bench-release'
+    Write-Host "building benchmark ($BenchPreset, EGO_TSACORE_PROFILE)..."
     Push-Location $root
     try {
         Invoke-Native 'configure benchmark build' {
-            cmake --preset $Preset -B $benchDir '-DEGO_TSACORE_EXTRA_FLAGS=-O2' '-DEGO_TSACORE_PROFILE=ON'
+            # 发布构建的录制读取器不保留原始 SPI 帧（--afe 回放没有输入），整体打开诊断字段；TsaCore 算法不受它影响
+            cmake --preset $BenchPreset -B $benchDir '-DEGO_BUILD_TESTS=ON' '-DEGO_TSACORE_PROFILE=ON' '-DCMAKE_CXX_FLAGS=-DEGOTOUCH_DIAGNOSTICS'
         }
         Invoke-Native 'benchmark build' { cmake --build $benchDir --target TsaRawReplay }
     } finally {

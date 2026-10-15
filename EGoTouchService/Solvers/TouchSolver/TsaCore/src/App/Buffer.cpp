@@ -36,10 +36,11 @@ constexpr uint16_t kAtEdgeQ8 = 0x20;
 
 uint16_t SensorNum() { return PrmtFlash().sensorNum; }
 
+/// 计时加 dt，饱和到 int16。
+int16_t AddTime(int16_t t, int dt) { return static_cast<int16_t>(std::clamp(t + dt, -0x8000, 0x7fff)); }
+
 /// 计时加一个帧间隔，饱和到 int16。
-int16_t GetNextTime(int16_t t) {
-    return static_cast<int16_t>(std::clamp(t + Static().frameIntervalMs, -0x8000, 0x7fff));
-}
+int16_t GetNextTime(int16_t t) { return AddTime(t, Static().frameIntervalMs); }
 
 template <class T>
 bool Alloc(T*& slot, size_t count) {
@@ -50,30 +51,6 @@ bool Alloc(T*& slot, size_t count) {
 template <class T>
 void Release(T*& slot) { Mem::Release(slot); }
 
-// TSABuffer_TzIsMergedHandle @ 0x6ba8ec68：格在区域里
-void TzIsMergedHandle(uint32_t i) {
-    TsaBufferTable& b = Buffers();
-    if (b.tzZonePrev[i] == 0) {
-        b.timeDown[i] = 0;
-        b.maxSigDown[i] = b.dif[i];
-        if (PrevTouches().count < Touches().count) ++b.silentTouchNum[i];
-    } else {
-        b.timeDown[i] = GetNextTime(b.timeDown[i]);
-        if (b.maxSigDown[i] < b.dif[i]) b.maxSigDown[i] = b.dif[i];
-    }
-}
-
-// TSABuffer_TzIsNotMergedHandle @ 0x6ba8ed8c：格不在区域里
-void TzIsNotMergedHandle(uint32_t i) {
-    TsaBufferTable& b = Buffers();
-    if (b.tzZonePrev[i] == 0) {
-        if (b.timeOff[i] != kTimeNone) b.timeOff[i] = GetNextTime(b.timeOff[i]);
-        if (b.dif[i] < b.minSigOff[i]) b.minSigOff[i] = b.dif[i];
-    } else {
-        b.timeOff[i] = Static().frameIntervalMs;
-        b.minSigOff[i] = b.dif[i];
-    }
-}
 
 // TSABuffer_TZIDProcess @ 0x6ba8e7ac
 // 每个未抬起触点所在格的 SubTZ 编码对应到触点 ID，再按编码给每格填上 ID。
@@ -88,7 +65,14 @@ void TzIdProcess() {
         idOfCode[code] = static_cast<int8_t>(u.id);
     }
     idOfCode[0] = 0;
-    for (uint16_t i = SensorNum(); i-- != 0;) b.tzId[i] = idOfCode[static_cast<uint8_t>(b.subTz[i])];
+    const int n = SensorNum();
+    const int8_t* subTz = b.subTz;
+    int8_t* tzId = b.tzId;
+    if (std::all_of(idOfCode.begin(), idOfCode.end(), [](int8_t id) { return id == 0; })) {
+        std::fill_n(tzId, n, int8_t{0});
+        return;
+    }
+    for (int i = 0; i < n; ++i) tzId[i] = idOfCode[static_cast<uint8_t>(subTz[i])];
 }
 
 // TSABuffer_TimeRptProcess @ 0x6ba8e9b0
@@ -105,22 +89,26 @@ void TimeRptProcess() {
         const uint8_t zone = b.tzZone[GridIndex(pk.dim1, pk.dim2)];
         if (zone != 0) reported[zone] = (p.persistFlags & 0x20000000) != 0 ? 1 : 0;
     }
-    const int16_t dt = Static().frameIntervalMs;
-    for (uint16_t i = 0; i < SensorNum(); ++i) {
-        if (reported[b.tzZone[i]] == 0) {
-            b.timeRpt[i] = static_cast<int16_t>(std::clamp(dt + b.timeRpt[i], -0x8000, 0x7fff));
-        } else {
-            b.timeRpt[i] = 0;
-        }
+    const int dt = Static().frameIntervalMs;
+    const int n = SensorNum();
+    const uint8_t* zone = b.tzZone;
+    int16_t* timeRpt = b.timeRpt;
+    for (int i = 0; i < n; ++i) {
+        const int16_t next = AddTime(timeRpt[i], dt);  // 先无条件算出，选择表达式里不放读取，循环才能向量化
+        timeRpt[i] = reported[zone[i]] == 0 ? next : int16_t{0};
     }
 }
 
 // TSABuffer_GripTimeProcess @ 0x6ba8eea1：Dif 超过握持跟踪门限的格累计时间
 void GripTimeProcess() {
-    const auto thold = GripFilter::GetTrackingThold();
-    TsaBufferTable& b = Buffers();
-    for (uint16_t i = 0; i < SensorNum(); ++i) {
-        b.gripTime[i] = thold < b.dif[i] ? std::max<int16_t>(0, GetNextTime(b.gripTime[i])) : int16_t{0};
+    const int thold = GripFilter::GetTrackingThold();
+    const int dt = Static().frameIntervalMs;
+    const int n = SensorNum();
+    const int16_t* dif = Buffers().dif;
+    int16_t* gripTime = Buffers().gripTime;
+    for (int i = 0; i < n; ++i) {
+        const int16_t next = std::max<int16_t>(0, AddTime(gripTime[i], dt));
+        gripTime[i] = thold < dif[i] ? next : int16_t{0};
     }
 }
 
@@ -139,7 +127,7 @@ bool Malloc() {
         !Alloc(b.rawStoredSinceMutualSsNotMatch, n) || !Alloc(b.tzPrev, n) || !Alloc(b.tzZonePrev, n) || !Alloc(b.tzZone, n) ||
         !Alloc(b.tzId, n) || !Alloc(b.subTz, n) || !Alloc(b.timeOff, n) || !Alloc(b.timeDown, n) || !Alloc(b.timeRpt, n) ||
         !Alloc(b.minSigOff, n) || !Alloc(b.gripStage, n) || !Alloc(b.gripTime, n) || !Alloc(b.gripTimeOff, n) ||
-        !Alloc(b.gripRegion, n) || !Alloc(b.maxSigDown, n) || !Alloc(b.silentTouchNum, n) ||
+        !Alloc(b.gripRegion, n) ||
         !Alloc(b.preDif, n) || !Alloc(b.preHwRaw, n) || !Alloc(b.raw2RawDif, n) || !Alloc(b.raw2RawDifAftCmf, n) ||
         !Alloc(b.commonModeNoise, map) || !Alloc(b.rawCapture, n) || !Alloc(b.rawCaptureNextSide, n) || !Alloc(b.tzAge, n) ||
         !Alloc(b.cleanBaseline, n) || !Alloc(b.preUnnormalizedRaw, n) || !Alloc(b.rawGrid, n)) {
@@ -179,8 +167,6 @@ void Free() {
     Release(b.gripTime);
     Release(b.gripTimeOff);
     Release(b.gripRegion);
-    Release(b.maxSigDown);
-    Release(b.silentTouchNum);
     Release(b.preDif);
     Release(b.preHwRaw);
     Release(b.raw2RawDif);
@@ -211,8 +197,6 @@ void Init() {
     std::fill_n(b.timeRpt, n, kTimeNone);
     ClearChecked(b.timeDown, cap * 2, n * 2);
     ClearChecked(b.minSigOff, cap * 2, n * 2);
-    ClearChecked(b.maxSigDown, cap * 2, n * 2);
-    ClearChecked(b.silentTouchNum, cap, n);
     ClearChecked(b.gripStage, cap, n);
     ClearChecked(b.gripRegion, cap, n);
     ClearChecked(b.gripTime, cap * 2, n * 2);
@@ -220,17 +204,37 @@ void Init() {
 }
 
 // TSABuffer_PreProcess @ 0x6ba8f37f（SafeBaseline 被裁掉，信号恒不稳定）
+// 逐格更新计时（TSABuffer_TzIsMergedHandle @ 0x6ba8ec68 / TSABuffer_TzIsNotMergedHandle @ 0x6ba8ed8c）：
+// - 不在区域里：刚离开时抬起计时取一个帧间隔、抬起后最小信号取当前 Dif；否则计时推进（kTimeNone 不动）、
+//   最小信号取较小者；
+// - 在区域里：刚进入时按下计时清零，否则推进。
+// 原代码还记按下期间的最大 Dif 与「触点数增加时仍未进入区域」的次数（后者处理完即清零），都没有模块读，不记。
+// 各格互不相关，写成无分支的选择（区域的进出逐格随机）。
 void PreProcess() {
     TsaBufferTable& b = Buffers();
-    for (uint32_t i = SensorNum(); i-- != 0;) {
-        if (b.tzZone[i] == 0) {
-            TzIsNotMergedHandle(i);
-        } else {
-            TzIsMergedHandle(i);
-        }
+    const int dt = Static().frameIntervalMs;
+    const int n = SensorNum();
+    const uint8_t* zone = b.tzZone;
+    const uint8_t* prev = b.tzZonePrev;
+    const int16_t* dif = b.dif;
+    int16_t* timeOff = b.timeOff;
+    int16_t* minSigOff = b.minSigOff;
+    int16_t* timeDown = b.timeDown;
+    for (int i = 0; i < n; ++i) {
+        const bool in = zone[i] != 0;
+        const bool was = prev[i] != 0;
+        const int16_t off = timeOff[i];
+        const int16_t ms = minSigOff[i];
+        const int16_t td = timeDown[i];
+        const int16_t d = dif[i];
+        const int16_t outOff = was ? static_cast<int16_t>(dt) : off == kTimeNone ? off : AddTime(off, dt);
+        const int16_t outMs = was ? d : std::min(ms, d);
+        const int16_t inTd = was ? AddTime(td, dt) : int16_t{0};
+        timeOff[i] = in ? off : outOff;
+        minSigOff[i] = in ? ms : outMs;
+        timeDown[i] = in ? inTd : td;
     }
     CopyChecked(b.tzZonePrev, GridBufSize(), b.tzZone, SensorNum());
-    ClearChecked(b.silentTouchNum, GridBufSize(), SensorNum());
     TzIdProcess();
 }
 
@@ -258,18 +262,23 @@ void GripStageProcess() {
         if (u.edgeDistDim1 < kAtEdgeQ8 || u.edgeDistDim2 < kAtEdgeQ8) zoneGrip[z] = 1;
         zoneLocked[z] = (u.persistFlags4 & 1) != 0 ? 1 : 0;
     }
-    TsaBufferTable& b = Buffers();
-    const uint16_t interval = PrmtFlash().gripTimeInterval;
-    for (uint16_t i = 0; i < SensorNum(); ++i) {
-        const uint8_t z = b.tzZone[i];
-        if (z == 0) {
-            if (b.gripStage[i] != 0) b.gripTimeOff[i] = 0;
-            b.gripStage[i] = 0;
-            b.gripTimeOff[i] = GetNextTime(b.gripTimeOff[i]);
-        } else if (zoneLocked[z] == 0 && static_cast<int>(interval) < b.gripTime[i]) {
-            b.gripStage[i] = zoneGrip[z];
-        }
-        if (b.timeRpt[i] == 0) b.gripTimeOff[i] = kTimeNone;
+    const TsaBufferTable& b = Buffers();
+    const int interval = PrmtFlash().gripTimeInterval;
+    const int dt = Static().frameIntervalMs;
+    const int n = SensorNum();
+    const uint8_t* zone = b.tzZone;
+    const int16_t* gripTime = b.gripTime;
+    const int16_t* timeRpt = b.timeRpt;
+    uint8_t* gripStage = b.gripStage;
+    int16_t* gripTimeOff = b.gripTimeOff;
+    for (int i = 0; i < n; ++i) {
+        const uint8_t z = zone[i];
+        const bool in = z != 0;
+        const int16_t offBase = gripStage[i] != 0 ? int16_t{0} : gripTimeOff[i];
+        const int16_t off = in ? gripTimeOff[i] : AddTime(offBase, dt);
+        const bool update = zoneLocked[z] == 0 && interval < gripTime[i];
+        gripStage[i] = !in ? uint8_t{0} : update ? zoneGrip[z] : gripStage[i];
+        gripTimeOff[i] = timeRpt[i] == 0 ? kTimeNone : off;
     }
 }
 

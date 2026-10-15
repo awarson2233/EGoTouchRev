@@ -17,8 +17,7 @@ struct TsaBufferTable {
     int16_t* timeDown;  // 每格自按下以来的时间
     int16_t* timeRpt;  // 每格自开始报点以来的时间
     int16_t* minSigOff;  // 每格抬起后的最小信号
-    int16_t* maxSigDown;  // 每格按下期间的最大 Dif
-    uint8_t* silentTouchNum;  // 每格在触点数增加时仍未进入区域的次数（信号不稳时清零）
+    void* reserved020[2];
     void* unnormalizedRaw;
     int16_t* preUnnormalizedRaw;
     int16_t* rawGrid;  // 归一化前后的 raw（原地归一化）
@@ -62,8 +61,7 @@ static_assert(offsetof(TsaBufferTable, timeOff) == 0x000);
 static_assert(offsetof(TsaBufferTable, timeDown) == 0x008);
 static_assert(offsetof(TsaBufferTable, timeRpt) == 0x010);
 static_assert(offsetof(TsaBufferTable, minSigOff) == 0x018);
-static_assert(offsetof(TsaBufferTable, maxSigDown) == 0x020);
-static_assert(offsetof(TsaBufferTable, silentTouchNum) == 0x028);
+static_assert(offsetof(TsaBufferTable, reserved020) == 0x020);
 static_assert(offsetof(TsaBufferTable, unnormalizedRaw) == 0x030);
 static_assert(offsetof(TsaBufferTable, preUnnormalizedRaw) == 0x038);
 static_assert(offsetof(TsaBufferTable, rawGrid) == 0x040);
