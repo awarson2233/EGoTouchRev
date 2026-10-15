@@ -1,8 +1,13 @@
 {
   "mcpServers": {
     "ghidra": {
-      "command": "C:/Users/Detach0-0/AppData/Local/GhidraMCP/.venv/Scripts/python.exe",
-      "args": ["C:/Users/Detach0-0/AppData/Local/GhidraMCP/bridge_mcp_ghidra.py"]
+      "command": "C:/Users/detach/AppData/Local/Microsoft/WinGet/Links/uv.exe",
+      "args": [
+        "run",
+        "--directory",
+        "D:/source/repos/ghidra-mcp",
+        "bridge-mcp-ghidra"
+      ]
     }
   }
 }

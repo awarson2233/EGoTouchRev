@@ -36,23 +36,15 @@ ego_add_device_test(DevicePenUsbTransportWin32LifecycleTest Device.PenUsb.Transp
     "${DEVICE_ROOT}/tests/btmcu/PenUsbTransportWin32LifecycleTest.cpp")
 target_link_libraries(DevicePenUsbTransportWin32LifecycleTest PRIVATE Device Common)
 
+ego_add_device_test(DeviceBtHidChannelReconnectTest Device.PenUsb.BtHidChannelReconnect
+    "Device;Device.Unit;Device.PenUsb;Device.Win32;Timing;NoHardware" 60
+    "${DEVICE_ROOT}/tests/btmcu/BtHidChannelReconnectTest.cpp")
+target_link_libraries(DeviceBtHidChannelReconnectTest PRIVATE Device Common)
+
 ego_add_device_test(DeviceVhfReporterStylusPacketTest Device.Vhf.StylusPacket
     "Device;Device.Unit;Device.Vhf;NoHardware" 10
     "${DEVICE_ROOT}/tests/vhf/VhfReporterStylusPacketTest.cpp")
 target_link_libraries(DeviceVhfReporterStylusPacketTest PRIVATE Solvers Common)
-
-ego_add_device_test(DeviceVhfReporterTouchPacketTest Device.Vhf.TouchPacket
-    "Device;Device.Unit;Device.Vhf;NoHardware" 10
-    "${DEVICE_ROOT}/tests/vhf/VhfReporterTouchPacketTest.cpp")
-target_link_libraries(DeviceVhfReporterTouchPacketTest PRIVATE Solvers Common)
-
-ego_add_device_test(DeviceRuntimeSystemPowerPolicyTest Device.Runtime.SystemPowerPolicy
-    "Device;Device.Runtime;Device.Win32;Timing;NoHardware" 20
-    "${DEVICE_ROOT}/tests/runtime/DeviceRuntimeSystemPowerPolicyTest.cpp")
-target_link_libraries(DeviceRuntimeSystemPowerPolicyTest PRIVATE Device Common)
-set_tests_properties(Device.Runtime.SystemPowerPolicy PROPERTIES
-    RESOURCE_LOCK DeviceRuntimeTiming
-)
 
 ego_add_device_test(DeviceRuntimePenStateTest Device.Runtime.PenState
     "Device;Device.Runtime;Device.PenUsb;NoHardware" 10

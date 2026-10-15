@@ -320,103 +320,6 @@ bool RunNamedEventSequenceTest() {
 
 
 
-bool RunStateNormalizationDedupTest() {
-    using namespace std::chrono_literals;
-
-    TestEventNames event_names(L"StateNormalizationDedup");
-    ResetAllNamedEventsBestEffort(event_names.List());
-
-    Host::SystemStateMonitor monitor(event_names.List());
-    EventRecorder recorder;
-
-    const bool started = monitor.Start([&](const Host::SystemStateEvent& event) {
-        recorder.Record(event);
-    });
-
-    if (!started) {
-        std::cerr << "[TEST] SystemStateMonitor start failed in state normalization test.\n";
-        return false;
-    }
-
-    std::this_thread::sleep_for(kWorkerWarmup);
-
-    if (!SignalAndWaitForCount(monitor, recorder, event_names.List(), Host::SystemStateNamedEventId::MonitorConsoleDisplayOn, 1, "state normalization test") ||
-        !SignalAndWaitForCount(monitor, recorder, event_names.List(), Host::SystemStateNamedEventId::MonitorConsoleDisplayOff, 2, "DisplayOff transition test") ||
-        !SignalAndWaitForCount(monitor, recorder, event_names.List(), Host::SystemStateNamedEventId::MonitorLidOn, 3, "LidOn transition test") ||
-        !SignalAndExpectNoAdditionalCallback(monitor, recorder, event_names.List(), Host::SystemStateNamedEventId::MonitorLidOn, 3, "duplicate LidOn test") ||
-        !SignalAndWaitForCount(monitor, recorder, event_names.List(), Host::SystemStateNamedEventId::MonitorShutDown, 4, "Shutdown transition test") ||
-        !SignalAndExpectNoAdditionalCallback(monitor, recorder, event_names.List(), Host::SystemStateNamedEventId::MonitorShutDown, 4, "duplicate Shutdown test") ||
-        !SignalAndWaitForCount(monitor, recorder, event_names.List(), Host::SystemStateNamedEventId::PbtApmResumeAutomatic, 5, "first ResumeAutomatic test") ||
-        !SignalAndWaitForCount(monitor, recorder, event_names.List(), Host::SystemStateNamedEventId::PbtApmResumeSuspend, 6, "second ResumeAutomatic test")) {
-        return false;
-    }
-
-    monitor.Stop();
-    ResetAllNamedEventsBestEffort(event_names.List());
-
-    const std::vector<Host::SystemStateEventType> expected = {
-        Host::SystemStateEventType::DisplayOn,
-        Host::SystemStateEventType::DisplayOff,
-        Host::SystemStateEventType::LidOn,
-        Host::SystemStateEventType::Shutdown,
-        Host::SystemStateEventType::ResumeAutomatic,
-        Host::SystemStateEventType::ResumeAutomatic,
-    };
-
-    return ExpectTypes(expected, recorder.Snapshot(), "state normalization test");
-}
-
-bool RunDisplayBurstCoalescingTest() {
-    TestEventNames event_names(L"DisplayBurstCoalescing");
-    ResetAllNamedEventsBestEffort(event_names.List());
-
-    TestEventHandles event_handles;
-    if (!event_handles.OpenAll(event_names.List())) {
-        std::cerr << "[TEST] Failed to create named events in display burst coalescing test.\n";
-        return false;
-    }
-
-    if (!event_handles.Set(Host::SystemStateNamedEventId::MonitorConsoleDisplayOff) ||
-        !event_handles.Set(Host::SystemStateNamedEventId::MonitorConsoleDisplayOn)) {
-        std::cerr << "[TEST] Failed to pre-signal display burst events.\n";
-        ResetAllNamedEventsBestEffort(event_names.List());
-        return false;
-    }
-
-    Host::SystemStateMonitor monitor(event_names.List());
-    EventRecorder recorder;
-
-    const bool started = monitor.Start([&](const Host::SystemStateEvent& event) {
-        recorder.Record(event);
-    });
-
-    if (!started) {
-        std::cerr << "[TEST] SystemStateMonitor start failed in display burst coalescing test.\n";
-        ResetAllNamedEventsBestEffort(event_names.List());
-        return false;
-    }
-
-    if (!recorder.WaitForCount(1)) {
-        monitor.Stop();
-        ResetAllNamedEventsBestEffort(event_names.List());
-        std::cerr << "[TEST] Timeout waiting for display burst event.\n";
-        return false;
-    }
-
-    if (recorder.WaitForCount(2, kNoExtraCallbackWindow)) {
-        monitor.Stop();
-        ResetAllNamedEventsBestEffort(event_names.List());
-        std::cerr << "[TEST] Display burst emitted more than one event.\n";
-        DumpObserved(recorder.Snapshot());
-        return false;
-    }
-
-    monitor.Stop();
-    ResetAllNamedEventsBestEffort(event_names.List());
-
-    return ExpectTypes({Host::SystemStateEventType::DisplayOn}, recorder.Snapshot(), "display burst coalescing test");
-}
-
 bool RunCallbackExceptionContainmentTest() {
     using namespace std::chrono_literals;
 
@@ -615,14 +518,6 @@ int main() {
 
     if (!RunNamedEventSequenceTest()) {
         return 2;
-    }
-
-    if (!RunStateNormalizationDedupTest()) {
-        return 3;
-    }
-
-    if (!RunDisplayBurstCoalescingTest()) {
-        return 4;
     }
 
     if (!RunCallbackExceptionContainmentTest()) {

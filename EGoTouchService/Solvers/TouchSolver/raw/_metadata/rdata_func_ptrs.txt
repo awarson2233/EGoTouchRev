@@ -1,0 +1,12 @@
+0x6bb52a40 (g_tmHandlerTable) -> TouchMode_NoObjDetect @ 0x6ba790ae
+0x6bb52a48 (PTR_TouchMode_NoObjProcess_6bb52a48) -> TouchMode_NoObjProcess @ 0x6ba79113
+0x6bb52a50 () -> TouchMode_FingerDetect @ 0x6ba7911f
+0x6bb52a58 () -> TouchMode_FingerProcess @ 0x6ba79318
+0x6bb52a60 () -> TouchMode_GloveDetect @ 0x6ba793fe
+0x6bb52a68 () -> TouchMode_GloveProcess @ 0x6ba797a7
+0x6bb52a70 () -> TouchMode_StylusDetect @ 0x6ba798b8
+0x6bb52a78 () -> TouchMode_StylusProcess @ 0x6ba7991a
+0x6bb60510 (__dyn_tls_init_callback) -> tls_callback_0 @ 0x6bb47db0
+0x6bb60cc0 (.refptr.RecordTrigger_PutStr) -> RecordTrigger_PutStr @ 0x6bafcdd0
+0x6bb60cd0 (.refptr.TSA_GetSensorData) -> TSA_GetSensorData @ 0x6ba8f9be
+0x6bb61cb0 (.refptr.memset) -> memset @ 0x6bb4e540

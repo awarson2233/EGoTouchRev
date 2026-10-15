@@ -104,7 +104,7 @@ int main() {
     const auto catalog = Config::deserializeConfigV3Catalog(catalogBlob.bytes.data(), catalogBlob.bytes.size());
     assert(catalog.schemaVersion == catalogBlob.schemaVersion);
     assert(CatalogHasPath(catalog, "service.mode"));
-    assert(CatalogHasPath(catalog, "touch.signal_cond.baseline_no_finger_max_step"));
+    assert(CatalogHasPath(catalog, "stylus.sp.signal_floor"));
     assert(CatalogHasPath(catalog, "stylus.sp.iir_max_coef"));
 
     const auto snapshotBlob = runtime.BuildSnapshotV3Blob();
@@ -157,26 +157,26 @@ int main() {
     assert(afterRejectSnapshotBlob.snapshotVersion == beforeRejectSnapshotBlob.snapshotVersion);
     assert(afterRejectSnapshotBlob.checksum == beforeRejectSnapshotBlob.checksum);
 
-    const auto touchStepKeyId = Config::tryKeyIdForPath("touch.signal_cond.baseline_no_finger_max_step");
-    assert(touchStepKeyId.has_value());
-    const auto touchPayload = MakePatchPayload({Config::ConfigTlvEntry{*touchStepKeyId, Config::ConfigValueType::Int32, "513"}});
-    const auto touchApplied = ApplyV3Patch(runtime, touchPayload);
-    assert(touchApplied.runtimeStatus == Service::ServiceRuntimeStatusCode::Ok);
-    assert(touchApplied.status == Service::ConfigV3MutationStatus::Ok);
-    assert(touchApplied.changedCount == 1);
-    assert(touchApplied.appliedCount == 1);
-    assert(HasAction(touchApplied, Service::ConfigApplyActionKind::PipelineRuntime));
+    const auto signalFloorKeyId = Config::tryKeyIdForPath("stylus.sp.signal_floor");
+    assert(signalFloorKeyId.has_value());
+    const auto signalFloorPayload = MakePatchPayload({Config::ConfigTlvEntry{*signalFloorKeyId, Config::ConfigValueType::Int32, "513"}});
+    const auto signalFloorApplied = ApplyV3Patch(runtime, signalFloorPayload);
+    assert(signalFloorApplied.runtimeStatus == Service::ServiceRuntimeStatusCode::Ok);
+    assert(signalFloorApplied.status == Service::ConfigV3MutationStatus::Ok);
+    assert(signalFloorApplied.changedCount == 1);
+    assert(signalFloorApplied.appliedCount == 1);
+    assert(HasAction(signalFloorApplied, Service::ConfigApplyActionKind::PipelineRuntime));
 
-    const auto touchPeakThresholdKeyId = Config::tryKeyIdForPath("touch.peak_detection.threshold");
-    assert(touchPeakThresholdKeyId.has_value());
-    const auto touchPeakPayload = MakePatchPayload({Config::ConfigTlvEntry{*touchPeakThresholdKeyId, Config::ConfigValueType::Int32, "351"}});
-    const auto touchPeakApplied = ApplyV3Patch(runtime, touchPeakPayload);
-    assert(touchPeakApplied.runtimeStatus == Service::ServiceRuntimeStatusCode::Ok);
-    assert(touchPeakApplied.status == Service::ConfigV3MutationStatus::Ok);
-    assert(touchPeakApplied.changedCount == 1);
-    assert(touchPeakApplied.appliedCount == 1);
-    assert(HasAction(touchPeakApplied, Service::ConfigApplyActionKind::PipelineRuntime));
-    assert(runtime.SnapshotStore().getOr<int32_t>("touch.peak_detection.threshold", 0) == 351);
+    const auto edgeEnterKeyId = Config::tryKeyIdForPath("stylus.sp.pressure_edge_enter_threshold");
+    assert(edgeEnterKeyId.has_value());
+    const auto edgeEnterPayload = MakePatchPayload({Config::ConfigTlvEntry{*edgeEnterKeyId, Config::ConfigValueType::Int32, "351"}});
+    const auto edgeEnterApplied = ApplyV3Patch(runtime, edgeEnterPayload);
+    assert(edgeEnterApplied.runtimeStatus == Service::ServiceRuntimeStatusCode::Ok);
+    assert(edgeEnterApplied.status == Service::ConfigV3MutationStatus::Ok);
+    assert(edgeEnterApplied.changedCount == 1);
+    assert(edgeEnterApplied.appliedCount == 1);
+    assert(HasAction(edgeEnterApplied, Service::ConfigApplyActionKind::PipelineRuntime));
+    assert(runtime.SnapshotStore().getOr<int32_t>("stylus.sp.pressure_edge_enter_threshold", 0) == 351);
 
     const auto iirMaxKeyId = Config::tryKeyIdForPath("stylus.sp.iir_max_coef");
     const auto iirLowHoverKeyId = Config::tryKeyIdForPath("stylus.sp.iir_coef_low_hover");
@@ -248,7 +248,7 @@ int main() {
     assert(sessionLive.status == Service::ConfigV3MutationStatus::Ok);
     assert(sessionLive.appliedCount == 1);
     assert(!sessionRuntime.ServiceState().autoMode);
-    const auto sessionTouchPeak = ApplyV3Patch(sessionRuntime, touchPeakPayload);
+    const auto sessionTouchPeak = ApplyV3Patch(sessionRuntime, edgeEnterPayload);
     assert(sessionTouchPeak.runtimeStatus == Service::ServiceRuntimeStatusCode::Ok);
     assert(sessionTouchPeak.status == Service::ConfigV3MutationStatus::Ok);
     assert(sessionTouchPeak.appliedCount == 1);
@@ -266,7 +266,7 @@ int main() {
     assert(restartedRuntime.ServiceState().autoMode);
     assert(restartedRuntime.ServiceState().mode == Service::ServiceMode::Full);
     assert(restartedRuntime.SnapshotStore().getOr<std::string>("service.mode", "") == "full");
-    assert(restartedRuntime.SnapshotStore().getOr<int32_t>("touch.peak_detection.threshold", 0) != 351);
+    assert(restartedRuntime.SnapshotStore().getOr<int32_t>("stylus.sp.pressure_edge_enter_threshold", 0) != 351);
 
     Service::ConfigRuntime explicitRouteRuntime;
     assert(explicitRouteRuntime.Initialize([](const Config::ConfigStore&) { return true; }));
@@ -327,11 +327,11 @@ int main() {
 
     Service::ConfigRuntime floatRuntime;
     assert(floatRuntime.Initialize([](const Config::ConfigStore&) { return true; }));
-    const auto fingerSharpnessKeyId = Config::tryKeyIdForPath("touch.classifier.finger_sharpness");
-    assert(fingerSharpnessKeyId.has_value());
+    const auto noiseRatioKeyId = Config::tryKeyIdForPath("stylus.sp.noise_signal_ratio_thold");
+    assert(noiseRatioKeyId.has_value());
     const auto boolFloatRejected = ApplyV3Patch(
         floatRuntime,
-        MakePatchPayload({Config::ConfigTlvEntry{*fingerSharpnessKeyId, Config::ConfigValueType::Bool, "true"}}));
+        MakePatchPayload({Config::ConfigTlvEntry{*noiseRatioKeyId, Config::ConfigValueType::Bool, "true"}}));
     assert(boolFloatRejected.runtimeStatus == Service::ServiceRuntimeStatusCode::Ok);
     assert(boolFloatRejected.status == Service::ConfigV3MutationStatus::Rejected);
 

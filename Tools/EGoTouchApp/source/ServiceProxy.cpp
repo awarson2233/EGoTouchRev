@@ -222,13 +222,17 @@ DvrRuntimeConfigSnapshot BuildRuntimeConfigSnapshotFromState(
     builder.AddBool("AppRuntime", "vhf_transpose", appRuntimeState.vhfTranspose, "VHF Transpose", "App Runtime");
     builder.AddBool("AppRuntime", "master_parser_only", appRuntimeState.masterParserOnly, "Master Parser Only", "App Runtime");
 
+    // 原 BaselineNoFingerMaxStep 是复刻自创的「单帧步长硬上限」，原厂没有对应量：
+    // TSACore 的 Stage 0 步长完全由 TSADynPrmt_UpdateBfrTch @0x6BB3C960 算出
+    // （clamp(noiseThold >> 8, 1, 255)，W273AS2700 实测 = 2）。改为直接快照
+    // 该派生量，取值范围与原版 clamp 一致（文档 01 §8）。
     builder.AddInt32("TouchPipeline",
-                     "BaselineNoFingerMaxStep",
-                     touchPipeline.m_baseline.m_noFingerMaxStep,
-                     "Baseline No Finger Max Step",
+                     "BaselineNoTouchStep",
+                     static_cast<int32_t>(touchPipeline.m_baseline.GetDynParams().stepNoTouch),
+                     "Baseline No Touch Step",
                      "Touch / Signal Conditioning",
                      1.0f,
-                     2048.0f);
+                     255.0f);
     builder.AddInt32("StylusPipeline",
                      "sp.btFreqShiftDebounceFrames",
                      stylusPipeline.m_hpp3.m_postPressure.m_btFreqShiftDebounceFrames,

@@ -195,3 +195,4 @@ inline bool StylusTouchSuppressor::Process(HeatmapFrame& frame) {
 }
 
 }} // namespace Solvers::Touch
+

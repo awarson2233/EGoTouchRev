@@ -113,7 +113,15 @@ struct FakeRuntime {
     void BuildPipeline() { calls->Add("runtime.buildPipeline"); }
     bool Start() { calls->Add("runtime.start"); return startResult; }
     void HandlePolicyEvent() { calls->Add("runtime.policyEvent"); }
+    bool NotifyPenLinkDown() {
+        calls->Add("runtime.pen.linkDown");
+        const bool changed = penConnected;
+        penConnected = false;
+        return changed;
+    }
     void Stop() { calls->Add("runtime.stop"); }
+
+    bool penConnected = true;
 };
 
 class FakeMonitor {
@@ -289,6 +297,7 @@ struct FakePen {
     bool eventStarted = false;
     bool pressureStarted = false;
     bool notifyAttached = false;
+    bool linkStale = false;
     StageBarrier* beforePublishBarrier = nullptr;
 
     bool Start(Service::ServiceMode mode) {
@@ -316,6 +325,19 @@ struct FakePen {
 
     void SendQueryPenStatus() {
         if (eventStarted) calls->Add("penEvent.query.0x7101");
+    }
+
+    void MarkLinkStale() {
+        if (linkStale) return;
+        linkStale = true;
+        calls->Add("penEvent.link.stale");
+    }
+
+    bool RearmHandshakeIfStale() {
+        if (!linkStale) return false;
+        linkStale = false;
+        calls->Add("penEvent.handshake.rearm");
+        return true;
     }
 
     void Stop() {
@@ -354,9 +376,16 @@ struct FakeServiceHostHarness {
     bool StartSystemStateMonitor() {
         return monitor.Start([this](Host::SystemStateEventType event) {
             runtime.HandlePolicyEvent();
-            if (config.mode == Service::ServiceMode::Full &&
-                Host::IsPenStatusWakeEvent(event)) {
-                pen.SendQueryPenStatus();
+            if (config.mode == Service::ServiceMode::Full) {
+                if (Host::IsPenLinkDownEvent(event)) {
+                    runtime.NotifyPenLinkDown();
+                    pen.MarkLinkStale();
+                } else if (Host::IsPenStatusWakeEvent(event)) {
+                    // Re-arm before transmitting so the reply lands on a
+                    // re-armed handshake session.
+                    pen.RearmHandshakeIfStale();
+                    pen.SendQueryPenStatus();
+                }
             }
             monitor.WaitInsideCallbackIfRequested();
         });
@@ -627,6 +656,60 @@ bool WakeCallbacksIssuePenStatusQueryOnlyInFullMode() {
     return true;
 }
 
+bool SleepResumeDeregistersPenAndReArmsHandshake() {
+    FakeServiceHostHarness host;
+    REQUIRE_TRUE(host.Start());
+    const auto baseline = host.calls.Snapshot().size();
+
+    // Modern Standby on ARM64 hosts commonly reports only the display
+    // transition, so DisplayOff must be enough to arm the recovery.
+    host.monitor.Emit(Host::SystemStateEventType::DisplayOff);
+    host.monitor.Emit(Host::SystemStateEventType::DisplayOn);
+
+    auto calls = host.calls.Snapshot();
+    calls.erase(calls.begin(), calls.begin() + static_cast<std::ptrdiff_t>(baseline));
+    const std::vector<std::string> expected{
+        "runtime.policyEvent",
+        "runtime.pen.linkDown",
+        "penEvent.link.stale",
+        "runtime.policyEvent",
+        "penEvent.handshake.rearm",
+        "penEvent.query.0x7101",
+    };
+    REQUIRE_TRUE(calls == expected);
+
+    // A second wake without an intervening sleep must not re-arm again.
+    host.monitor.Emit(Host::SystemStateEventType::ResumeAutomatic);
+    const auto afterSecondWake = host.calls.Snapshot();
+    REQUIRE_TRUE(std::count(afterSecondWake.begin(), afterSecondWake.end(),
+                            "penEvent.handshake.rearm") == 1);
+
+    // Suspend and LidOff must arm the same recovery path as DisplayOff.
+    FakeServiceHostHarness suspendHost;
+    REQUIRE_TRUE(suspendHost.Start());
+    suspendHost.monitor.Emit(Host::SystemStateEventType::Suspend);
+    suspendHost.monitor.Emit(Host::SystemStateEventType::ResumeAutomatic);
+    REQUIRE_TRUE(Contains(suspendHost.calls.Snapshot(), "penEvent.handshake.rearm"));
+
+    FakeServiceHostHarness lidHost;
+    REQUIRE_TRUE(lidHost.Start());
+    lidHost.monitor.Emit(Host::SystemStateEventType::LidOff);
+    lidHost.monitor.Emit(Host::SystemStateEventType::LidOn);
+    REQUIRE_TRUE(Contains(lidHost.calls.Snapshot(), "penEvent.handshake.rearm"));
+
+    // touch_only must not touch the pen subsystem on either edge.
+    FakeServiceHostHarness touchOnlyHost;
+    touchOnlyHost.config.mode = Service::ServiceMode::TouchOnly;
+    REQUIRE_TRUE(touchOnlyHost.Start());
+    touchOnlyHost.monitor.Emit(Host::SystemStateEventType::Suspend);
+    touchOnlyHost.monitor.Emit(Host::SystemStateEventType::ResumeAutomatic);
+    const auto touchOnlyCalls = touchOnlyHost.calls.Snapshot();
+    REQUIRE_TRUE(!Contains(touchOnlyCalls, "runtime.pen.linkDown"));
+    REQUIRE_TRUE(!Contains(touchOnlyCalls, "penEvent.link.stale"));
+    REQUIRE_TRUE(!Contains(touchOnlyCalls, "penEvent.handshake.rearm"));
+    return true;
+}
+
 bool StopWaitsForPenLocalProducersToPublish() {
     FakeServiceHostHarness host;
     StageBarrier beforePublish;
@@ -854,6 +937,7 @@ int main() {
     failures += RunTest(&PenFailureGatesIpcThenRollsBackPartialPen, "PenFailureGatesIpcThenRollsBackPartialPen");
     failures += RunTest(&MonitorFailureRollsBackAllCompletedStages, "MonitorFailureRollsBackAllCompletedStages");
     failures += RunTest(&WakeCallbacksIssuePenStatusQueryOnlyInFullMode, "WakeCallbacksIssuePenStatusQueryOnlyInFullMode");
+    failures += RunTest(&SleepResumeDeregistersPenAndReArmsHandshake, "SleepResumeDeregistersPenAndReArmsHandshake");
     failures += RunTest(&StopWaitsForPenLocalProducersToPublish, "StopWaitsForPenLocalProducersToPublish");
     failures += RunTest(&StopWaitsForIpcAndMonitorStartupStages, "StopWaitsForIpcAndMonitorStartupStages");
     failures += RunTest(&ConcurrentStartExceptionReturnsFalseAndAllowsRetry, "ConcurrentStartExceptionReturnsFalseAndAllowsRetry");

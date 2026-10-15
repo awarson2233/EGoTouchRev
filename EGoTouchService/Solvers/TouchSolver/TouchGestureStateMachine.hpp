@@ -4,6 +4,7 @@
 // 5-Phase gesture lifecycle per slot.
 
 #include "SolverTypes.h"
+#include "TrackingAndEvents.hpp"
 #include <array>
 #include <cstdint>
 
@@ -245,5 +246,8 @@ private:
         }
     }
 };
+
+// ── Compatibility Aliases ─────────────────────────────────────────────
+using TouchGestureStateMachineModern = TrackingAndEvents;
 
 }} // namespace Solvers::Touch

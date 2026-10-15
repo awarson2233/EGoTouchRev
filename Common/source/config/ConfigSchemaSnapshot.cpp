@@ -73,16 +73,6 @@ std::string fallbackModuleTag(std::string_view yamlPath)
 std::string deriveModuleTag(std::string_view yamlPath)
 {
     if (startsWith(yamlPath, "service.")) return "Service";
-    if (startsWith(yamlPath, "touch.signal_cond.")) return "Touch / Signal Conditioning";
-    if (startsWith(yamlPath, "touch.frame_parser.")) return "Touch / Frame Parser";
-    if (startsWith(yamlPath, "touch.peak_detection.")) return "Touch / Peak Detection";
-    if (startsWith(yamlPath, "touch.classifier.")) return "Touch / Palm Rejection";
-    if (startsWith(yamlPath, "touch.zone_contact.")) return "Touch / Zone & Contact";
-    if (startsWith(yamlPath, "touch.edge.")) return "Touch / Edge";
-    if (startsWith(yamlPath, "touch.tracking.")) return "Touch / Tracking";
-    if (startsWith(yamlPath, "touch.stylus_suppress.")) return "Touch / Stylus Suppress";
-    if (startsWith(yamlPath, "touch.coord_filter.")) return "Touch / Coordinate Filter";
-    if (startsWith(yamlPath, "touch.gesture.")) return "Touch / Gesture";
     if (startsWith(yamlPath, "stylus.sp.frame_parser")) return "Stylus / Frame Parser";
 
     if (startsWith(yamlPath, "stylus.sp.peak_") ||

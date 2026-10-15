@@ -166,7 +166,10 @@ std::string format_core(const char* fmt_str, const LogArg* args, size_t count) {
                 end++;
             }
             if (*end == '}') {
-                std::string spec(fmt_str + 1, end);
+                // "{:02X}" 的格式说明是冒号之后的部分
+                const char* specBegin = fmt_str + 1;
+                if (*specBegin == ':') ++specBegin;
+                std::string spec(specBegin, end);
                 if (arg_idx < count) {
                     format_single_arg(out, spec, args[arg_idx++]);
                 } else {
@@ -212,19 +215,22 @@ void Logger::Init(const std::string& loggerName, const std::filesystem::path& lo
 
         g_logPath = logDir / (loggerName + ".txt");
 
-        bool truncate = false;
-        if (fs::exists(g_logPath, ec) && !ec) {
-            if (fs::file_size(g_logPath, ec) > 5 * 1024 * 1024 && !ec) {
-                truncate = true;
-            }
+        // 超过 5 MB 时整体挪到 <name>.1.txt 再开新文件，保留上一段现场
+        if (fs::exists(g_logPath, ec) && !ec &&
+            fs::file_size(g_logPath, ec) > 5 * 1024 * 1024 && !ec) {
+            const fs::path rotated = logDir / (loggerName + ".1.txt");
+            fs::remove(rotated, ec);
+            fs::rename(g_logPath, rotated, ec);
         }
 
 #if defined(_WIN32)
+        // _wfopen_s 打开的文件不可共享，服务运行期间别的进程连读都读不了；
+        // 这里只拒绝别人写，允许随时查看 / tail 日志
         std::wstring wpath = g_logPath.wstring();
-        errno_t err = _wfopen_s(&g_fileStream, wpath.c_str(), truncate ? L"wb" : L"ab");
-        g_initialized = (err == 0 && g_fileStream != nullptr);
+        g_fileStream = _wfsopen(wpath.c_str(), L"ab", _SH_DENYWR);
+        g_initialized = (g_fileStream != nullptr);
 #else
-        g_fileStream = fopen(g_logPath.string().c_str(), truncate ? "wb" : "ab");
+        g_fileStream = fopen(g_logPath.string().c_str(), "ab");
         g_initialized = (g_fileStream != nullptr);
 #endif
 

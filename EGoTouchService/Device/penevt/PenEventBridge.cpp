@@ -277,8 +277,68 @@ void PenEventBridge::AdvanceSessionFromEvent(uint8_t eventCode) {
     ExecuteInitAction(action);
 }
 
+// ── 链路失效标记与被动重握手 ───────────────────────────────────────────────
+void PenEventBridge::MarkLinkStale() {
+    if (m_linkStale.exchange(true, std::memory_order_acq_rel)) {
+        return;
+    }
+    LOG_INFO("PenEvent", __func__, "MCU",
+             "MCU link marked stale by host power transition; handshake will be re-armed on wake.");
+}
+
+bool PenEventBridge::RearmHandshakeIfStale() {
+    if (!m_linkStale.exchange(false, std::memory_order_acq_rel)) {
+        return false;
+    }
+
+    {
+        std::lock_guard<std::mutex> sessionLock(m_sessionMutex);
+        m_initSession.RearmForLinkRecovery();
+        m_handshakeDeadline =
+            std::chrono::steady_clock::now() + kHandshakeRecoveryTimeout;
+    }
+
+    LOG_INFO("PenEvent", __func__, "MCU",
+             "Handshake session re-armed after wake; awaiting MCU 0x77 to drive 0x7701 -> 0x7B -> 0x7D01.");
+    return true;
+}
+
+// 被动重握手的看门狗：由 worker 读超时（≈1Hz）驱动，不占用额外线程。
+// MCU 若在窗口内没有自发上报 0x77，会话会永远停在 AwaitingMcuStatus，
+// 此时升级为强制重连，改由 OnConnected() 走主动握手。
+void PenEventBridge::OnIdleTick() {
+    bool escalate = false;
+    {
+        std::lock_guard<std::mutex> sessionLock(m_sessionMutex);
+        if (m_handshakeDeadline == std::chrono::steady_clock::time_point{}) {
+            return;
+        }
+        if (m_initSession.IsHandshakeComplete()) {
+            m_handshakeDeadline = {};
+        } else if (std::chrono::steady_clock::now() >= m_handshakeDeadline) {
+            m_handshakeDeadline = {};
+            escalate = true;
+        }
+    }
+
+    if (escalate) {
+        LOG_WARN("PenEvent", __func__, "MCU",
+                 "MCU did not drive the handshake to 0x7D01 within {} ms after wake; forcing reconnect.",
+                 kHandshakeRecoveryTimeout.count());
+        RequestReconnect();
+    }
+}
+
 // ── BtHidChannel hooks ────────────────────────────────────────────────────
 void PenEventBridge::OnConnected() {
+    // A real reconnect resets the session outright and drives the active
+    // handshake, so any pending stale mark or passive-recovery deadline from a
+    // power transition is already satisfied.
+    m_linkStale.store(false, std::memory_order_release);
+    {
+        std::lock_guard<std::mutex> sessionLock(m_sessionMutex);
+        m_handshakeDeadline = {};
+    }
     RunHandshake();
     (void)SendQueryPenModule();
     (void)SendQuerySerialNumber();

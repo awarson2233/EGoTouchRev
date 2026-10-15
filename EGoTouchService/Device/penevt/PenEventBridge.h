@@ -5,6 +5,7 @@
 #include "btmcu/PenUsbTypes.h"
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -48,6 +49,19 @@ public:
     /// 手动触发握手（0x7101 + 0x7701 + 0x7701），通常无需手动调用。
     void RunHandshake();
 
+    /// 标记 MCU 链路已因主机电源转换（Suspend / DisplayOff / LidOff）失效。
+    /// 休眠不会让 col00 HID 句柄失效，读循环因此不会重连，握手会话会停在
+    /// Phase::Running，0x7D01 永不重发。该标志把"需要重握手"记到下一次唤醒。
+    void MarkLinkStale();
+    bool IsLinkStale() const {
+        return m_linkStale.load(std::memory_order_acquire);
+    }
+
+    /// 唤醒时调用：若链路被标记为 stale，则重置握手会话并清除标志。
+    /// 不发送任何数据包——后续由 MCU 自身的事件链驱动回 0x7D01。
+    /// @return true 表示本次确实重新武装了会话。
+    bool RearmHandshakeIfStale();
+
     bool SendQueryPenModule();
     bool SendQuerySerialNumber();
     bool SendQueryHardwareVersion();
@@ -57,10 +71,15 @@ public:
     bool SendSecondMcuStatusQuery();
     bool SendPairInfoSet(uint8_t value);
 
+    /// 被动重握手的升级窗口：唤醒后若 MCU 在此时限内没有把会话推进到
+    /// 0x7D01，则强制重连并改走主动握手。
+    static constexpr std::chrono::milliseconds kHandshakeRecoveryTimeout{5000};
+
 protected:
     std::optional<std::wstring> FindDevicePath() override;
     void OnConnected() override;
     void OnPacketReceived(std::span<const uint8_t> packet) override;
+    void OnIdleTick() override;
     const char* ChannelName() const override { return "PenEventBridge"; }
 
 private:
@@ -76,7 +95,11 @@ private:
     mutable std::mutex m_txMutex;
     std::shared_ptr<const PenEventCallback> m_eventCallback;
     std::atomic<NativeEventHandle> m_notifyEvent{nullptr};
+    std::atomic<bool> m_linkStale{false};
     PenUsbInitSession m_initSession;
+    /// 非零表示"已被动重武装、等待 MCU 推进握手"的截止时刻。
+    /// 与 m_initSession 同受 m_sessionMutex 保护。
+    std::chrono::steady_clock::time_point m_handshakeDeadline{};
 };
 
 } // namespace Himax::Pen

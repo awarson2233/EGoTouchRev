@@ -20,6 +20,7 @@ BtHidChannel::~BtHidChannel() {
 
 bool BtHidChannel::Start() {
     if (m_running.exchange(true)) return true;
+    m_reconnectRequested.store(false, std::memory_order_release);
     try {
         m_thread = std::thread(&BtHidChannel::WorkerFunc, this);
     } catch (...) {
@@ -40,6 +41,13 @@ void BtHidChannel::Stop() {
     if (m_transport) m_transport->Close();
     LOG_INFO(ChannelName(), "Stop", "MCU",
              "Channel stopped.");
+}
+
+void BtHidChannel::RequestReconnect() {
+    if (!IsRunning()) return;
+    if (m_reconnectRequested.exchange(true, std::memory_order_acq_rel)) return;
+    LOG_WARN(ChannelName(), "RequestReconnect", "MCU",
+             "Channel reconnect requested; worker will reopen the device.");
 }
 
 void BtHidChannel::WorkerFunc() {
@@ -76,6 +84,13 @@ void BtHidChannel::WorkerFunc() {
         OnConnected();
 
         while (m_running.load() && m_transport && m_transport->IsOpen()) {
+            if (m_reconnectRequested.exchange(false, std::memory_order_acq_rel)) {
+                LOG_WARN(ChannelName(), "WorkerFunc", "MCU",
+                         "[Thread] Reconnect requested; closing channel to force a fresh handshake.");
+                m_transport->Close();
+                break;
+            }
+
             PenUsbPacketBuffer rxBuf;
             auto res = m_transport->ReadPacket(rxBuf, 1000);
             if (res && !rxBuf.empty()) {
@@ -83,6 +98,7 @@ void BtHidChannel::WorkerFunc() {
                 continue;
             }
             if (!res && res.error() == ChipError::Timeout) {
+                OnIdleTick();
                 continue;
             }
 

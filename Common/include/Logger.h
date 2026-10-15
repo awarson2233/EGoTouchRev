@@ -121,6 +121,8 @@ public:
 #endif
 
 
+// 低频、但现场定位离不开的事件（电源输入、状态机迁移、建链结果、心跳）。Release 也保留。
+#define LOG_NOTICE(layer, method, state, msg, ...) LOG_INTERNAL(notice, layer, method, state, msg __VA_OPT__(,) __VA_ARGS__)
 #define LOG_WARN(layer,  method, state, msg, ...) LOG_INTERNAL(warn,  layer, method, state, msg __VA_OPT__(,) __VA_ARGS__)
 #define LOG_ERROR(layer, method, state, msg, ...) LOG_INTERNAL(error, layer, method, state, msg __VA_OPT__(,) __VA_ARGS__)
 #define LOG_CRIT(layer,  method, state, msg, ...) LOG_INTERNAL(critical, layer, method, state, msg __VA_OPT__(,) __VA_ARGS__)

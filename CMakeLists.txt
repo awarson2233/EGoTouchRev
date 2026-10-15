@@ -128,6 +128,11 @@ option(HIMAX_ENABLE_NEON "Enable ARM NEON intrinsics when available" ON)
 option(EGO_BUILD_TESTS "Build local test executables" ON)
 option(EGO_BUILD_TOOLS "Build GUI workbench and diagnostic tools" ON)
 
+# --- Touch solver selection ---
+# ON: DeviceRuntime 默认用 TsaCoreSolver（反编译的 TSACore 手指管线）；OFF: 默认用 TouchPipeline。
+# 运行时可用 DeviceRuntime::SetTsaCoreSolverEnabled 切换。
+option(EGO_TOUCH_SOLVER_TSACORE "Use the decompiled TSACore finger pipeline by default" OFF)
+
 # --- Common Library ---
 # Use the source directory as the root for subprojects/resources so paths
 # resolve correctly whether building in-tree or out-of-tree.
@@ -231,6 +236,7 @@ target_compile_definitions(Device PUBLIC
     $<$<BOOL:${HIMAX_ENABLE_NEON}>:HIMAX_ENABLE_NEON=1>
     $<$<NOT:$<BOOL:${HIMAX_ENABLE_NEON}>>:HIMAX_ENABLE_NEON=0>
     EGOTOUCH_SERVICE_ENABLE_IPC=$<IF:$<CONFIG:Debug>,1,0>
+    EGOTOUCH_TOUCH_SOLVER_TSACORE=$<IF:$<BOOL:${EGO_TOUCH_SOLVER_TSACORE}>,1,0>
 )
 
 
@@ -244,6 +250,10 @@ set(SOLVERS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/EGoTouchService/Solvers")
 set(SOLVERS_SOURCES
     # TouchSolver (linear orchestrator — all algorithm modules are header-only .hpp)
     EGoTouchService/Solvers/TouchSolver/TouchPipeline.cpp
+    # TSACore 宿主侧：AFE 适配层、ctrl flags / 初始化、输出映射与外观类
+    EGoTouchService/Solvers/TouchSolver/TsaCore/HimaxAfeAdapter.cpp
+    EGoTouchService/Solvers/TouchSolver/TsaCore/TsaHostShim.cpp
+    EGoTouchService/Solvers/TouchSolver/TsaCore/TsaCoreSolver.cpp
     # StylusSolver (official ASA pipeline — modules are header-only .hpp)
     EGoTouchService/Solvers/StylusSolver/StylusPipeline.cpp
 )
@@ -267,6 +277,38 @@ endfunction()
 
 add_library(Solvers STATIC ${SOLVERS_SOURCES})
 ego_configure_solvers_target(Solvers)
+
+# TSACore 手指管线：由 Ghidra 反编译的 TSACore.dll 改写成的 C++（TsaCore/src/）。全局状态在
+# g_tsaMemoryImage 里（按原 DLL 地址排布），进程内单例。raw/ 只留分析文档与符号元数据。
+# 原代码依赖类型双关与有符号回绕，必须关掉严格别名并启用 -fwrapv；改写后的代码沿用同样的语义。
+# -ffp-contract=off：原 DLL 是 x64，没有乘加融合；ARM64 上默认融合会让浮点中间量差出末位。
+# -ftrivial-auto-var-init=zero：原代码有把未赋值的局部量（结构体尾部的填充）拷进状态的地方，
+# 不清零的话状态随栈上的残留值变，重构前后无从比对。
+set(TSACORE_RAW_ROOT "${SOLVERS_ROOT}/TouchSolver/raw")
+set(TSACORE_SRC_ROOT "${SOLVERS_ROOT}/TouchSolver/TsaCore/src")
+file(GLOB_RECURSE TSACORE_CPP_SOURCES CONFIGURE_DEPENDS "${TSACORE_SRC_ROOT}/*.cpp")
+add_library(TsaCore STATIC ${TSACORE_CPP_SOURCES})
+target_include_directories(TsaCore PRIVATE "${TSACORE_SRC_ROOT}")
+target_compile_options(TsaCore PRIVATE
+    -fno-strict-aliasing
+    -fwrapv
+    -ffp-contract=off
+    -ftrivial-auto-var-init=zero
+)
+# 比对与覆盖率用：给算法库单独追加编译选项（如 -O2、-fprofile-instr-generate -fcoverage-mapping），
+# 回放工具其余部分保持 Debug
+set(EGO_TSACORE_EXTRA_FLAGS "" CACHE STRING "Extra compile options for the TSACore algorithm library")
+if (EGO_TSACORE_EXTRA_FLAGS)
+    separate_arguments(_ego_tsacore_extra NATIVE_COMMAND "${EGO_TSACORE_EXTRA_FLAGS}")
+    target_compile_options(TsaCore PRIVATE ${_ego_tsacore_extra})
+endif()
+# 分段计时（Common/Profile.h）：主流程每个步骤记累计耗时，回放 --profile 打印。默认关，打开后有计时开销
+option(EGO_TSACORE_PROFILE "Time each TSACore pipeline step (TsaRawReplay --profile)" OFF)
+if (EGO_TSACORE_PROFILE)
+    target_compile_definitions(TsaCore PRIVATE TSACORE_PROFILE)
+endif()
+# TsaCoreSolver 直接调用 TsaCore 的导出
+target_link_libraries(Solvers PUBLIC TsaCore)
 # Let Common see Solvers headers for SharedFrameBuffer
 target_include_directories(Common PUBLIC "${SOLVERS_ROOT}")
 
@@ -381,7 +423,7 @@ add_executable(EGoTouchService
 target_include_directories(EGoTouchService PRIVATE
     "${SERVICE_ROOT}/include"
 )
-target_link_libraries(EGoTouchService PRIVATE EGoTouchServiceCore $<$<CONFIG:Debug>:IPCCore> Device Host Common advapi32 setupapi hid)
+target_link_libraries(EGoTouchService PRIVATE EGoTouchServiceCore $<$<CONFIG:Debug>:IPCCore> Device Host Common advapi32 setupapi hid powrprof user32)
 target_compile_definitions(EGoTouchService PRIVATE
     EGOTOUCH_SERVICE_ENABLE_IPC=$<IF:$<CONFIG:Debug>,1,0>
 )
@@ -537,6 +579,22 @@ if (EGO_BUILD_TESTS)
         "dvrcore;negative;corruption;device-free"
         15
     )
+
+    # 离线重放工具：把 .dvrbin 灌回 TouchPipeline，用于复现只在真机出现的现象
+    add_executable(DvrReplay Tools/DvrReplay/main.cpp)
+    target_link_libraries(DvrReplay PRIVATE DVRCore Solvers Common)
+
+    # 同一段 .dvrbin 灌进 TsaCore（反编译 TSACore），逐帧打印 TSA_Rpt* 输出
+    add_executable(TsaRawReplay Tools/TsaRawReplay/main.cpp Tools/TsaRawReplay/StateTrace.cpp)
+    target_link_libraries(TsaRawReplay PRIVATE DVRCore Solvers Common)
+    target_compile_definitions(TsaRawReplay PRIVATE TSA_RAW_ROOT="${TSACORE_RAW_ROOT}")
+    if (EGO_TSACORE_EXTRA_FLAGS MATCHES "fprofile-instr-generate")
+        target_link_options(TsaRawReplay PRIVATE -fprofile-instr-generate)
+    endif()
+
+    # 手指管线吞吐基准：往返播放一段录制并统计每帧解算耗时
+    add_executable(TouchBench Tools/TouchBench/main.cpp)
+    target_link_libraries(TouchBench PRIVATE DVRCore Solvers Common)
 
     if (EGO_BUILD_TOOLS)
         add_executable(EGoTouchApp_ServiceProxyDvrBridgeTest

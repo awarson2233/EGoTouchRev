@@ -1,6 +1,7 @@
 #include "SystemStateMonitor.h"
 #include "Logger.h"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <condition_variable>
@@ -31,8 +32,6 @@ struct SystemStateMonitor::Impl {
     bool joining = false;
     bool selfStopCleanupPending = false;
     std::thread::id workerThreadId{};
-    SystemStateEventType lastDisplayType = SystemStateEventType::Unknown;
-    SystemStateEventType lastLidType = SystemStateEventType::Unknown;
     bool shutdownObserved = false;
 };
 
@@ -132,50 +131,44 @@ namespace {
 
 
 
-bool IsDisplayStateEvent(SystemStateEventType type) noexcept {
-    return type == SystemStateEventType::DisplayOn ||
-           type == SystemStateEventType::DisplayOff;
+// 同一组里的事件描述同一个电平（显示开 / 关、合盖、休眠 / 唤醒），组内只有最新的一个有意义。
+enum class LevelGroup : uint8_t { None, Display, Lid, Power };
+
+LevelGroup GroupOf(SystemStateEventType type) noexcept {
+    switch (type) {
+    case SystemStateEventType::DisplayOn:
+    case SystemStateEventType::DisplayOff:
+        return LevelGroup::Display;
+    case SystemStateEventType::LidOn:
+    case SystemStateEventType::LidOff:
+        return LevelGroup::Lid;
+    case SystemStateEventType::Suspend:
+    case SystemStateEventType::ResumeAutomatic:
+        return LevelGroup::Power;
+    default:
+        return LevelGroup::None;
+    }
 }
 
-bool IsLidStateEvent(SystemStateEventType type) noexcept {
-    return type == SystemStateEventType::LidOn ||
-           type == SystemStateEventType::LidOff;
+// 一批里同时出现时的派发顺序：终止最先，然后所有「下」沿，最后「上」沿。
+// 组内先后已经无从得知，先下后上至少保证下游看到过一次断电，并以「开」收尾；
+// 开着的结论由运行时在建链前用 ACPI 面板电源位再核实一次。
+int DispatchRank(SystemStateEventType type) noexcept {
+    switch (type) {
+    case SystemStateEventType::Shutdown:        return 0;
+    case SystemStateEventType::Suspend:         return 1;
+    case SystemStateEventType::LidOff:          return 2;
+    case SystemStateEventType::DisplayOff:      return 3;
+    case SystemStateEventType::ResumeAutomatic: return 4;
+    case SystemStateEventType::LidOn:           return 5;
+    case SystemStateEventType::DisplayOn:       return 6;
+    default:                                    return 7;
+    }
 }
 
 template <typename ImplT>
 void ResetNormalizationState(ImplT& impl) noexcept {
-    impl.lastDisplayType = SystemStateEventType::Unknown;
-    impl.lastLidType = SystemStateEventType::Unknown;
     impl.shutdownObserved = false;
-}
-
-template <typename ImplT>
-bool ShouldSuppressNormalizedEvent(const ImplT& impl, SystemStateEventType type) noexcept {
-    if (IsDisplayStateEvent(type)) {
-        return impl.lastDisplayType == type;
-    }
-    if (IsLidStateEvent(type)) {
-        return impl.lastLidType == type;
-    }
-    if (type == SystemStateEventType::Shutdown) {
-        return impl.shutdownObserved;
-    }
-    return false;
-}
-
-template <typename ImplT>
-void RememberNormalizedEvent(ImplT& impl, SystemStateEventType type) noexcept {
-    if (IsDisplayStateEvent(type)) {
-        impl.lastDisplayType = type;
-        return;
-    }
-    if (IsLidStateEvent(type)) {
-        impl.lastLidType = type;
-        return;
-    }
-    if (type == SystemStateEventType::Shutdown) {
-        impl.shutdownObserved = true;
-    }
 }
 
 SystemStateEvent BuildEvent(std::size_t index, const wchar_t* rawName) {
@@ -247,78 +240,51 @@ void DispatchNormalizedBatch(
     ImplT& impl,
     const std::array<std::size_t, SystemStateMonitor::kEventCount>& batchIndices,
     std::size_t batchCount) {
+    // 同一类型的多个传输事件（例如两种 resume）合并为一个
     std::array<NormalizedBatchEntry, kSystemStateEventTypeCount> entries{};
-
     for (std::size_t position = 0; position < batchCount; ++position) {
         const std::size_t eventIndex = batchIndices[position];
         SystemStateEvent event = BuildEvent(eventIndex, impl.eventNames[eventIndex].c_str());
         NormalizedBatchEntry& entry = entries[ToIndex(event.type)];
-
-        if (!entry.present) {
-            entry.present = true;
-            entry.firstPosition = position;
-            entry.event = event;
+        if (entry.present) {
+            LOG_INFO("Host", __func__, "Normalize",
+                     "Suppressing named event[{}] as duplicate transport for type={}.",
+                     eventIndex, ToString(event.type));
+            continue;
         }
+        entry.present = true;
+        entry.firstPosition = position;
+        entry.event = event;
     }
 
-    const bool displayBurstHasOnAndOff =
-        entries[ToIndex(SystemStateEventType::DisplayOn)].present &&
-        entries[ToIndex(SystemStateEventType::DisplayOff)].present;
+    std::array<const NormalizedBatchEntry*, kSystemStateEventTypeCount> ordered{};
+    std::size_t orderedCount = 0;
+    for (const auto& entry : entries) {
+        if (entry.present && entry.event.type != SystemStateEventType::Unknown) {
+            ordered[orderedCount++] = &entry;
+        }
+    }
+    std::sort(ordered.begin(), ordered.begin() + orderedCount,
+              [](const NormalizedBatchEntry* a, const NormalizedBatchEntry* b) {
+                  return DispatchRank(a->event.type) < DispatchRank(b->event.type);
+              });
 
-    for (std::size_t position = 0; position < batchCount; ++position) {
+    for (std::size_t i = 0; i < orderedCount; ++i) {
         if (!impl.running.load(std::memory_order_acquire)) {
             break;
         }
+        const SystemStateEvent& event = ordered[i]->event;
 
-        const std::size_t eventIndex = batchIndices[position];
-        const SystemStateNamedEventSpec* spec = TryGetNamedEventSpec(eventIndex);
-        const SystemStateEventType type = spec != nullptr ? spec->type : SystemStateEventType::Unknown;
-        const NormalizedBatchEntry& entry = entries[ToIndex(type)];
-
-        if (!entry.present) {
-            continue;
+        // 电平事件不去重：下游按电平处理，重复是幂等的；只有终止只派发一次
+        if (event.type == SystemStateEventType::Shutdown) {
+            if (impl.shutdownObserved) {
+                continue;
+            }
+            impl.shutdownObserved = true;
         }
 
-        if (entry.firstPosition != position) {
-            LOG_INFO(
-                "Host",
-                __func__,
-                "Normalize",
-                "Suppressing named event[{}] as duplicate transport for type={}.",
-                eventIndex,
-                ToString(type));
-            continue;
-        }
-
-        if (displayBurstHasOnAndOff && entry.event.type == SystemStateEventType::DisplayOff) {
-            LOG_INFO(
-                "Host",
-                __func__,
-                "Normalize",
-                "Suppressing DisplayOff from mixed display burst; DisplayOn wins for transient display changes.");
-            continue;
-        }
-
-        if (ShouldSuppressNormalizedEvent(impl, entry.event.type)) {
-            LOG_INFO(
-                "Host",
-                __func__,
-                "Normalize",
-                "Suppressing normalized duplicate type={} from named event[{}].",
-                ToString(entry.event.type),
-                entry.event.raw_index);
-            continue;
-        }
-
-        LOG_INFO(
-            "Host",
-            __func__,
-            "Signal",
-            "Named event[{}] normalized -> type={}.",
-            entry.event.raw_index,
-            ToString(entry.event.type));
-
-        RememberNormalizedEvent(impl, entry.event.type);
+        LOG_INFO("Host", __func__, "Signal", "Named event[{}] normalized -> type={}.",
+                 event.raw_index, ToString(event.type));
 
         SystemStateMonitor::EventCallback callback;
         {
@@ -328,7 +294,7 @@ void DispatchNormalizedBatch(
 
         if (callback) {
             try {
-                callback(entry.event);
+                callback(event);
             } catch (const std::exception& ex) {
                 LOG_ERROR("Host", __func__, "Callback", "SystemStateMonitor callback threw std::exception: {}", ex.what());
             } catch (...) {
@@ -546,6 +512,23 @@ bool SystemStateMonitor::SignalNamedEvent(SystemStateNamedEventId id, const wcha
     const std::size_t index = ToIndex(id);
     if (index >= kEventCount || eventNames[index] == nullptr || eventNames[index][0] == L'\0') {
         return false;
+    }
+
+    // 先撤掉同组里旧的电平，再置位新的：消费方任何时候最多看到组内一个事件，
+    // 先后顺序不会因为手动复位事件的合并而丢失（与华为宿主置位前先复位整组的做法一致）
+    const LevelGroup group = GroupOf(kSystemStateNamedEventSpecs[index].type);
+    if (group != LevelGroup::None) {
+        for (std::size_t other = 0; other < kEventCount; ++other) {
+            if (other == index || GroupOf(kSystemStateNamedEventSpecs[other].type) != group ||
+                eventNames[other] == nullptr || eventNames[other][0] == L'\0') {
+                continue;
+            }
+            HANDLE stale = OpenEventW(EVENT_MODIFY_STATE, FALSE, eventNames[other]);
+            if (stale != nullptr) {
+                ResetEvent(stale);
+                CloseHandle(stale);
+            }
+        }
     }
 
     HANDLE event_handle = OpenEventW(EVENT_MODIFY_STATE, FALSE, eventNames[index]);

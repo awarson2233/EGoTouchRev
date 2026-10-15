@@ -233,8 +233,16 @@ void DiagnosticsWorkbench::DrawHeatmap() {
                 }
 
                 for (const auto& contact : m_currentFrame.touch.output.contacts) {
-                    float mirrored_r = (rows - 1.0f) - contact.y;
-                    float mirrored_c = (cols - 1.0f) - contact.x;
+                    float contactX = contact.x;
+                    float contactY = contact.y;
+                    if (contactX >= cols && cols > 0) {
+                        contactX = (contactX / 2560.0f) * cols;
+                    }
+                    if (contactY >= rows && rows > 0) {
+                        contactY = (contactY / 1600.0f) * rows;
+                    }
+                    float mirrored_r = (rows - 1.0f) - contactY;
+                    float mirrored_c = (cols - 1.0f) - contactX;
                     float cx = canvas_p.x + mirrored_c * cell_w + cell_w * 0.5f;
                     float cy = canvas_p.y + mirrored_r * cell_h + cell_h * 0.5f;
 
@@ -493,7 +501,13 @@ void DiagnosticsWorkbench::DrawCoordinateTable() {
 
                 // Compute VHF screen coordinates (same formula as BuildTouchVhfReports)
                 auto toVhfVal = [](float gridVal, float gridMax, float logMax, bool invert) -> int {
-                    float norm = std::clamp(gridVal / gridMax, 0.0f, 1.0f);
+                    float norm = 0.0f;
+                    if (gridVal > gridMax && gridMax <= 60.0f) {
+                        const float pixelMax = (gridMax == 60.0f) ? 2560.0f : 1600.0f;
+                        norm = std::clamp(gridVal / pixelMax, 0.0f, 1.0f);
+                    } else {
+                        norm = std::clamp(gridVal / gridMax, 0.0f, 1.0f);
+                    }
                     int vhf = std::clamp(static_cast<int>(std::lround(norm * logMax)), 0, static_cast<int>(logMax));
                     return invert ? (static_cast<int>(logMax) - vhf) : vhf;
                 };

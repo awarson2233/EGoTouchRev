@@ -1,44 +1,60 @@
 #pragma once
 // ══════════════════════════════════════════════════════════════════════
-// TouchPipeline — Single-CPP linear orchestrator for the Touch solver.
-// Architecture: mirrors StylusPipeline (v2.4).
-//   - All algorithm modules are header-only (.hpp) and held as members.
-//   - Process() executes all phases linearly, no virtual dispatch.
-//   - Config schema/save/load unified in this class.
+// TouchPipeline — Linear orchestrator for the TSACore touch solver.
+// Architecture:
+//   - All 8 algorithm modules are modern C++23 header-only (.hpp)
+//   - Process() executes all stages linearly, no virtual dispatch.
+//   - Operates directly on the shared big frame (TouchBigFrame).
+//   - TouchPipeline.cpp contains ONLY orchestration logic, no heuristic
+//     calculations or complex branching.
 // ══════════════════════════════════════════════════════════════════════
 
 #include "SolverTypes.h"
+#include "TouchCoreTypes.hpp"
 
-// ── Phase 1: Frame Parsing ──
+// ── Stage 0: Frame Ingestion ──
 #include "MasterFrameParser.hpp"
 
-// ── Phase 2: Signal Conditioning ──
-#include "BaselineTracker.hpp"
-#include "CMFProcessor.hpp"
+// ── Stage 1: Signal Conditioning & Baseline Management ──
+#include "HardwareAnalyzerAndHold.hpp"
 
-// ── Phase 3: Feature Extraction ──
-#include "MacroZoneDetector.hpp"
-#include "PeakDetector.hpp"
-#include "TouchClassifier.hpp"
-#include "PalmBoxSuppressor.hpp"
+#include "BaselineAndDiff.hpp"
 
-// ── Phase 4: Contact Extraction & Post-Processing ──
-#include "ContactExtractor.hpp"
-#include "EdgeCompensation.hpp"
-#include "StylusTouchSuppressor.hpp"
-#include "TouchDiagnosticCache.hpp"
+// ── Stage 2: Common Mode Noise Filtering & Grid IIR ──
+#include "CmfAndGridFilter.hpp"
 
-// ── Phase 5: Tracking & Coordinate Filtering ──
-#include "TouchTracker.hpp"
-#include "CoordinateFilter.hpp"
+// ── Stage 2.5: Per-frame Dynamic Threshold Recomputation ──
+#include "TouchThold.hpp"
 
-// ── Phase 6: Gesture & Output ──
+// ── Stage 3: Peak Detection & Grip Region ──
+#include "PeakAndGripRegion.hpp"
+
+// ── Stage 4: Touch Zone BFS Flood & Weighted Centroid CoG ──
+#include "TouchZoneAndCentroid.hpp"
+
+// ── Stage 5: Multi-target Hungarian Tracking & Touch Event FSM ──
+#include "TrackingAndEvents.hpp"
+
+// ── Stage 6: Palm Rejection, Thenar & Grip Filtering ──
+#include "PalmAndGripRejection.hpp"
+
+// ── Stage 6.5: Four-state Touch Mode FSM ──
+#include "TouchModeFsm.hpp"
+
+// ── Stage 7: Touch Report Admission & Adaptive Speed IIR Filter ──
+#include "TouchReportAndFilter.hpp"
+
+// ── Stage 8: Display Mapping, Sensor Pitch Remap & Double Report ──
+#include "PitchRemapAndDisplay.hpp"
+
+// ── Backward Compatibility Headers ──
 #include "TouchGestureStateMachine.hpp"
 
 #include <atomic>
 #include <string>
 #include <vector>
 #include <array>
+#include <mutex>
 
 namespace Config {
 class ConfigBinder;
@@ -49,13 +65,13 @@ namespace Solvers {
 
 class TouchPipeline {
 public:
-    TouchPipeline() {}
+    TouchPipeline();
 
-    /// Main entry: processes one frame through all 6 phases.
+    /// Main entry: processes one frame through all stages using the shared big frame.
     bool Process(HeatmapFrame& frame);
     bool ProcessMasterParserOnly(HeatmapFrame& frame);
 
-    /// Runs the tracker/filter/gesture output stage. Exposed for focused unit tests.
+    /// Runs tracking and downstream stages.
     bool ProcessTrackingAndGesture(HeatmapFrame& frame);
     bool ProcessGestureOutput(HeatmapFrame& frame);
 
@@ -66,7 +82,7 @@ public:
     void registerBindings(Config::ConfigBinder& binder);
     void applyConfig(const Config::ConfigStore& store);
 
-    // ── Thread-safe accessors for UI/IPC (guarded by mutex) ──
+    // ── Thread-safe accessors for UI / IPC / Diagnostics ──
     std::vector<Touch::Peak> GetPeaks() const;
     std::array<uint8_t, 2400> GetTouchZones() const;
     std::array<uint8_t, 2400> GetZoneEdge() const;
@@ -75,43 +91,42 @@ public:
     int GetCachedZoneCount() const { return m_cachedZoneCount.load(std::memory_order_relaxed); }
     int GetCachedContactCount() const { return m_cachedContactCount.load(std::memory_order_relaxed); }
 
-    // ── Public module access (for direct parameter tuning from UI thread) ──
-    // NOTE: Write access must be done when pipeline is idle or via config reload.
-    Touch::MasterFrameParser         m_frameParser;
-    Touch::BaselineTracker            m_baseline;
-    Touch::CMFProcessor              m_cmf;
-    Touch::MacroZoneDetector         m_macroZoneDet;
-    Touch::PeakDetector              m_peakDet;
-    Touch::TouchClassifier           m_touchClassifier;
-    Touch::PalmBoxSuppressor         m_palmBoxSuppressor;
-    Touch::ContactExtractor          m_contactExtractor;
-    Touch::EdgeCompensator           m_edgeComp;
-    Touch::EdgeRejector              m_edgeReject;
-    Touch::StylusTouchSuppressor     m_stylusSuppress;
-    Touch::TouchTracker              m_tracker;
-    Touch::CoordinateFilter          m_coordFilter;
-    Touch::TouchGestureStateMachine  m_gesture;
+    // ── Authentic 8-Stage Algorithm Modules ──
+    Touch::MasterFrameParser        m_frameParser;    // Stage 0: 裸帧解析
+    Touch::HardwareAnalyzerAndHold  m_hwAnalyzer;     // Stage 0.5: 帧间硬件异常分析与异常帧保持
+    Touch::BaselineAndDiff          m_baseline;       // Stage 1: 差分与基线 FSM
+    Touch::CmfAndGridFilter         m_cmf;            // Stage 2: 1D Dim1 CMF 与网格滤波
+    Touch::TouchThold               m_dynThold;       // Stage 2.5: 每帧动态门限重算 (TSAPrmt_Process)
+    Touch::PeakAndGripRegion        m_peakDet;        // Stage 3: Mode 3 极值与 2D 握持墙
+    Touch::TouchZoneAndCentroid     m_touchZone;      // Stage 4: 4-连通 BFS 与定点加权重心
+    Touch::TrackingAndEvents        m_tracker;        // Stage 5: 匈牙利追踪与 PTP 状态机
+    Touch::PalmAndGripRejection     m_palmGrip;       // Stage 6: 大鱼际识别与握持防误触
+    Touch::TouchModeFsm             m_touchMode;      // Stage 6.5: 四态触控模式 FSM (TouchMode_Process)
+    Touch::TouchReportAndFilter     m_reportFilter;   // Stage 7: 上报网闸、自适应 IIR 与迟滞防抖
+    Touch::PitchRemapAndDisplay     m_displayRemap;   // Stage 8: 80 阶样条走线重映射与显示映射
+
+    // ── Compatibility aliases for external callers / tests ──
+    Touch::TouchGestureStateMachine m_legacyGesture;
+    Touch::TouchReportAndFilter&    m_coordFilter;
+    Touch::TrackingAndEvents&       m_gesture;
+    Touch::PalmAndGripRejection&    m_palmBoxSuppressor;
+    Touch::TouchZoneAndCentroid&    m_contactExtractor;
 
 private:
-    void ReserveContactCapacity(HeatmapFrame& frame) const;
-    bool ProcessFrameParser(HeatmapFrame& frame);
-    bool ProcessSignalConditioning(HeatmapFrame& frame);
-    void GenerateContacts(HeatmapFrame& frame);
-    void PostProcessContacts(HeatmapFrame& frame);
     void UpdateContactCaches(HeatmapFrame& frame);
     void ResetIdleOutputs(HeatmapFrame& frame);
+    /// 帧尾把本帧触点统计回灌给 Stage 2.5 / Stage 4 的跨帧输入
+    /// （对位 PrevTouch_PostProcess）。
+    void LatchPrevTouchInputs();
+    /// Stage 6.5：对位 TSA_MSProcess 里 GripFilter_Process 之后那一次
+    /// TouchMode_Process 调用（AntiTouch_Process / TouchReport_Process 之前）。
+    void RunTouchModeFsm();
 
-#if EGOTOUCH_DIAG
-    void UpdateDiagnosticCaches(HeatmapFrame& frame);
-#endif
+    // 共享大帧物理总线实例
+    Touch::TouchBigFrame m_bigFrame;
 
-#if EGOTOUCH_DIAG
-    Touch::DiagnosticCache m_diagCache;
-#endif
-
-    bool m_prevHasLiveTouchState = false;
-
-    // UI-thread-safe cache
+    // 线程安全互斥锁与原子计数
+    mutable std::mutex m_diagMu;
     std::atomic<int> m_cachedPeakCount{0};
     std::atomic<int> m_cachedZoneCount{0};
     std::atomic<int> m_cachedContactCount{0};

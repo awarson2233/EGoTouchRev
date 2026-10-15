@@ -13,20 +13,20 @@ public:
 
     // ── IIR coefficient selection (GetIIRCoef equivalent) ──
     // Hover mode params (no pressure)
-    int32_t m_coefLowHover = 10;     // asa[0xA5E]
-    int32_t m_coefHighHover = 6;     // asa[0xA5F]
-    int32_t m_speedTholdHover = 10;  // 0x14
+    int32_t m_coefLowHover = 2;      // asa[0xA5E]
+    int32_t m_coefHighHover = 16;    // asa[0xA5F]
+    int32_t m_speedTholdHover = 20;  // 0x14
 
     // Writing mode params (has pressure)
-    int32_t m_coefLowWriting = 18;        // asa[0xA5C]
-    int32_t m_coefHighWriting = 26;      // asa[0xA5D]
+    int32_t m_coefLowWriting = 6;         // asa[0xA5C]
+    int32_t m_coefHighWriting = 18;      // asa[0xA5D]
     int32_t m_speedTholdWriting = 10;    // 0x0A
 
-    int32_t m_speedMax = 60;  // 0xCD — speed value at which high coef is fully engaged
+    int32_t m_speedMax = 205; // 0xCD — speed value at which high coef is fully engaged
     int32_t m_maxCoef = 32;    // asa[0xA60] — denominator in IIR formula
 
     // ── Output ──
-    uint16_t m_currentCoef = 10;
+    uint16_t m_currentCoef = 2;
 
     inline void Reset() {
         m_iirFracX = 0;
@@ -136,12 +136,14 @@ private:
             selected = coefLow;
         } else if (speedValue >= m_speedMax) {
             selected = coefHigh;
+        } else if (speedThreshold == m_speedMax - 1) {
+            selected = static_cast<uint16_t>((coefLow + coefHigh) / 2);
         } else {
-            // Linear interpolation between low and high
+            // Linear interpolation between low and high; TSACore spans [threshold, 0xCC]
             selected = static_cast<uint16_t>(
                 coefLow + (static_cast<int>(coefHigh - coefLow) *
                            (speedValue - speedThreshold)) /
-                              (m_speedMax - speedThreshold));
+                              (m_speedMax - 1 - speedThreshold));
         }
         return selected;
     }

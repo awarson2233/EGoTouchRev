@@ -47,6 +47,8 @@ private:
     void SignalShutdownTransportAndStop() noexcept;
     void RegisterPowerNotifications();
     void UnregisterPowerNotifications();
+    void RegisterConsolePowerNotifications();
+    void UnregisterConsolePowerNotifications();
     void ReportStatus(DWORD state, DWORD waitHint = 0);
     void WaitForStop();
 

@@ -80,6 +80,42 @@ void TestReconnectResetsSession() {
             "reconnected session should send init params again");
 }
 
+void TestLinkRecoveryRearmResendsInitParamsFromMcuEventChain() {
+    Himax::Pen::PenUsbInitSession session;
+    session.OnConnected();
+    session.OnEvent(EC::PenScreenStatus);
+    Require(session.OnEvent(EC::PenRepParam) == Action::SendFactoryInitProtocolParams,
+            "initial handshake should reach 0x7D01");
+    Require(session.OnEvent(EC::PenScreenStatus) == Action::None,
+            "running session should ignore 0x77 before re-arm");
+
+    session.RearmForLinkRecovery();
+
+    Require(session.OnEvent(EC::PenScreenStatus) == Action::SendSecondMcuStatusQuery,
+            "re-armed session should accept MCU 0x77 and request the second 0x7701");
+    Require(session.OnEvent(EC::PenRepParam) == Action::SendFactoryInitProtocolParams,
+            "re-armed session should resend 0x7D01 after 0x7B");
+}
+
+void TestLinkRecoveryRearmIsIdempotentBeforeMcuEvents() {
+    Himax::Pen::PenUsbInitSession session;
+    session.OnConnected();
+    session.OnEvent(EC::PenScreenStatus);
+    session.OnEvent(EC::PenRepParam);
+
+    session.RearmForLinkRecovery();
+    session.RearmForLinkRecovery();
+
+    Require(session.OnEvent(EC::PenRepParam) == Action::None,
+            "re-armed session must still wait for 0x77 before honouring 0x7B");
+    Require(session.OnEvent(EC::PenScreenStatus) == Action::SendSecondMcuStatusQuery,
+            "repeated re-arm should leave the session awaiting 0x77");
+    Require(session.OnEvent(EC::PenRepParam) == Action::SendFactoryInitProtocolParams,
+            "repeated re-arm should still reach 0x7D01 exactly once per cycle");
+    Require(session.OnEvent(EC::PenRepParam) == Action::None,
+            "0x7D01 must not repeat within the same recovery cycle");
+}
+
 } // namespace
 
 int main() {
@@ -89,6 +125,8 @@ int main() {
         TestDuplicateMcuStatusDoesNotRepeatSecondQuery();
         TestRunningStateIgnoresFurtherEvents();
         TestReconnectResetsSession();
+        TestLinkRecoveryRearmResendsInitParamsFromMcuEventChain();
+        TestLinkRecoveryRearmIsIdempotentBeforeMcuEvents();
         std::cout << "[TEST] Device Pen USB init session tests passed.\n";
         return 0;
     } catch (const std::exception& ex) {

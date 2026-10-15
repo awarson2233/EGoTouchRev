@@ -3,6 +3,7 @@
 #include "SolverTypes.h"
 #include "GhostSuppressor.hpp"
 #include "StylusTouchSuppressor.hpp"
+#include "TrackingAndEvents.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -1029,5 +1030,9 @@ inline bool TouchTracker::Process(HeatmapFrame& frame) {
     }
     return true;
 }
+
+// ── Compatibility Aliases ─────────────────────────────────────────────
+using Stage5Tracker = TrackingAndEvents;
+using TrackingAndEventsModern = TrackingAndEvents;
 
 }} // namespace Solvers::Touch

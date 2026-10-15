@@ -132,6 +132,27 @@ void VhfReporter::FlushTouchAllUp() {
     WriteTouchAllUpLocked();
 }
 
+void VhfReporter::FlushAllUp() {
+    const bool hadTouch =
+        m_hadTouchLastFrame.exchange(false, std::memory_order_acq_rel);
+    const bool hadStylus =
+        m_hadStylusActiveLastFrame.exchange(false, std::memory_order_acq_rel);
+    if (!hadTouch && !hadStylus) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lk(m_mu);
+    if (m_closed) {
+        return;
+    }
+    if (hadTouch) {
+        WriteTouchAllUpLocked();
+    }
+    if (hadStylus) {
+        WriteStylusNeutralLocked();
+    }
+}
+
 void VhfReporter::Close() {
     std::lock_guard<std::mutex> lk(m_mu);
     m_closed = true;

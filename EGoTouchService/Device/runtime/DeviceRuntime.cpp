@@ -5,6 +5,7 @@
 #include "config/SchemaValidator.h"
 
 
+#include <algorithm>
 #include <chrono>
 #include <mutex>
 #include <string>
@@ -12,8 +13,35 @@
 #include <utility>
 
 namespace {
-constexpr std::chrono::milliseconds kEventDebounce{400};
-constexpr std::chrono::milliseconds kDisplayOffSuspendDelay{2000};
+// 只灭屏（不合盖、不休眠）时保留链路的宽限期。宽限内亮屏且面板没断过电就直接继续取帧。
+constexpr std::chrono::milliseconds kDisplayOffGrace{2000};
+// 宽限期内读 ACPI 面板电源位的间隔
+constexpr std::chrono::milliseconds kHoldPanelPollInterval{100};
+// 宿主认为屏亮着、面板电源位却是断的时，等它回来的轮询间隔（原厂 WaitNotify 也是约 200 ms 查一次）
+constexpr std::chrono::milliseconds kPanelPollInterval{200};
+// 总线没就绪（面板 / 触摸部分没上电）时的探测间隔
+constexpr std::chrono::milliseconds kBusPollInterval{500};
+// 状态机心跳间隔
+constexpr std::chrono::seconds kHeartbeatInterval{30};
+// 连续建链失败这么多次后，连设备句柄一起重开
+constexpr int kReopenAfterFailures = 5;
+// 待机 / 手动模式下的空等上限（输入变化会立刻唤醒）
+constexpr std::chrono::milliseconds kStandbyWait{1000};
+constexpr std::chrono::milliseconds kManualModeWait{50};
+
+// thp_afe_screen_on 在总线没准备好时先等 1.5 s 再重试；这里由短到长退避、封顶 2 s，不设次数上限
+std::chrono::milliseconds BringUpBackoff(int failures) noexcept {
+  static constexpr std::array<int, 5> kStepsMs{200, 500, 1000, 1500, 2000};
+  const int idx = std::clamp(failures, 1, static_cast<int>(kStepsMs.size())) - 1;
+  return std::chrono::milliseconds{kStepsMs[static_cast<std::size_t>(idx)]};
+}
+
+const char *StandbyReason(const PowerInputs &in) noexcept {
+  if (in.systemSuspended) return "system suspended";
+  if (!in.lidOpen) return "lid closed";
+  if (!in.panelOn) return "panel power off";
+  return "display off past grace period";
+}
 
 uint8_t PayloadByteOrZero(const Himax::Pen::PenEvent &ev) noexcept {
   return ev.payload.empty() ? 0 : ev.payload[0];
@@ -139,8 +167,25 @@ const char *ToString(workerState s) noexcept {
     return "streaming";
   case workerState::recover:
     return "recover";
+  case workerState::hold:
+    return "hold";
   default:
     return "unknown";
+  }
+}
+
+const char *ToString(PowerTarget t) noexcept {
+  switch (t) {
+  case PowerTarget::Quit:
+    return "Quit";
+  case PowerTarget::Standby:
+    return "Standby";
+  case PowerTarget::Hold:
+    return "Hold";
+  case PowerTarget::Active:
+    return "Active";
+  default:
+    return "Unknown";
   }
 }
 
@@ -205,7 +250,7 @@ std::optional<command> BuildPenConnectionAfeCommand(
 DeviceRuntime::DeviceRuntime(const std::wstring &master,
                              const std::wstring &slave,
                              const std::wstring &interrupt)
-    : m_chip(master, slave, interrupt) {
+    : m_chip(master, slave), m_panelWatcher(interrupt) {
   m_vhfReporter.SetStylusPacketSensorRows(
       m_stylusPipeline.GetPacketSensorRows());
   m_vhfReporter.SetStylusPacketSensorCols(
@@ -236,14 +281,16 @@ DeviceRuntime::StartRequestResult DeviceRuntime::StartStateMachine() {
 
   if (m_running.load(std::memory_order_acquire)) {
     bool lifecycleAccepting = false;
+    bool shutdownRequested = false;
     {
       std::lock_guard<std::mutex> lk(m_mu);
       lifecycleAccepting = m_acceptExternalAfeCommands;
+      shutdownRequested = m_inputs.shutdown;
     }
     const bool workerIsQuitting =
         !lifecycleAccepting ||
         m_state.load(std::memory_order_acquire) == workerState::quit ||
-        m_stopReason.load(std::memory_order_acquire) == StopReason::Shutdown;
+        shutdownRequested;
     if (!workerIsQuitting) {
       return StartRequestResult::AlreadyRunning;
     }
@@ -270,11 +317,9 @@ DeviceRuntime::StartRequestResult DeviceRuntime::StartStateMachine() {
   // Initialize every new-generation state before publishing running/accepting.
   // IngestPolicyEvent uses m_lifecycleMu, so events linearized after publication
   // cannot be overwritten by startup resets.
-  m_stopReason.store(StopReason::None, std::memory_order_release);
+  // 显示 / 合盖 / 休眠是宿主电平，跨越 Stop/Start 保留；只有终止请求属于上一代 worker。
   SetState(workerState::ready);
-  m_needSuspendDeinit.store(false, std::memory_order_release);
-  m_systemSuspendObserved.store(false, std::memory_order_release);
-  m_consecutiveFrameErrors = 0;
+  m_link = LinkState{};
 
   {
     std::lock_guard<std::mutex> penIngressLock(m_penIngressMu);
@@ -290,8 +335,9 @@ DeviceRuntime::StartRequestResult DeviceRuntime::StartStateMachine() {
 
     std::lock_guard<std::mutex> lk(m_mu);
     CancelQueuedCommandsLocked("cancelled: superseded by runtime start");
-    m_displayOffSuspendPending = false;
-    m_lastEventByType.fill(std::chrono::steady_clock::time_point{});
+    m_inputs.shutdown = false;
+    ++m_inputs.revision;
+    m_seenRevision = m_inputs.revision;
     m_recoverCount = 0;
     m_lastNote = "Runtime started";
     m_acceptExternalAfeCommands = true;
@@ -336,8 +382,10 @@ void DeviceRuntime::Stop() {
       m_acceptExternalAfeCommands = false;
       m_stopped.store(true, std::memory_order_release);
       CancelQueuedCommandsLocked("cancelled: runtime stop");
+      m_inputs.shutdown = true;
+      ++m_inputs.revision;
     }
-    m_stopReason.store(StopReason::Shutdown, std::memory_order_release);
+    m_inputsCv.notify_all();
 
     if (!m_running.load(std::memory_order_acquire) && !m_thread.joinable() &&
         !m_selfStopDetached) {
@@ -445,7 +493,13 @@ void DeviceRuntime::ApplyConfigStore(const Config::ConfigStore& store) {
 #endif
 
 bool DeviceRuntime::IsShutdownRequested() const {
-  return m_stopReason.load() == StopReason::Shutdown;
+  std::lock_guard<std::mutex> lk(m_mu);
+  return m_inputs.shutdown;
+}
+
+PowerInputs DeviceRuntime::GetPowerInputs() const {
+  std::lock_guard<std::mutex> lk(m_mu);
+  return m_inputs;
 }
 
 #ifdef _DEBUG
@@ -484,9 +538,24 @@ void DeviceRuntime::SetMasterParserOnlyMode(bool enabled) {
   }
 }
 
+void DeviceRuntime::SetTsaCoreSolverEnabled(bool enabled) {
+  const bool wasEnabled =
+      m_useTsaCoreSolver.exchange(enabled, std::memory_order_acq_rel);
+  if (wasEnabled != enabled) {
+    // 两个解算器各自维护触点 ID，切换时先让 HID 侧全部抬起
+    std::lock_guard<std::mutex> lk(m_pipelineMu);
+    m_vhfReporter.FlushTouchAllUp();
+  }
+}
+
+bool DeviceRuntime::IsTsaCoreSolverEnabled() const {
+  return m_useTsaCoreSolver.load(std::memory_order_relaxed);
+}
+
 void DeviceRuntime::IngestBtMcuPressure(uint16_t p) {
   std::lock_guard<std::mutex> lk(m_pipelineMu);
   m_stylusPipeline.SetBtMcuPressure(p);
+  m_tsaCoreSolver.OnBtPressure(0, 0, 0, p);
 }
 
 void DeviceRuntime::IngestBtMcuPressurePacket(
@@ -494,6 +563,8 @@ void DeviceRuntime::IngestBtMcuPressurePacket(
     const std::array<uint16_t, 4> &rawPressure, uint8_t freq1, uint8_t freq2) {
   std::lock_guard<std::mutex> lk(m_pipelineMu);
   m_stylusPipeline.SetBtMcuPressurePacket(pressure, rawPressure, freq1, freq2);
+  // ApDaemon 收到压力包时同样通知 TSACore：它据此判断蓝牙笔是否还活着
+  m_tsaCoreSolver.OnBtPressure(pressure[0], pressure[1], pressure[2], pressure[3]);
 }
 
 void DeviceRuntime::ApplyPenStateToStylusPipeline() {
@@ -679,6 +750,8 @@ uint64_t DeviceRuntime::EnqueueCommand(command cmd, CommandSource src,
       LOG_ERROR("Runtime", __func__, "Queue", "Command queue overflow! Command dropped.");
     }
   }
+  // IC 在 IDLE 时一次取帧会阻塞约 3 s，命令不等它：取消这次读，worker 回到循环顶上先执行命令
+  m_chip.CancelPendingFrameRead();
   return commandId;
 }
 
@@ -695,12 +768,13 @@ void DeviceRuntime::IngestPolicyEvent(const RuntimePolicyEvent &ev) {
 
   if (ev.type != EventType::Shutdown) {
     bool acceptingCommands = false;
+    bool shutdownRequested = false;
     {
       std::lock_guard<std::mutex> lk(m_mu);
       acceptingCommands = m_acceptExternalAfeCommands;
+      shutdownRequested = m_inputs.shutdown;
     }
-    if (m_stopInProgress || !acceptingCommands ||
-        m_stopReason.load(std::memory_order_acquire) == StopReason::Shutdown) {
+    if (m_stopInProgress || !acceptingCommands || shutdownRequested) {
       LOG_INFO("Runtime", __func__, "Policy",
                "Ignoring non-terminal event ({}) while termination is in progress.",
                ToString(ev.type));
@@ -708,114 +782,58 @@ void DeviceRuntime::IngestPolicyEvent(const RuntimePolicyEvent &ev) {
     }
   }
 
+  // 事件只改电平，不碰 worker 状态：重复事件幂等，乱序到达时以最后一次为准，
+  // 什么时候静默、什么时候重新建链由 worker 根据电平决定。
   const auto now = std::chrono::steady_clock::now();
-  const bool isWakeEvent = ev.type == EventType::DisplayOn ||
-                           ev.type == EventType::LidOn ||
-                           ev.type == EventType::ResumeAutomatic;
-  {
-    std::lock_guard<std::mutex> lk(m_mu);
-    const size_t key = static_cast<size_t>(ev.type);
-    if (key < m_lastEventByType.size()) {
-      auto lastTime = m_lastEventByType[key];
-      if (lastTime != std::chrono::steady_clock::time_point{} &&
-          now - lastTime < kEventDebounce &&
-          !(isWakeEvent && m_displayOffSuspendPending)) {
-        return;
-      }
-      m_lastEventByType[key] = now;
-    }
-  }
-
   switch (ev.type) {
-  case EventType::DisplayOff: {
-    std::lock_guard<std::mutex> lk(m_mu);
-    m_displayOffSuspendPending = true;
-    m_displayOffSuspendDeadline = now + kDisplayOffSuspendDelay;
-  }
-    LOG_INFO("Runtime", __func__, "Policy",
-             "DisplayOff pending; suspend delayed by {} ms.",
-             kDisplayOffSuspendDelay.count());
-    m_chip.CancelPendingFrameRead();
-    break;
-  case EventType::LidOff: {
-    std::lock_guard<std::mutex> lk(m_mu);
-    m_displayOffSuspendPending = false;
-  }
-    LOG_INFO("Runtime", __func__, "Policy",
-             "Sleep event ({}), requesting suspend.", ToString(ev.type));
-    m_chip.CancelPendingFrameRead();
-    {
-      StopReason expected = StopReason::None;
-      m_stopReason.compare_exchange_strong(
-          expected, StopReason::ScreenOff, std::memory_order_acq_rel);
-    }
-    break;
-  case EventType::Suspend: {
-    {
-      std::lock_guard<std::mutex> lk(m_mu);
-      m_displayOffSuspendPending = false;
-    }
-    m_systemSuspendObserved.store(true, std::memory_order_release);
-    LOG_INFO("Runtime", __func__, "Policy",
-             "System suspend event, requesting immediate suspend.");
-    m_chip.CancelPendingFrameRead();
-    {
-      StopReason expected = StopReason::None;
-      m_stopReason.compare_exchange_strong(
-          expected, StopReason::ScreenOff, std::memory_order_acq_rel);
-    }
-    break;
-  }
   case EventType::DisplayOn:
+    UpdateInputs("DisplayOn", [&](PowerInputs &in) {
+      if (in.displayOn) return false;
+      in.displayOn = true;
+      in.displayOnAt = now;
+      return true;
+    }, false);
+    break;
+  case EventType::DisplayOff:
+    UpdateInputs("DisplayOff", [&](PowerInputs &in) {
+      ++in.downEpoch;
+      if (in.displayOn) {
+        in.displayOn = false;
+        in.displayOffAt = now;
+      }
+      return true;
+    }, true);
+    break;
   case EventType::LidOn:
-  case EventType::ResumeAutomatic: {
-    bool cancelledDisplayOff = false;
-    {
-      std::lock_guard<std::mutex> lk(m_mu);
-      cancelledDisplayOff = m_displayOffSuspendPending;
-      m_displayOffSuspendPending = false;
-    }
-
-    const bool resumedAfterSystemSuspend =
-        m_systemSuspendObserved.exchange(false, std::memory_order_acq_rel);
-    StopReason expected = StopReason::ScreenOff;
-    const bool clearedScreenOff =
-        m_stopReason.compare_exchange_strong(expected, StopReason::None);
-    m_needSuspendDeinit.store(false, std::memory_order_release);
-
-    LOG_INFO("Runtime", __func__, "Policy",
-             "Wake event ({}), attempting resume.", ToString(ev.type));
-    if (cancelledDisplayOff) {
-      LOG_INFO("Runtime", __func__, "Policy",
-               "Wake event cancelled pending DisplayOff suspend.");
-    }
-    if (clearedScreenOff) {
-      LOG_INFO("Runtime", __func__, "Policy",
-               "Wake event cleared pending ScreenOff stop reason.");
-    }
-
-    const workerState state = m_state.load(std::memory_order_acquire);
-    // Baseline is now inherited across state transitions; no explicit
-    // reacquire needed.
-    if (state == workerState::suspend ||
-        (resumedAfterSystemSuspend && IsRunning())) {
-      m_chip.CancelPendingFrameRead();
-      SetState(workerState::ready);
-      LOG_INFO("Runtime", __func__, "Policy", "{}",
-               resumedAfterSystemSuspend
-                   ? "Resumed after system suspend -> ready for reinitialization."
-                   : "Resumed from suspend -> ready (zero-cost wakeup).");
-    } else if (IsRunning()) {
-      LOG_INFO("Runtime", __func__, "Policy",
-               "Runtime already active; wake event does not restart worker.");
-    } else {
-      LOG_INFO("Runtime", __func__, "Policy",
-               "Wake event ignored because runtime is stopped.");
-    }
-  } break;
+    UpdateInputs("LidOn", [&](PowerInputs &in) {
+      if (in.lidOpen) return false;
+      in.lidOpen = true;
+      return true;
+    }, false);
+    break;
+  case EventType::LidOff:
+    UpdateInputs("LidOff", [&](PowerInputs &in) {
+      ++in.downEpoch;
+      in.lidOpen = false;
+      return true;
+    }, true);
+    break;
+  case EventType::Suspend:
+    UpdateInputs("Suspend", [&](PowerInputs &in) {
+      ++in.downEpoch;
+      in.systemSuspended = true;
+      return true;
+    }, true);
+    break;
+  case EventType::ResumeAutomatic:
+    // 系统唤醒只说明「休眠结束」：屏幕是否亮由显示电平决定，链路一律要重新证明
+    UpdateInputs("ResumeAutomatic", [&](PowerInputs &in) {
+      ++in.downEpoch;
+      in.systemSuspended = false;
+      return true;
+    }, true);
+    break;
   case EventType::Shutdown: {
-    LOG_INFO("Runtime", __func__, "Policy",
-             "Shutdown event, requesting termination.");
     {
       std::lock_guard<std::mutex> penIngressLock(m_penIngressMu);
       m_acceptPenAfeCommands = false;
@@ -825,12 +843,40 @@ void DeviceRuntime::IngestPolicyEvent(const RuntimePolicyEvent &ev) {
       m_acceptExternalAfeCommands = false;
       CancelQueuedCommandsLocked("cancelled: shutdown requested");
     }
-    m_stopReason.store(StopReason::Shutdown, std::memory_order_release);
-    m_chip.CancelPendingFrameRead();
+    UpdateInputs("Shutdown", [&](PowerInputs &in) {
+      if (in.shutdown) return false;
+      in.shutdown = true;
+      return true;
+    }, true);
     break;
   }
   default:
     break;
+  }
+}
+
+void DeviceRuntime::UpdateInputs(const char *why,
+                                 const std::function<bool(PowerInputs &)> &mutate,
+                                 bool interruptFrameRead) {
+  PowerInputs snapshot{};
+  bool changed = false;
+  {
+    std::lock_guard<std::mutex> lk(m_mu);
+    changed = mutate(m_inputs);
+    if (changed) {
+      ++m_inputs.revision;
+    }
+    snapshot = m_inputs;
+  }
+  LOG_NOTICE("PowerSM", "IngestPolicyEvent", "input", "{}: {}{}", why, DescribeInputs(snapshot),
+             changed ? "" : " (unchanged)");
+  if (!changed) {
+    return;
+  }
+  m_inputsCv.notify_all();
+  if (interruptFrameRead) {
+    // 把可能阻塞在读帧里的 worker 叫醒，让它尽快按新电平行动
+    m_chip.CancelPendingFrameRead();
   }
 }
 
@@ -981,138 +1027,315 @@ ThreadResult DeviceRuntime::WorkerMain() {
     workerHook();
   }
 
+  // 面板电源通道跟着 worker 的生命周期走
+  m_panelWatcher.Start([this](bool panelOn, uint8_t) { NotePanelPower(panelOn, "interrupt"); });
+
   while (true) {
-    bool displayOffSuspendDue = false;
+    PowerInputs in{};
     {
       std::lock_guard<std::mutex> lk(m_mu);
-      if (m_displayOffSuspendPending &&
-          std::chrono::steady_clock::now() >= m_displayOffSuspendDeadline &&
-          m_stopReason.load(std::memory_order_acquire) !=
-              StopReason::Shutdown) {
-        m_displayOffSuspendPending = false;
-        SetState(workerState::suspend);
-        m_needSuspendDeinit.store(true, std::memory_order_release);
-        CancelQueuedCommandsLocked("cancelled: display-off suspend");
-        displayOffSuspendDue = true;
-      }
+      in = m_inputs;
+      m_seenRevision = in.revision;
     }
-    if (displayOffSuspendDue) {
-      LOG_INFO("Runtime", __func__, "Policy",
-               "DisplayOff remained active for {} ms; entering suspend.",
-               kDisplayOffSuspendDelay.count());
-      continue;
-    }
+    const PowerTarget target = ComputeTarget(in, std::chrono::steady_clock::now());
+    MaybeHeartbeat(target, in);
 
-    // ── 检查停止请求，根据 StopReason 分流到 suspend 或 quit ──
-    auto reason =
-        m_stopReason.exchange(StopReason::None, std::memory_order_acq_rel);
-    if (reason != StopReason::None) {
-      if (reason == StopReason::ScreenOff) {
-        LOG_INFO("Runtime", __func__, "StopReq",
-                 "StopReason::ScreenOff consumed -> suspend");
-        SetState(workerState::suspend);
-        m_needSuspendDeinit.store(true, std::memory_order_release);
-      } else {
-        LOG_INFO("Runtime", __func__, "StopReq",
-                 "StopReason::Shutdown consumed -> quit");
-        {
-          std::lock_guard<std::mutex> penIngressLock(m_penIngressMu);
-          m_acceptPenAfeCommands = false;
-          m_penReplay.CompleteInitCycle();
-        }
-        m_stopped.store(true, std::memory_order_release);
-        SetState(workerState::quit);
+    if (target == PowerTarget::Quit) {
+      m_panelWatcher.Stop();
+      {
+        std::lock_guard<std::mutex> penIngressLock(m_penIngressMu);
+        m_acceptPenAfeCommands = false;
+        m_penReplay.CompleteInitCycle();
       }
-      std::lock_guard<std::mutex> lk(m_mu);
-      CancelQueuedCommandsLocked(
-          reason == StopReason::Shutdown
-              ? "cancelled: shutdown consumed"
-              : "cancelled: screen-off suspend");
+      m_stopped.store(true, std::memory_order_release);
+      {
+        std::lock_guard<std::mutex> lk(m_mu);
+        CancelQueuedCommandsLocked("cancelled: shutdown consumed");
+      }
+      OnQuit();
+      LOG_INFO("Runtime", __func__, "quit", "Worker exited, m_running=false.");
+      {
+        std::lock_guard<std::mutex> lifecycleLock(m_lifecycleMu);
+        m_workerThreadId = std::thread::id{};
+        m_selfStopDetached = false;
+        m_running.store(false, std::memory_order_release); // allow restart via Start()
+        m_lifecycleCv.notify_all();
+      }
+      return ThreadResult();
     }
 
     DrainCommands();
 
-    auto curState = m_state.load(std::memory_order_acquire);
-    switch (curState) {
-    case workerState::ready:
-      OnReady();
-      break;
-    case workerState::streaming:
-      OnStreaming();
-      break;
-    case workerState::recover:
-      OnRecover();
-      break;
-    case workerState::suspend:
-      OnSuspend();
-      break;
-    case workerState::quit:
-      if (OnQuit()) {
-        LOG_INFO("Runtime", __func__, "quit",
-                 "Worker exited, m_running=false.");
-        {
-          std::lock_guard<std::mutex> lifecycleLock(m_lifecycleMu);
-          m_workerThreadId = std::thread::id{};
-          m_selfStopDetached = false;
-          m_running.store(false, std::memory_order_release); // allow restart via Start()
-          m_lifecycleCv.notify_all();
-        }
-        return ThreadResult();
+    switch (target) {
+    case PowerTarget::Standby:
+      if (m_state.load(std::memory_order_acquire) != workerState::suspend) {
+        EnterStandby(StandbyReason(in));
       }
+      StepStandby(in);
+      break;
+    case PowerTarget::Hold:
+      StepHold(in);
+      break;
+    case PowerTarget::Active:
+      StepActive(in);
+      break;
+    default:
       break;
     }
   }
-  return ThreadResult();
 }
 
-// ----------- 状态处理 -----------
+PowerTarget DeviceRuntime::ComputeTarget(
+    const PowerInputs &in, std::chrono::steady_clock::time_point now) const {
+  if (in.shutdown) return PowerTarget::Quit;
+  if (in.systemSuspended || !in.lidOpen || !in.panelOn) return PowerTarget::Standby;
+  if (!in.displayOn) {
+    return now - in.displayOffAt < kDisplayOffGrace ? PowerTarget::Hold
+                                                    : PowerTarget::Standby;
+  }
+  return PowerTarget::Active;
+}
 
-void DeviceRuntime::OnReady() {
-  if (m_autoMode.load()) {
-    BeginPenReplayInitCycle();
-    if (auto r = m_chip.Init(); !r) {
-      SetState(workerState::recover);
+bool DeviceRuntime::WaitForInputs(std::chrono::milliseconds timeout) {
+  std::unique_lock<std::mutex> lk(m_mu);
+  return m_inputsCv.wait_for(lk, timeout, [this]() {
+    return m_inputs.revision != m_seenRevision;
+  });
+}
+
+// ----------- 阶段处理 -----------
+
+void DeviceRuntime::StepStandby(const PowerInputs &in) {
+  if (!in.systemSuspended && in.lidOpen && in.displayOn) {
+    // 只差面板电源位：宿主认为屏是亮的，等它回来。中断通知是主路，这里的轮询保证漏掉通知也能恢复；
+    // 读不到时按已上电处理，交给建链阶段的总线探测去判断。
+    NotePanelPower(m_chip.ReadPanelPower().value_or(true), "standby poll");
+    (void)WaitForInputs(kPanelPollInterval);
+    return;
+  }
+  // 其余的待机不碰硬件（读 ACPI 也会让 SPB 控制器保持唤醒），只等宿主电平变化
+  (void)WaitForInputs(kStandbyWait);
+}
+
+void DeviceRuntime::StepHold(const PowerInputs &in) {
+  switch (m_state.load(std::memory_order_acquire)) {
+  case workerState::streaming:
+    LeaveStreaming("display off");
+    m_link.holdPanelDrops = in.panelDrops;
+    TransitionTo(workerState::hold, "display off; link kept during grace period");
+    return;
+  case workerState::hold:
+    // 宽限期内盯着面板电源：一旦断电（或读不到）就不再保留链路，直接待机，亮屏后重新建链
+    NotePanelPower(m_chip.ReadPanelPower().value_or(false), "hold poll");
+    (void)WaitForInputs(kHoldPanelPollInterval);
+    return;
+  default:
+    // 没有在取帧（建链中 / 待机）：灭屏时不建链，等宽限期结束进入待机或重新亮屏
+    (void)WaitForInputs(kHoldPanelPollInterval);
+    return;
+  }
+}
+
+void DeviceRuntime::StepActive(const PowerInputs &in) {
+  switch (m_state.load(std::memory_order_acquire)) {
+  case workerState::streaming:
+    if (in.downEpoch != m_link.provenEpoch) {
+      // 取帧期间收到过可能断电的事件（例如被合并掉的灭屏 / 系统唤醒），链路要重新证明
+      BeginBringUp("power event while streaming", workerState::ready);
       return;
     }
-    ReplayPenStateAfterChipInit();
-    SetState(workerState::streaming);
-  } else {
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    OnStreaming();
+    return;
+  case workerState::hold:
+    if (in.panelDrops != m_link.holdPanelDrops) {
+      BeginBringUp("panel lost power during display-off grace", workerState::ready);
+      return;
+    }
+    m_link.provenEpoch = in.downEpoch;
+    TransitionTo(workerState::streaming, "display back on within grace; panel stayed powered");
+    return;
+  case workerState::suspend:
+    BeginBringUp("host reports panel on", workerState::ready);
+    return;
+  default:
+    StepBringUp(in);
+    return;
   }
+}
+
+void DeviceRuntime::StepBringUp(const PowerInputs &in) {
+  if (!m_autoMode.load(std::memory_order_acquire)) {
+    // 手动模式：不碰芯片，由外部命令驱动
+    (void)WaitForInputs(kManualModeWait);
+    return;
+  }
+
+  const auto now = std::chrono::steady_clock::now();
+  if (now < m_link.nextAttemptAt) {
+    (void)WaitForInputs(std::chrono::duration_cast<std::chrono::milliseconds>(
+        m_link.nextAttemptAt - now) + std::chrono::milliseconds{1});
+    return;
+  }
+
+  // 1. 总线就绪（himax_thp_drv!checkBusReady）：寄存器 0x13 两路都非零。面板 / 触摸部分
+  //    没上电时 IOCTL 照样成功、读到 0；这时做 Init 只会在 hx_set_N_frame 失败，还要白拉一次 reset。
+  //    所以只探测、不建链，等它上电。
+  const auto probe = m_chip.ProbeBus();
+  const auto panel = m_chip.ReadPanelPower();
+  NoteLinkProbe(probe, panel, "bring-up");
+  NotePanelPower(panel, "bring-up");
+  if (probe.ioOk && !probe.Ready()) {
+    if (m_link.busWaitSince == std::chrono::steady_clock::time_point{}) {
+      m_link.busWaitSince = now;
+    }
+    (void)WaitForInputs(kBusPollInterval);
+    return;
+  }
+  m_link.busWaitSince = {};
+
+  // 2. 从静默点重新建链；连续失败到一定次数时连设备句柄一起重开（对应原厂整只守护重启）
+  m_chip.Quiesce();
+  if (m_link.bringUpAttempts > 0 && m_link.bringUpAttempts % kReopenAfterFailures == 0) {
+    (void)m_chip.ReopenDevices();
+  }
+  ChipResult<> res{};
+  const char *failStep = "";
+  if (!probe.ioOk) {
+    res = std::unexpected(ChipError::CommunicationError);
+    failStep = "bus_ioctl";
+  } else {
+    BeginPenReplayInitCycle();
+    res = m_chip.Init();
+    failStep = m_chip.LastInitFailStep();
+  }
+  if (!res) {
+    ++m_link.bringUpAttempts;
+    const auto delay = BringUpBackoff(m_link.bringUpAttempts);
+    m_link.nextAttemptAt = std::chrono::steady_clock::now() + delay;
+    {
+      std::lock_guard<std::mutex> lk(m_mu);
+      m_recoverCount = static_cast<uint8_t>(std::min(m_link.bringUpAttempts, 255));
+    }
+    LOG_NOTICE("PowerSM", __func__, "ready", "Bring-up attempt {} failed at '{}' ({}, win32={}); retrying in {} ms.",
+               m_link.bringUpAttempts, failStep, ToString(res.error()), probe.win32Error, delay.count());
+    if (m_state.load(std::memory_order_acquire) != workerState::recover) {
+      TransitionTo(workerState::recover, "bring-up failed; backing off");
+    }
+    return;
+  }
+
+  EnterStreaming(in);
+}
+
+// ----------- 迁移与进入 / 离开动作 -----------
+
+void DeviceRuntime::TransitionTo(workerState next, const char *reason) {
+  const workerState prev = m_state.exchange(next, std::memory_order_acq_rel);
+  if (prev == next) {
+    return;
+  }
+  PowerInputs in{};
+  {
+    std::lock_guard<std::mutex> lk(m_mu);
+    in = m_inputs;
+    m_lastNote = std::string(ToString(next)) + ": " + reason;
+  }
+  LOG_NOTICE("PowerSM", __func__, ToString(next), "{} -> {} ({}) | {} proven={} attempts={}",
+             ToString(prev), ToString(next), reason, DescribeInputs(in), m_link.provenEpoch,
+             m_link.bringUpAttempts);
+}
+
+void DeviceRuntime::EnterStandby(const char *reason) {
+  const workerState phase = m_state.load(std::memory_order_acquire);
+  if (phase == workerState::streaming || phase == workerState::hold) {
+    LeaveStreaming(reason);
+  }
+  // 对齐 thp_afe_screen_off：只停止取帧，不发总线命令、不拉 reset
+  m_chip.Quiesce();
+  m_link.bringUpAttempts = 0;
+  m_link.nextAttemptAt = {};
+  m_link.busWaitSince = {};
+  {
+    std::lock_guard<std::mutex> lk(m_mu);
+    m_recoverCount = 0;
+    CancelQueuedCommandsLocked("cancelled: standby");
+  }
+  TransitionTo(workerState::suspend, reason);
+}
+
+void DeviceRuntime::BeginBringUp(const char *reason, workerState phase) {
+  const workerState prev = m_state.load(std::memory_order_acquire);
+  if (prev == workerState::streaming || prev == workerState::hold) {
+    LeaveStreaming(reason);
+  }
+  m_link.bringUpAttempts = 0;
+  m_link.nextAttemptAt = {};
+  m_link.busWaitSince = {};
+  {
+    // 重新建链后手写笔状态会整体重放，链路断开前排队的命令作废
+    std::lock_guard<std::mutex> lk(m_mu);
+    CancelQueuedCommandsLocked("cancelled: link re-initialization");
+  }
+  TransitionTo(phase, reason);
+}
+
+void DeviceRuntime::EnterStreaming(const PowerInputs &in) {
+  ReplayPenStateAfterChipInit();
+  {
+    // 芯片刚重新初始化：TSACore 下一帧按首帧处理并重建基线，闭环与输出记账归零
+    std::lock_guard<std::mutex> lk(m_pipelineMu);
+    m_tsaCoreSolver.OnAfeStarted();
+  }
+  m_link.provenEpoch = in.downEpoch;
+  m_link.bringUpAttempts = 0;
+  m_link.nextAttemptAt = {};
+  m_link.busWaitSince = {};
+  {
+    std::lock_guard<std::mutex> lk(m_mu);
+    m_recoverCount = 0;
+  }
+  TransitionTo(workerState::streaming, "chip initialized");
+}
+
+void DeviceRuntime::LeaveStreaming(const char *reason) {
+  {
+    std::lock_guard<std::mutex> lk(m_pipelineMu);
+    m_tsaCoreSolver.OnAfeStopped();
+  }
+  // 不再有帧来驱动抬起：在场的手指与笔由这里统一收尾
+  m_vhfReporter.FlushAllUp();
+  LOG_NOTICE("PowerSM", __func__, "streaming", "Frame streaming stopped ({}); HID contacts released.", reason);
 }
 
 void DeviceRuntime::OnStreaming() {
-  bool displayOffSuspendPending = false;
-  {
-    std::lock_guard<std::mutex> lk(m_mu);
-    displayOffSuspendPending = m_displayOffSuspendPending;
-  }
-  if (displayOffSuspendPending) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    return;
-  }
+  const bool tsaActive = m_useTsaCoreSolver.load(std::memory_order_relaxed) &&
+                         !m_masterParserOnly.load(std::memory_order_relaxed);
+  // IDLE 的进入由当前解算器决定：TSACore 自己会请求，TouchPipeline 靠芯片的无输入计数
+  m_chip.SetAutoIdleEnabled(!tsaActive);
 
-  auto res = m_chip.GetFrame();
-  if (res == std::unexpected(ChipError::Timeout))
-    return;
-  if (!res) {
-    // 连续 N 帧非Timeout失败才进入 recover；
-    // 某些 AFE 命令可能导致一两帧 bus 暂时失响应，不算致命。
-    m_consecutiveFrameErrors++;
-    if (m_consecutiveFrameErrors >= kMaxConsecutiveFrameErrors) {
-      LOG_ERROR("Runtime", __func__, "Streaming",
-                "{} consecutive GetFrame failures -> recover.",
-                m_consecutiveFrameErrors);
-      m_consecutiveFrameErrors = 0;
-      SetState(workerState::recover);
-    } else {
-      LOG_WARN("Runtime", __func__, "Streaming",
-               "GetFrame failed ({}/{}), retrying...", m_consecutiveFrameErrors,
-               kMaxConsecutiveFrameErrors);
-    }
+  // 取帧不分 Normal / IDLE：IC 在 IDLE 里慢慢出帧，这一步就跟着慢；IDLE 帧照常进解算器，
+  // 帧尾的 IDLE 位由 TSACore 的宿主层翻成控制标志（与 ApDaemon 一致）。
+  const auto readStart = std::chrono::steady_clock::now();
+  const auto read = m_chip.GetFrame();
+  const auto readMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - readStart).count();
+  m_hb.maxReadMs = std::max<int64_t>(m_hb.maxReadMs, readMs);
+  if (read == Himax::Chip::FrameRead::NoData) {
+    ++m_hb.noData;
     return;
   }
-  m_consecutiveFrameErrors = 0; // 成功读帧重置计数
+  if (read == Himax::Chip::FrameRead::Sos) {
+    // 对应 ApDaemon 的 ProcessSos → ThpBase::Reset（afe Stop + afe Start）
+    ++m_hb.sos;
+    LOG_NOTICE("PowerSM", __func__, "streaming", "AFE SOS after {} ms: {}; restarting the link.", readMs,
+               m_chip.LastSosReason());
+    BeginBringUp("AFE SOS", workerState::recover);
+    return;
+  }
+  ++m_hb.frames;
+  if (m_chip.GetAfeMode() == THP_AFE_MODE::Idle) {
+    ++m_hb.idleFrames;
+  }
 
   const auto &rawData = m_chip.GetFrameBuffer();
 
@@ -1131,6 +1354,7 @@ void DeviceRuntime::OnStreaming() {
   const bool stylusVhfEnabled =
       m_stylusVhfEnabled.load(std::memory_order_relaxed);
   bool dispatchTouch = false;
+  Solvers::Tsa::AfeActionList afeActions;
   {
     std::lock_guard<std::mutex> lk(m_pipelineMu);
 
@@ -1141,21 +1365,32 @@ void DeviceRuntime::OnStreaming() {
     // Skipped-master frames carry fresh stylus/slave data only; do not feed
     // them into touch modules, otherwise BaselineTracker treats the missing
     // master as invalid input and clears cross-frame finger visualization state.
-    if (touchFrame.masterWasRead) {
-      if (m_masterParserOnly.load(std::memory_order_relaxed)) {
+    // TSACore 是例外：原版每一帧都调用它，跳过 master 的帧只跑笔相关的手指侧逻辑
+    // （StylusAft 的抑制计数按调用次数走）。
+    if (m_masterParserOnly.load(std::memory_order_relaxed)) {
+      if (touchFrame.masterWasRead) {
         m_touchPipeline.ProcessMasterParserOnly(touchFrame);
-      } else {
-        dispatchTouch = m_touchPipeline.Process(touchFrame);
       }
+    } else if (m_useTsaCoreSolver.load(std::memory_order_relaxed)) {
+      // 解析器仍由 TouchPipeline 负责（热力图 / suffix 供诊断与 IPC 使用），
+      // 触点改由 TSACore 解算。
+      if (touchFrame.masterWasRead) {
+        m_touchPipeline.ProcessMasterParserOnly(touchFrame);
+      }
+      m_tsaCoreSolver.SetStylusConnected(m_chip.IsStylusConnected());
+      dispatchTouch = m_tsaCoreSolver.Process(touchFrame);
+      afeActions = m_tsaCoreSolver.PendingAfeActions();
+    } else if (touchFrame.masterWasRead) {
+      dispatchTouch = m_touchPipeline.Process(touchFrame);
+    }
 
-      // Serialized re-check: if parser-only was enabled between pipeline
-      // processing and this check, suppress touch dispatch. The lock
-      // guarantees that SetMasterParserOnlyMode's FlushTouchAllUp()
-      // either hasn't happened yet (touch→all-up = correct HID order)
-      // or already happened (dispatch suppressed = correct).
-      if (dispatchTouch && m_masterParserOnly.load(std::memory_order_relaxed)) {
-        dispatchTouch = false;
-      }
+    // Serialized re-check: if parser-only was enabled between pipeline
+    // processing and this check, suppress touch dispatch. The lock
+    // guarantees that SetMasterParserOnlyMode's FlushTouchAllUp()
+    // either hasn't happened yet (touch→all-up = correct HID order)
+    // or already happened (dispatch suppressed = correct).
+    if (dispatchTouch && m_masterParserOnly.load(std::memory_order_relaxed)) {
+      dispatchTouch = false;
     }
   }
 
@@ -1167,8 +1402,11 @@ void DeviceRuntime::OnStreaming() {
     m_vhfReporter.DispatchTouch(touchFrame);
   }
 
+  // 5. TSACore → AFE 闭环：本帧要下发的命令在 worker 上同步执行，结果回报给解算器
+  ExecuteSolverAfeActions(afeActions);
+
 #ifdef _DEBUG
-  // 5. Debug frame push (IPC visualization)
+  // 6. Debug frame push (IPC visualization)
   // Hold callback mutex through invocation so disable() waits for in-flight
   // callback to finish.
   std::lock_guard<std::mutex> lk(m_framePushCbMu);
@@ -1176,6 +1414,42 @@ void DeviceRuntime::OnStreaming() {
     m_framePushCb(touchFrame);
   }
 #endif
+}
+
+void DeviceRuntime::ExecuteSolverAfeActions(
+    const Solvers::Tsa::AfeActionList &actions) {
+  using Solvers::Tsa::AfeActionType;
+  for (const auto &action : actions) {
+    command cmd{};
+    cmd.param = action.param;
+    const char *reason = "";
+    switch (action.type) {
+    case AfeActionType::ClearStatus:
+      cmd.type = AFE_Command::ClearStatus;
+      reason = "TSACore->ClearStatus";
+      break;
+    case AfeActionType::ForceToFreqPoint:
+      cmd.type = AFE_Command::ForceToFreqPoint;
+      reason = "TSACore->ForceToFreqPoint";
+      break;
+    case AfeActionType::ForceToScanRate:
+      cmd.type = AFE_Command::ForceToScanRate;
+      reason = "TSACore->ForceToScanRate";
+      break;
+    case AfeActionType::EnterIdle:
+      cmd.type = AFE_Command::EnterIdle;
+      reason = "TSACore->EnterIdle";
+      break;
+    case AfeActionType::StartCalibration:
+      cmd.type = AFE_Command::StartCalibration;
+      reason = "TSACore->StartCalibration";
+      break;
+    }
+    const bool ok = ExecuteCommand(
+        MakeQueuedCommand(cmd, CommandSource::SystemPolicy, reason));
+    std::lock_guard<std::mutex> lk(m_pipelineMu);
+    m_tsaCoreSolver.OnAfeActionExecuted(action, ok);
+  }
 }
 
 // --------------- MCU 事件路由 ---------------
@@ -1186,6 +1460,43 @@ void DeviceRuntime::HandlePenButtonStatusCode(uint8_t statusCode,
   // statusCode 3 and 4 represent a barrel button action in this context
   PenButtonAction action{PenButtonAction::Type::Barrel, true, rawEventPayload};
   DispatchPenButtonAction(action, source);
+}
+
+bool DeviceRuntime::NotifyPenLinkDown() {
+  // Mirror the PenConnStatus(disconnected) ingress path so the AFE, the stylus
+  // pipeline and the replay plan all observe the same disconnected state.
+  std::lock_guard<std::mutex> penIngressLock(m_penIngressMu);
+
+  bool connectionChanged = false;
+  UpdatePenState([&](RuntimePenState &state, PenStateUpdateResult &res) {
+    const bool hadConnection = state.hasConnection;
+    const bool oldConnected = state.connected;
+
+    state.hasConnection = true;
+    state.connected = false;
+
+    connectionChanged =
+        hadConnection != state.hasConnection || oldConnected != state.connected;
+    res.stateChanged = connectionChanged;
+    if (connectionChanged) {
+      ResetPenTransientState(state);
+    }
+
+    const bool pipelineIdentityChanged =
+        state.hasStylusId ||
+        state.protocolHint != Solvers::StylusProtocolHint::Auto;
+    res.stateChanged = ClearPenIdentityState(state) || res.stateChanged;
+    res.applyToPipeline = connectionChanged || pipelineIdentityChanged;
+  });
+
+  if (const auto cmd = BuildPenConnectionAfeCommand(connectionChanged, false)) {
+    SubmitPenAfeCommandLocked(*cmd, "HostPowerTransition->Disconnect");
+  }
+
+  LOG_INFO("Runtime", __func__, "Policy",
+           "Pen link marked down by host power transition (connectionChanged={}).",
+           connectionChanged);
+  return connectionChanged;
 }
 
 void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
@@ -1199,6 +1510,9 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
     std::lock_guard<std::mutex> lk(m_penStateMu);
     m_penState.factoryStatusFlags = Himax::Pen::ApplyFactoryStatusFlagUpdate(
         m_penState.factoryStatusFlags, ev.code, payload0);
+    // ApDaemon 的 DriverThp::GetStatus：状态字交给 TSACore（屏幕旋转、笔吸附 / 休眠、
+    // 连接、防误触模式）
+    m_tsaCoreSolver.SetPenStatusWord(m_penState.factoryStatusFlags);
   }
 
   switch (ev.code) {
@@ -1502,61 +1816,100 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
   }
 }
 
+std::string DeviceRuntime::DescribeInputs(const PowerInputs &in) const {
+  return MiniFmt::format("display={} panel={} lid={} suspended={} shutdown={} downEpoch={}",
+                         in.displayOn ? "on" : "off", in.panelOn ? "on" : "off",
+                         in.lidOpen ? "open" : "closed", in.systemSuspended ? 1 : 0,
+                         in.shutdown ? 1 : 0, in.downEpoch);
+}
+
+void DeviceRuntime::NoteLinkProbe(const Himax::Chip::BusProbe &probe,
+                                  std::optional<bool> panel, const char *where) {
+  const int panelLevel = panel ? (*panel ? 1 : 0) : -1;
+  if (m_link.probeLogged && m_link.lastIoOk == probe.ioOk &&
+      m_link.lastBusMaster == probe.master && m_link.lastBusSlave == probe.slave &&
+      m_link.lastPanel == panelLevel) {
+    return;
+  }
+  m_link.probeLogged = true;
+  m_link.lastIoOk = probe.ioOk;
+  m_link.lastBusMaster = probe.master;
+  m_link.lastBusSlave = probe.slave;
+  m_link.lastPanel = panelLevel;
+  LOG_NOTICE("PowerSM", __func__, where,
+             "Link probe: bus {} (0x13 master=0x{:02X} slave=0x{:02X}, win32={}), panel ACPI bit0={}.",
+             !probe.ioOk ? "ioctl-failed" : (probe.Ready() ? "ready" : "not-ready"),
+             probe.master, probe.slave, probe.win32Error,
+             panelLevel < 0 ? "unreadable" : (panelLevel ? "1" : "0"));
+}
+
+void DeviceRuntime::NotePanelPower(std::optional<bool> panelOn, const char *source) {
+  if (!panelOn) {
+    return;
+  }
+  const bool on = *panelOn;
+  {
+    std::lock_guard<std::mutex> lk(m_mu);
+    if (m_inputs.panelOn == on) {
+      return;
+    }
+  }
+  const std::string why = MiniFmt::format("Panel{} ({})", on ? "On" : "Off", source);
+  // 面板断电时 IC 跟着掉电：把可能阻塞在读帧里的 worker 叫醒，链路要重新证明
+  UpdateInputs(why.c_str(), [on](PowerInputs &in) {
+    if (in.panelOn == on) return false;
+    in.panelOn = on;
+    if (!on) {
+      ++in.panelDrops;
+      ++in.downEpoch;
+    }
+    return true;
+  }, !on);
+}
+
+void DeviceRuntime::MaybeHeartbeat(PowerTarget target, const PowerInputs &in) {
+  const auto now = std::chrono::steady_clock::now();
+  if (now < m_hb.next) {
+    return;
+  }
+  const bool first = m_hb.next == std::chrono::steady_clock::time_point{};
+  m_hb.next = now + kHeartbeatInterval;
+  if (first) {
+    return;
+  }
+  const workerState phase = m_state.load(std::memory_order_acquire);
+  const long long busWaitS =
+      m_link.busWaitSince == std::chrono::steady_clock::time_point{}
+          ? 0
+          : std::chrono::duration_cast<std::chrono::seconds>(now - m_link.busWaitSince).count();
+  LOG_NOTICE("PowerSM", "Heartbeat", ToString(phase),
+             "target={} | {} | frames={} (idle {}) noData={} sos={} maxRead={}ms afe={} panelIrq={} | attempts={} "
+             "busWait={}s lastBus=0x{:02X}/0x{:02X} lastPanel={}",
+             ToString(target), DescribeInputs(in), m_hb.frames, m_hb.idleFrames, m_hb.noData, m_hb.sos,
+             m_hb.maxReadMs, m_chip.GetAfeMode() == THP_AFE_MODE::Idle ? "idle" : "normal",
+             m_panelWatcher.Notifications(), m_link.bringUpAttempts, busWaitS, m_link.lastBusMaster,
+             m_link.lastBusSlave, m_link.lastPanel);
+  const auto next = m_hb.next;
+  m_hb = {};
+  m_hb.next = next;
+}
+
 bool DeviceRuntime::OnQuit() {
-  if (m_autoMode.load()) {
+  const workerState prev = m_state.load(std::memory_order_acquire);
+  if (prev == workerState::streaming || prev == workerState::hold) {
+    LeaveStreaming("shutdown");
+  }
+  if (m_autoMode.load() &&
+      (prev == workerState::streaming || prev == workerState::hold)) {
+    // 链路还活着：正常关掉感测
     if (auto res = m_chip.Deinit(false); !res) {
       LOG_WARN("Runtime", __func__, "quit", "Chip deinit failed during quit.");
     }
+  } else {
+    m_chip.Quiesce();
   }
-  return true; // signal WorkerMain to return
-}
-
-void DeviceRuntime::OnSuspend() {
-  // 首次进入 suspend 时执行 HoldReset（拉低 reset，关闭中断通道）
-  if (m_needSuspendDeinit.exchange(false, std::memory_order_acq_rel)) {
-    m_chip.HoldReset();
-    LOG_INFO("Runtime", __func__, "suspend",
-             "Entered suspend, chip reset held low. Waiting for wake event.");
-  }
-  // 低功耗等待，每 100ms 检查一次状态变更
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
-}
-
-void DeviceRuntime::OnRecover() {
-  m_recoverCount++;
-
-  // 最大重试 30 次（500ms 间隔 ≈ 15 秒恢复窗口）
-  if (m_recoverCount > 30) {
-    LOG_ERROR("Runtime", __func__, "Recover",
-              "Exceeded 30 recovery attempts, entering suspend.");
-    m_recoverCount = 0;
-    m_needSuspendDeinit.store(true, std::memory_order_release);
-    SetState(workerState::suspend);
-    return;
-  }
-
-  // 等待 500ms 再重试，给硬件从休眠/灭屏恢复的时间
-  // 期间每 50ms 检查一次 stop 请求以保持响应性
-  for (int i = 0; i < 10; ++i) {
-    if (m_stopReason.load(std::memory_order_relaxed) != StopReason::None)
-      return;
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  }
-
-  LOG_INFO("Runtime", __func__, "Recover", "Recovery attempt {}/30...",
-           m_recoverCount);
-
-  if (auto res = m_chip.check_bus(); !res)
-    return;
-  BeginPenReplayInitCycle();
-  if (auto res = m_chip.Init(); !res)
-    return;
-  ReplayPenStateAfterChipInit();
-
-  LOG_INFO("Runtime", __func__, "Recover",
-           "Recovery succeeded after {} attempts.", m_recoverCount);
-  SetState(workerState::streaming);
-  m_recoverCount = 0;
+  TransitionTo(workerState::quit, "shutdown requested");
+  return true;
 }
 
 void DeviceRuntime::SetState(workerState newState) {
