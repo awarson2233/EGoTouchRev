@@ -69,6 +69,7 @@ constexpr uint32_t kTouchExcRecal = 0x1000;            // 检出需要重新校�
 constexpr uint32_t kAsaStylusInRange = 0x10;           // AFE 笔帧状态
 
 constexpr int64_t kNoTime = -1;
+constexpr uint16_t kRptScale = 0x100;            // 报点坐标是 Q8.8 的格坐标
 constexpr uint64_t kStylusIdleDelayMs = 2999;
 
 /// TSA_ProcessingAFEFrame 交给主流程的 raw 副本（g_rawDataBuf）。
@@ -155,13 +156,27 @@ void CheckRawDirection() {
 // TSA_SetDMDType @ 0x6ba9d881：异常类型只记日志，检出时 HardwareAnalyzer 会置 kSpecialHwException
 void ReportHwException() { (void)HardwareAnalyzer::GetDetectedException(); }
 
-// TSA_PitchSizeRemapProcess @ 0x6bb0611c：传感器间距不均匀时把坐标映射到等距
+// SensorPitchSizeMap @ 0x6bb05fc0
+// 传感器坐标（每格 scale）换成物理位置：在本格与下一格起点的位置间线性插值。表首项为 100.0 时不映射；
+// 超出 0x4f 格时为 0。
+int PitchSizeMap(int pos, const double* map, uint16_t scale) {
+    if (map[0] == 100.0) return pos;
+    if (scale == 0) return 0;
+    const auto cell = static_cast<uint16_t>(pos / scale);
+    if (0x4f <= cell) return 0;
+    const auto frac = static_cast<uint32_t>(pos % scale) & 0xffffu;
+    return static_cast<int>(map[cell + 1] * static_cast<double>(frac) +
+                            map[cell] * static_cast<double>(static_cast<int>(scale - frac)));
+}
+
+// TSA_PitchSizeRemapProcess @ 0x6bb0611c：传感器间距不均匀时把报点坐标映射到物理位置
 void PitchSizeRemap() {
+    const FlashPrmt& fl = PrmtFlash();
     TouchTable& tt = Touches();
     for (uint8_t k = 0; k < tt.count; ++k) {
         Point& p = tt.unit[k].rptPos;
-        p.dim1 = static_cast<uint16_t>(SensorPitchSizeMapDim1(p.dim1, 0x100));
-        p.dim2 = static_cast<uint16_t>(SensorPitchSizeMapDim2(p.dim2, 0x100));
+        p.dim1 = static_cast<uint16_t>(PitchSizeMap(p.dim1, fl.dim1PitchMap, kRptScale));
+        p.dim2 = static_cast<uint16_t>(PitchSizeMap(p.dim2, fl.dim2PitchMap, kRptScale));
     }
 }
 

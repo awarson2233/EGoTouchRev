@@ -9,6 +9,7 @@
 #include "Alg/TouchZone/TouchZone.h"
 #include "Alg/TouchZone/TouchZoneInternal.h"
 #include "Common/Image.h"
+#include "Common/TsaMath.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
@@ -321,15 +322,15 @@ int16_t EllipseRateMirror(const TouchZoneUnit& z) {
 }  // namespace
 
 // TZ_ContourInit @ 0x6ba8590b
-// 每个相位 f 的 4 个抽头是 SinXDivX 在 f+1、f、1−f、2−f 处的值。
+// 每个相位 f 的 4 个抽头是 CubicKernel 在 f+1、f、1−f、2−f 处的值。
 void ContourInit() {
     Kernel& k = Kernels();
     for (int phase = 0; phase < kPhaseNum; ++phase) {
         const float f = static_cast<float>(phase) / static_cast<float>(kHrScale);
-        k[phase][0] = static_cast<float>(SinXDivX(static_cast<double>(f + 1.0f)));
-        k[phase][1] = static_cast<float>(SinXDivX(static_cast<double>(f)));
-        k[phase][2] = static_cast<float>(SinXDivX(static_cast<double>(1.0f - f)));
-        k[phase][3] = static_cast<float>(SinXDivX(static_cast<double>(2.0f - f)));
+        k[phase][0] = static_cast<float>(Math::CubicKernel(static_cast<double>(f + 1.0f)));
+        k[phase][1] = static_cast<float>(Math::CubicKernel(static_cast<double>(f)));
+        k[phase][2] = static_cast<float>(Math::CubicKernel(static_cast<double>(1.0f - f)));
+        k[phase][3] = static_cast<float>(Math::CubicKernel(static_cast<double>(2.0f - f)));
     }
 }
 

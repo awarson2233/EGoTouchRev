@@ -160,7 +160,9 @@ struct FlashPrmt {
     int16_t field096;
     int16_t field098;
     int16_t field09A;
-    uint8_t reserved09C[0x504];
+    uint8_t reserved09C[0x4];
+    double dim1PitchMap[0x50];  // 传感器间距映射：第 i 格起点的物理位置（首项为 100.0 表示等距、不映射）
+    double dim2PitchMap[0x50];
     uint16_t outputResScale;  // 对外坐标的分辨率倍数（TSA 可设置），TSAOut 的显示坐标按它放大
     uint8_t dim1Flip;  // 显示坐标在 Dim1 方向翻转
     uint8_t dim2Flip;
@@ -440,6 +442,8 @@ static_assert(offsetof(FlashPrmt, field094) == 0x094);
 static_assert(offsetof(FlashPrmt, field096) == 0x096);
 static_assert(offsetof(FlashPrmt, field098) == 0x098);
 static_assert(offsetof(FlashPrmt, field09A) == 0x09A);
+static_assert(offsetof(FlashPrmt, dim1PitchMap) == 0x0A0);
+static_assert(offsetof(FlashPrmt, dim2PitchMap) == 0x320);
 static_assert(offsetof(FlashPrmt, outputResScale) == 0x5A0);
 static_assert(offsetof(FlashPrmt, dim1Flip) == 0x5A2);
 static_assert(offsetof(FlashPrmt, dim2Flip) == 0x5A3);

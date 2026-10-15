@@ -239,8 +239,6 @@ void BLSM_UpdateForRawUnstable(void);
 // Baseline_Compensation @ 0x6ba46d00 (Baseline\Baseline.c)
 void Baseline_Compensation(void);
 
-// Bezier @ 0x6ba6595d (Common\MISC.c)
-int Bezier(int param_1,int param_2,int param_3);
 
 
 
@@ -286,8 +284,6 @@ void CTD_ECProcess(void);
 // CTD_General @ 0x6ba5523c (Tracking\CTD.c)
 void CTD_General(byte param_1,byte param_2,byte param_3,byte param_4,undefined2 *param_5, undefined2 *param_6);
 
-// CaculateInterval @ 0x6bade69c (Common\MISC.c)
-void CaculateInterval(void);
 
 
 
@@ -1092,8 +1088,6 @@ int IIR_Process2(int param_1,int param_2,byte param_3,byte param_4);
 undefined8 IsNeedRecord(byte param_1,longlong param_2);
 
 
-// Misc_SqrtUint32 @ 0x6ba64d8b (Common\MISC.c)
-int Misc_SqrtUint32(uint param_1);
 
 
 // Peak_Clean @ 0x6ba659b0 (Detection\Peak.c)
@@ -1300,14 +1294,8 @@ void Rawdata_Process(void);
 bool SearchNearest(byte param_1,undefined8 param_2,undefined1 param_3,undefined8 param_4);
 
 
-// SensorPitchSizeMap @ 0x6bb05fc0 (Common\MISC.c)
-int SensorPitchSizeMap(int param_1,double *param_2,ushort param_3);
 
-// SensorPitchSizeMapDim1 @ 0x6bb060b4 (Common\MISC.c)
-int SensorPitchSizeMapDim1(int sensorCoord,ushort scale);
 
-// SensorPitchSizeMapDim2 @ 0x6bb060e8 (Common\MISC.c)
-int SensorPitchSizeMapDim2(int sensorCoord,ushort scale);
 
 
 
@@ -1328,8 +1316,6 @@ byte Sensor_GetZoneIndex(byte param_1,byte param_2);
 // SigSumFilter_ReserveTouch @ 0x6ba60977 (Signal\SigSumFilter.c)
 void SigSumFilter_ReserveTouch(int param_1);
 
-// SinXDivX @ 0x6ba8573e (Common\MISC.c)
-double SinXDivX(double param_1);
 
 // StylusAft_BtStatusPenAttach @ 0x6bb20932 (Rejection\StylusAft.c)
 bool StylusAft_BtStatusPenAttach(void);

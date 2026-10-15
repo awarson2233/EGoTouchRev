@@ -17,6 +17,7 @@ extern "C" uint8_t g_tsaMemoryImage[];  // raw/Common/TSABssMemoryImage.c
 namespace Solvers::Tsa::Core::Image {
 
 inline constexpr uint64_t kBaseVa = 0x6bb4e000;
+inline constexpr uint64_t kSize = 0x15f000;  // 到 0x6bcad000
 
 /// 原 DLL 地址 va 处的对象。
 template <class T>

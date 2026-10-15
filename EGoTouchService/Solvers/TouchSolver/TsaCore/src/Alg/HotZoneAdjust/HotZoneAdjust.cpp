@@ -11,6 +11,7 @@
 #include "App/TsaOut.h"
 #include "App/TsaStatic.h"
 #include "Common/Image.h"
+#include "Common/TsaMath.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
@@ -134,7 +135,7 @@ uint16_t DistanceTo(const Rect& r, uint16_t dim1, uint16_t dim2) {
     uint32_t d2 = 0;
     if (dim2 < r.dim2Min) d2 = r.dim2Min - dim2;
     else if (dim2 > r.dim2Max) d2 = dim2 - r.dim2Max;
-    return static_cast<uint16_t>(Misc_SqrtUint32(d2 * d2 + d1 * d1));
+    return static_cast<uint16_t>(Math::SqrtUint32(d2 * d2 + d1 * d1));
 }
 
 // SearchNearest @ 0x6baf4fbe / SearchNearestDisTwo @ 0x6baf458d

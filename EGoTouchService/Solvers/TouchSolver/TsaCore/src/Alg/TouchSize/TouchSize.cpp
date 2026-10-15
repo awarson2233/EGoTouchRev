@@ -5,6 +5,7 @@
 #include "Alg/Touch/PrevTouch.h"
 #include "Alg/Touch/TouchData.h"
 #include "Common/Assert.h"
+#include "Common/TsaMath.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
@@ -49,7 +50,7 @@ uint8_t UpdateCurSizeInMmForUdfp(uint8_t curIdx) {
     if (curIdx >= kMaxTouchNum) return 0;
     const TouchUnit& cur = Touches().unit[curIdx];
     auto size = static_cast<uint8_t>(GetSizeInMm(PrmtDynamic().touchThold, cur.sigSum));
-    const auto axisMean = static_cast<uint32_t>(Misc_SqrtUint32(static_cast<uint32_t>(cur.minorMm) * cur.majorMm));
+    const auto axisMean = static_cast<uint32_t>(Math::SqrtUint32(static_cast<uint32_t>(cur.minorMm) * cur.majorMm));
     if (size > 10) {
         size = static_cast<uint8_t>(axisMean);
     } else if (size > 6) {

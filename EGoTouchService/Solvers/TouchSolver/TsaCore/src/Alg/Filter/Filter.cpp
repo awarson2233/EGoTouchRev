@@ -12,6 +12,7 @@
 #include "App/TsaOut.h"
 #include "App/TsaStatic.h"
 #include "Common/Image.h"
+#include "Common/TsaMath.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
@@ -99,7 +100,7 @@ JitResult JitFilter(int curDim1, int curDim2, int prevDim1, int prevDim2, int ra
     const auto d2 = static_cast<uint32_t>(curDim2 - prevDim2);
     const uint32_t sq = d2 * d2 + d1 * d1;
     maxStep = std::min(maxStep, radius);
-    const int dist = Misc_SqrtUint32(sq);
+    const int dist = Math::SqrtUint32(sq);
     if (static_cast<uint32_t>(radius * radius) >= sq || dist == 0) return {prevDim1, prevDim2};
     return {curDim1 - JitLag(d1, radius, maxStep, dist), curDim2 - JitLag(d2, radius, maxStep, dist)};
 }
@@ -124,7 +125,7 @@ uint8_t GetAdaptiveCoef(uint8_t c, uint8_t p) {
     PrevTouchUnit& prev = Prev(p);
     const auto d1 = static_cast<uint16_t>(std::abs(cur.pos.dim1 - prev.iirPos.dim1));
     const auto d2 = static_cast<uint16_t>(std::abs(cur.pos.dim2 - prev.iirPos.dim2));
-    const auto dist = static_cast<uint16_t>(Misc_SqrtUint32(static_cast<uint32_t>(d2) * d2 + static_cast<uint32_t>(d1) * d1));
+    const auto dist = static_cast<uint16_t>(Math::SqrtUint32(static_cast<uint32_t>(d2) * d2 + static_cast<uint32_t>(d1) * d1));
     uint8_t coef = Aiir::GetCoef(dist);
     if (prev.curveTracking == 1) {
         cur.curveTracking = 1;
@@ -215,7 +216,7 @@ void IsCurveReturn(uint8_t c, uint8_t p) {
         const auto dx = static_cast<int16_t>(a.pos.dim1 - b.pos.dim1);
         const auto dy = static_cast<int16_t>(a.pos.dim2 - b.pos.dim2);
         elapsed += static_cast<uint32_t>(static_cast<int>(a.time) - static_cast<int>(b.time));
-        path += static_cast<uint32_t>(Misc_SqrtUint32(static_cast<uint32_t>(dy * dy + dx * dx)));
+        path += static_cast<uint32_t>(Math::SqrtUint32(static_cast<uint32_t>(dy * dy + dx * dx)));
         if (farIdx < 0 && kCurveFarPath < path) farIdx = static_cast<int16_t>(k - 1);
         if (timeIdx < 0 && kCurveMinTimeMs < elapsed) timeIdx = static_cast<int16_t>(k - 1);
         if (elapsed >= kCurveWindowMs) break;
@@ -228,8 +229,8 @@ void IsCurveReturn(uint8_t c, uint8_t p) {
     const auto ey = static_cast<int16_t>(end.pos.dim2 - from.pos.dim2);
     const auto mx = static_cast<int16_t>(mid.pos.dim1 - from.pos.dim1);
     const auto my = static_cast<int16_t>(mid.pos.dim2 - from.pos.dim2);
-    const auto endDist = static_cast<uint32_t>(Misc_SqrtUint32(static_cast<uint32_t>(ey * ey + ex * ex)));
-    const auto midDist = static_cast<uint32_t>(Misc_SqrtUint32(static_cast<uint32_t>(my * my + mx * mx)));
+    const auto endDist = static_cast<uint32_t>(Math::SqrtUint32(static_cast<uint32_t>(ey * ey + ex * ex)));
+    const auto midDist = static_cast<uint32_t>(Math::SqrtUint32(static_cast<uint32_t>(my * my + mx * mx)));
     if (endDist >= midDist) return;
     prev.curveReturnFrames = 1;
     if (std::abs(ey) * 5 < std::abs(ex) && std::abs(my) * 5 < std::abs(mx)) {

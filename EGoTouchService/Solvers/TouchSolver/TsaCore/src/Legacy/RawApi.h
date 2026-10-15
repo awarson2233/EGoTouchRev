@@ -14,9 +14,6 @@ extern "C" {
 // Common/TSABssMemoryImage.c
 void TSACoreRaw_LoadProjectTables(void);
 
-// Common/MISC.c
-int Misc_SqrtUint32(uint32_t value);
-double SinXDivX(double x);
 
 // Rejection/HandGesture.c
 uint64_t HandGesture_Malloc(void);
@@ -25,12 +22,6 @@ void HandGesture_Free(void);
 // Alg/Exception/Exception.cpp（被裁掉的充电噪声检测，恒为 0）
 uint64_t Exception_GetDetectedChargerNoise(void);
 
-// Common/TSAState.c
-void TSAState_OnAlloc(void* ptr, uint32_t size);
-void TSAState_OnFree(void* ptr);
-// Common/MISC.c（传感器间距映射）
-int SensorPitchSizeMapDim1(int sensorCoord, uint16_t scale);
-int SensorPitchSizeMapDim2(int sensorCoord, uint16_t scale);
 // Rejection/ASA.c、ASAHostBridge.c
 uint16_t ASA_GetDim1Res(void);
 uint16_t ASA_GetDim2Res(void);

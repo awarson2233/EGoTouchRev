@@ -61,6 +61,34 @@ int ArcTanOctant(int major, int minor) noexcept {
     return static_cast<int>(fine + sector * 16);
 }
 
+// Misc_SqrtUint32 @ 0x6ba64d8b
+int SqrtUint32(uint32_t v) noexcept {
+    uint32_t bit = 0x8000;
+    while (v < bit) bit >>= 1;
+    uint32_t root = 0;
+    for (; bit != 0; bit >>= 1) {
+        root += bit;
+        if (v < root * root) root -= bit;
+    }
+    return static_cast<int>(root);
+}
+
+// SinXDivX @ 0x6ba8573e：系数是 float 常量（a = −1 及 2、3、5、8、4），按原式的运算次序求值
+double CubicKernel(double x) noexcept {
+    constexpr float kA = -1.0f;
+    const double ax = x < 0.0 ? -x : x;
+    const double ax2 = ax * ax;
+    const double ax3 = ax2 * ax;
+    if (ax <= 1.0) {
+        return (static_cast<double>(kA + 2.0f) * ax3 - static_cast<double>(kA + 3.0f) * ax2) + 1.0;
+    }
+    if (ax <= 2.0) {
+        return ((static_cast<double>(kA) * ax3 - static_cast<double>(kA * 5.0f) * ax2) + static_cast<double>(kA * 8.0f) * ax) -
+               static_cast<double>(kA * 4.0f);
+    }
+    return 0.0;
+}
+
 }  // namespace Solvers::Tsa::Core::Math
 
 // ── 过渡期：未转换的 C 代码按原名调用 ──────────────────────────────
