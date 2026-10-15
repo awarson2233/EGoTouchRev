@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(EGoTouchRev VERSION 1.1.2 LANGUAGES C CXX) # x-release-please-version
+project(EGoTouchRev VERSION 1.2.0 LANGUAGES C CXX) # x-release-please-version
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
