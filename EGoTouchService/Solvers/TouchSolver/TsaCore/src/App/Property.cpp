@@ -9,7 +9,6 @@
 #include "App/TsaStatic.h"
 #include "Common/Image.h"
 #include "Common/Memory.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::Property {
@@ -269,10 +268,3 @@ int16_t MinSig() {
 int MaxCmfNoise() { return std::max(std::abs(Prpt().cmfNoiseMin), std::abs(Prpt().cmfNoiseMax)); }
 
 }  // namespace Solvers::Tsa::Core::Property
-
-// raw 的调用方
-extern "C" {
-namespace P = Solvers::Tsa::Core::Property;
-void TSAPrpt_GetDifPreCMFPrpt(void) { P::GetDifPreCmf(); }
-void TSA_GetPrpt(int16_t* raw, int16_t* bl) { P::Get(reinterpret_cast<const uint16_t*>(raw), reinterpret_cast<const uint16_t*>(bl)); }
-}  // extern "C"

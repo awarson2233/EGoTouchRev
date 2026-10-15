@@ -4,7 +4,6 @@
 #include <array>
 #include <cstring>
 
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 #include "Prmt/TuningField.h"
 
@@ -105,12 +104,3 @@ bool SetKeyValue(const char* key, int32_t value) {
 }
 
 }  // namespace Solvers::Tsa::Core::RtPrmt
-
-// ══════════════════════════════════════════════════════════════════════
-// 过渡期：供尚未改写的 raw 代码调用，签名与 raw/include/TSAFuncDecls.h 一致。
-// ══════════════════════════════════════════════════════════════════════
-
-// TSARTPrmt_SetKeyValue @ 0x6bb3de92
-extern "C" void TSARTPrmt_SetKeyValue(uint64_t key, uint32_t value) {
-    Solvers::Tsa::Core::RtPrmt::SetKeyValue(reinterpret_cast<const char*>(key), static_cast<int32_t>(value));
-}

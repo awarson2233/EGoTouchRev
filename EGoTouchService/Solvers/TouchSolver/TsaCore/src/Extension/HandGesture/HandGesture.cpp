@@ -20,7 +20,6 @@
 #include "Common/Assert.h"
 #include "Common/Memory.h"
 #include "Common/TsaMath.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 #include "Prmt/TsaPrmt.h"
 #include "Rejection/GripFilter/GripFilter.h"
@@ -414,5 +413,3 @@ void Process() {
 bool Is2HandDetected() { return (g_state.flags & kTwoHand) != 0; }
 
 }  // namespace Solvers::Tsa::Core::HandGesture
-
-// raw 的调用方（GripFilter）

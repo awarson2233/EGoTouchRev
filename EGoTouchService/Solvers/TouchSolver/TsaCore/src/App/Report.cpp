@@ -6,7 +6,6 @@
 #include "App/TsaOut.h"
 #include "App/TsaStatic.h"
 #include "Extension/HardwareAnalyzer/HardwareAnalyzer.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 #include "Prmt/TsaPrmt.h"
 
@@ -183,7 +182,7 @@ bool IsWindowsPadFeatureEnabled() { return (Static().featureFlags & kFeatWindows
 
 }  // namespace Solvers::Tsa::Core::Report
 
-// 宿主与 raw 的调用方
+// 宿主 API
 extern "C" {
 namespace R = Solvers::Tsa::Core::Report;
 uint32_t TSA_RptTouchNum(void) { return R::TouchNum(); }
@@ -194,7 +193,6 @@ uint32_t TSA_RptTouchPressure(uint8_t idx) { return R::TouchPressure(idx); }
 uint32_t TSA_RptIsTouchDown(uint8_t idx) { return R::IsTouchDown(idx); }
 uint32_t TSA_RptIsLiftOff(uint8_t idx) { return R::IsLiftOff(idx); }
 uint64_t TSA_RptDiffPtr(void) { return reinterpret_cast<uint64_t>(Solvers::Tsa::Core::Buffers().dif); }
-uint16_t TSA_GetXRes(void) { return R::XRes(); }
 void TSA_SetXRes(uint16_t res) { R::SetXRes(res); }
 void TSA_SetYRes(uint16_t res) { R::SetYRes(res); }
 uint64_t TSA_SetResScale(uint16_t scale) {

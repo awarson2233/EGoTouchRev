@@ -3,7 +3,6 @@
 #include "Alg/TouchSize/TouchSize.h"
 #include "App/Sys.h"
 #include "App/TsaStatic.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::Touch {

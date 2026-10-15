@@ -91,8 +91,8 @@ struct SymbolTable {
             char name[256] = {};
             if (std::sscanf(line.c_str(), "0x%llx : %255s", &va, name) == 2) Add(va, name);
         }
-        for (const char* header : {"/include/TSABssMemoryImage.h", "/include/TSACoreInternal.h"}) {
-            std::ifstream in(rawRoot + header);
+        {
+            std::ifstream in(rawRoot + "/_metadata/image_macros.txt");
             while (std::getline(in, line)) {
                 char name[256] = {};
                 if (std::sscanf(line.c_str(), "#define %255s", name) != 1) continue;

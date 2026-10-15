@@ -25,7 +25,6 @@
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
 #include "Common/Image.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 #include "WorkAround/ToeSynaBl/ToeSynaBl.h"
 
@@ -920,10 +919,3 @@ bool CheckAbnormalTouch(uint8_t touchIdx) {
 }
 
 }  // namespace Solvers::Tsa::Core::Baseline
-
-// raw 的调用方
-extern "C" {
-namespace B = Solvers::Tsa::Core::Baseline;
-bool BLReset_InDebounce(void) { return B::ResetInDebounce(); }
-uint8_t BLReset_Status(void) { return B::ResetStatus(); }
-}  // extern "C"

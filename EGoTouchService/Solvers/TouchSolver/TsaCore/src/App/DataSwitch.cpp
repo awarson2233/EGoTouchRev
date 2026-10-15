@@ -38,7 +38,3 @@ void ToGrid() { Switch(kGrid); }
 void ToHand() { Switch(kHand); }
 
 }  // namespace Solvers::Tsa::Core::DataSwitch
-
-extern "C" {
-void DataSwitch_ToHand(void) { Solvers::Tsa::Core::DataSwitch::ToHand(); }
-}

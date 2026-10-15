@@ -9,7 +9,6 @@
 #include "App/Report.h"
 #include "App/TsaOut.h"
 #include "Common/Image.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::EdgeRecovery {
@@ -296,9 +295,3 @@ bool IsMoveInCorrectedButDisabled() { return MoveInCorrectedButDisabled() != 0; 
 uint16_t GetLimit() { return static_cast<uint16_t>(static_cast<uint16_t>(TouchSize::MmToDisplayPixel(static_cast<uint8_t>(LimitMm()))) >> 4); }
 
 }  // namespace Solvers::Tsa::Core::EdgeRecovery
-
-extern "C" {
-void ER_Init(void) { Solvers::Tsa::Core::EdgeRecovery::Init(); }
-void ER_Process(void) { Solvers::Tsa::Core::EdgeRecovery::Process(); }
-uint16_t ER_GetLimit(void) { return Solvers::Tsa::Core::EdgeRecovery::GetLimit(); }
-}  // extern "C"

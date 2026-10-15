@@ -16,7 +16,6 @@
 #include "Alg/TouchZone/TouchZoneInternal.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::TouchZone {

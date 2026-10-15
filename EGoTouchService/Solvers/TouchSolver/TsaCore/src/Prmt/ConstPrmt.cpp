@@ -93,9 +93,3 @@ void Init() {
 }
 
 }  // namespace Solvers::Tsa::Core::ConstPrmt
-
-// ══════════════════════════════════════════════════════════════════════
-// 过渡期：供尚未改写的 raw 代码调用，签名与 raw/include/TSAFuncDecls.h 一致。
-// ══════════════════════════════════════════════════════════════════════
-
-extern "C" void TSAConstPrmt_Init(void) { Solvers::Tsa::Core::ConstPrmt::Init(); }

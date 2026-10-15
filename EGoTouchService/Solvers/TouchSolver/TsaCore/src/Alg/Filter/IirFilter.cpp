@@ -48,14 +48,3 @@ uint8_t GetCoef(uint16_t delta) noexcept {
 }
 
 }  // namespace Solvers::Tsa::Core::Aiir
-
-// ── 过渡期：未转换的 C 代码按原名调用 ──────────────────────────────
-extern "C" int IIR_Process(int current, int previous, uint8_t weight, uint8_t shift) {
-    return Solvers::Tsa::Core::Iir::Process(current, previous, weight, shift);
-}
-extern "C" int IIR_Process2(int current, int previous, uint8_t weight, uint8_t shift) {
-    return Solvers::Tsa::Core::Iir::ProcessConverging(current, previous, weight, shift);
-}
-extern "C" char AIIR_GetCoef(uint16_t delta) {
-    return static_cast<char>(Solvers::Tsa::Core::Aiir::GetCoef(delta));
-}

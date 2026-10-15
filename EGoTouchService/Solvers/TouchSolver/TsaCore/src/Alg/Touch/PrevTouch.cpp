@@ -332,33 +332,3 @@ bool HistoryQueuePush(uint8_t prevIdx, uint16_t dim1, uint16_t dim2) {
 }
 
 }  // namespace Solvers::Tsa::Core::PrevTouch
-
-// ══════════════════════════════════════════════════════════════════════
-// 过渡期：未改写的 C 代码按原名调用。签名与 raw/include/TSAFuncDecls.h 一致。
-// ══════════════════════════════════════════════════════════════════════
-namespace PT = Solvers::Tsa::Core::PrevTouch;
-using Solvers::Tsa::Core::HistoryEntry;
-
-extern "C" {
-void PrevTouch_Release(void) { PT::Release(); }
-uint8_t PrevTouch_GetIdxBasedOnID(char id) { return PT::GetIdxBasedOnId(static_cast<uint8_t>(id)); }
-uint64_t PrevTouch_IsValidId(char id) { return PT::IsValidId(static_cast<uint8_t>(id)); }
-void PrevTouch_PostProcess(void) { PT::PostProcess(); }
-void PrevTouch_UnitCopy(uint8_t prevIdx, uint8_t curIdx) { PT::UnitCopy(prevIdx, curIdx); }
-void PrevTouch_UnitUpdate(uint8_t prevIdx, uint8_t curIdx) { PT::UnitUpdate(prevIdx, curIdx); }
-uint64_t PrevTouch_HistoryBufferPush(uint8_t prevIdx, uint64_t* entry) {
-    return PT::HistoryBufferPush(prevIdx, *reinterpret_cast<const HistoryEntry*>(entry));
-}
-uint64_t PrevTouch_HistoryBufferPop(uint8_t prevIdx, uint64_t* out) {
-    return PT::HistoryBufferPop(prevIdx, *reinterpret_cast<HistoryEntry*>(out));
-}
-uint64_t PrevTouch_HistoryBufferGet(uint8_t prevIdx, uint8_t pos, uint64_t* out) {
-    return PT::HistoryBufferGet(prevIdx, pos, *reinterpret_cast<HistoryEntry*>(out));
-}
-void PrevTouch_HistoryBufferInsert(uint8_t prevIdx, uint8_t pos, uint64_t* entry) {
-    PT::HistoryBufferInsert(prevIdx, pos, *reinterpret_cast<const HistoryEntry*>(entry));
-}
-uint64_t PrevTouch_HistoryQueuePush(uint8_t prevIdx, uint16_t dim1, uint16_t dim2) {
-    return PT::HistoryQueuePush(prevIdx, dim1, dim2);
-}
-}  // extern "C"

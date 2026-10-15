@@ -9,7 +9,6 @@
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::Rawdata {
@@ -119,10 +118,3 @@ void GetUnNormalizedBaseline(int16_t* bl, uint32_t n) {
 }
 
 }  // namespace Solvers::Tsa::Core::Rawdata
-
-// raw 的调用方
-extern "C" {
-namespace R = Solvers::Tsa::Core::Rawdata;
-void Rawdata_Process(void) { R::Process(); }
-void Rawdata_CMF(void) { R::Cmf(); }
-}  // extern "C"

@@ -4,7 +4,6 @@
 
 #include "Alg/TouchThold/TouchThold.h"
 #include "App/TsaStatic.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::DynPrmt {

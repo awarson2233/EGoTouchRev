@@ -412,4 +412,3 @@ void Process() {
 }  // namespace Solvers::Tsa::Core::TouchMode
 
 // raw TSA 还在调用的入口
-extern "C" void TouchMode_Process(void) { Solvers::Tsa::Core::TouchMode::Process(); }

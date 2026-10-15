@@ -60,12 +60,3 @@ bool IsOnOuterEdge(uint8_t idx) {
 }
 
 }  // namespace Solvers::Tsa::Core::PrevPeak
-
-// ══════════════════════════════════════════════════════════════════════
-// 过渡期：未改写的 C 代码按原名调用。签名与 raw/include/TSAFuncDecls.h 一致。
-// ══════════════════════════════════════════════════════════════════════
-namespace PP = Solvers::Tsa::Core::PrevPeak;
-
-extern "C" {
-void PrevPeak_Process(void) { PP::Process(); }
-}  // extern "C"

@@ -12,7 +12,6 @@
 #include "App/Sys.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::Exception {
@@ -203,16 +202,3 @@ void Process() {
 }
 
 }  // namespace Solvers::Tsa::Core::Exception
-
-// raw 的调用方
-extern "C" {
-namespace E = Solvers::Tsa::Core::Exception;
-void Exception_Process(void) { E::Process(); }
-void Exception_ProcessTouchZone(void* zone) { E::ProcessTouchZone(*static_cast<Solvers::Tsa::Core::TouchZoneUnit*>(zone)); }
-
-// 充电器噪声与 Panel SD 检测：Full Incell 版本（FIException）为空，Hybrid Incell 版本（HIException）被裁掉。
-void Exception_CheckChargerNoiseInRxLines(void) {}
-void Exception_CheckPanelSD(void) {}
-uint64_t Exception_IsChargerNoiseDetected(void) { return 0; }
-uint64_t Exception_GetDetectedChargerNoise(void) { return 0; }
-}  // extern "C"

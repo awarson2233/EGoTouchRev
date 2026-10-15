@@ -4,8 +4,8 @@
 #include <cstring>
 
 #include "Common/Assert.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
+#include "Prmt/ProjectTables.h"
 
 namespace Solvers::Tsa::Core::Prmt {
 
@@ -37,7 +37,7 @@ void ReInit() {
 // TSAPrmt_Init @ 0x6bb3b90d
 // 原代码经 TSAPrmt_FlashPrmtLoadProject 装入机型参数，它总是返回成功。
 bool Init() {
-    TSACoreRaw_LoadProjectTables();
+    LoadProjectTables();
     ReInit();
     return true;
 }
@@ -45,7 +45,7 @@ bool Init() {
 // TSAPrmt_LoadProject @ 0x6bb3b93a
 bool LoadProject(const char* name) {
     if (name == nullptr) return false;
-    TSACoreRaw_LoadProjectTables();
+    LoadProjectTables();
     if (std::strcmp(GetProjectName(), "DFLT000000") == 0) {
         FlashPrmt& flash = PrmtFlash();
         flash.dim1Len = static_cast<uint8_t>(Afe::ColNum());
@@ -78,16 +78,3 @@ void Process() {
 const char* GetProjectName() { return ProjectName(); }
 
 }  // namespace Solvers::Tsa::Core::Prmt
-
-// ══════════════════════════════════════════════════════════════════════
-// 过渡期：供尚未改写的 raw 代码调用，签名与 raw/include/TSAFuncDecls.h 一致。
-// ══════════════════════════════════════════════════════════════════════
-
-namespace Prmt = Solvers::Tsa::Core::Prmt;
-
-extern "C" {
-
-void TSAPrmt_PreProcess(void) { Prmt::PreProcess(); }
-void TSAPrmt_Process(void) { Prmt::Process(); }
-
-}  // extern "C"

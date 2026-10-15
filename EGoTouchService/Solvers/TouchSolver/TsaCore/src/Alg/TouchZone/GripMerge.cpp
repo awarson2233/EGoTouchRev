@@ -18,7 +18,6 @@
 #include "App/Report.h"
 #include "App/Sys.h"
 #include "App/TsaBuffer.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 #include "Rejection/GripFilter/GripFilter.h"
 

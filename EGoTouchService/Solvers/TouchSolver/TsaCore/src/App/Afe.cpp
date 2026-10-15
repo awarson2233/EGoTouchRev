@@ -12,7 +12,6 @@
 #include "Common/Image.h"
 #include "Common/Memory.h"
 #include "Extension/HardwareAnalyzer/HardwareAnalyzer.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 #include "Prmt/TsaPrmt.h"
 
@@ -298,7 +297,7 @@ void UpdateCurrFreq() {
 void UpdateScanFreq() {
     const Caps& caps = *CapsPtr();
     Scan& sc = g.scan;
-    const auto noise = static_cast<int16_t>(Exception_GetDetectedChargerNoise());
+    constexpr int16_t noise = 0;  // 充电噪声检测（Exception_GetDetectedChargerNoise）在本移植里裁掉了
     FreqEntry& cur = sc.freq[sc.curFreq];
     if (cur.maxChargerNoise < noise) cur.maxChargerNoise = noise;
     if (cur.noisyTime == 0) cur.noisyTime = Now();
@@ -745,9 +744,3 @@ bool IsRawUnifiedToTargetValue() { return IsAlpsProject() && std::strcmp(Version
 bool IsIndividualBaselineForEachFreq() { return IsRawUnifiedToTargetValue(); }
 
 }  // namespace Solvers::Tsa::Core::Afe
-
-// raw 的调用方
-extern "C" {
-namespace A = Solvers::Tsa::Core::Afe;
-uint32_t AFE_IsAutoCalibration(void) { return A::IsAutoCalibration() ? 1 : 0; }
-}  // extern "C"

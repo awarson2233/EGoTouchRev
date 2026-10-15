@@ -6,7 +6,6 @@
 #include "App/Property.h"
 #include "App/Sys.h"
 #include "App/TsaStatic.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::TouchThold {
@@ -184,15 +183,3 @@ void Process(int16_t fingerThold, int16_t gloveThold, int16_t* peakThold, int16_
 }
 
 }  // namespace Solvers::Tsa::Core::TouchThold
-
-namespace T = Solvers::Tsa::Core::TouchThold;
-
-extern "C" {
-void TouchThold_Init(void) { T::Init(); }
-void TouchThold_Process(int16_t fingerThold, int16_t gloveThold, int16_t* peakThold, int16_t* touchThold,
-                        int16_t* touchDownThold) {
-    T::Process(fingerThold, gloveThold, peakThold, touchThold, touchDownThold);
-}
-uint8_t TouchThold_IsSwitching(void) { return Solvers::Tsa::Core::Prpt().tholdSwitching; }
-uint64_t TouchThold_ToeUseSpecialThold(void) { return T::ToeUseSpecialThold(); }
-}  // extern "C"

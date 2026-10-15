@@ -14,7 +14,6 @@
 #include "Common/Assert.h"
 #include "Common/Memory.h"
 #include "Extension/HardwareAnalyzer/HardwareAnalyzerInternal.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 #include "WorkAround/BadChannel/BadChannel.h"
 #include "WorkAround/RfNoise/RfNoise.h"
@@ -495,15 +494,3 @@ bool IsToBypassCurrentFrame() {
 const char* GetExceptionDescription() { return St().description; }
 
 }  // namespace Solvers::Tsa::Core::HardwareAnalyzer
-
-// raw 的调用方
-extern "C" {
-namespace HA = Solvers::Tsa::Core::HardwareAnalyzer;
-void HardwareAnalyzer_Process(void) { HA::Process(); }
-void HardwareAnalyzer_GetRaw2RawPrpt(void) { HA::GetRaw2RawPrpt(); }
-void HardwareAnalyzer_SetSoftException(void) { HA::SetSoftException(); }
-int HardwareAnalyzer_GetDetectedException(void) { return HA::GetDetectedException(); }
-// 描述串靠 StrPrintf 拼写，StrPrintf 被裁掉后为空操作。
-void HardwareAnalyzer_GenerateExceptionDescription(void) {}
-uint8_t HardwareAnalyzer_IsToBypassCurrentFrame(void) { return HA::IsToBypassCurrentFrame() ? 1 : 0; }
-}  // extern "C"

@@ -10,7 +10,6 @@
 #include "Alg/Touch/TouchData.h"
 #include "Alg/TouchSize/TouchSize.h"
 #include "App/TsaStatic.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 #include "Rejection/GripFilter/GripFilter.h"
 
@@ -286,8 +285,3 @@ void Process(bool strictAccCheck) {
 }
 
 }  // namespace Solvers::Tsa::Core::IdTracking
-
-extern "C" {
-void IDT_Init(void) {}
-void IDT_Process(uint8_t useStrictAccCheck) { Solvers::Tsa::Core::IdTracking::Process(useStrictAccCheck != 0); }
-}  // extern "C"

@@ -6,7 +6,6 @@
 #include "App/Sys.h"
 #include "App/TsaBuffer.h"
 #include "Common/Assert.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::GridIir {
@@ -28,6 +27,3 @@ void Process() {
 }
 
 }  // namespace Solvers::Tsa::Core::GridIir
-
-// raw 的调用方
-extern "C" void GridIIR_Process(void) { Solvers::Tsa::Core::GridIir::Process(); }

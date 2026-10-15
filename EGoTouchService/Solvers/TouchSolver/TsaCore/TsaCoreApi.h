@@ -2,8 +2,7 @@
 // ══════════════════════════════════════════════════════════════════════
 // TsaCoreApi — 宿主用到的 TSACoreRaw 导出，以及宿主要填的三个 AFE 结构体。
 //
-// raw/include 下的头文件带上千个镜像地址宏，不能进 C++ 翻译单元；这里只按
-// 原 DLL 的导出签名重新声明用得到的那几个。结构体布局对应 AFE HAL spec
+// 按原 DLL 的导出签名声明宿主用得到的那几个。结构体布局对应 AFE HAL spec
 // 0x011a00（AFE_SetCapsNormal / AFE_SetFrameNormal 的拷贝范围）。
 // ══════════════════════════════════════════════════════════════════════
 
@@ -14,7 +13,7 @@ extern "C" {
 
 void TSACoreRaw_InitImage(void);
 
-// 算法状态所在的全部内存（raw/Common/TSAState.c），回放比对用。镜像块的 va 是原 DLL 的地址；
+// 算法状态所在的全部内存（Common/Memory.cpp），回放比对用。镜像块的 va 是原 DLL 的地址；
 // 堆缓冲的 va 为 0。返回块数；capacity 不够时只返回需要的块数，登记表溢出时返回 (size_t)-1。
 typedef struct TSACoreRaw_StateBlock {
     const uint8_t* data;

@@ -8,7 +8,6 @@
 #include "App/Sys.h"
 #include "App/TsaStatic.h"
 #include "Extension/Thenar/Thenar.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::Out {
@@ -198,18 +197,3 @@ int8_t Angle(int8_t angle) {
 }
 
 }  // namespace Solvers::Tsa::Core::Out
-
-// raw 的调用方
-extern "C" {
-namespace O = Solvers::Tsa::Core::Out;
-void TSAOut_PostProcess(void) { O::PostProcess(); }
-uint16_t TSAOut_DisplayXPos(uint8_t idx, ...) { return O::DisplayXPos(idx); }
-uint16_t TSAOut_RptXPos(uint8_t idx) { return O::RptXPos(idx); }
-uint16_t TSAOut_Dim1PosInternal(uint16_t pos, uint16_t scale) { return O::Dim1PosInternal(pos, scale); }
-uint16_t TSAOut_Dim2PosInternal(uint16_t pos, uint16_t scale) { return O::Dim2PosInternal(pos, scale); }
-uint32_t TSAOut_RevertDim1Pos(uint16_t pos) { return O::RevertDim1Pos(pos); }
-uint32_t TSAOut_IntToExtDist(int16_t dist) { return O::IntToExtDist(dist); }
-uint64_t TSAOut_ExtToIntDist(uint16_t dist) { return O::ExtToIntDist(dist); }
-uint16_t TSAOut_Axis(int16_t axis) { return O::Axis(axis); }
-char TSAOut_Angle(char angle) { return static_cast<char>(O::Angle(static_cast<int8_t>(angle))); }
-}  // extern "C"

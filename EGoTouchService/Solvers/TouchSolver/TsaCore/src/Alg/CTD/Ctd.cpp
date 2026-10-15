@@ -136,14 +136,3 @@ int64_t BasicCalculation(int32_t weightedSum, int32_t weight) {
 }
 
 }  // namespace Solvers::Tsa::Core::Ctd
-
-namespace C = Solvers::Tsa::Core::Ctd;
-
-extern "C" {
-void CTD_ECProcess(void) { C::EcProcess(); }
-void CTD_General(uint8_t dim1, uint8_t dim2, uint8_t dim1Span, uint8_t dim2Span, uint16_t* centerDim1,
-                 uint16_t* centerDim2) {
-    C::General(dim1, dim2, dim1Span, dim2Span, centerDim1, centerDim2);
-}
-int64_t CTD_BasicCalculation(int32_t weightedSum, int32_t weight) { return C::BasicCalculation(weightedSum, weight); }
-}  // extern "C"

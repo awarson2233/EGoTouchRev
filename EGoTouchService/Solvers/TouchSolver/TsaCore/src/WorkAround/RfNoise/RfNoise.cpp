@@ -8,7 +8,6 @@
 #include "App/TsaStatic.h"
 #include "Common/Image.h"
 #include "Common/Memory.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::RfNoise {

@@ -16,7 +16,6 @@
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
 #include "Common/Image.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 #include "WorkAround/ToeSynaBl/ToeSynaBl.h"
 
@@ -384,15 +383,3 @@ int16_t MinSig() {
 }
 
 }  // namespace Solvers::Tsa::Core::Baseline
-
-// raw 的调用方
-extern "C" {
-namespace B = Solvers::Tsa::Core::Baseline;
-void BLSM_Init(uint8_t clearResetLatch) { B::Init(clearResetLatch != 0); }
-void BLSM_PreProcess(void) { B::PreProcess(); }
-void BLSM_Process(bool hwReset, bool refresh) { B::Process(hwReset, refresh); }
-void BLSM_UpdateForRawUnstable(void) { B::UpdateForRawUnstable(); }
-uint32_t BLSM_IsReset(void) { return B::IsReset() ? 1 : 0; }
-uint32_t BLSM_IsOKToIDLE(void) { return B::IsOkToIdle() ? 1 : 0; }
-uint64_t BLSM_IsBaselineOK(void) { return B::IsBaselineOk() ? 1 : 0; }
-}  // extern "C"

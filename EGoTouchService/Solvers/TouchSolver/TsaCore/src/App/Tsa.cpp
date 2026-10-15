@@ -41,7 +41,6 @@
 #include "Extension/HandGesture/HandGesture.h"
 #include "Extension/HardwareAnalyzer/HardwareAnalyzer.h"
 #include "Extension/Thenar/Thenar.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 #include "Prmt/TsaPrmt.h"
 #include "Rejection/AntiTouch/AntiTouch.h"
@@ -495,7 +494,7 @@ bool IsReCalibNeeded() {
 
 }  // namespace Solvers::Tsa::Core::Tsa
 
-// 宿主与 raw 的调用方
+// 宿主 API
 extern "C" {
 namespace T = Solvers::Tsa::Core::Tsa;
 namespace A = Solvers::Tsa::Core::Afe;

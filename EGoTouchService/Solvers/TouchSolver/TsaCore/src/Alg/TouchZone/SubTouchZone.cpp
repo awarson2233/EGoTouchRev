@@ -13,7 +13,6 @@
 #include "App/Sys.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 #include "Tool/PosnList/PosnSpecial.h"
 #include "Rejection/GripFilter/GripFilter.h"

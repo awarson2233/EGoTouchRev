@@ -15,7 +15,6 @@
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
 #include "Extension/HardwareAnalyzer/HardwareAnalyzerInternal.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 #include "WorkAround/BadChannel/BadChannel.h"
 

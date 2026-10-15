@@ -5,12 +5,14 @@
 #include <cstddef>
 #include <cstring>
 
-extern "C" void HardwareAnalyzer_SetSoftException(void);
-
 namespace Solvers::Tsa::Core {
 
+namespace HardwareAnalyzer {
+void SetSoftException();
+}  // namespace HardwareAnalyzer
+
 inline void TsaAssert(bool condition) noexcept {
-    if (!condition) HardwareAnalyzer_SetSoftException();
+    if (!condition) HardwareAnalyzer::SetSoftException();
 }
 
 /// 原代码的 memset_s：长度超过容量时不写并记一次断言。

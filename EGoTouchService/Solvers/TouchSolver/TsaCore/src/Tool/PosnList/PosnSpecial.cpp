@@ -150,10 +150,3 @@ uint8_t GetPosMarker() {
 }  // namespace Solvers::Tsa::Core::PosnSpecial
 
 namespace PS = Solvers::Tsa::Core::PosnSpecial;
-
-extern "C" {
-void PosnSpecial_Init(uint16_t* cells, uint16_t capacity) { PS::Init(cells, capacity); }
-void PosnSpecial_Put(uint16_t cell) { PS::Put(cell); }
-uint16_t PosnSpecial_Get(void) { return PS::Get(); }
-char PosnSpecial_GetPosMarker(void) { return static_cast<char>(PS::GetPosMarker()); }
-}  // extern "C"

@@ -278,37 +278,22 @@ endfunction()
 add_library(Solvers STATIC ${SOLVERS_SOURCES})
 ego_configure_solvers_target(Solvers)
 
-# TSACore 手指管线。正在逐模块从 Ghidra 反编译 C（raw/）改写成 C++（TsaCore/src/），两部分编进同一个库，
-# 互相按原函数名调用。全局状态在 g_tsaMemoryImage 里，进程内单例。
-# 反编译代码依赖类型双关与有符号回绕，必须关掉严格别名并启用 -fwrapv；改写后的代码沿用同样的语义。
-# int-conversion 等诊断是反编译类型残留，只对 C 部分屏蔽。
+# TSACore 手指管线：由 Ghidra 反编译的 TSACore.dll 改写成的 C++（TsaCore/src/）。全局状态在
+# g_tsaMemoryImage 里（按原 DLL 地址排布），进程内单例。raw/ 只留分析文档与符号元数据。
+# 原代码依赖类型双关与有符号回绕，必须关掉严格别名并启用 -fwrapv；改写后的代码沿用同样的语义。
 # -ffp-contract=off：原 DLL 是 x64，没有乘加融合；ARM64 上默认融合会让浮点中间量差出末位。
 # -ftrivial-auto-var-init=zero：原代码有把未赋值的局部量（结构体尾部的填充）拷进状态的地方，
 # 不清零的话状态随栈上的残留值变，重构前后无从比对。
 set(TSACORE_RAW_ROOT "${SOLVERS_ROOT}/TouchSolver/raw")
 set(TSACORE_SRC_ROOT "${SOLVERS_ROOT}/TouchSolver/TsaCore/src")
 file(GLOB_RECURSE TSACORE_CPP_SOURCES CONFIGURE_DEPENDS "${TSACORE_SRC_ROOT}/*.cpp")
-file(GLOB TSACORE_RAW_SOURCES CONFIGURE_DEPENDS
-    "${TSACORE_RAW_ROOT}/Baseline/*.c"
-    "${TSACORE_RAW_ROOT}/Common/*.c"
-    "${TSACORE_RAW_ROOT}/Core/*.c"
-    "${TSACORE_RAW_ROOT}/Detection/*.c"
-    "${TSACORE_RAW_ROOT}/Filter/*.c"
-    "${TSACORE_RAW_ROOT}/Prmt/*.c"
-    "${TSACORE_RAW_ROOT}/Rejection/*.c"
-)
-add_library(TSACoreRaw STATIC ${TSACORE_RAW_SOURCES} ${TSACORE_CPP_SOURCES})
-set_target_properties(TSACoreRaw PROPERTIES C_STANDARD 17 C_EXTENSIONS ON)
-target_include_directories(TSACoreRaw PRIVATE
-    "$<$<COMPILE_LANGUAGE:C>:${TSACORE_RAW_ROOT}/include>"
-    "$<$<COMPILE_LANGUAGE:CXX>:${TSACORE_SRC_ROOT}>"
-)
+add_library(TSACoreRaw STATIC ${TSACORE_CPP_SOURCES})
+target_include_directories(TSACoreRaw PRIVATE "${TSACORE_SRC_ROOT}")
 target_compile_options(TSACoreRaw PRIVATE
     -fno-strict-aliasing
     -fwrapv
     -ffp-contract=off
     -ftrivial-auto-var-init=zero
-    $<$<COMPILE_LANGUAGE:C>:-Wno-int-conversion -Wno-incompatible-pointer-types -Wno-incompatible-function-pointer-types -Wno-everything -Werror=implicit-function-declaration>
 )
 # 比对与覆盖率用：给算法库单独追加编译选项（如 -O2、-fprofile-instr-generate -fcoverage-mapping），
 # 回放工具其余部分保持 Debug

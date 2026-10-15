@@ -19,7 +19,6 @@
 #include "Common/Memory.h"
 #include "Extension/HandGesture/HandGesture.h"
 #include "Extension/HardwareAnalyzer/HardwareAnalyzer.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 #include "WorkAround/BadChannel/BadChannel.h"
 #include "WorkAround/RfNoise/RfNoise.h"
@@ -304,13 +303,3 @@ bool InitProject() {
 }
 
 }  // namespace Solvers::Tsa::Core::Buffer
-
-// raw 的调用方
-extern "C" {
-namespace B = Solvers::Tsa::Core::Buffer;
-bool TSAMem_InitProject(void) { return B::InitProject(); }
-void TSABuffer_PreProcess(void) { B::PreProcess(); }
-void TSABuffer_PostProcess(void) { B::PostProcess(); }
-void TSABuffer_PrevFrameProcess(void) { B::PrevFrameProcess(); }
-void TSABuffer_GripStageProcess(void) { B::GripStageProcess(); }
-}  // extern "C"

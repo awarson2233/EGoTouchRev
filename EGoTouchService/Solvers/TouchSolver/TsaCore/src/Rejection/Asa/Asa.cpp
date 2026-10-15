@@ -262,7 +262,7 @@ bool IsHpp3() { return (g_state.aux & kAuxHpp3) != 0 && g_state.activeFrames != 
 
 }  // namespace Solvers::Tsa::Core::Asa
 
-// 宿主与 raw 的调用方
+// 宿主 API
 extern "C" {
 namespace As = Solvers::Tsa::Core::Asa;
 

@@ -9,7 +9,6 @@
 #include "Alg/TouchThold/TouchThold.h"
 #include "App/Scenario.h"
 #include "App/TsaStatic.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::Debounce {
@@ -165,9 +164,3 @@ uint16_t LargeObjectSize() {
 }  // namespace Solvers::Tsa::Core::Debounce
 
 namespace DB = Solvers::Tsa::Core::Debounce;
-
-extern "C" {
-uint16_t DB_TouchDownNum(uint8_t prevIdx, uint8_t curIdx) { return DB::TouchDownNum(prevIdx, curIdx); }
-uint16_t DB_LiftOffNum(uint8_t prevIdx) { return DB::LiftOffNum(prevIdx); }
-uint16_t DB_LOSize(void) { return DB::LargeObjectSize(); }
-}  // extern "C"

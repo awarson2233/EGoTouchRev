@@ -20,7 +20,6 @@
 #include "Extension/HardwareAnalyzer/HardwareAnalyzer.h"
 #include "Extension/Thenar/Thenar.h"
 #include "Extension/Thenar/ThenarData.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 #include "Rejection/AntiTouch/AntiTouch.h"
 #include "Rejection/GripFilter/GripFilter.h"
@@ -1036,40 +1035,3 @@ int GetTimeRpt(uint8_t curIdx) {
 }
 
 }  // namespace Solvers::Tsa::Core::Touch
-
-// ══════════════════════════════════════════════════════════════════════
-// 过渡期：未改写的 C 代码按原名调用。签名与 raw/include/TSAFuncDecls.h 一致。
-// ══════════════════════════════════════════════════════════════════════
-namespace T = Solvers::Tsa::Core::Touch;
-
-extern "C" {
-void Touch_Clean(void) { T::Clean(); }
-void Touch_KeepPrevTouchWithExceptionExcluded(void) { T::KeepPrevTouchWithExceptionExcluded(); }
-void Touch_UnitCopy(uint8_t curIdx, uint8_t prevIdx) { T::UnitCopy(curIdx, prevIdx); }
-void Touch_UnitRemove(uint8_t curIdx) { T::UnitRemove(curIdx); }
-void Touch_UnitUpdate(uint8_t curIdx, uint8_t prevIdx) { T::UnitUpdate(curIdx, prevIdx); }
-void Touch_SetEdgeDist(uint8_t curIdx) { T::SetEdgeDist(curIdx); }
-void Touch_ProcessAftTouchEvent(void) { T::ProcessAftTouchEvent(); }
-void Touch_ProcessBetaGrip(void) { T::ProcessBetaGrip(); }
-void Touch_ProcessExtInfo(void) { T::ProcessExtInfo(); }
-void Touch_CreatePostReport(uint8_t curIdx, uint8_t) { T::CreatePostReport(curIdx); }
-uint32_t Touch_GetSQDistPixel(uint16_t dim1A, uint16_t dim2A, uint16_t dim1B, uint16_t dim2B) {
-    return T::GetSqDistPixel(dim1A, dim2A, dim1B, dim2B);
-}
-int Touch_GetSQDistPixelToEdge(int16_t dim1, int16_t dim2, int16_t toDim1, int16_t toDim2) {
-    return T::GetSqDistPixelToEdge(dim1, dim2, toDim1, toDim2);
-}
-int16_t Touch_GetDistToLogicEdge(int edge, int16_t dim1, int16_t dim2) { return T::GetDistToLogicEdge(edge, dim1, dim2); }
-int16_t Touch_GetFormattedTimeInterval(int16_t dt) { return T::GetFormattedTimeInterval(dt); }
-uint64_t Touch_IsOffEvent(int event) { return T::IsOffEvent(static_cast<uint32_t>(event)); }
-char Touch_IsOff(uint8_t curIdx) { return T::IsOff(curIdx); }
-uint8_t Touch_IsException(uint8_t curIdx, uint8_t prevIdx) { return T::IsException(curIdx, prevIdx); }
-char Touch_IsGrip(uint8_t curIdx) { return T::IsGrip(curIdx); }
-uint64_t Touch_IsGhostByMinSigOff(uint8_t curIdx) { return T::IsGhostByMinSigOff(curIdx); }
-bool Touch_IsGhostByMinSigOff2(uint8_t curIdx) { return T::IsGhostByMinSigOff2(curIdx); }
-bool Touch_IsFullyLiftOff(uint8_t curIdx) { return T::IsFullyLiftOff(curIdx); }
-uint64_t Touch_IsSideCoreInSameZone(uint8_t coreIdx, uint8_t sideIdx) { return T::IsSideCoreInSameZone(coreIdx, sideIdx); }
-bool Touch_NeedXYFilter(uint8_t curIdx, uint8_t prevIdx) { return T::NeedXyFilter(curIdx, prevIdx); }
-uint64_t Touch_ValidComparison(uint8_t curIdx, uint8_t prevIdx) { return T::ValidComparison(curIdx, prevIdx); }
-int Touch_GetTimeOn(uint8_t curIdx) { return T::GetTimeOn(curIdx); }
-}  // extern "C"

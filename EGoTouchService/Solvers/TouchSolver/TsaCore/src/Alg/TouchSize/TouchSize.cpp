@@ -6,7 +6,6 @@
 #include "Alg/Touch/TouchData.h"
 #include "Common/Assert.h"
 #include "Common/TsaMath.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::TouchSize {
@@ -131,11 +130,3 @@ uint64_t SqMmToSqPixel(uint16_t sqMm) {
 }  // namespace Solvers::Tsa::Core::TouchSize
 
 namespace TS = Solvers::Tsa::Core::TouchSize;
-
-extern "C" {
-void TS_Process(void) { TS::Process(); }
-void TS_PostProcess(void) { TS::PostProcess(); }
-int TS_MMToPixel(uint8_t mm) { return TS::MmToPixel(mm); }
-uint32_t TS_MMToDisplayPixel(uint8_t mm) { return TS::MmToDisplayPixel(mm); }
-int TS_PixelToMM(uint16_t pixel) { return TS::PixelToMm(pixel); }
-}  // extern "C"

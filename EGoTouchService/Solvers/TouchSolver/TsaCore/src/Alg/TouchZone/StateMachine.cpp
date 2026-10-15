@@ -19,7 +19,6 @@
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Memory.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::TouchZone {
@@ -465,9 +464,3 @@ void Process() {
 }
 
 }  // namespace Solvers::Tsa::Core::TouchZone
-
-// raw 的调用方
-extern "C" {
-namespace TZ = Solvers::Tsa::Core::TouchZone;
-void TZ_Process(void) { TZ::Process(); }
-}  // extern "C"

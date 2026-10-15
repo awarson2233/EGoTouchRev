@@ -13,7 +13,6 @@
 #include "App/TsaStatic.h"
 #include "Common/Image.h"
 #include "Common/TsaMath.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::Filter {
@@ -501,4 +500,3 @@ void ProcessUnit(uint8_t curIdx, uint8_t prevIdx) {
 }  // namespace Solvers::Tsa::Core::Filter
 
 // raw TouchReport 还在调用的入口
-extern "C" void Filter_ProcessUnit(uint8_t curIdx, uint8_t prevIdx) { Solvers::Tsa::Core::Filter::ProcessUnit(curIdx, prevIdx); }

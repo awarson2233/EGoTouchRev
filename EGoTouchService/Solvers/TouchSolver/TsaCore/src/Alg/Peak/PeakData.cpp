@@ -6,7 +6,6 @@
 #include "Alg/Touch/TouchData.h"
 #include "App/TsaBuffer.h"
 #include "Common/Assert.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::Peak {
@@ -193,41 +192,3 @@ int GetSquareDistance(uint8_t idxA, uint8_t idxB) {
 }
 
 }  // namespace Solvers::Tsa::Core::Peak
-
-// ══════════════════════════════════════════════════════════════════════
-// 过渡期：未改写的 C 代码按原名调用。签名与 raw/include/TSAFuncDecls.h 一致。
-// 返回 undefined4 的边缘判定在原代码里是 CONCAT31：高 24 位带着比较对象的高位，这里照样拼出来。
-// ══════════════════════════════════════════════════════════════════════
-namespace P = Solvers::Tsa::Core::Peak;
-using Solvers::Tsa::Core::PrmtFlash;
-using Solvers::Tsa::Core::Touches;
-
-namespace {
-uint32_t Concat31(uint32_t high, bool low) {
-    return (high & 0xffffff00u) | static_cast<uint32_t>(low);
-}
-}  // namespace
-
-extern "C" {
-void Peak_Process(void) { P::Process(); }
-void Peak_Clean(void) { P::Clean(); }
-void Peak_DetectInRange(int16_t thold, uint8_t firstRow, uint8_t lastRow, uint8_t firstCol, uint8_t lastCol) {
-    P::DetectInRange(thold, firstRow, lastRow, firstCol, lastCol);
-}
-void Peak_SortInSigAscending(void) { P::SortInSigAscending(); }
-uint64_t Peak_IsToExcludeSideRegion(void) { return P::IsToExcludeSideRegion(); }
-uint64_t Peak_needUDFPLargeFingerWorkaround(void) { return P::NeedUdfpLargeFingerWorkaround(); }
-uint32_t Peak_Insert(uint8_t dim1, uint8_t dim2) { return P::Insert(dim1, dim2); }
-uint32_t Peak_IsTouchValid(uint8_t touchIdx) {
-    return Concat31(Touches().unit[touchIdx].event, P::IsTouchValid(touchIdx));
-}
-uint64_t Peak_IsOnInnerEdgeDim1(uint8_t idx) { return P::IsOnInnerEdgeDim1(idx); }
-uint64_t Peak_IsOnOuterEdge(uint8_t idx) { return P::IsOnOuterEdge(idx); }
-uint64_t Peak_IsOnOuterEdgeDim1(uint8_t idx) { return P::IsOnOuterEdgeDim1(idx); }
-uint8_t Peak_IsInNxNBox(uint8_t dim1, uint8_t dim2, uint8_t boxSize) { return P::IsInNxNBox(dim1, dim2, boxSize); }
-uint8_t Peak_GetIdxBySig(int16_t sig) { return P::GetIdxBySig(sig); }
-int Peak_GetZ9(uint8_t idx) { return P::GetZ9(idx); }
-uint8_t Peak_GetDistToEdge(uint8_t idx) { return P::GetDistToEdge(idx); }
-uint8_t Peak_GetDistance(uint8_t idxA, uint8_t idxB) { return P::GetDistance(idxA, idxB); }
-int Peak_GetSquareDistance(uint8_t idxA, uint8_t idxB) { return P::GetSquareDistance(idxA, idxB); }
-}  // extern "C"

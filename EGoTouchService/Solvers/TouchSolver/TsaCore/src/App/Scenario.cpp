@@ -243,7 +243,7 @@ void SetScreenRotateState(int state) {
 
 }  // namespace Solvers::Tsa::Core::Scenario
 
-// 宿主与 raw 的调用方
+// 宿主 API
 extern "C" {
 namespace Sc = Solvers::Tsa::Core::Scenario;
 uint32_t TSA_SetFeatures(uint32_t features) { return Sc::SetFeatures(features); }
@@ -251,5 +251,4 @@ uint32_t TSA_GetFeatures(void) { return Sc::GetFeatures(); }
 void TSA_EnableScenario(uint32_t mask) { Sc::Enable(mask); }
 void TSA_DisableScenario(uint32_t mask) { Sc::Disable(mask); }
 void TSA_SetScreenRotateState(int state) { Sc::SetScreenRotateState(state); }
-uint64_t TSA_IsGameScenario(void) { return Sc::IsGame() ? 1 : 0; }
 }  // extern "C"

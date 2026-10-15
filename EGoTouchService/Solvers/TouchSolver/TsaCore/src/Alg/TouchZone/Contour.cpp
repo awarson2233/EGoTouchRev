@@ -10,7 +10,6 @@
 #include "Alg/TouchZone/TouchZoneInternal.h"
 #include "Common/Image.h"
 #include "Common/TsaMath.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::TouchZone {

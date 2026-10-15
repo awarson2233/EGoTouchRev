@@ -12,7 +12,6 @@
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
 #include "Common/Image.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::Cmf {
@@ -352,14 +351,3 @@ void Process() {
 }
 
 }  // namespace Solvers::Tsa::Core::Cmf
-
-// raw 的调用方
-extern "C" {
-namespace C = Solvers::Tsa::Core::Cmf;
-void CMF_Process(void) { C::Process(); }
-uint32_t CMF_GetCmfMethod(void) { return C::GetMethod(); }
-void CMF_ProcessDimCommonOnBuf(int16_t* dst, const int16_t* src, int dim, int16_t thold, int16_t grad, uint8_t cols,
-                               uint8_t rows, uint8_t) {
-    C::ProcessDimCommonOnBuf(dst, src, dim, thold, grad, cols, rows);
-}
-}  // extern "C"

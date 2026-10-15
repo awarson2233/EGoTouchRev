@@ -6,7 +6,6 @@
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::Baseline {
@@ -100,9 +99,3 @@ void Reset() {
 }  // namespace Iir
 
 }  // namespace Solvers::Tsa::Core::Baseline
-
-// raw 的调用方
-extern "C" {
-namespace B = Solvers::Tsa::Core::Baseline;
-void BLIIR_CalcDiffCommon(int16_t* dif, int16_t* raw, int16_t* bl) { B::CalcDiffCommon(dif, raw, bl); }
-}  // extern "C"

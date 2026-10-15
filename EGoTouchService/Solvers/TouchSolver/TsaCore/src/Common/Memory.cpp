@@ -59,7 +59,6 @@ void Free(void* p) {
 
 }  // namespace Solvers::Tsa::Core::Mem
 
-// raw 的调用方
 extern "C" {
 
 // 宿主（回放）：镜像在前，堆缓冲按分配次序。

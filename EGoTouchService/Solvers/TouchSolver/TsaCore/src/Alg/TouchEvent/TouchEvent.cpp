@@ -8,7 +8,6 @@
 #include "App/Report.h"
 #include "App/Sys.h"
 #include "App/TsaStatic.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::TouchEvent {
@@ -265,7 +264,3 @@ void Process() {
 }
 
 }  // namespace Solvers::Tsa::Core::TouchEvent
-
-extern "C" {
-void TE_Process(void) { Solvers::Tsa::Core::TouchEvent::Process(); }
-}  // extern "C"

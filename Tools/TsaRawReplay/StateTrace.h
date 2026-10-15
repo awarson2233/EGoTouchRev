@@ -34,7 +34,7 @@ struct StateSnapshot {
 };
 
 /// 逐字节比较两份快照，把不同的区间连同符号名打到 stdout。rawRoot 是 raw 源码目录，符号名从
-/// _metadata/bss_symbols.txt 和 include 下的镜像宏里取。symbolFilter 非空时只列符号名含这个子串的区间
+/// _metadata/bss_symbols.txt 和 _metadata/image_macros.txt 里取。symbolFilter 非空时只列符号名含这个子串的区间
 /// （不限条数）。返回不同的字节数。
 size_t DiffSnapshots(const StateSnapshot& a, const StateSnapshot& b, const std::string& rawRoot,
                      const std::string& symbolFilter = {}, int maxRanges = 40);

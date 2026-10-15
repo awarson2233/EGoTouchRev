@@ -112,8 +112,3 @@ void Process() {
 void Reset() { ZeroFill(SelfBuf()); }
 
 }  // namespace Solvers::Tsa::Core::Self
-
-// raw 的调用方
-extern "C" {
-void Self_Reset(void) { Solvers::Tsa::Core::Self::Reset(); }
-}  // extern "C"

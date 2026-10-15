@@ -1,18 +1,15 @@
 #pragma once
 // ══════════════════════════════════════════════════════════════════════
-// 过渡期的状态访问：算法状态仍然在 raw 的 g_tsaMemoryImage 里，按原 DLL 的地址排布
-// （.data / .rdata / .bss，VA 0x6bb4e000 起）。已经转成 C++ 的模块经这里按原地址拿到
-// 带类型的引用，还没转换的 C 代码读写的是同一块内存，两边始终一致；回放比对的状态摘要
-// 也按原地址规范化，所以转换前后可以逐字节对比。
-//
-// 全部模块转换完以后，状态改为 Context 的成员，这个头文件随之删除。
+// 状态访问：算法状态在 g_tsaMemoryImage 里，按原 DLL 的地址排布（.data / .rdata / .bss，
+// VA 0x6bb4e000 起）。各模块经这里按原地址拿到带类型的引用；回放比对的状态摘要也按原地址
+// 规范化，所以重构前后可以逐字节对比。
 // ══════════════════════════════════════════════════════════════════════
 
 #include <cstdint>
 #include <cstring>
 #include <type_traits>
 
-extern "C" uint8_t g_tsaMemoryImage[];  // raw/Common/TSABssMemoryImage.c
+extern "C" uint8_t g_tsaMemoryImage[];  // Common/ImageInit.cpp
 
 namespace Solvers::Tsa::Core::Image {
 

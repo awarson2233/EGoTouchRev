@@ -7,7 +7,6 @@
 #include "App/Afe.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::Baseline {
@@ -99,6 +98,3 @@ void Compensation() {
 }
 
 }  // namespace Solvers::Tsa::Core::Baseline
-
-// raw 的调用方
-extern "C" void Baseline_Compensation(void) { Solvers::Tsa::Core::Baseline::Compensation(); }

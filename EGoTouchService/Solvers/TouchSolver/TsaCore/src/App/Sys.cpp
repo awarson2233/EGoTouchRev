@@ -10,7 +10,6 @@
 #include "App/Tsa.h"
 #include "App/TsaStatic.h"
 #include "Common/Image.h"
-#include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
 namespace Solvers::Tsa::Core::Sys {
@@ -489,18 +488,3 @@ void ProcessAftTouchEvent() {
 }
 
 }  // namespace Solvers::Tsa::Core::Sys
-
-// raw 的调用方
-extern "C" {
-namespace S = Solvers::Tsa::Core::Sys;
-void TSAStatic_Init(void) { S::Init(); }
-void TSAStatic_PreProcess(void) { S::PreProcess(); }
-bool TSAStatic_IsHWReset(void) { return S::IsHwReset(); }
-uint32_t TSAStatic_IsAFTModeEnabled(void) { return S::IsAftModeEnabled() ? 1 : 0; }
-uint64_t TSAStatic_IsSafeBaselineApplied(void) { return S::IsSafeBaselineApplied() ? 1 : 0; }
-uint8_t TSAStatic_IsSignalReverted(void) { return S::IsSignalReverted() ? 1 : 0; }
-uint8_t TSAStatic_IsChargerPlugged(void) { return S::IsChargerPlugged() ? 1 : 0; }
-uint8_t TSAStatic_IsAllFreqNoisy(void) { return S::IsAllFreqNoisy() ? 1 : 0; }
-uint8_t TSAStatic_IsAllFreqBecomeNoisy(void) { return S::IsAllFreqBecomeNoisy() ? 1 : 0; }
-void TSAStatic_SafeDiffCheck(void) { S::SafeDiffCheck(); }
-}  // extern "C"
