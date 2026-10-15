@@ -18,38 +18,6 @@ void DataSwitch_ToGrid(void)
 
 
 // ============================================================================
-// Function: DataSwitch_ToSide @ 6ba90770
-// ============================================================================
-
-void DataSwitch_ToSide(void)
-
-{
-                    /* 0x50770  531  DataSwitch_ToSide */
-  *(undefined8 *)_refptr_g_tsaBufTz = *(undefined8 *)_refptr_g_tsaBufTzSide;
-  *(undefined **)_refptr_g_touchesPtr = _refptr_g_touchesSide;
-  *_refptr_g_prevTouchesPtr = (PrevTouchArray *)_refptr_g_prevTouchesSide;
-  *_refptr_g_peaksPtr = (PeakArray *)_refptr_g_peaksSide;
-  *(undefined **)_refptr_g_prevPeaksPtr = _refptr_g_prevPeaksSide;
-  return;
-}
-
-
-// ============================================================================
-// Function: DataSwitch_ToProx @ 6ba9072e
-// ============================================================================
-
-void DataSwitch_ToProx(void)
-
-{
-                    /* 0x5072e  530  DataSwitch_ToProx */
-  *(undefined8 *)_refptr_g_tsaBufTz = *(undefined8 *)_refptr_g_tsaBufTzProx;
-  *(undefined8 *)_refptr_g_touchesPtr = *(undefined8 *)_refptr_g_touchesProxPtr;
-  *_refptr_g_prevTouchesPtr = *(PrevTouchArray **)_refptr_g_prevTouchesProxPtr;
-  return;
-}
-
-
-// ============================================================================
 // Function: DataSwitch_ToHand @ 6ba907ce
 // ============================================================================
 

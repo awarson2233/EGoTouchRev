@@ -30,9 +30,6 @@ void AFE_AutoCheckFreqShift(undefined8 param_1,ulonglong param_2);
 // AFE_AutoCheckInit @ 0x6bb29d1a (Core\AFE.c)
 void AFE_AutoCheckInit(void);
 
-// AFE_AutoCheckProcess @ 0x6bb2c5ed (Core\AFE.c)
-bool AFE_AutoCheckProcess(longlong param_1,undefined4 param_2,undefined8 param_3);
-
 // AFE_AutoCheckProcessInternal @ 0x6bb2c45b (Core\AFE.c)
 void AFE_AutoCheckProcessInternal (undefined8 param_1,undefined2 param_2,undefined4 param_3,void *param_4);
 
@@ -72,12 +69,6 @@ undefined2 AFE_GetColNum(void);
 // AFE_GetFrame @ 0x6bb2cd26 (Core\AFE.c)
 AFE_Frame * AFE_GetFrame(void);
 
-// AFE_GetGesture @ 0x6bb2cda4 (Core\AFE.c)
-uint AFE_GetGesture(void);
-
-// AFE_GetMaxNoise @ 0x6bb2d506 (Core\AFE.c)
-undefined2 AFE_GetMaxNoise(byte param_1);
-
 // AFE_GetNextScanFreqIndex @ 0x6bb2d650 (Core\AFE.c)
 undefined8 AFE_GetNextScanFreqIndex(byte *param_1);
 
@@ -87,26 +78,8 @@ undefined8 AFE_GetNextScanRateIndex(byte *param_1,char *param_2);
 // AFE_GetRowNum @ 0x6bb2d597 (Core\AFE.c)
 undefined2 AFE_GetRowNum(void);
 
-// AFE_GetScanFreq @ 0x6bb2d2be (Core\AFE.c)
-undefined2 AFE_GetScanFreq(void);
-
-// AFE_GetSpecMajorVersion @ 0x6bb2c994 (Core\AFE.c)
-undefined8 AFE_GetSpecMajorVersion(void);
-
-// AFE_GetSpecMinorVersion @ 0x6bb2c99f (Core\AFE.c)
-undefined8 AFE_GetSpecMinorVersion(void);
-
-// AFE_GetSpecPatchVersion @ 0x6bb2c9aa (Core\AFE.c)
-undefined8 AFE_GetSpecPatchVersion(void);
-
-// AFE_GetSpecVersion @ 0x6bb2c989 (Core\AFE.c)
-undefined8 AFE_GetSpecVersion(void);
-
 // AFE_GetTargetScanRateIndex @ 0x6bb2d733 (Core\AFE.c)
 undefined8 AFE_GetTargetScanRateIndex(ushort param_1,byte *param_2);
-
-// AFE_GetTestResult @ 0x6bb2c1d7 (Core\AFE.c)
-undefined * AFE_GetTestResult(void);
 
 // AFE_GetVersionInfo @ 0x6bb2cd7e (Core\AFE.c)
 char * AFE_GetVersionInfo(void);
@@ -174,9 +147,6 @@ bool AFE_IsIndividualBaselineForEachFreq(void);
 // AFE_IsManualFreqHopping @ 0x6bb2cfaf (Core\AFE.c)
 undefined4 AFE_IsManualFreqHopping(void);
 
-// AFE_IsManualFreqShift @ 0x6bb2d1b9 (Core\AFE.c)
-bool AFE_IsManualFreqShift(void);
-
 // AFE_IsRawJump @ 0x6bb2cebb (Core\AFE.c)
 undefined4 AFE_IsRawJump(void);
 
@@ -188,12 +158,6 @@ undefined4 AFE_IsRawUnstable(void);
 
 // AFE_IsRecalRequested @ 0x6bb2cf82 (Core\AFE.c)
 bool AFE_IsRecalRequested(void);
-
-// AFE_IsSideTouchDetected @ 0x6bb2ce2a (Core\AFE.c)
-undefined8 AFE_IsSideTouchDetected(void);
-
-// AFE_IsTouchDetected @ 0x6bb2ce62 (Core\AFE.c)
-undefined8 AFE_IsTouchDetected(void);
 
 // AFE_IsValid @ 0x6bb2cfec (Core\AFE.c)
 bool AFE_IsValid(void);
@@ -273,9 +237,6 @@ void AFE_ScanRateResetUnit(byte param_1);
 // AFE_ScanReset @ 0x6bb2d3a3 (Core\AFE.c)
 void AFE_ScanReset(void);
 
-// AFE_SetAFESpecVersion @ 0x6bb2c94d (Core\AFE.c)
-undefined8 AFE_SetAFESpecVersion(byte param_1,byte param_2,byte param_3);
-
 // AFE_SetCaps @ 0x6bb2cb53 (Core\AFE.c)
 void AFE_SetCaps(undefined8 param_1);
 
@@ -321,9 +282,6 @@ void AFE_SetInfo(undefined8 param_1);
 // AFE_SetMaxScanRate @ 0x6bb2d3ca (Core\AFE.c)
 void AFE_SetMaxScanRate(undefined2 param_1);
 
-// AFE_SetTestLevel @ 0x6bb2c1c5 (Core\AFE.c)
-void AFE_SetTestLevel(undefined4 param_1);
-
 // AFE_Simulation @ 0x6bb2c8aa (Core\AFE.c)
 void AFE_Simulation(void);
 
@@ -360,17 +318,11 @@ void ASAStaticInit(longlong param_1);
 // ASA_GetBluetoothConnectStatus @ 0x6bac77ec (Rejection\ASA.c)
 undefined4 ASA_GetBluetoothConnectStatus(void);
 
-// ASA_GetDim1PhyRes @ 0x6bac75df (Rejection\ASA.c)
-undefined2 ASA_GetDim1PhyRes(void);
-
 // ASA_GetDim1Res @ 0x6bac760d (Rejection\ASA.c)
 ushort ASA_GetDim1Res(void);
 
 // ASA_GetDim2Res @ 0x6bac761d (Rejection\ASA.c)
 ushort ASA_GetDim2Res(void);
-
-// ASA_GetFrameBypass @ 0x6bac76e7 (Rejection\ASA.c)
-undefined8 ASA_GetFrameBypass(void);
 
 // ASA_GetGridNopressSafeTablePtr @ 0x6bac7e41 (Rejection\ASA.c)
 ushort * ASA_GetGridNopressSafeTablePtr(void);
@@ -477,45 +429,6 @@ void ASA_LoadStylusHWPrmt(byte param_1);
 // ASA_Reset @ 0x6bac4e3b (Rejection\ASA.c)
 undefined8 ASA_Reset(void);
 
-// ASA_SetDim1Len @ 0x6bac7ffa (Rejection\ASA.c)
-void ASA_SetDim1Len(byte param_1, ...);
-
-// ASA_SetDim1Ofst @ 0x6bac802c (Rejection\ASA.c)
-void ASA_SetDim1Ofst(byte param_1);
-
-// ASA_SetDim2Len @ 0x6bac8013 (Rejection\ASA.c)
-void ASA_SetDim2Len(byte param_1);
-
-// ASA_SetDim2Ofst @ 0x6bac8045 (Rejection\ASA.c)
-void ASA_SetDim2Ofst(byte param_1);
-
-// ASA_SetFoldState @ 0x6bac82ff (Rejection\ASA.c)
-void ASA_SetFoldState(byte param_1,ulonglong param_2,ulonglong param_3);
-
-// ASA_SetXRes @ 0x6bac805e (Rejection\ASA.c)
-void ASA_SetXRes(ushort param_1);
-
-// ASA_SetXResClipHigh @ 0x6bac80e4 (Rejection\ASA.c)
-void ASA_SetXResClipHigh(ushort param_1);
-
-// ASA_SetXResClipLow @ 0x6bac80c9 (Rejection\ASA.c)
-void ASA_SetXResClipLow(ushort param_1);
-
-// ASA_SetXResOfst @ 0x6bac8093 (Rejection\ASA.c)
-void ASA_SetXResOfst(ushort param_1);
-
-// ASA_SetYRes @ 0x6bac8078 (Rejection\ASA.c)
-void ASA_SetYRes(ushort param_1);
-
-// ASA_SetYResClipHigh @ 0x6bac811a (Rejection\ASA.c)
-void ASA_SetYResClipHigh(ushort param_1);
-
-// ASA_SetYResClipLow @ 0x6bac80ff (Rejection\ASA.c)
-void ASA_SetYResClipLow(ushort param_1);
-
-// ASA_SetYResOfst @ 0x6bac80ae (Rejection\ASA.c)
-void ASA_SetYResOfst(ushort param_1);
-
 // AdaptiveIIR_Process @ 0x6bafad7d (Filter\AdaptiveIIR.c)
 int AdaptiveIIR_Process(int param_1,int param_2,byte param_3,byte param_4,int param_5);
 
@@ -534,9 +447,6 @@ undefined1 AntiTouch_GetAxisMajorThold(byte param_1);
 // AntiTouch_GetEllipseRateThold @ 0x6bad6a5a (Rejection\AntiTouch.c)
 undefined2 AntiTouch_GetEllipseRateThold(byte param_1);
 
-// AntiTouch_GetMaxTouchPeakIdx @ 0x6bad6633 (Rejection\AntiTouch.c)
-undefined1 AntiTouch_GetMaxTouchPeakIdx(void);
-
 // AntiTouch_GetPersistFlag @ 0x6bad6b3d (Rejection\AntiTouch.c)
 bool AntiTouch_GetPersistFlag(byte param_1,byte param_2);
 
@@ -545,9 +455,6 @@ void AntiTouch_Init(void);
 
 // AntiTouch_IsGrip @ 0x6bad6640 (Rejection\AntiTouch.c)
 bool AntiTouch_IsGrip(byte param_1);
-
-// AntiTouch_IsRptDebounce @ 0x6bad7b8f (Rejection\AntiTouch.c)
-undefined8 AntiTouch_IsRptDebounce(void);
 
 // AntiTouch_IsToGoBackReport @ 0x6bad6021 (Rejection\AntiTouch.c)
 undefined8 AntiTouch_IsToGoBackReport(byte param_1);
@@ -1032,12 +939,6 @@ void DataSwitch_ToGrid(void);
 // DataSwitch_ToHand @ 0x6ba907ce (Core\DataSwitch.c)
 void DataSwitch_ToHand(void);
 
-// DataSwitch_ToProx @ 0x6ba9072e (Core\DataSwitch.c)
-void DataSwitch_ToProx(void);
-
-// DataSwitch_ToSide @ 0x6ba90770 (Core\DataSwitch.c)
-void DataSwitch_ToSide(void);
-
 // DetailDescriptionPutStr @ 0x6baf6865 (Tracking\HotZoneAdjust.c)
 void DetailDescriptionPutStr(longlong param_1);
 
@@ -1251,9 +1152,6 @@ void GenerateDetailDescription(void);
 // GenerateDmdDescription @ 0x6baf6c49 (Tracking\HotZoneAdjust.c)
 void GenerateDmdDescription(void);
 
-// GetSensorStartDspl @ 0x6bb26af1 (Common\MISC.c)
-int GetSensorStartDspl(char param_1,char param_2,short param_3,byte param_4,byte param_5);
-
 // GridIIR_Process @ 0x6ba61098 (Signal\GridIIR.c)
 void GridIIR_Process(void);
 
@@ -1314,9 +1212,6 @@ void GripFilter_CheckScreenRotatedMultiGrip(void);
 // GripFilter_ClearDeadZoneFlag @ 0x6bae5565 (Rejection\GripFilter.c)
 void GripFilter_ClearDeadZoneFlag(void);
 
-// GripFilter_ClickNum @ 0x6bae1730 (Rejection\GripFilter.c)
-undefined1 GripFilter_ClickNum(void);
-
 // GripFilter_CloseGripDetect @ 0x6bae6e5b (Rejection\GripFilter.c)
 void GripFilter_CloseGripDetect(void);
 
@@ -1334,9 +1229,6 @@ void GripFilter_DeadzoneReset(void);
 
 // GripFilter_FastMoveDetect @ 0x6bae65ff (Rejection\GripFilter.c)
 void GripFilter_FastMoveDetect(void);
-
-// GripFilter_FlickNum @ 0x6bae173d (Rejection\GripFilter.c)
-undefined1 GripFilter_FlickNum(void);
 
 // GripFilter_GetAbsThold @ 0x6bae65e3 (Rejection\GripFilter.c)
 int GripFilter_GetAbsThold(ushort param_1);
@@ -1424,9 +1316,6 @@ undefined4 GripFilter_GetTrackingThold(void);
 
 // GripFilter_GrapDetect @ 0x6bae71df (Rejection\GripFilter.c)
 void GripFilter_GrapDetect(void);
-
-// GripFilter_GripNum @ 0x6bae192b (Rejection\GripFilter.c)
-undefined1 GripFilter_GripNum(void);
 
 // GripFilter_HeavyGripRegionDetect @ 0x6bae8d98 (Rejection\GripFilter.c)
 void GripFilter_HeavyGripRegionDetect(void);
@@ -1656,9 +1545,6 @@ undefined8 GripFilter_IsVideoMode(void);
 // GripFilter_IsVideoModeLongPressAllowed @ 0x6bae2720 (Rejection\GripFilter.c)
 undefined8 GripFilter_IsVideoModeLongPressAllowed(void);
 
-// GripFilter_Log @ 0x6bae1b85 (Rejection\GripFilter.c)
-void GripFilter_Log(void);
-
 // GripFilter_MultiGripDetect @ 0x6bae7d43 (Rejection\GripFilter.c)
 void GripFilter_MultiGripDetect(void);
 
@@ -1724,12 +1610,6 @@ void GripFilter_UpdateDeadzone(void);
 
 // GripFilter_WeakenCornerClickSupress @ 0x6baeca55 (Rejection\GripFilter.c)
 void GripFilter_WeakenCornerClickSupress(char *param_1);
-
-// HPP3_EnableFreqShift @ 0x6bab6c66 (Rejection\HPP3.c)
-void HPP3_EnableFreqShift(void);
-
-// HPP3_FreqShiftInit @ 0x6bab6b50 (Rejection\HPP3.c)
-void HPP3_FreqShiftInit(void);
 
 // HandGesture_2HandDetection @ 0x6baef641 (Rejection\HandGesture.c)
 void HandGesture_2HandDetection(void);
@@ -2130,35 +2010,8 @@ undefined8 IsNeedRecord(byte param_1,longlong param_2);
 // JITFilter @ 0x6ba602c6 (Common\MISC.c)
 void JITFilter(int *param_1,int *param_2,int *param_3);
 
-// Misc_Cos @ 0x6ba64eaa (Common\MISC.c)
-int Misc_Cos(int param_1);
-
-// Misc_FindKthSmallest @ 0x6ba6572e (Common\MISC.c)
-undefined4 Misc_FindKthSmallest(longlong param_1,int param_2,int param_3, ...);
-
-// Misc_GetShiftBits @ 0x6ba64cdb (Common\MISC.c)
-byte Misc_GetShiftBits(ulonglong param_1,byte param_2);
-
-// Misc_GetShiftNum @ 0x6ba64b9c (Common\MISC.c)
-char Misc_GetShiftNum(ushort *param_1,ushort param_2);
-
-// Misc_IsInRect @ 0x6ba64f1f (Common\MISC.c)
-undefined8 Misc_IsInRect(ushort *param_1,int param_2,int param_3);
-
-// Misc_RightShift @ 0x6ba64d3c (Common\MISC.c)
-ulonglong Misc_RightShift(ulonglong param_1,byte param_2);
-
-// Misc_ShiftInINT64S @ 0x6ba64c33 (Common\MISC.c)
-void Misc_ShiftInINT64S(ulonglong *param_1,byte param_2);
-
-// Misc_Sin @ 0x6ba64e40 (Common\MISC.c)
-int Misc_Sin(int param_1);
-
 // Misc_SqrtUint32 @ 0x6ba64d8b (Common\MISC.c)
 int Misc_SqrtUint32(uint param_1);
-
-// Misc_SqrtUint64 @ 0x6ba64ddd (Common\MISC.c)
-longlong Misc_SqrtUint64(ulonglong param_1);
 
 // Peak_CalcZn @ 0x6ba67c89 (Detection\Peak.c)
 void Peak_CalcZn(byte param_1);
@@ -2501,9 +2354,6 @@ void Rawdata_Process(void);
 
 // Rawdata_RetrieveBaseline @ 0x6ba696ed (Signal\Rawdata.c)
 void Rawdata_RetrieveBaseline (longlong param_1,undefined8 param_2,longlong param_3,undefined8 param_4, longlong param_5, ...);
-
-// RefreshClipPrmt @ 0x6bb26b52 (Common\MISC.c)
-undefined8 RefreshClipPrmt(longlong param_1);
 
 // RxLineFilter_Init @ 0x6ba60440 (Signal\RxLineFilter.c)
 void RxLineFilter_Init(void);
@@ -2886,83 +2736,17 @@ void TSADynPrmt_UpdateNoiseTholdBfrTch(short param_1,short param_2);
 // TSADynPrmt_UpdateStepAftTch @ 0x6bb3ca49 (Prmt\TSADynPrmt.c)
 void TSADynPrmt_UpdateStepAftTch(short param_1,short param_2);
 
-// TSAMS_GetBLPtr @ 0x6ba916ea (Core\TSAMS.c)
-undefined8 TSAMS_GetBLPtr(void);
-
-// TSAMS_GetCMNPtr @ 0x6ba916b4 (Core\TSAMS.c)
-undefined * TSAMS_GetCMNPtr(void);
-
 // TSAMS_GetDifPtr @ 0x6ba91631 (Core\TSAMS.c)
 undefined8 TSAMS_GetDifPtr(void);
 
-// TSAMS_GetExtROIPeakDim1 @ 0x6ba99c16 (Core\TSAMS.c)
-uchar TSAMS_GetExtROIPeakDim1(void);
-
-// TSAMS_GetExtROIPeakDim2 @ 0x6ba99c63 (Core\TSAMS.c)
-uchar TSAMS_GetExtROIPeakDim2(void);
-
-// TSAMS_GetNormalBLPtr @ 0x6ba91768 (Core\TSAMS.c)
-undefined8 TSAMS_GetNormalBLPtr(void);
-
-// TSAMS_GetPreCMFDifPtr @ 0x6ba916c7 (Core\TSAMS.c)
-undefined8 TSAMS_GetPreCMFDifPtr(void);
-
-// TSAMS_GetPreFilteredDifPtr @ 0x6ba916d7 (Core\TSAMS.c)
-undefined8 TSAMS_GetPreFilteredDifPtr(void);
-
-// TSAMS_GetPreFilteredRawPtr @ 0x6ba91699 (Core\TSAMS.c)
-undefined8 TSAMS_GetPreFilteredRawPtr(void);
-
-// TSAMS_GetPreRawPtr @ 0x6ba9168c (Core\TSAMS.c)
-undefined * TSAMS_GetPreRawPtr(void);
-
-// TSAMS_GetRawPtr @ 0x6ba9167c (Core\TSAMS.c)
-undefined8 TSAMS_GetRawPtr(void);
-
-// TSAMS_GetSDPtr @ 0x6ba916a4 (Core\TSAMS.c)
-undefined8 TSAMS_GetSDPtr(void);
-
-// TSAMS_GetSSDifPtr @ 0x6ba91662 (Core\TSAMS.c)
-undefined * TSAMS_GetSSDifPtr(void);
-
-// TSAMS_GetSSPreUnifiedBLPtr @ 0x6ba91778 (Core\TSAMS.c)
-undefined * TSAMS_GetSSPreUnifiedBLPtr(void);
-
-// TSAMS_GetSafeBLPtr @ 0x6ba9172d (Core\TSAMS.c)
-undefined8 TSAMS_GetSafeBLPtr(undefined8 param_1);
-
 // TSAMS_GetSelfDifPtr @ 0x6ba9166f (Core\TSAMS.c)
 undefined * TSAMS_GetSelfDifPtr(void);
-
-// TSAMS_GetTouchMode @ 0x6ba998f4 (Core\TSAMS.c)
-undefined4 TSAMS_GetTouchMode(void);
-
-// TSAMS_GetTouchModeStage @ 0x6ba99907 (Core\TSAMS.c)
-undefined4 TSAMS_GetTouchModeStage(void);
-
-// TSAMS_GetTouchSize @ 0x6ba9991a (Core\TSAMS.c)
-undefined1 TSAMS_GetTouchSize(void);
-
-// TSAMS_GetTouchThold @ 0x6ba9992b (Core\TSAMS.c)
-undefined2 TSAMS_GetTouchThold(void);
-
-// TSAMS_IsBaselineOK @ 0x6ba9993f (Core\TSAMS.c)
-undefined8 TSAMS_IsBaselineOK(void);
-
-// TSAMS_IsExistExtROIPeak @ 0x6ba99bee (Core\TSAMS.c)
-bool TSAMS_IsExistExtROIPeak(void);
-
-// TSAMS_IsNewSafeBaselineAvailable @ 0x6ba916fa (Core\TSAMS.c)
-undefined8 TSAMS_IsNewSafeBaselineAvailable(void);
 
 // TSAMS_IsOKToEnterIDLEMode @ 0x6ba99ad6 (Core\TSAMS.c)
 bool TSAMS_IsOKToEnterIDLEMode(void);
 
 // TSAMS_IsReadyForIDLEMode @ 0x6ba9998b (Core\TSAMS.c)
 bool TSAMS_IsReadyForIDLEMode(void);
-
-// TSAMS_RptIsMatchWithROI @ 0x6ba99cb0 (Core\TSAMS.c)
-bool TSAMS_RptIsMatchWithROI(void);
 
 // TSAMath_ATan2 @ 0x6bb429d4 (Common\TSAMath.c)
 int TSAMath_ATan2(ushort param_1,ushort param_2);
@@ -3177,12 +2961,6 @@ undefined1 TSAStatic_IsChargerPlugged(void);
 // TSAStatic_IsChargerPluggedNoDebounce @ 0x6baa24b0 (Core\TSAStatic.c)
 bool TSAStatic_IsChargerPluggedNoDebounce(void);
 
-// TSAStatic_IsCouplingNoiseEstimateApplied @ 0x6baa312c (Core\TSAStatic.c)
-undefined8 TSAStatic_IsCouplingNoiseEstimateApplied(void);
-
-// TSAStatic_IsCouplingNoiseEstimateNeeded @ 0x6ba5b769 (Core\TSAStatic.c)
-bool TSAStatic_IsCouplingNoiseEstimateNeeded(void);
-
 // TSAStatic_IsFreqShiftDone @ 0x6baa23cd (Core\TSAStatic.c)
 bool TSAStatic_IsFreqShiftDone(void);
 
@@ -3243,9 +3021,6 @@ undefined8 TSAStatic_SetLogName(char *param_1);
 // TSAStatic_UpdateCtrlFlags @ 0x6baa21cb (Core\TSAStatic.c)
 void TSAStatic_UpdateCtrlFlags(TSA_SystemFlags param_1);
 
-// TSAStatic_UpdateExtendCtrlFlags @ 0x6baa2329 (Core\TSAStatic.c)
-void TSAStatic_UpdateExtendCtrlFlags(undefined8 param_1);
-
 // TSAStatic_UpdateIDLEModeOutput @ 0x6baa2aa7 (Core\TSAStatic.c)
 undefined1 TSAStatic_UpdateIDLEModeOutput(void);
 
@@ -3303,26 +3078,8 @@ undefined4 TSA_ASAAFEStatus(void);
 // TSA_AppTypeToScenario @ 0x6ba90318 (Core\TSA.c)
 void TSA_AppTypeToScenario(void);
 
-// TSA_AutoCheckProcess @ 0x6ba9fa96 (Core\TSA.c)
-undefined8 TSA_AutoCheckProcess(longlong param_1,undefined4 param_2,undefined8 param_3);
-
-// TSA_ClearBigData @ 0x6baa039b (Core\TSA.c)
-void TSA_ClearBigData(void);
-
 // TSA_CombineBlock @ 0x6baa0da1 (Core\TSA.c)
 void TSA_CombineBlock(undefined8 *param_1,uint param_2);
-
-// TSA_ConsoleReset @ 0x6ba8fb1e (Core\TSA.c)
-void TSA_ConsoleReset(void);
-
-// TSA_ContextCurFrame @ 0x6baa03d6 (Core\TSA.c)
-void TSA_ContextCurFrame(undefined8 param_1);
-
-// TSA_ContextFrameToData @ 0x6baa044f (Core\TSA.c)
-void TSA_ContextFrameToData(undefined8 param_1,undefined4 param_2,undefined8 param_3);
-
-// TSA_ContextKeyFrame @ 0x6baa03f2 (Core\TSA.c)
-void TSA_ContextKeyFrame(undefined8 param_1);
 
 // TSA_CoreTouchDim1Center @ 0x6ba8f893 (Core\TSA.c)
 ushort TSA_CoreTouchDim1Center(byte param_1);
@@ -3333,59 +3090,14 @@ ushort TSA_CoreTouchDim2Center(byte param_1);
 // TSA_DelayToIdleModeHPPx @ 0x6ba9e3c6 (Core\TSA.c)
 undefined8 TSA_DelayToIdleModeHPPx(void);
 
-// TSA_DetectedBendingException @ 0x6ba9e297 (Core\TSA.c)
-uint TSA_DetectedBendingException(void);
-
-// TSA_DetectedESDLevel @ 0x6ba9d82d (Core\TSA.c)
-undefined8 TSA_DetectedESDLevel(void);
-
-// TSA_DetectedHardwareException @ 0x6ba9d838 (Core\TSA.c)
-uint TSA_DetectedHardwareException(void);
-
 // TSA_DetectedNoiseLevel @ 0x6ba9d789 (Core\TSA.c)
 uint TSA_DetectedNoiseLevel(void);
-
-// TSA_DetectedSDLevel @ 0x6ba9d7a1 (Core\TSA.c)
-uint TSA_DetectedSDLevel(void);
-
-// TSA_DetectedWaterLevel @ 0x6ba9d7b7 (Core\TSA.c)
-uint TSA_DetectedWaterLevel(void);
 
 // TSA_DimEdgeToSide @ 0x6ba8f5e5 (Core\TSA.c)
 undefined8 TSA_DimEdgeToSide(int param_1);
 
-// TSA_DisableActiveStylusFeature @ 0x6ba9ee25 (Core\TSA.c)
-void TSA_DisableActiveStylusFeature(void);
-
-// TSA_DisableEdgePeakFilterWorkaround @ 0x6ba9f36d (Core\TSA.c)
-void TSA_DisableEdgePeakFilterWorkaround(void);
-
-// TSA_DisableGloveFeature @ 0x6ba9eb1a (Core\TSA.c)
-void TSA_DisableGloveFeature(void);
-
-// TSA_DisableGripFilterFeature @ 0x6ba9ed36 (Core\TSA.c)
-void TSA_DisableGripFilterFeature(void);
-
-// TSA_DisablePadFeature @ 0x6ba9eea2 (Core\TSA.c)
-void TSA_DisablePadFeature(void);
-
 // TSA_DisableScenario @ 0x6ba8fa33 (Core\TSA.c)
 void TSA_DisableScenario(uint param_1);
-
-// TSA_DisableSmartCoverFeature @ 0x6ba9ecc1 (Core\TSA.c)
-void TSA_DisableSmartCoverFeature(void);
-
-// TSA_DisableStylusFeature @ 0x6ba9ebae (Core\TSA.c)
-void TSA_DisableStylusFeature(void);
-
-// TSA_DisableUnderWaterFeature @ 0x6ba9edab (Core\TSA.c)
-void TSA_DisableUnderWaterFeature(void);
-
-// TSA_DisableWindowsPadFeature @ 0x6ba9ef1f (Core\TSA.c)
-void TSA_DisableWindowsPadFeature(void);
-
-// TSA_EnableActiveStylusFeature @ 0x6ba9edf4 (Core\TSA.c)
-undefined8 TSA_EnableActiveStylusFeature(void);
 
 // TSA_EnableEdgePeakFilterWorkaround @ 0x6ba9f33f (Core\TSA.c)
 undefined8 TSA_EnableEdgePeakFilterWorkaround(void);
@@ -3396,38 +3108,11 @@ bool TSA_EnableGloveFeature(void);
 // TSA_EnableGripFilterFeature @ 0x6ba9ed08 (Core\TSA.c)
 undefined8 TSA_EnableGripFilterFeature(void);
 
-// TSA_EnablePadFeature @ 0x6ba9ee71 (Core\TSA.c)
-undefined8 TSA_EnablePadFeature(void);
-
-// TSA_EnablePreCMFDiffLog @ 0x6baa02a3 (Core\TSA.c)
-void TSA_EnablePreCMFDiffLog(undefined4 param_1);
-
-// TSA_EnableProximityFeature @ 0x6ba9fc09 (Core\TSA.c)
-undefined8 TSA_EnableProximityFeature(void);
-
 // TSA_EnableScenario @ 0x6ba8fa07 (Core\TSA.c)
 void TSA_EnableScenario(uint param_1);
 
-// TSA_EnableSmartCoverFeature @ 0x6ba9ec93 (Core\TSA.c)
-undefined8 TSA_EnableSmartCoverFeature(void);
-
-// TSA_EnableStylusFeature @ 0x6ba9eb61 (Core\TSA.c)
-bool TSA_EnableStylusFeature(void);
-
-// TSA_EnableUnderWaterFeature @ 0x6ba9ed7d (Core\TSA.c)
-undefined8 TSA_EnableUnderWaterFeature(void);
-
-// TSA_EnableWindowsPadFeature @ 0x6ba9eeee (Core\TSA.c)
-undefined8 TSA_EnableWindowsPadFeature(void);
-
 // TSA_Free @ 0x6baa34c4 (Core\TSA.c)
 void TSA_Free(longlong *param_1);
-
-// TSA_GenerateAndGetHotZoneAdjustDescription @ 0x6baa04d9 (Core\TSA.c)
-void TSA_GenerateAndGetHotZoneAdjustDescription(void);
-
-// TSA_GetAFEGesture @ 0x6ba9faff (Core\TSA.c)
-void TSA_GetAFEGesture(void);
 
 // TSA_GetAFEScanFreqIndex @ 0x6ba9f998 (Core\TSA.c)
 undefined8 TSA_GetAFEScanFreqIndex(longlong param_1);
@@ -3435,56 +3120,11 @@ undefined8 TSA_GetAFEScanFreqIndex(longlong param_1);
 // TSA_GetAFEScanRateIndex @ 0x6ba9fa2d (Core\TSA.c)
 undefined8 TSA_GetAFEScanRateIndex(longlong param_1);
 
-// TSA_GetAFEScanState @ 0x6ba9f9ea (Core\TSA.c)
-undefined8 TSA_GetAFEScanState(void);
-
-// TSA_GetAFESpecMajorVersion @ 0x6ba9f8d5 (Core\TSA.c)
-void TSA_GetAFESpecMajorVersion(void);
-
-// TSA_GetAFESpecMinorVersion @ 0x6ba9f8e8 (Core\TSA.c)
-void TSA_GetAFESpecMinorVersion(void);
-
-// TSA_GetAFESpecPatchVersion @ 0x6ba9f8fb (Core\TSA.c)
-void TSA_GetAFESpecPatchVersion(void);
-
-// TSA_GetAFESpecVersion @ 0x6ba9f8c2 (Core\TSA.c)
-void TSA_GetAFESpecVersion(void);
-
-// TSA_GetAFETestResult @ 0x6ba9faec (Core\TSA.c)
-void TSA_GetAFETestResult(void);
-
 // TSA_GetASADim1Res @ 0x6ba9d3e0 (Core\TSA.c)
 ulonglong TSA_GetASADim1Res(void);
 
 // TSA_GetASADim2Res @ 0x6ba9d41c (Core\TSA.c)
 ulonglong TSA_GetASADim2Res(void);
-
-// TSA_GetASAFrameBypass @ 0x6ba9d37a (Core\TSA.c)
-undefined8 TSA_GetASAFrameBypass(void);
-
-// TSA_GetBaselineThold @ 0x6ba9e970 (Core\TSA.c)
-undefined2 TSA_GetBaselineThold(void);
-
-// TSA_GetBigDataLength @ 0x6baa0375 (Core\TSA.c)
-void TSA_GetBigDataLength(void);
-
-// TSA_GetBigDataPtr @ 0x6baa0388 (Core\TSA.c)
-void TSA_GetBigDataPtr(void);
-
-// TSA_GetBranchName @ 0x6ba9e8f7 (Core\TSA.c)
-char * TSA_GetBranchName(void);
-
-// TSA_GetContextMaxSize @ 0x6baa0434 (Core\TSA.c)
-void TSA_GetContextMaxSize(undefined8 param_1);
-
-// TSA_GetCoreRegion @ 0x6baa01b9 (Core\TSA.c)
-undefined4 TSA_GetCoreRegion(void);
-
-// TSA_GetDMDString @ 0x6ba9da2d (Core\TSA.c)
-char * TSA_GetDMDString(uint param_1);
-
-// TSA_GetDMDType @ 0x6ba9da17 (Core\TSA.c)
-int TSA_GetDMDType(void);
 
 // TSA_GetDifPrpt @ 0x6baa121d (Core\TSA.c)
 void TSA_GetDifPrpt(void);
@@ -3495,23 +3135,11 @@ void TSA_GetDifPrptCommon(void);
 // TSA_GetDim1Length @ 0x6ba9addb (Core\TSA.c)
 uchar TSA_GetDim1Length(void);
 
-// TSA_GetDim1PhyRes @ 0x6ba9aea7 (Core\TSA.c)
-undefined2 TSA_GetDim1PhyRes(void);
-
-// TSA_GetDim1Pitch @ 0x6ba9ae65 (Core\TSA.c)
-undefined1 TSA_GetDim1Pitch(void);
-
 // TSA_GetDim1Res @ 0x6ba9aecf (Core\TSA.c)
 undefined2 TSA_GetDim1Res(void);
 
 // TSA_GetDim2Length @ 0x6ba9adec (Core\TSA.c)
 uchar TSA_GetDim2Length(void);
-
-// TSA_GetDim2PhyRes @ 0x6ba9aebb (Core\TSA.c)
-undefined2 TSA_GetDim2PhyRes(void);
-
-// TSA_GetDim2Pitch @ 0x6ba9ae76 (Core\TSA.c)
-undefined1 TSA_GetDim2Pitch(void);
 
 // TSA_GetDim2Res @ 0x6ba9aee3 (Core\TSA.c)
 undefined2 TSA_GetDim2Res(void);
@@ -3519,293 +3147,35 @@ undefined2 TSA_GetDim2Res(void);
 // TSA_GetDimEdge @ 0x6ba8f6f3 (Core\TSA.c)
 undefined4 TSA_GetDimEdge(ushort param_1,ushort param_2);
 
-// TSA_GetDoubleReportDelayUs @ 0x6baa04c6 (Core\TSA.c)
-void TSA_GetDoubleReportDelayUs(void);
-
-// TSA_GetERLimit @ 0x6ba9c10e (Core\TSA.c)
-void TSA_GetERLimit(void);
-
-// TSA_GetEabledTHPLog @ 0x6ba9ff66 (Core\TSA.c)
-int TSA_GetEabledTHPLog(void);
-
-// TSA_GetEnabledSensor @ 0x6baa008c (Core\TSA.c)
-undefined4 TSA_GetEnabledSensor(void);
-
-// TSA_GetEvent @ 0x6ba9f66f (Core\TSA.c)
-int TSA_GetEvent(void);
-
-// TSA_GetEventString @ 0x6ba9dd4b (Core\TSA.c)
-char * TSA_GetEventString(uint param_1);
-
-// TSA_GetException @ 0x6ba9ea62 (Core\TSA.c)
-undefined4 TSA_GetException(void);
-
-// TSA_GetExceptionDescription @ 0x6ba9e284 (Core\TSA.c)
-void TSA_GetExceptionDescription(void);
-
-// TSA_GetExposedDataState @ 0x6ba9fe16 (Core\TSA.c)
-int TSA_GetExposedDataState(void);
-
 // TSA_GetFeatures @ 0x6ba9f329 (Core\TSA.c)
 TSA_FeatureFlags TSA_GetFeatures(void);
-
-// TSA_GetFingerSupported @ 0x6ba9ac21 (Core\TSA.c)
-undefined8 TSA_GetFingerSupported(void);
-
-// TSA_GetGestureCode @ 0x6ba9fbb3 (Core\TSA.c)
-void TSA_GetGestureCode(void);
-
-// TSA_GetGridDataCount @ 0x6ba99615 (Core\TSA.c)
-undefined8 TSA_GetGridDataCount(void);
-
-// TSA_GetGridDataName @ 0x6ba996d5 (Core\TSA.c)
-longlong TSA_GetGridDataName(byte param_1);
-
-// TSA_GetGridDataPtr @ 0x6ba99620 (Core\TSA.c)
-undefined8 TSA_GetGridDataPtr(byte param_1);
-
-// TSA_GetGridDataSelfPtr @ 0x6ba99782 (Core\TSA.c)
-void TSA_GetGridDataSelfPtr(byte param_1);
-
-// TSA_GetGridDataStylusTx1Ptr @ 0x6ba99848 (Core\TSA.c)
-void TSA_GetGridDataStylusTx1Ptr(byte param_1);
-
-// TSA_GetGridDataStylusTx2Ptr @ 0x6ba998a1 (Core\TSA.c)
-void TSA_GetGridDataStylusTx2Ptr(byte param_1);
-
-// TSA_GetGridDataTypeSign @ 0x6ba99747 (Core\TSA.c)
-undefined1 TSA_GetGridDataTypeSign(byte param_1);
-
-// TSA_GetGridDataTypeSize @ 0x6ba9970c (Core\TSA.c)
-undefined1 TSA_GetGridDataTypeSize(byte param_1);
-
-// TSA_GetIDLETouchThold @ 0x6ba9e86d (Core\TSA.c)
-void TSA_GetIDLETouchThold(void);
-
-// TSA_GetLOSpec @ 0x6ba9f70c (Core\TSA.c)
-undefined1 TSA_GetLOSpec(void);
-
-// TSA_GetMSDiffTypeSign @ 0x6ba9ac5d (Core\TSA.c)
-undefined8 TSA_GetMSDiffTypeSign(void);
-
-// TSA_GetMSDiffTypeSize @ 0x6ba9ac52 (Core\TSA.c)
-undefined8 TSA_GetMSDiffTypeSize(void);
-
-// TSA_GetMSExceptionDescription @ 0x6ba99bca (Core\TSA.c)
-void TSA_GetMSExceptionDescription(void);
-
-// TSA_GetMSRawTypeSign @ 0x6ba9ac47 (Core\TSA.c)
-undefined8 TSA_GetMSRawTypeSign(void);
-
-// TSA_GetMSRawTypeSize @ 0x6ba9ac3c (Core\TSA.c)
-undefined8 TSA_GetMSRawTypeSize(void);
-
-// TSA_GetMajorVersion @ 0x6ba9ab60 (Core\TSA.c)
-undefined8 TSA_GetMajorVersion(void);
 
 // TSA_GetMaxCMFNoiseValue @ 0x6ba9e207 (Core\TSA.c)
 int TSA_GetMaxCMFNoiseValue(void);
 
-// TSA_GetMaxContinuousCMFNoiseFrameNum @ 0x6ba9e26d (Core\TSA.c)
-ushort TSA_GetMaxContinuousCMFNoiseFrameNum(void);
-
-// TSA_GetMaxDim1Length @ 0x6ba9ac00 (Core\TSA.c)
-undefined8 TSA_GetMaxDim1Length(void);
-
-// TSA_GetMaxDim2Length @ 0x6ba9ac0b (Core\TSA.c)
-undefined8 TSA_GetMaxDim2Length(void);
-
-// TSA_GetMaxFingerSupported @ 0x6ba9ac16 (Core\TSA.c)
-undefined8 TSA_GetMaxFingerSupported(void);
-
-// TSA_GetMaxSensorNum @ 0x6ba9abf5 (Core\TSA.c)
-undefined8 TSA_GetMaxSensorNum(void);
-
 // TSA_GetMinSigPrpt @ 0x6baa07dc (Core\TSA.c)
 short TSA_GetMinSigPrpt(void);
-
-// TSA_GetMinorVersion @ 0x6ba9ab6b (Core\TSA.c)
-undefined8 TSA_GetMinorVersion(void);
-
-// TSA_GetMouseGestureString @ 0x6ba9dec8 (Core\TSA.c)
-char * TSA_GetMouseGestureString(int param_1);
-
-// TSA_GetMutualDifMax @ 0x6ba9eaa3 (Core\TSA.c)
-int TSA_GetMutualDifMax(void);
-
-// TSA_GetMutualDifMin @ 0x6ba9eab8 (Core\TSA.c)
-int TSA_GetMutualDifMin(void);
-
-// TSA_GetMutualRawMax @ 0x6ba9ea75 (Core\TSA.c)
-ushort TSA_GetMutualRawMax(void);
-
-// TSA_GetMutualRawMin @ 0x6ba9ea8c (Core\TSA.c)
-ushort TSA_GetMutualRawMin(void);
-
-// TSA_GetMutualSDCoef @ 0x6ba9f701 (Core\TSA.c)
-undefined8 TSA_GetMutualSDCoef(void);
-
-// TSA_GetMutualTouchTholdInIDLEMode @ 0x6ba9e880 (Core\TSA.c)
-ushort TSA_GetMutualTouchTholdInIDLEMode(void);
-
-// TSA_GetNegCBody @ 0x6ba9f6eb (Core\TSA.c)
-undefined8 TSA_GetNegCBody(void);
-
-// TSA_GetOSName @ 0x6ba9e904 (Core\TSA.c)
-char * TSA_GetOSName(void);
-
-// TSA_GetPatchVersion @ 0x6ba9ab76 (Core\TSA.c)
-undefined8 TSA_GetPatchVersion(void);
-
-// TSA_GetPosCBody @ 0x6ba9f6e0 (Core\TSA.c)
-undefined8 TSA_GetPosCBody(void);
-
-// TSA_GetPosture @ 0x6ba9f801 (Core\TSA.c)
-void TSA_GetPosture(void);
 
 // TSA_GetPrmtName @ 0x6ba9e911 (Core\TSA.c)
 char* TSA_GetPrmtName(void);
 
-// TSA_GetProjectName @ 0x6ba9e8ea (Core\TSA.c)
-char * TSA_GetProjectName(void);
-
 // TSA_GetPrpt @ 0x6baa1353 (Core\TSA.c)
 void TSA_GetPrpt(short *pRawGrid,short *pBaselineGrid);
-
-// TSA_GetRatio @ 0x6ba8f953 (Core\TSA.c)
-ulonglong TSA_GetRatio(int param_1,int param_2,int param_3);
 
 // TSA_GetRawPrpt @ 0x6baa08ab (Core\TSA.c)
 void TSA_GetRawPrpt(longlong param_1,longlong param_2);
 
-// TSA_GetResScale @ 0x6baa026e (Core\TSA.c)
-undefined2 TSA_GetResScale(void);
-
-// TSA_GetRingDataPointer @ 0x6ba9fe2c (Core\TSA.c)
-void TSA_GetRingDataPointer(void);
-
-// TSA_GetRingDataSize @ 0x6ba9fe3f (Core\TSA.c)
-void TSA_GetRingDataSize(void);
-
-// TSA_GetScenario @ 0x6ba8f9f1 (Core\TSA.c)
-uint TSA_GetScenario(void);
-
 // TSA_GetScenarioInternal @ 0x6ba8fd76 (Core\TSA.c)
 uint TSA_GetScenarioInternal(void);
-
-// TSA_GetScreenOffDataPointer @ 0x6ba9fe8e (Core\TSA.c)
-undefined8 TSA_GetScreenOffDataPointer(void);
-
-// TSA_GetScreenOffDataSize @ 0x6ba9fe99 (Core\TSA.c)
-undefined8 TSA_GetScreenOffDataSize(void);
-
-// TSA_GetScreenOnDataPointer @ 0x6ba9fe78 (Core\TSA.c)
-undefined8 TSA_GetScreenOnDataPointer(void);
-
-// TSA_GetScreenOnDataSize @ 0x6ba9fe83 (Core\TSA.c)
-undefined8 TSA_GetScreenOnDataSize(void);
 
 // TSA_GetSensorData @ 0x6ba8f9be (Core\TSA.c)
 longlong TSA_GetSensorData(void);
 
-// TSA_GetSensorRate @ 0x6baa00cc (Core\TSA.c)
-undefined1 TSA_GetSensorRate(uint param_1);
-
 // TSA_GetSide @ 0x6ba8f7f7 (Core\TSA.c)
 undefined4 TSA_GetSide(undefined2 param_1,undefined2 param_2);
 
-// TSA_GetSigSum @ 0x6ba9e9b0 (Core\TSA.c)
-undefined4 TSA_GetSigSum(byte param_1);
-
-// TSA_GetState @ 0x6ba9f659 (Core\TSA.c)
-undefined4 TSA_GetState(void);
-
-// TSA_GetSupportedGestureList @ 0x6ba9fbc6 (Core\TSA.c)
-void TSA_GetSupportedGestureList(void);
-
-// TSA_GetTHPLogName @ 0x6baa0014 (Core\TSA.c)
-char * TSA_GetTHPLogName(int param_1);
-
-// TSA_GetTHPLogPostFrameNum @ 0x6ba9ffc8 (Core\TSA.c)
-undefined2 TSA_GetTHPLogPostFrameNum(int param_1);
-
-// TSA_GetTHPLogPreFrameNum @ 0x6ba9ff7c (Core\TSA.c)
-undefined2 TSA_GetTHPLogPreFrameNum(int param_1);
-
-// TSA_GetTZFlagTypeSign @ 0x6ba917b0 (Core\TSA.c)
-undefined8 TSA_GetTZFlagTypeSign(void);
-
-// TSA_GetTZFlagTypeSize @ 0x6ba917a5 (Core\TSA.c)
-undefined8 TSA_GetTZFlagTypeSize(void);
-
-// TSA_GetTZThold @ 0x6ba9e981 (Core\TSA.c)
-undefined2 TSA_GetTZThold(byte param_1);
-
-// TSA_GetThenarSide @ 0x6ba9fb12 (Core\TSA.c)
-undefined4 TSA_GetThenarSide(void);
-
-// TSA_GetTouchCancelStr @ 0x6ba9c306 (Core\TSA.c)
-undefined * TSA_GetTouchCancelStr(undefined1 param_1);
-
-// TSA_GetTouchEventStr @ 0x6ba9c37d (Core\TSA.c)
-undefined * TSA_GetTouchEventStr(undefined1 param_1);
-
-// TSA_GetTouchExceptionStr @ 0x6ba9c254 (Core\TSA.c)
-undefined * TSA_GetTouchExceptionStr(ushort param_1);
-
-// TSA_GetTouchMode @ 0x6ba9e924 (Core\TSA.c)
-void TSA_GetTouchMode(void);
-
-// TSA_GetTouchModeStage @ 0x6ba9e937 (Core\TSA.c)
-void TSA_GetTouchModeStage(void);
-
-// TSA_GetTouchObjectStr @ 0x6ba9c1cb (Core\TSA.c)
-undefined * TSA_GetTouchObjectStr();
-
-// TSA_GetTouchShapeStr @ 0x6ba9c121 (Core\TSA.c)
-undefined * TSA_GetTouchShapeStr(undefined1 param_1);
-
 // TSA_GetTouchSide @ 0x6ba8f82b (Core\TSA.c)
 undefined4 TSA_GetTouchSide(byte param_1);
-
-// TSA_GetTouchSize @ 0x6ba9e94a (Core\TSA.c)
-void TSA_GetTouchSize(void);
-
-// TSA_GetTouchThold @ 0x6ba9e95d (Core\TSA.c)
-void TSA_GetTouchThold(void);
-
-// TSA_GetTouchXVelocity @ 0x6baa0250 (Core\TSA.c)
-void TSA_GetTouchXVelocity(undefined1 param_1);
-
-// TSA_GetTouchYVelocity @ 0x6baa0285 (Core\TSA.c)
-void TSA_GetTouchYVelocity(undefined1 param_1);
-
-// TSA_GetTriggerEventDescription @ 0x6ba9f646 (Core\TSA.c)
-void TSA_GetTriggerEventDescription(void);
-
-// TSA_GetTriggerEventOffset @ 0x6ba9f633 (Core\TSA.c)
-void TSA_GetTriggerEventOffset(void);
-
-// TSA_GetTriggeredFrameIndex @ 0x6ba9f620 (Core\TSA.c)
-void TSA_GetTriggeredFrameIndex(void);
-
-// TSA_GetUnNormalizedBaseline @ 0x6ba9f754 (Core\TSA.c)
-void TSA_GetUnNormalizedBaseline(undefined8 param_1,undefined4 param_2);
-
-// TSA_GetUnnormalizedRaw @ 0x6ba9f778 (Core\TSA.c)
-undefined8 TSA_GetUnnormalizedRaw(void);
-
-// TSA_GetVersion @ 0x6ba9ab55 (Core\TSA.c)
-undefined8 TSA_GetVersion(void);
-
-// TSA_GetWaterSize @ 0x6ba9f7a6 (Core\TSA.c)
-undefined2 TSA_GetWaterSize(void);
-
-// TSA_GetWorkarounds @ 0x6ba9f42d (Core\TSA.c)
-uint TSA_GetWorkarounds(void);
-
-// TSA_GetXLength @ 0x6ba9adfd (Core\TSA.c)
-void TSA_GetXLength(void);
 
 // TSA_GetXRes @ 0x6ba9aef7 (Core\TSA.c)
 ushort TSA_GetXRes(void);
@@ -3815,12 +3185,6 @@ ushort TSA_GetYLength(void);
 
 // TSA_GetYRes @ 0x6ba9af2b (Core\TSA.c)
 ushort TSA_GetYRes(void);
-
-// TSA_GetZ4 @ 0x6ba9ea0c (Core\TSA.c)
-undefined4 TSA_GetZ4(byte param_1);
-
-// TSA_GetZ9 @ 0x6ba9e9de (Core\TSA.c)
-undefined4 TSA_GetZ9(byte param_1);
 
 // TSA_GridDataAftCMFDiffInit @ 0x6ba92f26 (Core\TSA.c)
 void TSA_GridDataAftCMFDiffInit(int param_1);
@@ -4062,20 +3426,8 @@ void TSA_GridNopressTableTx2ShortTerm(int param_1);
 // TSA_GridTiedGridUpdate @ 0x6ba98c61 (Core\TSA.c)
 void TSA_GridTiedGridUpdate(int param_1,undefined8 param_2,char *param_3);
 
-// TSA_GripClickNum @ 0x6ba9f452 (Core\TSA.c)
-undefined8 TSA_GripClickNum(void);
-
-// TSA_GripFlickNum @ 0x6ba9f4b4 (Core\TSA.c)
-undefined8 TSA_GripFlickNum(void);
-
-// TSA_GripNum @ 0x6ba9f483 (Core\TSA.c)
-undefined8 TSA_GripNum(void);
-
 // TSA_InStylusHPP2Mode @ 0x6ba9c70b (Core\TSA.c)
 bool TSA_InStylusHPP2Mode(void);
-
-// TSA_InStylusHPP3Mode @ 0x6ba9c73e (Core\TSA.c)
-undefined8 TSA_InStylusHPP3Mode(void);
 
 // TSA_InStylusMode @ 0x6ba9c771 (Core\TSA.c)
 undefined8 TSA_InStylusMode(void);
@@ -4095,68 +3447,14 @@ void TSA_InitCommonUI(void);
 // TSA_InitProject_UI @ 0x6ba99d4e (Core\TSA.c)
 undefined8 TSA_InitProject_UI(undefined8 param_1);
 
-// TSA_Init_UI @ 0x6ba99d35 (Core\TSA.c)
-void TSA_Init_UI(void);
-
-// TSA_IsAFESupported @ 0x6ba9a79c (Core\TSA.c)
-undefined8 TSA_IsAFESupported(void);
-
-// TSA_IsAFTModeEnabled @ 0x6ba9fbd9 (Core\TSA.c)
-void TSA_IsAFTModeEnabled(void);
-
-// TSA_IsActiveStylusFeatureEnabled @ 0x6ba9ee51 (Core\TSA.c)
-undefined4 TSA_IsActiveStylusFeatureEnabled(void);
-
-// TSA_IsAllFreqNoisy @ 0x6ba9e2c5 (Core\TSA.c)
-void TSA_IsAllFreqNoisy(void);
-
-// TSA_IsBaselineOK @ 0x6ba9d776 (Core\TSA.c)
-void TSA_IsBaselineOK(void);
-
-// TSA_IsBothHandOperating @ 0x6ba9fb9f (Core\TSA.c)
-undefined1 TSA_IsBothHandOperating(void);
-
-// TSA_IsCommandFlagEnabled @ 0x6ba9f7c0 (Core\TSA.c)
-uchar TSA_IsCommandFlagEnabled(void);
-
-// TSA_IsDone @ 0x6ba9ab37 (Core\TSA.c)
-bool TSA_IsDone(void);
-
-// TSA_IsERCheckPassedButDisabled @ 0x6ba9c0fb (Core\TSA.c)
-void TSA_IsERCheckPassedButDisabled(void);
-
-// TSA_IsEdgePeakFilterWorkaroundEnabled @ 0x6ba9f396 (Core\TSA.c)
-bool TSA_IsEdgePeakFilterWorkaroundEnabled(void);
-
-// TSA_IsEnableDoubleReport @ 0x6baa04b3 (Core\TSA.c)
-void TSA_IsEnableDoubleReport(void);
-
-// TSA_IsFalseFlickDetected @ 0x6ba9c0ab (Core\TSA.c)
-undefined4 TSA_IsFalseFlickDetected(void);
-
 // TSA_IsFlickCheckPassed @ 0x6ba9c0e8 (Core\TSA.c)
 void TSA_IsFlickCheckPassed(void);
-
-// TSA_IsFreqHopNeeded @ 0x6ba9e2ad (Core\TSA.c)
-bool TSA_IsFreqHopNeeded(void);
-
-// TSA_IsFreqShiftSupported @ 0x6ba9e308 (Core\TSA.c)
-bool TSA_IsFreqShiftSupported(void);
 
 // TSA_IsGameScenario @ 0x6ba8fe7f (Core\TSA.c)
 undefined8 TSA_IsGameScenario(void);
 
-// TSA_IsGloveFeatureEnabled @ 0x6ba9eb43 (Core\TSA.c)
-bool TSA_IsGloveFeatureEnabled(void);
-
-// TSA_IsGripFilterFeatureEnabled @ 0x6ba9ed5f (Core\TSA.c)
-bool TSA_IsGripFilterFeatureEnabled(void);
-
 // TSA_IsGripOKToIDLE @ 0x6ba9e650 (Core\TSA.c)
 char TSA_IsGripOKToIDLE(void);
-
-// TSA_IsHangingPosture @ 0x6ba9f7ee (Core\TSA.c)
-void TSA_IsHangingPosture(void);
 
 // TSA_IsHighRateGameScenario @ 0x6ba8feab (Core\TSA.c)
 bool TSA_IsHighRateGameScenario(void);
@@ -4170,29 +3468,11 @@ uchar TSA_IsInProcess(void);
 // TSA_IsJustEnterTypingScenario @ 0x6ba8fe53 (Core\TSA.c)
 undefined8 TSA_IsJustEnterTypingScenario(void);
 
-// TSA_IsMotorControlEnabled @ 0x6ba9fe03 (Core\TSA.c)
-void TSA_IsMotorControlEnabled(void);
-
-// TSA_IsNewSafeBaselineAvailable @ 0x6ba9c554 (Core\TSA.c)
-void TSA_IsNewSafeBaselineAvailable(void);
-
 // TSA_IsNormalRateGameScenario @ 0x6ba8fee1 (Core\TSA.c)
 bool TSA_IsNormalRateGameScenario(void);
 
-// TSA_IsOKToDisableFreqShift @ 0x6ba9e82a (Core\TSA.c)
-bool TSA_IsOKToDisableFreqShift(void);
-
 // TSA_IsOKToEnterIDLEMode @ 0x6ba9e755 (Core\TSA.c)
 undefined1 TSA_IsOKToEnterIDLEMode(void);
-
-// TSA_IsOKToEnterSideIDLEMode @ 0x6ba9e742 (Core\TSA.c)
-void TSA_IsOKToEnterSideIDLEMode(void);
-
-// TSA_IsOKToResetIDLEBaseline @ 0x6ba9e7d5 (Core\TSA.c)
-undefined8 TSA_IsOKToResetIDLEBaseline(void);
-
-// TSA_IsOKToSuspendAFE @ 0x6ba9e85a (Core\TSA.c)
-void TSA_IsOKToSuspendAFE(void);
 
 // TSA_IsOutOfWaterDetected @ 0x6ba9d7fd (Core\TSA.c)
 uint TSA_IsOutOfWaterDetected(void);
@@ -4203,20 +3483,11 @@ undefined4 TSA_IsPadFeatureEnabled(void);
 // TSA_IsPhoneCallScenario @ 0x6ba8fb38 (Core\TSA.c)
 undefined8 TSA_IsPhoneCallScenario(void);
 
-// TSA_IsPossibleOutOfWater @ 0x6baa086b (Core\TSA.c)
-bool TSA_IsPossibleOutOfWater(void);
-
 // TSA_IsPossibleProximity @ 0x6ba8fc41 (Core\TSA.c)
 bool TSA_IsPossibleProximity(void);
 
 // TSA_IsPossibleUnderWater @ 0x6baa082b (Core\TSA.c)
 bool TSA_IsPossibleUnderWater(void);
-
-// TSA_IsPreNthFrameTriggered @ 0x6ba9f60d (Core\TSA.c)
-void TSA_IsPreNthFrameTriggered(void);
-
-// TSA_IsProximityDetected @ 0x6ba9fbec (Core\TSA.c)
-bool TSA_IsProximityDetected(void);
 
 // TSA_IsReCalibDetected @ 0x6ba9e2d8 (Core\TSA.c)
 bool TSA_IsReCalibDetected(void);
@@ -4230,26 +3501,8 @@ undefined8 TSA_IsScreenLockPhoneCallScenario(void);
 // TSA_IsScreenLockScenario @ 0x6ba8fb7c (Core\TSA.c)
 undefined8 TSA_IsScreenLockScenario(void);
 
-// TSA_IsSensorValid @ 0x6ba9f733 (Core\TSA.c)
-void TSA_IsSensorValid(undefined4 param_1,undefined4 param_2);
-
-// TSA_IsSmartCoverFeatureEnabled @ 0x6ba9ecea (Core\TSA.c)
-bool TSA_IsSmartCoverFeatureEnabled(void);
-
-// TSA_IsStylusFeatureEnabled @ 0x6ba9ebd7 (Core\TSA.c)
-bool TSA_IsStylusFeatureEnabled(void);
-
 // TSA_IsToBypassCurrentFrame @ 0x6ba9f720 (Core\TSA.c)
 char TSA_IsToBypassCurrentFrame(void);
-
-// TSA_IsToExtendTHPLog @ 0x6ba9ff4f (Core\TSA.c)
-uchar TSA_IsToExtendTHPLog(void);
-
-// TSA_IsTopAppScenario @ 0x6ba8ff17 (Core\TSA.c)
-bool TSA_IsTopAppScenario(void);
-
-// TSA_IsTraceTimeStackNull @ 0x6baa03af (Core\TSA.c)
-undefined8 TSA_IsTraceTimeStackNull(void);
 
 // TSA_IsTypingScenario @ 0x6ba8fe17 (Core\TSA.c)
 bool TSA_IsTypingScenario(void);
@@ -4260,29 +3513,11 @@ bool TSA_IsTypingScenarioPrev(void);
 // TSA_IsUnderWaterDetected @ 0x6ba9d7e5 (Core\TSA.c)
 uint TSA_IsUnderWaterDetected(void);
 
-// TSA_IsUnderWaterFeatureEnabled @ 0x6ba9edd4 (Core\TSA.c)
-undefined4 TSA_IsUnderWaterFeatureEnabled(void);
-
 // TSA_IsVideoScenario @ 0x6ba8fdf7 (Core\TSA.c)
 bool TSA_IsVideoScenario(void);
 
-// TSA_IsVolumeControlEnabled @ 0x6ba9fdf0 (Core\TSA.c)
-void TSA_IsVolumeControlEnabled(void);
-
-// TSA_IsVolumePressDown @ 0x6ba9fdb7 (Core\TSA.c)
-void TSA_IsVolumePressDown(void);
-
-// TSA_IsWakeupDetected @ 0x6ba9d7cd (Core\TSA.c)
-uint TSA_IsWakeupDetected(void);
-
-// TSA_IsWetFingerDetected @ 0x6ba9d815 (Core\TSA.c)
-uint TSA_IsWetFingerDetected(void);
-
 // TSA_IsWindowsPadFeatureEnabled @ 0x6ba9ef4b (Core\TSA.c)
 undefined4 TSA_IsWindowsPadFeatureEnabled(void);
-
-// TSA_MSInit @ 0x6ba90950 (Core\TSA.c)
-void TSA_MSInit(void);
 
 // TSA_MSInitCommon @ 0x6ba90830 (Core\TSA.c)
 void TSA_MSInitCommon(char param_1);
@@ -4323,9 +3558,6 @@ void TSA_Processing(short *pMutualRawData,uint dwCtrlFlags,void *pFrameBuffer);
 // TSA_ProcessingAFEFrame @ 0x6ba9a7a7 (Core\TSA.c)
 int TSA_ProcessingAFEFrame(AFE_Frame *frame,uint ctrl,ulonglong data);
 
-// TSA_ProcessingExt @ 0x6ba9aadb (Core\TSA.c)
-int TSA_ProcessingExt(ulong gridData,uint ctrl,ulong data,ushort field_88,byte field_28, uint field_30);
-
 // TSA_RawCheckFrozen @ 0x6bafca3c (Core\TSA.c)
 void TSA_RawCheckFrozen(void);
 
@@ -4337,15 +3569,6 @@ void TSA_RawCheckProcess(void);
 
 // TSA_RawIsFrozen @ 0x6bafca30 (Core\TSA.c)
 undefined4 TSA_RawIsFrozen(void);
-
-// TSA_ReloadASAPrmtByScanState @ 0x6bb26d3f (Core\TSA.c)
-void TSA_ReloadASAPrmtByScanState(uint param_1);
-
-// TSA_RetrieveBaseline @ 0x6ba9f50b (Core\TSA.c)
-void TSA_RetrieveBaseline(longlong param_1,longlong param_2);
-
-// TSA_RetrieveBaseline2 @ 0x6ba9f57e (Core\TSA.c)
-void TSA_RetrieveBaseline2(longlong param_1,longlong param_2,longlong param_3);
 
 // TSA_RptASAPressure @ 0x6ba9cb4b (Core\TSA.c)
 undefined8 TSA_RptASAPressure(void);
@@ -4362,125 +3585,17 @@ undefined8 TSA_RptASAYPos();
 // TSA_RptASAYTilt @ 0x6ba9cb18 (Core\TSA.c)
 undefined8 TSA_RptASAYTilt(void);
 
-// TSA_RptBaselinePtr @ 0x6ba9c541 (Core\TSA.c)
-undefined8 TSA_RptBaselinePtr(void);
-
-// TSA_RptCMNPtr @ 0x6ba9c5f4 (Core\TSA.c)
-undefined8 TSA_RptCMNPtr(void);
-
-// TSA_RptDX @ 0x6ba9fd33 (Core\TSA.c)
-undefined8 TSA_RptDX(void);
-
-// TSA_RptDY @ 0x6ba9fd43 (Core\TSA.c)
-undefined8 TSA_RptDY(void);
-
 // TSA_RptDiffPtr @ 0x6ba9c5a8 (Core\TSA.c)
 undefined8 TSA_RptDiffPtr(void);
-
-// TSA_RptDisplayXPos @ 0x6ba9fca7 (Core\TSA.c)
-ulonglong TSA_RptDisplayXPos(undefined1 param_1);
-
-// TSA_RptDisplayYPos @ 0x6ba9fcd7 (Core\TSA.c)
-ulonglong TSA_RptDisplayYPos(undefined1 param_1);
-
-// TSA_RptExtROIPeakDim1 @ 0x6ba9bf89 (Core\TSA.c)
-void TSA_RptExtROIPeakDim1(void);
-
-// TSA_RptExtROIPeakDim2 @ 0x6ba9bf9c (Core\TSA.c)
-void TSA_RptExtROIPeakDim2(void);
-
-// TSA_RptFilmGesture @ 0x6ba9fc9c (Core\TSA.c)
-undefined8 TSA_RptFilmGesture(void);
-
-// TSA_RptGesture @ 0x6ba9fc86 (Core\TSA.c)
-undefined8 TSA_RptGesture(void);
-
-// TSA_RptIsExistExtROIPeak @ 0x6ba9bf76 (Core\TSA.c)
-void TSA_RptIsExistExtROIPeak(void);
 
 // TSA_RptIsLiftOff @ 0x6ba9b1b4 (Core\TSA.c)
 uint TSA_RptIsLiftOff(byte param_1);
 
-// TSA_RptIsMatchWithROI @ 0x6ba9bfaf (Core\TSA.c)
-void TSA_RptIsMatchWithROI(void);
-
 // TSA_RptIsTouchDown @ 0x6ba9b112 (Core\TSA.c)
 uint TSA_RptIsTouchDown(byte param_1);
 
-// TSA_RptIsTrueLiftOff @ 0x6ba9b226 (Core\TSA.c)
-uint TSA_RptIsTrueLiftOff(byte param_1);
-
-// TSA_RptIsTrueTouchDown @ 0x6ba9b184 (Core\TSA.c)
-uint TSA_RptIsTrueTouchDown(byte param_1);
-
 // TSA_RptLONum @ 0x6ba9b0eb (Core\TSA.c)
 undefined1 TSA_RptLONum(void);
-
-// TSA_RptMouseGesture @ 0x6ba9fc91 (Core\TSA.c)
-undefined8 TSA_RptMouseGesture(void);
-
-// TSA_RptNormalBaselinePtr @ 0x6ba9c582 (Core\TSA.c)
-void TSA_RptNormalBaselinePtr(void);
-
-// TSA_RptPreCMFRawPtr @ 0x6ba9c4f8 (Core\TSA.c)
-undefined8 TSA_RptPreCMFRawPtr(void);
-
-// TSA_RptPreFilteredDifPtr @ 0x6ba9c52e (Core\TSA.c)
-undefined8 TSA_RptPreFilteredDifPtr(void);
-
-// TSA_RptPreFilteredRawPtr @ 0x6ba9c51b (Core\TSA.c)
-void TSA_RptPreFilteredRawPtr(void);
-
-// TSA_RptPreRawPtr @ 0x6ba9c508 (Core\TSA.c)
-void TSA_RptPreRawPtr(void);
-
-// TSA_RptRawPtr @ 0x6ba9c4e8 (Core\TSA.c)
-undefined8 TSA_RptRawPtr(void);
-
-// TSA_RptRotateAngle @ 0x6ba9fd73 (Core\TSA.c)
-undefined8 TSA_RptRotateAngle(void);
-
-// TSA_RptSDPtr @ 0x6ba9c5ce (Core\TSA.c)
-void TSA_RptSDPtr(void);
-
-// TSA_RptSQDistDisplayPixelFromPrevPos @ 0x6ba9c07d (Core\TSA.c)
-undefined4 TSA_RptSQDistDisplayPixelFromPrevPos(byte param_1);
-
-// TSA_RptSQDistMMFromPrevPos @ 0x6ba9c04e (Core\TSA.c)
-undefined2 TSA_RptSQDistMMFromPrevPos(byte param_1);
-
-// TSA_RptSQDistMMFromStartPos @ 0x6ba9c020 (Core\TSA.c)
-undefined2 TSA_RptSQDistMMFromStartPos(byte param_1);
-
-// TSA_RptSSBaselinePtr @ 0x6ba9c595 (Core\TSA.c)
-void TSA_RptSSBaselinePtr(void);
-
-// TSA_RptSSDiffPtr @ 0x6ba9c5bb (Core\TSA.c)
-void TSA_RptSSDiffPtr(void);
-
-// TSA_RptSafeBaselinePtr @ 0x6ba9c567 (Core\TSA.c)
-void TSA_RptSafeBaselinePtr(undefined8 param_1);
-
-// TSA_RptScrollDX @ 0x6ba9fd07 (Core\TSA.c)
-undefined8 TSA_RptScrollDX(void);
-
-// TSA_RptScrollDY @ 0x6ba9fd12 (Core\TSA.c)
-undefined8 TSA_RptScrollDY(void);
-
-// TSA_RptScrollVX @ 0x6ba9fd1d (Core\TSA.c)
-undefined8 TSA_RptScrollVX(void);
-
-// TSA_RptScrollVY @ 0x6ba9fd28 (Core\TSA.c)
-undefined8 TSA_RptScrollVY(void);
-
-// TSA_RptSelfDiffPtr @ 0x6ba9c5e1 (Core\TSA.c)
-void TSA_RptSelfDiffPtr(void);
-
-// TSA_RptTZFlagPtr @ 0x6ba91792 (Core\TSA.c)
-void TSA_RptTZFlagPtr(void);
-
-// TSA_RptTouchAge @ 0x6ba9bfc2 (Core\TSA.c)
-undefined2 TSA_RptTouchAge(byte param_1);
 
 // TSA_RptTouchAxisAngle @ 0x6ba9bef5 (Core\TSA.c)
 ulonglong TSA_RptTouchAxisAngle(byte param_1);
@@ -4488,47 +3603,17 @@ ulonglong TSA_RptTouchAxisAngle(byte param_1);
 // TSA_RptTouchAxisMajor @ 0x6ba9bca2 (Core\TSA.c)
 ulonglong TSA_RptTouchAxisMajor(byte param_1);
 
-// TSA_RptTouchAxisMajorExtend @ 0x6ba9bd2d (Core\TSA.c)
-uint TSA_RptTouchAxisMajorExtend(byte param_1);
-
-// TSA_RptTouchAxisMinor @ 0x6ba9be32 (Core\TSA.c)
-ulonglong TSA_RptTouchAxisMinor(byte param_1);
-
 // TSA_RptTouchDim1Center @ 0x6ba9b98a (Core\TSA.c)
 ushort TSA_RptTouchDim1Center(byte param_1);
-
-// TSA_RptTouchDim1Peak @ 0x6ba9ba7a (Core\TSA.c)
-uchar TSA_RptTouchDim1Peak(byte param_1);
 
 // TSA_RptTouchDim2Center @ 0x6ba9b9bd (Core\TSA.c)
 ushort TSA_RptTouchDim2Center(byte param_1);
 
-// TSA_RptTouchDim2Peak @ 0x6ba9bb57 (Core\TSA.c)
-uchar TSA_RptTouchDim2Peak(byte param_1);
-
-// TSA_RptTouchEdgeFlag @ 0x6ba9c48c (Core\TSA.c)
-undefined4 TSA_RptTouchEdgeFlag(byte param_1);
-
 // TSA_RptTouchEvent @ 0x6ba9b3cc (Core\TSA.c)
 undefined4 TSA_RptTouchEvent(byte param_1);
 
-// TSA_RptTouchEventStr @ 0x6ba9c3f1 (Core\TSA.c)
-void TSA_RptTouchEventStr(byte param_1);
-
 // TSA_RptTouchException @ 0x6ba9b3fa (Core\TSA.c)
 undefined4 TSA_RptTouchException(byte param_1);
-
-// TSA_RptTouchExceptionStr @ 0x6ba9c33d (Core\TSA.c)
-void TSA_RptTouchExceptionStr(byte param_1);
-
-// TSA_RptTouchGripLevel @ 0x6ba9b95b (Core\TSA.c)
-undefined1 TSA_RptTouchGripLevel(byte param_1);
-
-// TSA_RptTouchGripRatio @ 0x6ba9b92c (Core\TSA.c)
-undefined1 TSA_RptTouchGripRatio(byte param_1);
-
-// TSA_RptTouchHand @ 0x6ba9b2f1 (Core\TSA.c)
-undefined1 TSA_RptTouchHand(byte param_1);
 
 // TSA_RptTouchID @ 0x6ba9b256 (Core\TSA.c)
 int TSA_RptTouchID(byte param_1);
@@ -4536,47 +3621,14 @@ int TSA_RptTouchID(byte param_1);
 // TSA_RptTouchNum @ 0x6ba9b09c (Core\TSA.c)
 uint TSA_RptTouchNum(void);
 
-// TSA_RptTouchObject @ 0x6ba9b36a (Core\TSA.c)
-undefined4 TSA_RptTouchObject(byte param_1);
-
-// TSA_RptTouchObjectStr @ 0x6ba9c214 (Core\TSA.c)
-void TSA_RptTouchObjectStr(byte param_1);
-
-// TSA_RptTouchPersistFlag @ 0x6ba9c45e (Core\TSA.c)
-undefined4 TSA_RptTouchPersistFlag(byte param_1);
-
 // TSA_RptTouchPressure @ 0x6ba9bc34 (Core\TSA.c)
 uint TSA_RptTouchPressure(byte param_1);
-
-// TSA_RptTouchShape @ 0x6ba9b2c4 (Core\TSA.c)
-undefined4 TSA_RptTouchShape(byte param_1);
-
-// TSA_RptTouchShapeStr @ 0x6ba9c18c (Core\TSA.c)
-void TSA_RptTouchShapeStr(byte param_1);
-
-// TSA_RptTouchSizeInMM @ 0x6ba9bff1 (Core\TSA.c)
-undefined1 TSA_RptTouchSizeInMM(byte param_1);
 
 // TSA_RptTouchSuppressFlag @ 0x6ba9c4ba (Core\TSA.c)
 undefined4 TSA_RptTouchSuppressFlag(byte param_1);
 
-// TSA_RptTouchToBeGoBack @ 0x6ba9bebd (Core\TSA.c)
-undefined4 TSA_RptTouchToBeGoBack(byte param_1);
-
-// TSA_RptTouchVolatileFlag @ 0x6ba9c431 (Core\TSA.c)
-undefined4 TSA_RptTouchVolatileFlag(byte param_1);
-
 // TSA_RptTouchXCenter @ 0x6ba9b9f0 (Core\TSA.c)
 ushort TSA_RptTouchXCenter(undefined1 param_1);
-
-// TSA_RptTouchXEdgeWidth @ 0x6ba9b5e2 (Core\TSA.c)
-byte TSA_RptTouchXEdgeWidth(byte param_1);
-
-// TSA_RptTouchXGripCtd @ 0x6ba9b81a (Core\TSA.c)
-undefined1 TSA_RptTouchXGripCtd(byte param_1);
-
-// TSA_RptTouchXGripRatio @ 0x6ba9b6e6 (Core\TSA.c)
-ulonglong TSA_RptTouchXGripRatio(byte param_1);
 
 // TSA_RptTouchXPos @ 0x6ba9b428 (Core\TSA.c)
 ulonglong TSA_RptTouchXPos(byte param_1);
@@ -4587,47 +3639,11 @@ byte TSA_RptTouchXWidth(byte param_1);
 // TSA_RptTouchYCenter @ 0x6ba9ba35 (Core\TSA.c)
 ushort TSA_RptTouchYCenter(undefined1 param_1);
 
-// TSA_RptTouchYEdgeWidth @ 0x6ba9b664 (Core\TSA.c)
-byte TSA_RptTouchYEdgeWidth(byte param_1);
-
 // TSA_RptTouchYGripCtd @ 0x6ba9b8a3 (Core\TSA.c)
 undefined1 TSA_RptTouchYGripCtd(byte param_1);
 
-// TSA_RptTouchYGripRatio @ 0x6ba9b780 (Core\TSA.c)
-ulonglong TSA_RptTouchYGripRatio(byte param_1);
-
 // TSA_RptTouchYPos @ 0x6ba9b482 (Core\TSA.c)
 ulonglong TSA_RptTouchYPos(byte param_1);
-
-// TSA_RptTouchYWidth @ 0x6ba9b55f (Core\TSA.c)
-byte TSA_RptTouchYWidth(byte param_1);
-
-// TSA_RptTouchZoneNum @ 0x6ba9b0d7 (Core\TSA.c)
-undefined1 TSA_RptTouchZoneNum(void);
-
-// TSA_RptUserStatus @ 0x6ba9b0ff (Core\TSA.c)
-undefined4 TSA_RptUserStatus(void);
-
-// TSA_RptVX @ 0x6ba9fd53 (Core\TSA.c)
-undefined8 TSA_RptVX(void);
-
-// TSA_RptVY @ 0x6ba9fd63 (Core\TSA.c)
-undefined8 TSA_RptVY(void);
-
-// TSA_RptVirtualKeyAction @ 0x6ba9fc68 (Core\TSA.c)
-void TSA_RptVirtualKeyAction(undefined1 param_1);
-
-// TSA_RptVirtualKeyCode @ 0x6ba9fc4a (Core\TSA.c)
-void TSA_RptVirtualKeyCode(undefined1 param_1);
-
-// TSA_RptVitualKeyEventNum @ 0x6ba9fc37 (Core\TSA.c)
-void TSA_RptVitualKeyEventNum(void);
-
-// TSA_RptZoomScale @ 0x6ba9fd7e (Core\TSA.c)
-undefined8 TSA_RptZoomScale(void);
-
-// TSA_SDOverCompensated @ 0x6ba9f6f6 (Core\TSA.c)
-undefined8 TSA_SDOverCompensated(void);
 
 // TSA_SavePreUnifiedRaw @ 0x6ba9a32b (Core\TSA.c)
 void TSA_SavePreUnifiedRaw(void *param_1,uint param_2);
@@ -4647,62 +3663,14 @@ void TSA_ScenarioTypingPrmtSetting(void);
 // TSA_SetAFECaps @ 0x6ba9f93c (Core\TSA.c)
 bool TSA_SetAFECaps(longlong param_1);
 
-// TSA_SetAFEFrame @ 0x6ba9f96a (Core\TSA.c)
-bool TSA_SetAFEFrame(longlong param_1);
-
 // TSA_SetAFEInfo @ 0x6ba9f90e (Core\TSA.c)
 bool TSA_SetAFEInfo(longlong param_1);
-
-// TSA_SetAFESpecVersion @ 0x6ba9f890 (Core\TSA.c)
-void TSA_SetAFESpecVersion(undefined1 param_1,undefined1 param_2,undefined1 param_3);
-
-// TSA_SetAFETestLevel @ 0x6ba9fad2 (Core\TSA.c)
-void TSA_SetAFETestLevel(undefined4 param_1);
-
-// TSA_SetAODRingState @ 0x6baa0231 (Core\TSA.c)
-void TSA_SetAODRingState(undefined1 param_1);
-
-// TSA_SetAccData @ 0x6baa0118 (Core\TSA.c)
-void TSA_SetAccData(short param_1,short param_2,short param_3);
-
-// TSA_SetAfeHwVer @ 0x6ba9ab81 (Core\TSA.c)
-void TSA_SetAfeHwVer(undefined4 param_1);
-
-// TSA_SetAfeWorkMode @ 0x6baa047d (Core\TSA.c)
-undefined8 TSA_SetAfeWorkMode(undefined1 param_1);
-
-// TSA_SetAppFeatureCommandEnabled @ 0x6ba8fa63 (Core\TSA.c)
-void TSA_SetAppFeatureCommandEnabled(void);
-
-// TSA_SetAppName @ 0x6ba8fa7a (Core\TSA.c)
-void TSA_SetAppName(char *param_1);
-
-// TSA_SetAppType @ 0x6ba8fb02 (Core\TSA.c)
-void TSA_SetAppType(undefined4 param_1);
-
-// TSA_SetBaselineDataCallbackFunc @ 0x6ba9f4e5 (Core\TSA.c)
-undefined8 TSA_SetBaselineDataCallbackFunc(void);
-
-// TSA_SetBaselineResetFlag @ 0x6ba9f833 (Core\TSA.c)
-void TSA_SetBaselineResetFlag(undefined1 param_1);
-
-// TSA_SetCommandEnableFlag @ 0x6ba9f814 (Core\TSA.c)
-void TSA_SetCommandEnableFlag(uchar param_1);
 
 // TSA_SetDMDType @ 0x6ba9d881 (Core\TSA.c)
 int TSA_SetDMDType(void);
 
-// TSA_SetDdicSn @ 0x6ba9abb4 (Core\TSA.c)
-void TSA_SetDdicSn(undefined8 param_1,undefined2 param_2);
-
-// TSA_SetDim1Length @ 0x6ba9ae87 (Core\TSA.c)
-undefined8 TSA_SetDim1Length(void);
-
 // TSA_SetDim1Res @ 0x6ba9af9a (Core\TSA.c)
 undefined8 TSA_SetDim1Res(undefined2 param_1);
-
-// TSA_SetDim2Length @ 0x6ba9ae97 (Core\TSA.c)
-undefined8 TSA_SetDim2Length(void);
 
 // TSA_SetDim2Res @ 0x6ba9afd5 (Core\TSA.c)
 undefined8 TSA_SetDim2Res(undefined2 param_1);
@@ -4713,95 +3681,29 @@ void TSA_SetDisableBaselineUpdateFlag(undefined1 param_1);
 // TSA_SetDisableCMFFlag @ 0x6ba9f871 (Core\TSA.c)
 void TSA_SetDisableCMFFlag(uchar param_1);
 
-// TSA_SetExtendCtrlFlag @ 0x6baa03ba (Core\TSA.c)
-void TSA_SetExtendCtrlFlag(undefined8 param_1);
-
-// TSA_SetExternalFeatures @ 0x6ba9f2eb (Core\TSA.c)
-void TSA_SetExternalFeatures(TSA_FeatureFlags param_1);
-
 // TSA_SetFeatures @ 0x6ba9f179 (Core\TSA.c)
 undefined4 TSA_SetFeatures(TSA_FeatureFlags param_1);
-
-// TSA_SetFingerSupported @ 0x6ba9ac2c (Core\TSA.c)
-undefined8 TSA_SetFingerSupported(void);
-
-// TSA_SetFrame @ 0x6ba9a903 (Core\TSA.c)
-void TSA_SetFrame(undefined8 *param_1);
 
 // TSA_SetGloveFeatures @ 0x6ba9ef6b (Core\TSA.c)
 undefined8 TSA_SetGloveFeatures(undefined8 param_1,undefined8 param_2,uint *param_3);
 
-// TSA_SetGridData @ 0x6ba9a991 (Core\TSA.c)
-void TSA_SetGridData(void *param_1);
-
 // TSA_SetGripFilterFeatures @ 0x6ba9f04b (Core\TSA.c)
 undefined8 TSA_SetGripFilterFeatures(uint param_1,uint *param_2, ...);
-
-// TSA_SetGyroData @ 0x6baa014e (Core\TSA.c)
-void TSA_SetGyroData(void);
-
-// TSA_SetLineData @ 0x6ba9a9a6 (Core\TSA.c)
-void TSA_SetLineData(void *param_1);
-
-// TSA_SetMsTimeData @ 0x6ba9aa11 (Core\TSA.c)
-void TSA_SetMsTimeData(ulonglong param_1);
-
-// TSA_SetPostureData @ 0x6baa0165 (Core\TSA.c)
-void TSA_SetPostureData(undefined8 *param_1);
-
-// TSA_SetPressure @ 0x6ba9fd89 (Core\TSA.c)
-bool TSA_SetPressure(longlong param_1);
-
-// TSA_SetReportRateLevel @ 0x6ba8fae6 (Core\TSA.c)
-void TSA_SetReportRateLevel(undefined1 param_1);
 
 // TSA_SetResScale @ 0x6ba9af5f (Core\TSA.c)
 undefined8 TSA_SetResScale(undefined2 param_1);
 
-// TSA_SetScenario @ 0x6ba8f9d5 (Core\TSA.c)
-void TSA_SetScenario(uint param_1);
-
-// TSA_SetScreenBrightness @ 0x6ba9ff33 (Core\TSA.c)
-void TSA_SetScreenBrightness(int param_1);
-
-// TSA_SetScreenOnOffSource @ 0x6ba9ff17 (Core\TSA.c)
-void TSA_SetScreenOnOffSource(int param_1);
-
 // TSA_SetScreenRotateState @ 0x6ba9fea4 (Core\TSA.c)
 void TSA_SetScreenRotateState(int param_1);
-
-// TSA_SetSensorData @ 0x6ba8f99f (Core\TSA.c)
-void TSA_SetSensorData(longlong param_1);
-
-// TSA_SetSensorDataCallBackFunc @ 0x6ba8f980 (Core\TSA.c)
-void TSA_SetSensorDataCallBackFunc(void *param_1);
-
-// TSA_SetShbLogCallback @ 0x6ba9f443 (Core\TSA.c)
-undefined8 TSA_SetShbLogCallback(void);
 
 // TSA_SetSmartCoverFeatures @ 0x6ba9efdb (Core\TSA.c)
 undefined8 TSA_SetSmartCoverFeatures(undefined8 param_1,undefined8 param_2,uint *param_3);
 
-// TSA_SetSmartCoverRange @ 0x6ba9ebf5 (Core\TSA.c)
-undefined8 TSA_SetSmartCoverRange(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
-
-// TSA_SetStylusData @ 0x6ba9aa75 (Core\TSA.c)
-void TSA_SetStylusData(stylusFrame *param_1);
-
-// TSA_SetStylusDataType @ 0x6ba9aa8a (Core\TSA.c)
-void TSA_SetStylusDataType(undefined1 param_1);
-
 // TSA_SetStylusFeatures @ 0x6ba9f095 (Core\TSA.c)
 undefined8 TSA_SetStylusFeatures(undefined8 param_1,undefined8 param_2,uint *param_3);
 
-// TSA_SetSysTraceFunc @ 0x6ba9f4f8 (Core\TSA.c)
-undefined8 TSA_SetSysTraceFunc(void);
-
 // TSA_SetUnderWaterFeatures @ 0x6ba9f105 (Core\TSA.c)
 undefined8 TSA_SetUnderWaterFeatures(undefined8 param_1,undefined8 param_2,uint *param_3);
-
-// TSA_SetUsTimeData @ 0x6ba9a9bb (Core\TSA.c)
-void TSA_SetUsTimeData(ulonglong param_1);
 
 // TSA_SetVolumeSideEnabledScreenRotate90or270 @ 0x6ba9012b (Core\TSA.c)
 void TSA_SetVolumeSideEnabledScreenRotate90or270(void);
@@ -4835,15 +3737,6 @@ void TSA_SideTouchPrmtSetting(void);
 
 // TSA_StylusAftProcess @ 0x6bb22b1c (Core\TSA.c)
 void TSA_StylusAftProcess(void);
-
-// TSA_TriggerDoubleReport @ 0x6baa04a0 (Core\TSA.c)
-void TSA_TriggerDoubleReport(void);
-
-// TSA_UpdateContextKeyFrame @ 0x6baa040e (Core\TSA.c)
-void TSA_UpdateContextKeyFrame(undefined8 param_1,undefined8 param_2);
-
-// TSA_UpdateFrameInfo @ 0x6ba9aaa9 (Core\TSA.c)
-void TSA_UpdateFrameInfo(ushort param_1,byte param_2,uint param_3);
 
 // TSA_UpdateIDLEModeInternally @ 0x6ba9e458 (Core\TSA.c)
 bool TSA_UpdateIDLEModeInternally(void);

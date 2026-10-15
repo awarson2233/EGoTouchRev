@@ -569,24 +569,6 @@ void GripFilter_RegionSetByHandGesture(void)
 
 
 // ============================================================================
-// Function: GripFilter_Log @ 6bae1b85
-// ============================================================================
-
-void GripFilter_Log(void)
-
-{
-  undefined1 uVar1;
-  
-                    /* 0xa1b85  778  GripFilter_Log */
-  uVar1 = GripFilter_Is2HandGame();
-  StrPrintf_Process(0,"\nis2HandGame = %d",uVar1);
-  uVar1 = GripFilter_IsVideoMode();
-  StrPrintf_Process(0," isVideoMode = %d",uVar1);
-  return;
-}
-
-
-// ============================================================================
 // Function: GripFilter_IsToCancelIDMapping @ 6bae8858
 // ============================================================================
 
@@ -5571,43 +5553,6 @@ undefined1 GripFilter_IsMergeHandlerSensorEnabled(byte param_1,byte param_2)
   }
   return local_9;
 }
-
-
-// ============================================================================
-// Function: GripFilter_ClickNum @ 6bae1730
-// ============================================================================
-
-undefined1 GripFilter_ClickNum(void)
-
-{
-                    /* 0xa1730  660  GripFilter_ClickNum */
-  return g_clickNum;
-}
-
-
-// ============================================================================
-// Function: GripFilter_GripNum @ 6bae192b
-// ============================================================================
-
-undefined1 GripFilter_GripNum(void)
-
-{
-                    /* 0xa192b  692  GripFilter_GripNum */
-  return *(undefined1 *)(*(longlong *)_refptr_g_touchesPtr + 0xd);
-}
-
-
-// ============================================================================
-// Function: GripFilter_FlickNum @ 6bae173d
-// ============================================================================
-
-undefined1 GripFilter_FlickNum(void)
-
-{
-                    /* 0xa173d  666  GripFilter_FlickNum */
-  return g_flickNum;
-}
-
 
 
 // ============================================================================

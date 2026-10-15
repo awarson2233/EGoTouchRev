@@ -773,32 +773,6 @@ undefined1 TSAStatic_IsJustOKToEnterSideIDLEMode(void)
 
 
 // ============================================================================
-// Function: TSAStatic_IsCouplingNoiseEstimateNeeded @ 6ba5b769
-// ============================================================================
-
-bool TSAStatic_IsCouplingNoiseEstimateNeeded(void)
-
-{
-  char cVar1;
-  int iVar2;
-  bool local_9;
-  
-  cVar1 = TSAStatic_IsCouplingNoiseEstimateApplied();
-  if (_refptr_g_tsaPrmtFlash->bCmfForceDim1Pass == '\0') {
-    iVar2 = *(int *)&_refptr_g_tsaPrpt->field_0x234;
-  }
-  else {
-    iVar2 = *(int *)&_refptr_g_tsaPrpt->field_0x258;
-  }
-  local_9 = 999 < -iVar2 && cVar1 != '\0';
-  if ((*_refptr_g_prevTouchesPtr)->bPrevTouchCount == '\0') {
-    local_9 = false;
-  }
-  return local_9;
-}
-
-
-// ============================================================================
 // Function: TSAStatic_IsChargerPluggedNoDebounce @ 6baa24b0
 // ============================================================================
 
@@ -944,24 +918,6 @@ undefined1 TSAStatic_IsAFEJustExitSideIDLEMode(void)
     local_9 = 0;
   }
   return local_9;
-}
-
-
-// ============================================================================
-// Function: TSAStatic_IsCouplingNoiseEstimateApplied @ 6baa312c
-// ============================================================================
-
-undefined8 TSAStatic_IsCouplingNoiseEstimateApplied(void)
-
-{
-  char cVar1;
-  
-                    /* 0x6312c  1693  TSAStatic_IsCouplingNoiseEstimateApplied */
-  if (((_refptr_g_tsaPrmtDynamic[0x92] != '\0') && (cVar1 = TSA_IsGameScenario(), cVar1 == '\0')) &&
-     (cVar1 = TSAStatic_IsChargerPlugged(), cVar1 == '\0')) {
-    return 1;
-  }
-  return 0;
 }
 
 
@@ -1177,19 +1133,6 @@ uint TSAStatic_GetSigThold(int param_1)
     uVar1 = (uint)*(ushort *)(_refptr_g_tsaPrmtDynamic + 8);
   }
   return uVar1;
-}
-
-
-// ============================================================================
-// Function: TSAStatic_UpdateExtendCtrlFlags @ 6baa2329
-// ============================================================================
-
-void TSAStatic_UpdateExtendCtrlFlags(undefined8 param_1)
-
-{
-                    /* 0x62329  1716  TSAStatic_UpdateExtendCtrlFlags */
-  *(undefined8 *)&g_tsaStaticPtr->field_0xc8 = param_1;
-  return;
 }
 
 

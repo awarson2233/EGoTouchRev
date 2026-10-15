@@ -424,26 +424,6 @@ void AFE_ScanProcess(void)
 
 
 // ============================================================================
-// Function: AFE_GetGesture @ 6bb2cda4
-// ============================================================================
-
-uint AFE_GetGesture(void)
-
-{
-  uint uVar1;
-  
-                    /* 0xecda4  10  AFE_GetGesture */
-  if (PTR_AFE_Frame == (AFE_Frame *)0x0) {
-    uVar1 = 0;
-  }
-  else {
-    uVar1 = PTR_AFE_Frame->dwGesture;
-  }
-  return uVar1;
-}
-
-
-// ============================================================================
 // Function: AFE_IsManualFreqHopping @ 6bb2cfaf
 // ============================================================================
 
@@ -592,26 +572,6 @@ undefined8 AFE_GetNextScanRateIndex(byte *param_1,char *param_2)
     }
   }
   return uVar5;
-}
-
-
-// ============================================================================
-// Function: AFE_GetScanFreq @ 6bb2d2be
-// ============================================================================
-
-undefined2 AFE_GetScanFreq(void)
-
-{
-  undefined2 uVar1;
-  
-                    /* 0xed2be  16  AFE_GetScanFreq */
-  if (*(longlong *)(_refptr_g_thpAFEStruct + 0x10) == 0) {
-    uVar1 = 0;
-  }
-  else {
-    uVar1 = *(undefined2 *)(*(longlong *)(_refptr_g_thpAFEStruct + 0x10) + 0x30);
-  }
-  return uVar1;
 }
 
 
@@ -2215,35 +2175,6 @@ void AFE_UpdateScanRate(void)
 
 
 // ============================================================================
-// Function: AFE_GetMaxNoise @ 6bb2d506
-// ============================================================================
-
-undefined2 AFE_GetMaxNoise(byte param_1)
-
-{
-  undefined2 uVar1;
-  byte local_res8;
-  
-                    /* 0xed506  11  AFE_GetMaxNoise */
-  if (*(longlong *)(_refptr_g_thpAFEStruct + 8) == 0) {
-    uVar1 = 0;
-  }
-  else {
-    local_res8 = param_1;
-    if (9 < param_1) {
-      local_res8 = 0;
-      StrPrintf_Process(0,"\nAssertion failed: %s line %d: \"%s\", value:%d\n",
-                        "../../src/Extension/TSA_AFE/TSA_AFE_Scan.c",0x74,
-                        "freqIndex < THP_MAX_SCAN_FREQ_NUMBER_SUPPORTED",0);
-      HardwareAnalyzer_SetSoftException();
-    }
-    uVar1 = *(undefined2 *)(&DAT_6bca39a8 + (longlong)(int)(uint)local_res8 * 0x18);
-  }
-  return uVar1;
-}
-
-
-// ============================================================================
 // Function: AFE_IsAlwaysNoisy @ 6bb2d087
 // ============================================================================
 
@@ -2553,24 +2484,6 @@ bool AFE_IsRawUnifiedToTargetValue(void)
 
 
 // ============================================================================
-// Function: AFE_IsTouchDetected @ 6bb2ce62
-// ============================================================================
-
-undefined8 AFE_IsTouchDetected(void)
-
-{
-  char cVar1;
-  
-                    /* 0xece62  47  AFE_IsTouchDetected */
-  cVar1 = AFE_IsCoreTouchDetected();
-  if ((cVar1 == '\0') && (cVar1 = AFE_IsSideTouchDetected(), cVar1 == '\0')) {
-    return 0;
-  }
-  return 1;
-}
-
-
-// ============================================================================
 // Function: AFE_IsFreqHopSupported @ 6bb2d61a
 // ============================================================================
 
@@ -2616,29 +2529,6 @@ undefined1 AFE_IsFrequentlyHopping(void)
 {
                     /* 0xeeede  34  AFE_IsFrequentlyHopping */
   return g_tsaAfeIsFrequentlyHopping;
-}
-
-
-// ============================================================================
-// Function: AFE_IsSideTouchDetected @ 6bb2ce2a
-// ============================================================================
-
-undefined8 AFE_IsSideTouchDetected(void)
-
-{
-  undefined8 uVar1;
-  
-                    /* 0xece2a  46  AFE_IsSideTouchDetected */
-  if (PTR_AFE_Frame == (AFE_Frame *)0x0) {
-    uVar1 = 0;
-  }
-  else if ((PTR_AFE_Frame->dwFlags & 0x80000) == 0) {
-    uVar1 = 0;
-  }
-  else {
-    uVar1 = 1;
-  }
-  return uVar1;
 }
 
 
@@ -2899,19 +2789,6 @@ void AFE_SetInfo(undefined8 param_1)
                     /* 0xecb3e  64  AFE_SetInfo */
   g_thpAFEStruct = param_1;
   return;
-}
-
-
-// ============================================================================
-// Function: AFE_SetAFESpecVersion @ 6bb2c94d
-// ============================================================================
-
-undefined8 AFE_SetAFESpecVersion(byte param_1,byte param_2,byte param_3)
-
-{
-                    /* 0xec94d  59  AFE_SetAFESpecVersion */
-  g_afeHalSpec = (longlong)(int)((uint)param_3 + ((uint)param_2 + (uint)param_1 * 0x100) * 0x100);
-  return 0;
 }
 
 
@@ -3445,118 +3322,6 @@ void AFE_SetCapsByV190(undefined2 *param_1,undefined2 *param_2)
     HardwareAnalyzer_SetSoftException();
   }
   return;
-}
-
-
-// ============================================================================
-// Function: AFE_IsManualFreqShift @ 6bb2d1b9
-// ============================================================================
-
-bool AFE_IsManualFreqShift(void)
-
-{
-                    /* 0xed1b9  41  AFE_IsManualFreqShift */
-  return _refptr_g_tsaPrmtFlash->dwPeakProcessingMode != 3;
-}
-
-
-// ============================================================================
-// Function: AFE_GetSpecVersion @ 6bb2c989
-// ============================================================================
-
-undefined8 AFE_GetSpecVersion(void)
-
-{
-                    /* 0xec989  22  AFE_GetSpecVersion */
-  return 0x11a00;
-}
-
-
-// ============================================================================
-// Function: AFE_GetSpecMajorVersion @ 6bb2c994
-// ============================================================================
-
-undefined8 AFE_GetSpecMajorVersion(void)
-
-{
-                    /* 0xec994  19  AFE_GetSpecMajorVersion */
-  return 1;
-}
-
-
-// ============================================================================
-// Function: AFE_GetSpecMinorVersion @ 6bb2c99f
-// ============================================================================
-
-undefined8 AFE_GetSpecMinorVersion(void)
-
-{
-                    /* 0xec99f  20  AFE_GetSpecMinorVersion */
-  return 0x1a;
-}
-
-
-// ============================================================================
-// Function: AFE_GetSpecPatchVersion @ 6bb2c9aa
-// ============================================================================
-
-undefined8 AFE_GetSpecPatchVersion(void)
-
-{
-                    /* 0xec9aa  21  AFE_GetSpecPatchVersion */
-  return 0;
-}
-
-
-// ============================================================================
-// Function: AFE_AutoCheckProcess @ 6bb2c5ed
-// ============================================================================
-
-bool AFE_AutoCheckProcess(longlong param_1,undefined4 param_2,undefined8 param_3)
-
-{
-  longlong lVar1;
-  
-                    /* 0xec5ed  2  AFE_AutoCheckProcess */
-  if (param_1 != 0) {
-    AFE_SetFrame(param_1);
-    lVar1 = AFE_GetFrame();
-    AFE_AutoCheckProcessInternal
-              (*(undefined8 *)(lVar1 + 0x10),_refptr_g_tsaPrmtFlash->wBufElementCount * 2,param_2,
-               param_3);
-  }
-  return param_1 == 0;
-}
-
-
-// ============================================================================
-// Function: AFE_SetTestLevel @ 6bb2c1c5
-// ============================================================================
-
-void AFE_SetTestLevel(undefined4 param_1)
-
-{
-                    /* 0xec1c5  66  AFE_SetTestLevel */
-  g_afeTestLevel = param_1;
-  return;
-}
-
-
-// ============================================================================
-// Function: AFE_GetTestResult @ 6bb2c1d7
-// ============================================================================
-
-undefined * AFE_GetTestResult(void)
-
-{
-  char cVar1;
-  
-                    /* 0xec1d7  24  AFE_GetTestResult */
-  cVar1 = TSALog_RtEnable(2,0x3e,0x10);
-  if (cVar1 != '\0') {
-    StrPrintf_Process(0,"\ng_afeTestErrorInfo=%s\n",g_afeTestErrorInfo);
-  }
-  return g_afeTestErrorInfo;
 }
 
 
