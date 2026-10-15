@@ -346,7 +346,6 @@ static inline void BigData_Init(void) {}
 static inline void CMFPca_Free(void) {}
 static inline uint8_t CMFPca_Malloc(void) { return 1; }
 static inline void CMFRemap_Free(void) {}
-void CMFRemap_Init(void);   // Core/TSAPrunedImpl.c
 static inline void CMFRemap_InitMapIdxBySlotTable(void *a, ...) { (void)a; }
 static inline uint8_t CMFRemap_Malloc(void) { return 1; }
 static inline void Context_Init(void) {}
@@ -399,7 +398,6 @@ static inline uint32_t SideTouch_GetRingLogPostFrameNum(void) { return 0; }
 static inline uint32_t SideTouch_GetRingLogPreFrameNum(void) { return 0; }
 static inline void SideTouch_Init(void) {}
 static inline uint8_t SideTouch_IsBaselineOK(void) { return 1; }
-bool SideTouch_Malloc(void);   // Core/TSAPrunedImpl.c
 static inline void SideTouch_SetPressure(int p) {}
 static inline void SignalDisparity_Init(void) {}
 static inline void SmartCover_Init(void) {}

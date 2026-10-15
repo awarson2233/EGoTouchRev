@@ -19,6 +19,7 @@ int Misc_SqrtUint32(uint32_t value);
 double SinXDivX(double x);
 
 // Core/AFE.c
+uint64_t AFE_Malloc(void);
 uint8_t AFE_IsAllFreqNoisy(void);
 char AFE_IsFreqShiftDone(void);
 bool AFE_IsInIDLEMode(void);
@@ -36,6 +37,14 @@ bool AFE_IsRecalRequested(void);
 uint64_t AFE_IsCoreTouchDetected(void);
 uint8_t AFE_IsFrequentlyHopping(void);
 bool AFE_IsIndividualBaselineForEachFreq(void);
+
+// Core/TSAPrpt.c
+bool TSAPrpt_Malloc(void);
+void TSAPrpt_Free(void);
+
+// Rejection/HandGesture.c
+uint64_t HandGesture_Malloc(void);
+void HandGesture_Free(void);
 
 // Core/TSA.c
 uint16_t TSA_GetXRes(void);
@@ -71,9 +80,6 @@ int64_t TSA_GetSensorData(void);
 void TSA_SetXPos(uint8_t idx, uint16_t x);
 
 
-
-// Core/TSAPrunedImpl.c
-void CMFRemap_Init(void);
 
 
 // Rejection/AntiTouch.c

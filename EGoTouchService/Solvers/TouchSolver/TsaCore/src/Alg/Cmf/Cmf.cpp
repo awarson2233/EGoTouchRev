@@ -57,14 +57,12 @@ static_assert(sizeof(NoiseState) == 0xc0);
 
 NoiseState& Noise() { return Image::At<NoiseState>(0x6bb7f080); }
 uint8_t& PreCmfDifLogEnabled() { return Image::At<uint8_t>(0x6bb7f040); }
-int16_t* PreCmfDif() { return Image::At<int16_t*>(0x6bc38448); }
 /// 每条线相邻格之差与二阶差（方向随 dim1Axis）。
 int16_t* OneOrderDiff() { return &Image::At<int16_t>(0x6bc16080); }
 int16_t* TwoOrderDiff() { return &Image::At<int16_t>(0x6bc32180); }
 /// Dim1 方向 CMF 之后、全部 CMF 之后的 Dif。
 int16_t* AftDim1CmfDif() { return &Image::At<int16_t>(0x6bc40240); }
 int16_t* AftCmfDif() { return &Image::At<int16_t>(0x6bc21a00); }
-uint16_t GridMapBufSize() { return Image::At<uint16_t>(0x6bc1f348); }
 
 // CMF_InitNoiseData @ 0x6ba4d9e0
 void InitNoiseData(const int32_t* data) {
@@ -303,8 +301,8 @@ bool Malloc() { return true; }
 // CMF_Free @ 0x6ba4d8a8
 void Free() {}
 
-// CMF_Init @ 0x6ba4d8c1（2D 滤波的初始化被裁掉）
-void Init() { CMFRemap_Init(); }
+// CMF_Init @ 0x6ba4d8c1（2D 滤波与 CMFRemap 的初始化被裁掉：CMFRemap 的状态无人读）
+void Init() {}
 
 // CMF_GetCmfMethod @ 0x6ba4d903
 uint32_t GetMethod() {

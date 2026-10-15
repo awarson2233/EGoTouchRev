@@ -17,13 +17,13 @@ struct TsaBufferTable {
     int16_t* timeDown;  // 每格自按下以来的时间
     int16_t* timeRpt;  // 每格自开始报点以来的时间
     int16_t* minSigOff;  // 每格抬起后的最小信号
-    void* maxSigDown;
-    void* silentTouchNum;
+    int16_t* maxSigDown;  // 每格按下期间的最大 Dif
+    uint8_t* silentTouchNum;  // 每格在触点数增加时仍未进入区域的次数（信号不稳时清零）
     void* unnormalizedRaw;
-    void* preUnnormalizedRaw;
+    int16_t* preUnnormalizedRaw;
     int16_t* rawGrid;  // 归一化前后的 raw（原地归一化）
-    void* difGrid;
-    void* preCmfRawGrid;
+    int16_t* difGrid;
+    int16_t* preCmfRawGrid;
     int16_t* cleanBaseline;  // BLReset 存下的干净基线
     uint16_t* tzAge;  // 每格所在握持区域的年龄（gripFlags 0x200）
     int16_t* rawCapture;  // SHB 抓取时的 CMF 前 raw
@@ -37,16 +37,16 @@ struct TsaBufferTable {
     int16_t* preHwRaw;
     int16_t* raw2RawDif;
     int16_t* raw2RawDifAftCmf;  // raw2RawDif 按扫描线 CMF 之后
-    void* preDif;
+    int16_t* preDif;
     int16_t* gridIirDif;  // GridIIR：上一帧滤波后的 Dif
-    void* blGrid;
+    int16_t* blGrid;
     int16_t* blNormal;
     int8_t* tzGrid;
-    void* sd;
-    void* ssChargerNFilterDif;
+    int16_t* sd;
+    int16_t* ssChargerNFilterDif;
     void* aftSsCmfDif;
     int16_t* rawStoredSinceSsNoSignal;
-    void* rawStoredSinceMutualSsNotMatch;
+    int16_t* rawStoredSinceMutualSsNotMatch;
     int8_t* tzPrev;  // 上一帧的区域图
     uint8_t* tzZonePrev;  // 上一帧的 tzZone
     uint8_t* tzZone;  // 每格所属区域的编码基数（TouchZoneUnit::mapTag），只记强信号格
@@ -104,8 +104,15 @@ static_assert(offsetof(TsaBufferTable, gripRegion) == 0x150);
 
 [[nodiscard]] inline TsaBufferTable& Buffers() noexcept { return Image::At<TsaBufferTable>(0x6bb81280); }
 
-/// 网格缓冲的元素个数（g_gridBufSize）。
-[[nodiscard]] inline uint16_t GridBufSize() noexcept { return Image::At<uint16_t>(0x6bc34a80); }
+/// 网格缓冲的元素个数（g_gridBufSize），以及按它推出的几种尺寸（TSAMem_InitProject 设置）。
+[[nodiscard]] inline uint16_t& GridBufSize() noexcept { return Image::At<uint16_t>(0x6bc34a80); }
+[[nodiscard]] inline uint16_t& GridMapBufSize() noexcept { return Image::At<uint16_t>(0x6bc1f348); }  // 1.5 倍网格
+[[nodiscard]] inline uint16_t& LineBufSize() noexcept { return Image::At<uint16_t>(0x6bc3db80); }     // dim1Len + dim2Len
+[[nodiscard]] inline uint16_t& MaxDimSize() noexcept { return Image::At<uint16_t>(0x6bc44f08); }      // max(dim1Len, dim2Len)
+
+/// 缓冲表之外的两块网格缓冲：CMF 前的 Dif，侧边区域图。
+[[nodiscard]] inline int16_t*& PreCmfDif() noexcept { return Image::At<int16_t*>(0x6bc38448); }
+[[nodiscard]] inline int8_t*& SideTz() noexcept { return Image::At<int8_t*>(0x6bbaa0e0); }
 
 /// 传感器 (dim1, dim2) 在网格缓冲里的下标，按 16 位截断。
 [[nodiscard]] inline uint16_t GridIndex(uint8_t dim1, uint8_t dim2) noexcept {
