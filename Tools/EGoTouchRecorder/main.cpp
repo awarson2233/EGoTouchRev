@@ -6,7 +6,7 @@
 //   recording.dvrbin   DVR 录制（每帧附带 BT MCU 的状态与报文计数，见 BuildBtSchema）
 //   btmcu.csv          BT MCU 的全部原始报文，带时间与所在帧号
 //   device.txt         机型（BIOS）、面板型号（建链时从显示驱动 OTP 读出）、笔的型号与固件版本
-//   recorder.log       运行日志
+//   EGoTouchRecorder.txt  运行日志
 //
 // 只读的含义：不向系统注入任何触摸 / 笔输入（VHF 关闭），不写芯片 flash、不改任何配置。芯片建链与
 // BT MCU 握手 / ACK 是读数据的前提，与服务平时的行为相同。
@@ -335,7 +335,7 @@ std::string DescribeDevice(const std::optional<Himax::PanelIdentity>& panel, con
         std::snprintf(hex, sizeof hex, "0x%02X", panel->e2);
         line("panel.e2h", hex);
     } else {
-        line("panel.project_id", "? (OTP read failed, see recorder.log)");
+        line("panel.project_id", "? (OTP read failed, see EGoTouchRecorder.txt)");
     }
 
     if (pen && pen->hasPenModuleModelId) {
@@ -446,7 +446,7 @@ int main(int argc, char** argv) {
 
     int exitCode = 0;
     if (!runtime->Start()) {
-        std::printf("触摸运行时启动失败，详见 recorder.log。\n");
+        std::printf("触摸运行时启动失败，详见 EGoTouchRecorder.txt。\n");
         exitCode = 1;
     } else {
         std::printf("正在给触摸芯片上电并建链（请保持屏幕点亮）...\n");
@@ -465,7 +465,7 @@ int main(int argc, char** argv) {
             gotFrames = rec.seenFrames != 0;
         }
         if (!gotFrames) {
-            std::printf("%d 秒内没有收到任何帧：触摸芯片没有建链。请确认屏幕亮着、驱动正常，详见 recorder.log。\n",
+            std::printf("%d 秒内没有收到任何帧：触摸芯片没有建链。请确认屏幕亮着、驱动正常，详见 EGoTouchRecorder.txt。\n",
                         kBringUpTimeoutSeconds);
             exitCode = 1;
         } else {
