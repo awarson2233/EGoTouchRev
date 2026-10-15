@@ -219,13 +219,13 @@ void SetDeadZoneFlag() {
         for (uint8_t i = GetEdgeWidthStart(pos, width); i <= end; ++i) g_deadZone[edge * kDeadZoneLen + i] = 1;
     };
     if ((edges & kDeadZoneTop) != 0 && u.rawPos.dim2 <= 0xff) {
-        mark(0, u.rawPos.dim1, u.field070, fl.dim1Len);
+        mark(0, u.rawPos.dim1, u.edgeWidthDim1, fl.dim1Len);
     } else if ((edges & kDeadZoneBottom) != 0 && (fl.dim2Len - 1) * 0x100 < u.rawPos.dim2) {
-        mark(1, u.rawPos.dim1, u.field070, fl.dim1Len);
+        mark(1, u.rawPos.dim1, u.edgeWidthDim1, fl.dim1Len);
     } else if ((edges & kDeadZoneLeft) != 0 && u.rawPos.dim1 <= 0xff) {
-        mark(2, u.rawPos.dim2, u.field071, fl.dim2Len);
+        mark(2, u.rawPos.dim2, u.edgeWidthDim2, fl.dim2Len);
     } else if ((edges & kDeadZoneRight) != 0 && (fl.dim1Len - 1) * 0x100 < u.rawPos.dim1) {
-        mark(3, u.rawPos.dim2, u.field071, fl.dim2Len);
+        mark(3, u.rawPos.dim2, u.edgeWidthDim2, fl.dim2Len);
     }
 }
 
@@ -276,11 +276,11 @@ bool IsGripCriteriaDeadzone(uint8_t curIdx) {
     const bool bigShape = 0x1a <= CurG().iirMajorMm;
     if ((fl.gripDeadzoneEdges & (kDeadZoneLeft | kDeadZoneRight)) != 0) {
         const bool inner = 0xff < u.rawPos.dim1 && u.rawPos.dim1 <= (fl.dim1Len - 1) * 0x100;
-        if (!inner && (fl.dim2Len >> 2 < u.field071 || bigShape)) return true;
+        if (!inner && (fl.dim2Len >> 2 < u.edgeWidthDim2 || bigShape)) return true;
     }
     if ((fl.gripDeadzoneEdges & (kDeadZoneTop | kDeadZoneBottom)) == 0) return false;
     const bool inner = 0xff < u.rawPos.dim2 && u.rawPos.dim2 <= (fl.dim2Len - 1) * 0x100;
-    return !inner && (fl.dim1Len >> 1 < u.field070 || bigShape);
+    return !inner && (fl.dim1Len >> 1 < u.edgeWidthDim1 || bigShape);
 }
 
 // GripFilter_IsInDynamicDeadZone @ 0x6bae59ae：贴着开启死区的边时，沿边那一格及两侧邻格在任一条边的死区里
@@ -346,7 +346,7 @@ bool IsTouchInHeavyRegion(uint8_t curIdx) {
 }
 
 // GripFilter_IsHeavyRegionTouched @ 0x6baea6e5 / GripFilter_GetTouchedLevel @ 0x6baea6a0：触点区域碰到的最高握持等级为 3
-bool IsHeavyRegionTouched(uint8_t curIdx) { return GetGripLevel(Cur(curIdx).field059) == 3; }
+bool IsHeavyRegionTouched(uint8_t curIdx) { return GetGripLevel(Cur(curIdx).gripRegion) == 3; }
 
 // GripFilter_IsHeavyCornerTouched @ 0x6baea7ca
 bool IsHeavyCornerTouched(uint8_t curIdx) { return IsHeavyRegionTouched(curIdx) && IsNearbyCorner(curIdx); }

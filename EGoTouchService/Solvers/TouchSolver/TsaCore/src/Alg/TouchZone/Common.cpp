@@ -93,17 +93,17 @@ uint8_t CalcGripRatio(uint32_t sides, const TouchZoneUnit& z, uint32_t* hitSides
 }
 
 // TZ_UpdateGripRatio @ 0x6ba7faa8
-// field088：按手套过滤的边算的握持比；field058：边上最大信号不超过最强峰一半的方向不算，按左右（系统标志
+// gloveGripRatio：按手套过滤的边算的握持比；gripRatio：边上最大信号不超过最强峰一半的方向不算，按左右（系统标志
 // 0x80 时四边）算的握持比，贴到的边记在 touchSide。
 void UpdateGripRatio(uint8_t idx, const TouchZoneUnit& z) {
     TouchUnit& t = TouchAt(idx);
     uint32_t hit = 0;
-    t.field088 = CalcGripRatio(PrmtDynamic().gloveFilterSides, z, &hit, z.gripRatioDim1, z.gripRatioDim2);
+    t.gloveGripRatio = CalcGripRatio(PrmtDynamic().gloveFilterSides, z, &hit, z.gripRatioDim1, z.gripRatioDim2);
     const int16_t halfPeak = static_cast<int16_t>(PeakAt(z.maxSigPeakIdx).sig / 2);
     const uint16_t r1 = z.edgeMaxSigDim1 <= halfPeak ? 0 : z.gripRatioDim1;
     const uint16_t r2 = z.edgeMaxSigDim2 <= halfPeak ? 0 : z.gripRatioDim2;
     const uint32_t sides = (Static().systemFlags & 0x80) != 0 ? 0xf : 0xc;
-    t.field058 = CalcGripRatio(sides, z, &hit, r1, r2);
+    t.gripRatio = CalcGripRatio(sides, z, &hit, r1, r2);
     t.touchSide = hit;
 }
 
@@ -137,7 +137,7 @@ int EdgeSpan(int8_t lo, int8_t hi) {
 
 // TZ_GetZValue @ 0x6ba7fe48
 uint16_t ZValue(int32_t sigSum) {
-    const uint32_t v = static_cast<uint32_t>(PrmtFlashConst().field000) * static_cast<uint32_t>(sigSum) >> 12;
+    const uint32_t v = static_cast<uint32_t>(PrmtFlashConst().zValueScale) * static_cast<uint32_t>(sigSum) >> 12;
     return static_cast<uint16_t>(std::clamp<uint32_t>(v, 1, 0xffff));
 }
 
@@ -215,25 +215,25 @@ void RegisterTouch(TouchZoneUnit& z) {
     }
     t.rptPos = {z.centroidDim1, z.centroidDim2};
     t.pos = {z.centroidDim1, z.centroidDim2};
-    t.field03E = z.minDim2;
-    t.field03F = z.maxDim2;
-    t.field03C = z.minDim1;
-    t.field03D = z.maxDim1;
+    t.zoneMinDim2 = z.minDim2;
+    t.zoneMaxDim2 = z.maxDim2;
+    t.zoneMinDim1 = z.minDim1;
+    t.zoneMaxDim1 = z.maxDim1;
     t.dim1Span = static_cast<uint8_t>(z.maxDim1 - z.minDim1 + 1);
     t.dim2Span = static_cast<uint8_t>(z.maxDim2 - z.minDim2 + 1);
-    t.field070 = z.edgeWidthDim1;
-    t.field071 = z.edgeWidthDim2;
-    t.field072 = z.edgeWidthSum;
-    t.field06E = static_cast<int8_t>(EdgeSpan(z.edgeMinDim1, z.edgeMaxDim1));
-    t.field06F = static_cast<int8_t>(EdgeSpan(z.edgeMinDim2, z.edgeMaxDim2));
-    t.field0FE = z.cellCount;
+    t.edgeWidthDim1 = z.edgeWidthDim1;
+    t.edgeWidthDim2 = z.edgeWidthDim2;
+    t.edgeWidthSum = z.edgeWidthSum;
+    t.edgeSpanDim1 = static_cast<int8_t>(EdgeSpan(z.edgeMinDim1, z.edgeMaxDim1));
+    t.edgeSpanDim2 = static_cast<int8_t>(EdgeSpan(z.edgeMinDim2, z.edgeMaxDim2));
+    t.cellCount = z.cellCount;
     t.waterCells = z.waterCells;
-    t.field068 = z.gripRatioRawDim1;
-    t.field06A = z.gripRatioRawDim2;
-    t.field078 = z.innerCornerSigRatio;
-    t.field059 = z.gripRegion;
+    t.edgeRatioDim1 = z.gripRatioRawDim1;
+    t.edgeRatioDim2 = z.gripRatioRawDim2;
+    t.innerCornerSigRatio = z.innerCornerSigRatio;
+    t.gripRegion = z.gripRegion;
     t.maxMinSigOff = z.maxMinSigOff;
-    t.field05C = z.field338;
+    t.minSentinel = z.minSentinel;
     t.gripRatioDim1 = z.gripRatioDim1;
     t.gripRatioDim2 = z.gripRatioDim2;
     UpdateGripRatio(idx, z);
@@ -244,27 +244,27 @@ void RegisterTouch(TouchZoneUnit& z) {
     t.minorPx = z.minorAxis;
     t.angle = z.angle;
     t.ellipseRate = z.ellipseRate;
-    t.field064 = z.ellipseRateMirror;
-    t.field066 = std::min(t.field064, t.ellipseRate);
+    t.ellipseRateMirror = z.ellipseRateMirror;
+    t.minEllipseRate = std::min(t.ellipseRateMirror, t.ellipseRate);
     t.zoneShape = static_cast<int32_t>(z.shape);
     t.sigSum = z.sigSum;
-    t.field090 = z.gripRegionSigSum;
-    t.field098 = z.sigSumAll;
+    t.gripRegionSigSum = z.gripRegionSigSum;
+    t.sigSumAll = z.sigSumAll;
     t.pressure = ZValue(t.sigSum);
-    t.field14A = static_cast<uint16_t>(z.sigThold);
+    t.sigThold = static_cast<uint16_t>(z.sigThold);
     t.zoneSignalScale = z.maxSig;
     t.peakIdx = z.maxSigPeakIdx;
     t.sdcPeakIdx = z.sdcMaxPeakIdx;
     t.zoneEdgeSumDim1 = z.edgeSumDim1;
     t.zoneEdgeSumDim2 = z.edgeSumDim2;
     t.exceptionType = static_cast<int32_t>(z.exceptionType);
-    t.field164 = z.field36D;
+    t.hiSkipZ8 = z.hiSkipZ8;
     CentroidEdgeFlag(z, idx);
     UpdateTouchFlag(z, idx);
     UpdateInsideSensor(z, &t.insideDim1, &t.insideDim2);
-    t.field0A8 = 1;
+    t.originType = 1;
     t.zoneIdx = TzAccess().tag;
-    t.field05E = z.minTimeHand;
+    t.minTimeHand = z.minTimeHand;
     t.id = GetId(z, t.id);
     ++touches.count;
     ++touches.reportedCount;
@@ -599,7 +599,7 @@ void Get2ClosestPeaks(const TouchZoneUnit& z, uint8_t& a, uint8_t& b) {
 
 // TZ_UnitToTouch @ 0x6ba8134b
 void UnitToTouch(TouchZoneUnit& z) {
-    ++Touches().field002;
+    ++Touches().zoneTouchCount;
     z.curMajorMm = z.majorMm;
     if ((PrmtFlash().gripFlags & kGripRegisterDirect) != 0) {
         RegisterTouch(z);

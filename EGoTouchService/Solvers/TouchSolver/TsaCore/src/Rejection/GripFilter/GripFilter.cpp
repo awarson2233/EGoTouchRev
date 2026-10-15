@@ -67,7 +67,7 @@ void GetPropertyGlobal() {
         } else if ((u.persistFlags4 & kPersist4Merged) != 0 && !Touch::IsOff(k) && IsPeakAbsNotGrip(u.peakIdx)) {
             u.gripFlags |= kGripPeakAbsNotGrip;
         }
-        if (GetCenterLevel(k) != 0 || u.sigSum < u.field090 * 2) u.gripFlags |= kGripWeakCenter;
+        if (GetCenterLevel(k) != 0 || u.sigSum < u.gripRegionSigSum * 2) u.gripFlags |= kGripWeakCenter;
         if (!Touch::IsOff(g_ctx.cur) && u.dim1Span == 1 && 2 < u.dim2Span && Peak::IsOnInnerEdgeDim1(u.peakIdx)) {
             u.persistFlags4 |= kPersist4InnerEdgeNarrow;
         }
@@ -183,7 +183,7 @@ void BasicProcess(uint8_t curIdx, uint8_t prevIdx) {
     TouchTable& tt = Touches();
     TouchUnit& u = tt.unit[curIdx];
     if (u.gripStage == kStageAbsGrip && PrevG().gripStage != kStageAbsGrip && g_ctx.absGripEnterCount != 0xff) ++g_ctx.absGripEnterCount;
-    if (u.gripStage == kStageAbsGrip || u.gripStage == kStageTempGrip) ++tt.field00D;
+    if (u.gripStage == kStageAbsGrip || u.gripStage == kStageTempGrip) ++tt.gripCount;
     if ((u.persistFlags & kPersistReportedOnce) != 0 && IsGrip(Prev(prevIdx).gripStage)) u.persistFlags2 |= kPersist2GripToPost;
 }
 
@@ -264,7 +264,7 @@ bool IsMerged(uint8_t curIdx, uint8_t prevIdx) {
     if ((Cur(prevIdx).persistFlags4 & kPersist4Merged) != 0 || 0x80 < p.edgeDistDim1) return false;
     if (Cur(curIdx).edgeDistDim1 < static_cast<uint16_t>(TouchSize::MmToPixel(4)) + p.edgeDistDim1) return false;
     if ((p.touchSide & kSideLeft) == 0 && (p.touchSide & kSideRight) == 0) return false;
-    if (p.field068 < PrmtFlash().gripEdge[Report::SideToEdge(p.touchSide)].ratioThold[2]) return false;
+    if (p.edgeRatioDim1 < PrmtFlash().gripEdge[Report::SideToEdge(p.touchSide)].ratioThold[2]) return false;
     return !Peak::IsOnOuterEdgeDim1(Cur(curIdx).peakIdx) || (Cur(curIdx).persistFlags & kPersistReported) == 0;
 }
 

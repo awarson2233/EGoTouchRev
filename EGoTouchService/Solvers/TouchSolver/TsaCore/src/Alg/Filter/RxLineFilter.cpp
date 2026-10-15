@@ -44,7 +44,7 @@ bool IsZ8Failed(uint8_t idx, uint8_t ratio) {
 }
 
 // RxLineFilter_IsPossibleFalseTouch @ 0x6ba6069c（SS_TouchValid 被裁掉，恒为否）
-// 串扰嫌疑的触点：重度噪声下、或尚无 ID、或已报过点但峰值减半个峰门限后低于 hiException.field01E。
+// 串扰嫌疑的触点：重度噪声下、或尚无 ID、或已报过点但峰值减半个峰门限后低于 hiException.crosstalkPeakFloor。
 bool IsPossibleFalseTouch(uint8_t idx, uint8_t ratio) {
     if (!IsZ8Failed(idx, ratio)) return false;
     bool r = Static().noiseLevel == 3;
@@ -52,7 +52,7 @@ bool IsPossibleFalseTouch(uint8_t idx, uint8_t ratio) {
     if (u.id == 0) return true;
     const uint8_t prevIdx = PrevTouch::GetIdxBasedOnId(u.id);
     if (prevIdx != kNoTouch && (PrevTouches().unit[prevIdx].persistFlags & kPersistReported) != 0 &&
-        Peaks().entry[u.peakIdx].sig - PrmtDynamic().peakThold / 2 < Static().hiException.field01E) {
+        Peaks().entry[u.peakIdx].sig - PrmtDynamic().peakThold / 2 < Static().hiException.crosstalkPeakFloor) {
         r = true;
     }
     return r;

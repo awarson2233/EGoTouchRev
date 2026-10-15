@@ -1,5 +1,5 @@
 // GripFilter 的判据：本帧的绝对 / 临时握持、边缘比例门限、长按、异常与被抑制的点击。
-// 边缘比例（field068 / field06A 及其历史最小、最大与 IIR 值）是触点在边缘一列 / 一行上的信号占比，
+// 边缘比例（edgeRatioDim1 / edgeRatioDim2 及其历史最小、最大与 IIR 值）是触点在边缘一列 / 一行上的信号占比，
 // 触点贴着 Dim1 的边（IsOnDim1）时看 Dim1 方向的那一个。
 
 #include <algorithm>
@@ -25,7 +25,7 @@ uint64_t Now() { return Static().curTimeMs; }
 // GripFilter_IsNegSigTouch @ 0x6bae38c7：负信号触点（小、刚按下且仍按着）
 bool IsNegSigTouch() {
     const TouchUnit& u = CurG();
-    return PrmtDynamic().skipZ8CheckOnInnerEdge != 0 && u.field164 != 0 && u.maxMajorMm < 0xf && u.durationMs < 1000 &&
+    return PrmtDynamic().skipZ8CheckOnInnerEdge != 0 && u.hiSkipZ8 != 0 && u.maxMajorMm < 0xf && u.durationMs < 1000 &&
            !Touch::IsOff(Ctx().cur);
 }
 
@@ -102,35 +102,35 @@ bool IsRatioOK(uint32_t kind) {
         case 6:
         case 7: {
             const uint16_t t = GetEdgeClickRatioThold(kind == 1 ? 2 : 3);
-            return t <= (IsOnDim1() ? p.minField068 : p.minField06A);
+            return t <= (IsOnDim1() ? p.minEdgeRatioDim1 : p.minEdgeRatioDim2);
         }
         case 3:
-        case 0xb: return e.ratioThold[2] <= (IsOnDim1() ? p.field3D4.dim1 : p.field3D4.dim2);
+        case 0xb: return e.ratioThold[2] <= (IsOnDim1() ? p.startEdgeRatio.dim1 : p.startEdgeRatio.dim2);
         case 4:
             if (Sys::IsScreenRotated() && (u.gripFlags & kGripHigherPriority) != 0 && IsNearbyCorner(Ctx().cur)) return true;
-            if (IsOnDim1()) return e.ratioThold[1] <= p.maxField068 && 0x10 <= p.minField068;
-            if (!Sys::IsScreenRotated()) return e.ratioThold[1] <= p.minField06A;
-            return e.ratioThold[1] <= p.maxField06A && (e.ratioThold[1] >> 1) <= p.minField06A;
+            if (IsOnDim1()) return e.ratioThold[1] <= p.maxEdgeRatioDim1 && 0x10 <= p.minEdgeRatioDim1;
+            if (!Sys::IsScreenRotated()) return e.ratioThold[1] <= p.minEdgeRatioDim2;
+            return e.ratioThold[1] <= p.maxEdgeRatioDim2 && (e.ratioThold[1] >> 1) <= p.minEdgeRatioDim2;
         case 5:
         case 0xc: {
             const uint16_t t = GetEdgeClickRatioThold(0);
-            if (IsOnDim1()) return t <= p.minField068 && u.maxEdgeDistDim1 <= 0x100;
-            return t <= p.minField06A && u.maxEdgeDistDim2 <= 0x100;
+            if (IsOnDim1()) return t <= p.minEdgeRatioDim1 && u.maxEdgeDistDim1 <= 0x100;
+            return t <= p.minEdgeRatioDim2 && u.maxEdgeDistDim2 <= 0x100;
         }
-        case 9: return (u.persistFlags & kPersistWithdrawable) == 0 && e.ratioThold[0] <= p.minField068;
+        case 9: return (u.persistFlags & kPersistWithdrawable) == 0 && e.ratioThold[0] <= p.minEdgeRatioDim1;
         case 10: {
             uint16_t t = e.ratioThold[0];
             if ((u.persistFlags & kPersistWithdrawable) != 0) t += e.ratioThold[0] >> 2;
-            return t <= p.iirField068;
+            return t <= p.iirEdgeRatioDim1;
         }
-        case 0xd: return IsOnDim1() && 0x29 <= Now() - p.strongZnTime && e.ratioThold[0] <= u.field068;
+        case 0xd: return IsOnDim1() && 0x29 <= Now() - p.strongZnTime && e.ratioThold[0] <= u.edgeRatioDim1;
         case 0xe: {
             const uint16_t t = GetEdgeClickRatioThold(0);
-            if (IsOnDim1()) return t <= p.iirField068;
-            return t <= (Sys::IsScreenRotated() ? p.iirField06A : p.minField06A);
+            if (IsOnDim1()) return t <= p.iirEdgeRatioDim1;
+            return t <= (Sys::IsScreenRotated() ? p.iirEdgeRatioDim2 : p.minEdgeRatioDim2);
         }
-        case 0xf: return u.field068 <= 8 && u.field06A <= 8;
-        case 0x11: return e.ratioThold[2] <= (IsOnDim1() ? p.iirField068 : p.iirField06A);
+        case 0xf: return u.edgeRatioDim1 <= 8 && u.edgeRatioDim2 <= 8;
+        case 0x11: return e.ratioThold[2] <= (IsOnDim1() ? p.iirEdgeRatioDim1 : p.iirEdgeRatioDim2);
         default: return true;
     }
 }
@@ -140,7 +140,7 @@ bool IsLongPressAllowed() {
     const TouchUnit& u = CurG();
     if ((u.gripFlags & kGripPalmShape) != 0) return false;
     if (IsRatioOK(6) && (u.gripFlags & kGripElongated) != 0) return false;
-    if (u.field05E < 5000 && IsRatioOK(0xb)) return false;
+    if (u.minTimeHand < 5000 && IsRatioOK(0xb)) return false;
     if (IsRatioOK(0xe) || (u.gripFlags & kGripGrab) != 0) return false;
     if (!IsCornerLongPressAllowed() || !IsVideoModeLongPressAllowed() || !IsScreenRotatedStateLongPressAllowed()) return false;
     if (BasicIsTempGripAbnormal()) return false;
@@ -193,7 +193,7 @@ bool BasicIsAbsGripAbnormal() {
 // GripFilter_IsNegSigTouchBypass @ 0x6bae3f02：负信号触点已经变大或按久了
 bool IsNegSigTouchBypass() {
     const TouchUnit& u = CurG();
-    return PrmtDynamic().skipZ8CheckOnInnerEdge != 0 && u.field164 != 0 && (0xf <= u.maxMajorMm || 1000 <= u.durationMs);
+    return PrmtDynamic().skipZ8CheckOnInnerEdge != 0 && u.hiSkipZ8 != 0 && (0xf <= u.maxMajorMm || 1000 <= u.durationMs);
 }
 
 // GripFilter_IsCornerGripClick @ 0x6bae7060
@@ -206,7 +206,7 @@ bool IsCornerGripClick() {
 // GripFilter_IsNearbyCorner @ 0x6baea708：两个方向的边缘比例都不为 0 且和不小于 8
 bool IsNearbyCorner(uint8_t curIdx) {
     const TouchUnit& u = Cur(curIdx);
-    return u.field068 != 0 && u.field06A != 0 && 8 <= u.field068 + u.field06A;
+    return u.edgeRatioDim1 != 0 && u.edgeRatioDim2 != 0 && 8 <= u.edgeRatioDim1 + u.edgeRatioDim2;
 }
 
 // GripFilter_IsOnDim2 @ 0x6baec7e8：贴着上 / 下边
@@ -239,7 +239,7 @@ bool IsSeparated(uint8_t curIdx, uint8_t prevIdx) {
     const PrevTouchUnit& p = Prev(prevIdx);
     if (p.edgeDistDim1 < u.edgeDistDim1 + static_cast<uint16_t>(TouchSize::MmToPixel(4))) return false;
     if ((u.touchSide & (kSideLeft | kSideRight)) == 0) return false;
-    return PrmtFlash().gripEdge[Report::SideToEdge(p.touchSide)].ratioThold[2] <= u.field068;
+    return PrmtFlash().gripEdge[Report::SideToEdge(p.touchSide)].ratioThold[2] <= u.edgeRatioDim1;
 }
 
 // GripFilter_GetDelayTime @ 0x6bae4796：判握持前等待的时间（ms）
@@ -272,7 +272,7 @@ uint16_t GetClickGripRatio() {
 bool IsEnableWeakenCornerClickSupress() { return PrmtFlash().gripWeakenCornerClick != 0 && CurG().durationMs <= 299; }
 void WeakenCornerClickSupress(uint8_t& level) {
     const TouchUnit& u = CurG();
-    if (1 < u.field070 && 1 < u.field071) ++level;
+    if (1 < u.edgeWidthDim1 && 1 < u.edgeWidthDim2) ++level;
 }
 
 // GripFilter_GetRatioTholdLevelExtra @ 0x6baec8e8：长按与视频模式至少用等级 1
@@ -308,7 +308,7 @@ int16_t GetSafeTouchThold() { return static_cast<int16_t>(PrmtDynamic().touchTho
 bool IsToApplyMaxDelayOnHeavyCorner() {
     const TouchUnit& u = CurG();
     if ((u.persistFlags4 & kPersist4HeavyCornerTouched) == 0) return false;
-    return 0xe < u.maxMajorMm || u.edgeDistDim1 < 0x181 || u.edgeDistDim2 < 0x181 || 0x10 < u.maxField058;
+    return 0xe < u.maxMajorMm || u.edgeDistDim1 < 0x181 || u.edgeDistDim2 < 0x181 || 0x10 < u.maxGripRatio;
 }
 
 // GripFilter_GetSafeDistToEdgeThold @ 0x6bae5d57 / GripFilter_IsSideTouch @ 0x6bae5d8e
@@ -332,8 +332,8 @@ uint16_t GetEdgeClickRatioThold(uint8_t level) {
         if (IsEnableWeakenCornerClickSupress()) {
             WeakenCornerClickSupress(lv);
         } else {
-            lv += 0x20 < u.maxField078 ? 2 : 1;
-            if (0x30 < u.maxField078) ++lv;
+            lv += 0x20 < u.maxInnerCornerSigRatio ? 2 : 1;
+            if (0x30 < u.maxInnerCornerSigRatio) ++lv;
         }
     }
     GetRatioTholdLevelExtra(lv);
@@ -394,7 +394,7 @@ bool IsSignalOK(uint8_t curIdx, uint32_t kind, bool checkState) {
     const auto weakToRef = [&] { return sig < u.maxRefPeakSig * 2 / 3 || sig < PrmtDynamic().touchThold * 2 / 5; };
     switch (kind) {
         case 1: return weakToRef();
-        case 8: return u.field03F == PrmtFlash().dim2Len - 1 || sig < hti * 2 / 3;
+        case 8: return u.zoneMaxDim2 == PrmtFlash().dim2Len - 1 || sig < hti * 2 / 3;
         case 0x10: return sig < hti * 2 / 3 || weakToRef();
         case 0x11: return hti * 2 / 5 <= sig && u.maxRefPeakSig / 2 <= sig;
         default: return true;
@@ -406,8 +406,8 @@ bool IsSuppressedByHandGesture() {
     const uint8_t cur = Ctx().cur;
     const TouchUnit& u = Cur(cur);
     const uint16_t window = PrmtFlash().gripCoreTouchChangeMs;
-    if (u.field05E < 5000) {
-        if (std::abs(u.field05E - Touch::GetTimeOn(cur)) < window) return true;
+    if (u.minTimeHand < 5000) {
+        if (std::abs(u.minTimeHand - Touch::GetTimeOn(cur)) < window) return true;
         if (IsCoreTouchChangeInTime(window) && ((u.gripFlags & kGripHandRelated) != 0 || IsRatioOK(0xb) || IsSignalOK(cur, 1, true))) {
             return true;
         }
@@ -442,14 +442,14 @@ uint16_t GetAbsThold(uint16_t percent) { return static_cast<uint16_t>(percent + 
 bool IsToCheckStuckSideTouch() {
     const TouchUnit& u = CurG();
     if (0x1a <= u.iirMajorMm || u.zoneSignalScale < PrevG().signalScale / 3) return true;
-    return u.maxEdgeDistDim1 < 0x200 && !Is2HandGame() && !Scenario::IsTyping() && 1 < PrevTouches().field006;
+    return u.maxEdgeDistDim1 < 0x200 && !Is2HandGame() && !Scenario::IsTyping() && 1 < PrevTouches().outCount;
 }
 
 // GripFilter_IsToApplyMaxDelay @ 0x6bae4536
 bool IsToApplyMaxDelay() {
     const TouchUnit& u = CurG();
     if ((u.persistFlags2 & kPersist2IdleWeak) != 0 || (u.gripFlags & (kGripCloseInTime | kGripInCorner)) != 0) return true;
-    if (IsToApplyMaxDelayOnHeavyCorner() || IsRatioOK(4) || u.field05E < 5000) return true;
+    if (IsToApplyMaxDelayOnHeavyCorner() || IsRatioOK(4) || u.minTimeHand < 5000) return true;
     if (!IsLongPressAllowed() || IsAbnormalLiftOff()) return true;
     return u.signalScale < GetSafeTouchThold();
 }

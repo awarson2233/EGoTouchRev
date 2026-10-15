@@ -42,17 +42,17 @@ uint16_t Cell(uint32_t dim1, uint32_t dim2) { return static_cast<uint16_t>(dim1 
 bool IsSensorOverRawLimit(uint8_t dim1, uint8_t dim2) {
     const FlashConstPrmt& fc = PrmtFlashConst();
     const auto v = static_cast<uint16_t>(Buffers().raw[Cell(dim1, dim2)]);
-    return v < fc.field05C || fc.field05A < v;
+    return v < fc.brokenRawMin || fc.brokenRawMax < v;
 }
 
 // HardwareAnalyzer_IsSensorOverRawDeltaLimit @ 0x6baf2cd7
-// 与四个邻格的 raw 之差有一个超出 (field060, field05E) 即为越限。
+// 与四个邻格的 raw 之差有一个超出 (brokenDeltaMin, brokenDeltaMax) 即为越限。
 bool IsSensorOverRawDeltaLimit(uint8_t dim1, uint8_t dim2) {
     const FlashPrmt& fl = PrmtFlash();
     const FlashConstPrmt& fc = PrmtFlashConst();
     const int16_t* raw = Buffers().raw;
-    const auto hi = static_cast<int16_t>(fc.field05E);
-    const auto lo = static_cast<int16_t>(fc.field060);
+    const auto hi = static_cast<int16_t>(fc.brokenDeltaMax);
+    const auto lo = static_cast<int16_t>(fc.brokenDeltaMin);
     const uint32_t cell = dim1 + dim2 * static_cast<uint32_t>(fl.dim1Len);
     const int16_t v = raw[static_cast<uint16_t>(cell)];
     bool over = false;

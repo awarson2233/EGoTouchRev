@@ -144,7 +144,7 @@ void CheckRawDirection() {
     if (-1000 <= p.dif.minSig && p.dif.maxSig <= 1000) return;
     if (p.dif.minSig < -1000) {
         FlashPrmt& fl = PrmtFlash();
-        fl.field600 = fl.field5FC * 2 - fl.field600;
+        fl.rawRefLevel = fl.rawZero * 2 - fl.rawRefLevel;
     }
     ConstPrmt::Init();
     p.rawDirectionChecked = 1;
@@ -228,7 +228,7 @@ void MsProcess(const int16_t* raw) {
     TsaStatic& s = Static();
     s.processingState |= kProcMsActive;
     TSA_STEP(DataSwitch::ToGrid());
-    if (raw == nullptr || PrmtDynamic().field024 != 0) {  // 后者原本还要求自容 raw 无效，自容被裁掉后恒成立
+    if (raw == nullptr || PrmtDynamic().msSkip != 0) {  // 后者原本还要求自容 raw 无效，自容被裁掉后恒成立
         if (Sys::IsHwReset()) TSA_STEP(MsReset());
         TSA_STEP(MsEnd());
         return;

@@ -135,7 +135,7 @@ struct FlashPrmt {
     uint8_t afeDim2Len;
     uint8_t reserved021[0xB];
     uint16_t sensorNum;  // dim1Len × dim2Len
-    uint16_t field02E;  // TS_MMToDisplayPixel：mm × max(dim1Res, dim2Res) × 16 / field02E
+    uint16_t mmToPixelDivisor;  // TS_MMToDisplayPixel：mm × max(dim1Res, dim2Res) × 16 / mmToPixelDivisor
     uint8_t reserved030[0x4];
     uint32_t sensorArchitecture;  // OnCell(1)、Hybrid Incell(2)、Full Incell(3)
     uint8_t reportRateHz;  // 0 时按 8 ms 一帧
@@ -145,7 +145,7 @@ struct FlashPrmt {
     uint16_t dbEnterIdleGame;  // 游戏场景的 dbEnterIdle
     uint16_t dbEnterIdleNormal;  // 普通场景的 dbEnterIdle
     uint16_t dbEnterIdleTyping;  // 输入场景的 dbEnterIdle
-    uint8_t field044;  // TouchMode：为 0 时手指 → 无物体的切换防抖 60 帧，否则立即切换
+    uint8_t fastNoObjExit;  // TouchMode：为 0 时手指 → 无物体的切换防抖 60 帧，否则立即切换
     uint8_t reserved045[0x1];
     uint16_t idleAfterInitMs;  // 互容主流程初始化后多久之内不进 IDLE
     uint16_t recalRawCenter;  // BLRecal：raw 上下边界的目标中心与允许范围
@@ -168,10 +168,10 @@ struct FlashPrmt {
     uint8_t dim1LogicLast;
     uint8_t dim2LogicFirst;
     uint8_t dim2LogicLast;
-    int16_t field094;
-    int16_t field096;
-    int16_t field098;
-    int16_t field09A;
+    int16_t displayXMin;  // 显示坐标的范围（本机型 0..2559 × 0..1599）
+    int16_t displayXMax;
+    int16_t displayYMin;
+    int16_t displayYMax;
     uint8_t reserved09C[0x4];
     double dim1PitchMap[0x50];  // 传感器间距映射：第 i 格起点的物理位置（首项为 100.0 表示等距、不映射）
     double dim2PitchMap[0x50];
@@ -199,15 +199,15 @@ struct FlashPrmt {
     int16_t gloveExitThold;  // 退出手套模式（确认手指）的门限；也是 DynPrmt 初值块的开头
     int16_t gloveThold;  // 手套模式的按下门限
     uint8_t reserved5DC[0x20];
-    int32_t field5FC;
-    int32_t field600;
+    int32_t rawZero;  // raw 的零点；基线初值
+    int32_t rawRefLevel;  // raw 量程的另一端：[rawRefLevel, rawZero] 线性映射到参考门限；缺省机型遇负向信号时以 rawZero 为轴翻转
     uint8_t rawForceNormalize;  // Rawdata：raw 按有符号值归一化，且总是做归一化
     uint8_t reserved605[0x3];
-    uint8_t field608;  // DynPrmt 初值块（0x608..0x626）的开头
+    uint8_t msSkip;  // DynPrmt 初值块（0x608..0x626）的开头：非 0 时跳过互容主流程
     uint8_t reserved609[0x17];
     CmfThold cmfTholdNormal;  // 常态
     CmfThold cmfTholdAlt;  // TsaStatic::systemFlags bit18 置位时
-    uint8_t field62C[0x50];  // ConstPrmt 取前 field025 项的最大值
+    uint8_t lineGroup[0x50];  // 各扫描线所属的组（HardwareAnalyzer 按组统计 raw2raw）
     uint8_t reserved67C[0x194];
     uint32_t cmfMethodNormal;  // CMF 方法：常态 / 智能皮套（1 为 SOF）
     uint32_t cmfMethodSmartCover;
@@ -238,7 +238,7 @@ struct FlashPrmt {
     uint16_t accThold;  // 两触点连线的加速度门限
     uint8_t reserved88C[0x2];
     AiirPrmt aiir[3];
-    uint8_t field8A0;
+    uint8_t reserved8A0[0x1];
     uint8_t jitRadiusDisplay;  // 抗抖动半径（显示像素），ConstPrmt 换算成 jitRadius
     uint8_t liftOffJitterSuppress;  // Filter：抬起过程中信号骤降时按抗抖动半径压住坐标
     uint8_t noCurvePredict;  // Filter：为 0 时轨迹折返后按速度外推坐标
@@ -269,7 +269,7 @@ struct FlashPrmt {
     uint8_t maxClickSuppressDistance;
     uint8_t reserved907[0x1];
     uint8_t flickDistance;  // 决定下一个触点默认是否做点击抑制的移动距离（像素）
-    uint8_t field909;  // 调参表里标为 obsolete
+    uint8_t obsolete909;  // 调参表里标为 obsolete
     uint8_t reserved90A[0x2];
     int16_t noiseTholdQuiet;  // 噪声门限：没有噪声触点时
     int16_t noiseTholdOneNoisy;  // 恰有一个噪声触点时
@@ -288,7 +288,7 @@ struct FlashPrmt {
     uint8_t waterSigHighPercent;
     uint8_t reserved93F[0x1];
     int16_t chargerNoiseTholdPercent;  // Hybrid Incell 充电噪声门限相对 HTI 门限的百分比；也是 DynPrmt 初值块（0x940..0x94c）的开头
-    uint16_t field942;  // 调参表里标为 obsolete
+    uint16_t obsolete942;  // 调参表里标为 obsolete
     uint8_t reserved944[0x8];
     uint8_t sensorOffsetNum;
     SensorOffset sensorOffset[38];
@@ -432,7 +432,7 @@ static_assert(offsetof(FlashPrmt, dim2Len) == 0x01E);
 static_assert(offsetof(FlashPrmt, afeDim1Len) == 0x01F);
 static_assert(offsetof(FlashPrmt, afeDim2Len) == 0x020);
 static_assert(offsetof(FlashPrmt, sensorNum) == 0x02C);
-static_assert(offsetof(FlashPrmt, field02E) == 0x02E);
+static_assert(offsetof(FlashPrmt, mmToPixelDivisor) == 0x02E);
 static_assert(offsetof(FlashPrmt, sensorArchitecture) == 0x034);
 static_assert(offsetof(FlashPrmt, reportRateHz) == 0x038);
 static_assert(offsetof(FlashPrmt, idleEnterDelayMs) == 0x03A);
@@ -440,7 +440,7 @@ static_assert(offsetof(FlashPrmt, dbEnterIdle) == 0x03C);
 static_assert(offsetof(FlashPrmt, dbEnterIdleGame) == 0x03E);
 static_assert(offsetof(FlashPrmt, dbEnterIdleNormal) == 0x040);
 static_assert(offsetof(FlashPrmt, dbEnterIdleTyping) == 0x042);
-static_assert(offsetof(FlashPrmt, field044) == 0x044);
+static_assert(offsetof(FlashPrmt, fastNoObjExit) == 0x044);
 static_assert(offsetof(FlashPrmt, idleAfterInitMs) == 0x046);
 static_assert(offsetof(FlashPrmt, recalRawCenter) == 0x048);
 static_assert(offsetof(FlashPrmt, recalRawRange) == 0x04A);
@@ -460,10 +460,10 @@ static_assert(offsetof(FlashPrmt, dim1LogicFirst) == 0x090);
 static_assert(offsetof(FlashPrmt, dim1LogicLast) == 0x091);
 static_assert(offsetof(FlashPrmt, dim2LogicFirst) == 0x092);
 static_assert(offsetof(FlashPrmt, dim2LogicLast) == 0x093);
-static_assert(offsetof(FlashPrmt, field094) == 0x094);
-static_assert(offsetof(FlashPrmt, field096) == 0x096);
-static_assert(offsetof(FlashPrmt, field098) == 0x098);
-static_assert(offsetof(FlashPrmt, field09A) == 0x09A);
+static_assert(offsetof(FlashPrmt, displayXMin) == 0x094);
+static_assert(offsetof(FlashPrmt, displayXMax) == 0x096);
+static_assert(offsetof(FlashPrmt, displayYMin) == 0x098);
+static_assert(offsetof(FlashPrmt, displayYMax) == 0x09A);
 static_assert(offsetof(FlashPrmt, dim1PitchMap) == 0x0A0);
 static_assert(offsetof(FlashPrmt, dim2PitchMap) == 0x320);
 static_assert(offsetof(FlashPrmt, outputResScale) == 0x5A0);
@@ -484,13 +484,13 @@ static_assert(offsetof(FlashPrmt, sigRatioToDirectReport) == 0x5BA);
 static_assert(offsetof(FlashPrmt, sdZnTholdScaleX16) == 0x5D0);
 static_assert(offsetof(FlashPrmt, gloveExitThold) == 0x5D8);
 static_assert(offsetof(FlashPrmt, gloveThold) == 0x5DA);
-static_assert(offsetof(FlashPrmt, field5FC) == 0x5FC);
-static_assert(offsetof(FlashPrmt, field600) == 0x600);
+static_assert(offsetof(FlashPrmt, rawZero) == 0x5FC);
+static_assert(offsetof(FlashPrmt, rawRefLevel) == 0x600);
 static_assert(offsetof(FlashPrmt, rawForceNormalize) == 0x604);
-static_assert(offsetof(FlashPrmt, field608) == 0x608);
+static_assert(offsetof(FlashPrmt, msSkip) == 0x608);
 static_assert(offsetof(FlashPrmt, cmfTholdNormal) == 0x620);
 static_assert(offsetof(FlashPrmt, cmfTholdAlt) == 0x626);
-static_assert(offsetof(FlashPrmt, field62C) == 0x62C);
+static_assert(offsetof(FlashPrmt, lineGroup) == 0x62C);
 static_assert(offsetof(FlashPrmt, cmfMethodNormal) == 0x810);
 static_assert(offsetof(FlashPrmt, cmfMethodSmartCover) == 0x814);
 static_assert(offsetof(FlashPrmt, noisyTouchDownDebounce) == 0x818);
@@ -514,7 +514,6 @@ static_assert(offsetof(FlashPrmt, centroidSigOffsetDim2) == 0x886);
 static_assert(offsetof(FlashPrmt, idtSnapDistMm) == 0x888);
 static_assert(offsetof(FlashPrmt, accThold) == 0x88A);
 static_assert(offsetof(FlashPrmt, aiir) == 0x88E);
-static_assert(offsetof(FlashPrmt, field8A0) == 0x8A0);
 static_assert(offsetof(FlashPrmt, jitRadiusDisplay) == 0x8A1);
 static_assert(offsetof(FlashPrmt, liftOffJitterSuppress) == 0x8A2);
 static_assert(offsetof(FlashPrmt, noCurvePredict) == 0x8A3);
@@ -538,7 +537,7 @@ static_assert(offsetof(FlashPrmt, clickDuration) == 0x900);
 static_assert(offsetof(FlashPrmt, clickSuppressDistance) == 0x904);
 static_assert(offsetof(FlashPrmt, maxClickSuppressDistance) == 0x906);
 static_assert(offsetof(FlashPrmt, flickDistance) == 0x908);
-static_assert(offsetof(FlashPrmt, field909) == 0x909);
+static_assert(offsetof(FlashPrmt, obsolete909) == 0x909);
 static_assert(offsetof(FlashPrmt, noiseTholdQuiet) == 0x90C);
 static_assert(offsetof(FlashPrmt, noiseTholdOneNoisy) == 0x90E);
 static_assert(offsetof(FlashPrmt, noiseTholdMultiNoisy) == 0x910);
@@ -552,7 +551,7 @@ static_assert(offsetof(FlashPrmt, wetFingerMinWaterCells) == 0x93C);
 static_assert(offsetof(FlashPrmt, waterSigLowPercent) == 0x93D);
 static_assert(offsetof(FlashPrmt, waterSigHighPercent) == 0x93E);
 static_assert(offsetof(FlashPrmt, chargerNoiseTholdPercent) == 0x940);
-static_assert(offsetof(FlashPrmt, field942) == 0x942);
+static_assert(offsetof(FlashPrmt, obsolete942) == 0x942);
 static_assert(offsetof(FlashPrmt, sensorOffsetNum) == 0x94C);
 static_assert(offsetof(FlashPrmt, sensorOffset) == 0x94D);
 static_assert(offsetof(FlashPrmt, sensorTranslateNum) == 0xA0D);
@@ -663,24 +662,23 @@ static_assert(offsetof(FlashPrmt, hotZoneExpandMin) == 0x185C);
 
 /// g_tsaPrmtFlashConst：由机型参数推导出的常量（ConstPrmt::Init；0x40..0x56 由 ER_Init 写）。
 struct FlashConstPrmt {
-    uint16_t field000;
+    uint16_t zValueScale;  // TZ_GetZValue：Z 值 = zValueScale × 信号和 >> 12
     uint8_t reserved002[0x2];
     uint32_t dim1DisplayScale;  // 显示坐标（含两端裁剪）对 Q8.8 像素坐标的比例，Q16
     uint32_t dim2DisplayScale;
     uint16_t aiirCoefToDeltaRatio[3];  // 每组 AIIR 系数的插值斜率，Q10
     uint16_t jitRadius;  // 抗抖动半径（Q8.8 传感器单位，按 Dim1 分辨率换算）；Filter 两个方向都用它
     uint16_t jitRadiusDim2;  // 按 Dim2 分辨率换算的抗抖动半径（无人读）
-    uint16_t field016;
-    uint16_t field018;
+    uint8_t reserved016[0x4];
     uint8_t q8PerMm;  // 每 mm 的 Q8.8 传感器单位数：0x1000 / sensorPitchX16 + 1
     uint8_t reserved01B[0x1];
     uint16_t mmPerQ8Q16;  // 每个 Q8.8 传感器单位的 mm 数（Q16）：0x10000 / q8PerMm
     uint16_t sizeAreaScale;  // 0x32400 / sensorPitchX16²，即 256π / 传感器面积（mm²）：TS_GetSizeInMM 用
     uint16_t dim1LenQ8;  // dim1Len << 8
     uint16_t dim2LenQ8;
-    uint8_t field024;  // dim1Axis 为 0 时是 dim2Len，否则是 dim1Len
-    uint8_t field025;  // 与 field024 相反
-    uint8_t field026;  // field62C 前 field025 项的最大值 + 1
+    uint8_t lineLen;  // 扫描线长度：dim1Axis 为 0 时是 dim2Len，否则是 dim1Len
+    uint8_t lineNum;  // 扫描线条数，与 lineLen 相反
+    uint8_t lineGroupNum;  // FlashPrmt::lineGroup 前 lineNum 项的最大值 + 1
     uint8_t reserved027[0x1];
     uint8_t dim1LogicLen;
     uint8_t dim2LogicLen;
@@ -688,51 +686,45 @@ struct FlashConstPrmt {
     uint16_t dim1FarEdge;
     uint16_t dim2NearEdge;
     uint16_t dim2FarEdge;
-    uint16_t field032;  // field096 - field094 + 1
-    uint16_t field034;  // field09A - field098 + 1
-    uint8_t reserved036[0x2];
-    uint32_t field038;
-    uint32_t field03C;
+    uint8_t reserved032[0x6];
+    uint32_t rawScale;  // Rawdata 归一化：raw × rawScale / 0x3fff + rawOffset
+    uint32_t rawOffset;
     ErEdgePrmt erEdge[4];  // ER_Init 由 FlashPrmt::erEdgeMm 换算
     uint8_t reserved058[0x2];
-    uint16_t field05A;
-    uint16_t field05C;
-    uint16_t field05E;
-    uint16_t field060;
+    uint16_t brokenRawMax;  // SensorBroken：raw 超出 [brokenRawMin, brokenRawMax] 即越限
+    uint16_t brokenRawMin;
+    uint16_t brokenDeltaMax;  // 与邻格之差超出 (brokenDeltaMin, brokenDeltaMax) 即越限
+    uint16_t brokenDeltaMin;
     uint8_t reserved062[0x2];
 };
 static_assert(sizeof(FlashConstPrmt) == 0x064);
-static_assert(offsetof(FlashConstPrmt, field000) == 0x000);
+static_assert(offsetof(FlashConstPrmt, zValueScale) == 0x000);
 static_assert(offsetof(FlashConstPrmt, dim1DisplayScale) == 0x004);
 static_assert(offsetof(FlashConstPrmt, dim2DisplayScale) == 0x008);
 static_assert(offsetof(FlashConstPrmt, aiirCoefToDeltaRatio) == 0x00C);
 static_assert(offsetof(FlashConstPrmt, jitRadius) == 0x012);
 static_assert(offsetof(FlashConstPrmt, jitRadiusDim2) == 0x014);
-static_assert(offsetof(FlashConstPrmt, field016) == 0x016);
-static_assert(offsetof(FlashConstPrmt, field018) == 0x018);
 static_assert(offsetof(FlashConstPrmt, q8PerMm) == 0x01A);
 static_assert(offsetof(FlashConstPrmt, mmPerQ8Q16) == 0x01C);
 static_assert(offsetof(FlashConstPrmt, sizeAreaScale) == 0x01E);
 static_assert(offsetof(FlashConstPrmt, dim1LenQ8) == 0x020);
 static_assert(offsetof(FlashConstPrmt, dim2LenQ8) == 0x022);
-static_assert(offsetof(FlashConstPrmt, field024) == 0x024);
-static_assert(offsetof(FlashConstPrmt, field025) == 0x025);
-static_assert(offsetof(FlashConstPrmt, field026) == 0x026);
+static_assert(offsetof(FlashConstPrmt, lineLen) == 0x024);
+static_assert(offsetof(FlashConstPrmt, lineNum) == 0x025);
+static_assert(offsetof(FlashConstPrmt, lineGroupNum) == 0x026);
 static_assert(offsetof(FlashConstPrmt, dim1LogicLen) == 0x028);
 static_assert(offsetof(FlashConstPrmt, dim2LogicLen) == 0x029);
 static_assert(offsetof(FlashConstPrmt, dim1NearEdge) == 0x02A);
 static_assert(offsetof(FlashConstPrmt, dim1FarEdge) == 0x02C);
 static_assert(offsetof(FlashConstPrmt, dim2NearEdge) == 0x02E);
 static_assert(offsetof(FlashConstPrmt, dim2FarEdge) == 0x030);
-static_assert(offsetof(FlashConstPrmt, field032) == 0x032);
-static_assert(offsetof(FlashConstPrmt, field034) == 0x034);
-static_assert(offsetof(FlashConstPrmt, field038) == 0x038);
-static_assert(offsetof(FlashConstPrmt, field03C) == 0x03C);
+static_assert(offsetof(FlashConstPrmt, rawScale) == 0x038);
+static_assert(offsetof(FlashConstPrmt, rawOffset) == 0x03C);
 static_assert(offsetof(FlashConstPrmt, erEdge) == 0x040);
-static_assert(offsetof(FlashConstPrmt, field05A) == 0x05A);
-static_assert(offsetof(FlashConstPrmt, field05C) == 0x05C);
-static_assert(offsetof(FlashConstPrmt, field05E) == 0x05E);
-static_assert(offsetof(FlashConstPrmt, field060) == 0x060);
+static_assert(offsetof(FlashConstPrmt, brokenRawMax) == 0x05A);
+static_assert(offsetof(FlashConstPrmt, brokenRawMin) == 0x05C);
+static_assert(offsetof(FlashConstPrmt, brokenDeltaMax) == 0x05E);
+static_assert(offsetof(FlashConstPrmt, brokenDeltaMin) == 0x060);
 
 /// g_tsaPrmtDynamic：随场景、噪声、触点状态每帧更新的门限（DynPrmt）。
 struct DynamicPrmt {
@@ -754,7 +746,7 @@ struct DynamicPrmt {
     uint8_t reserved01F[0x1];
     int16_t underWaterThold;
     int16_t underWaterTholdLow;
-    uint8_t field024;  // 机型参数初值块（0x24..0x42）的开头
+    uint8_t msSkip;  // 机型参数初值块（0x24..0x42）的开头：非 0 时跳过互容主流程
     uint8_t reserved025[0x7];
     int16_t ssTholdLow;
     int16_t ssThold;
@@ -766,17 +758,17 @@ struct DynamicPrmt {
     int16_t sideSmallThold;
     int16_t clampAfterTouch;  // noiseThold - 1
     int16_t clampAfterTouchSide;
-    uint8_t field04E;
+    uint8_t reserved04E[0x1];
     uint8_t stepNoTouch;  // noiseThold / 256，限制在 1..255
     uint8_t stepNoTouchSide;
-    uint8_t field051;
+    uint8_t reserved051[0x1];
     uint8_t stepAfterTouch;  // noiseThold / 64，限制在 1..255
     uint8_t reserved053[0x1];
     int16_t stageTimeoutMs;
     uint8_t halfReportRate;
     uint8_t reportRate;
     int16_t resetCounterCap;  // reportRateHz × 200
-    int16_t field05A;
+    int16_t blSinceResetCap;  // 基线复位后帧数计数的上限
     int16_t refThold;  // peakFilterReferenceThreshold
     int16_t negRefThold;
     uint8_t reserved060[0xC];
@@ -821,7 +813,7 @@ static_assert(offsetof(DynamicPrmt, lowTholdOnDim1FarEdge) == 0x01D);
 static_assert(offsetof(DynamicPrmt, lowTholdOnDim2FarEdge) == 0x01E);
 static_assert(offsetof(DynamicPrmt, underWaterThold) == 0x020);
 static_assert(offsetof(DynamicPrmt, underWaterTholdLow) == 0x022);
-static_assert(offsetof(DynamicPrmt, field024) == 0x024);
+static_assert(offsetof(DynamicPrmt, msSkip) == 0x024);
 static_assert(offsetof(DynamicPrmt, ssTholdLow) == 0x02C);
 static_assert(offsetof(DynamicPrmt, ssThold) == 0x02E);
 static_assert(offsetof(DynamicPrmt, cmfThold) == 0x03C);
@@ -831,16 +823,14 @@ static_assert(offsetof(DynamicPrmt, smallThold) == 0x046);
 static_assert(offsetof(DynamicPrmt, sideSmallThold) == 0x048);
 static_assert(offsetof(DynamicPrmt, clampAfterTouch) == 0x04A);
 static_assert(offsetof(DynamicPrmt, clampAfterTouchSide) == 0x04C);
-static_assert(offsetof(DynamicPrmt, field04E) == 0x04E);
 static_assert(offsetof(DynamicPrmt, stepNoTouch) == 0x04F);
 static_assert(offsetof(DynamicPrmt, stepNoTouchSide) == 0x050);
-static_assert(offsetof(DynamicPrmt, field051) == 0x051);
 static_assert(offsetof(DynamicPrmt, stepAfterTouch) == 0x052);
 static_assert(offsetof(DynamicPrmt, stageTimeoutMs) == 0x054);
 static_assert(offsetof(DynamicPrmt, halfReportRate) == 0x056);
 static_assert(offsetof(DynamicPrmt, reportRate) == 0x057);
 static_assert(offsetof(DynamicPrmt, resetCounterCap) == 0x058);
-static_assert(offsetof(DynamicPrmt, field05A) == 0x05A);
+static_assert(offsetof(DynamicPrmt, blSinceResetCap) == 0x05A);
 static_assert(offsetof(DynamicPrmt, refThold) == 0x05C);
 static_assert(offsetof(DynamicPrmt, negRefThold) == 0x05E);
 static_assert(offsetof(DynamicPrmt, defaultSizeMm) == 0x06C);

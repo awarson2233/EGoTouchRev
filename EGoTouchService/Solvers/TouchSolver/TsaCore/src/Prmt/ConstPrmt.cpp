@@ -44,28 +44,24 @@ void Init() {
     c.dim1FarEdge = static_cast<uint16_t>((flash.dim1LogicLast + 1) * 0x100);
     c.dim2NearEdge = static_cast<uint16_t>(flash.dim2LogicFirst << 8);
     c.dim2FarEdge = static_cast<uint16_t>((flash.dim2LogicLast + 1) * 0x100);
-    c.field032 = static_cast<uint16_t>(flash.field096 - flash.field094 + 1);
-    c.field034 = static_cast<uint16_t>(flash.field09A - flash.field098 + 1);
     if (flash.dim1Axis == 0) {
-        c.field025 = flash.dim1Len;
-        c.field024 = flash.dim2Len;
+        c.lineNum = flash.dim1Len;
+        c.lineLen = flash.dim2Len;
     } else {
-        c.field025 = flash.dim2Len;
-        c.field024 = flash.dim1Len;
+        c.lineNum = flash.dim2Len;
+        c.lineLen = flash.dim1Len;
     }
     uint8_t maxValue = 0;
-    for (int i = 0; i < c.field025; ++i) {
-        if (maxValue < flash.field62C[i]) maxValue = flash.field62C[i];
+    for (int i = 0; i < c.lineNum; ++i) {
+        if (maxValue < flash.lineGroup[i]) maxValue = flash.lineGroup[i];
     }
-    c.field026 = static_cast<uint8_t>(maxValue + 1);
+    c.lineGroupNum = static_cast<uint8_t>(maxValue + 1);
 
     c.dim1DisplayScale = DisplayScale(flash.dim1Res, flash.dim1ClipLow, flash.dim1ClipHigh, dim1Len);
     c.dim2DisplayScale = DisplayScale(flash.dim2Res, flash.dim2ClipLow, flash.dim2ClipHigh, dim2Len);
     for (int i = 0; i < 3; ++i) c.aiirCoefToDeltaRatio[i] = AiirRatio(flash.aiir[i]);
     c.jitRadius = PerResolution(flash.jitRadiusDisplay, dim1Len, flash.dim1Res);
     c.jitRadiusDim2 = PerResolution(flash.jitRadiusDisplay, dim2Len, flash.dim2Res);
-    c.field016 = PerResolution(flash.field8A0, dim1Len, flash.dim1Res);
-    c.field018 = PerResolution(flash.field8A0, dim2Len, flash.dim2Res);
 
     // 以下按 64 位无符号除；sensorPitchX16 为 0 时与原代码一样除零
     const uint64_t pitch = flash.sensorPitchX16;
@@ -74,20 +70,20 @@ void Init() {
     c.mmPerQ8Q16 = static_cast<uint16_t>(0x10000u / static_cast<uint64_t>(static_cast<int64_t>(static_cast<int>(0x1000u / pitch) + 1)));
     const uint32_t scaleProduct = static_cast<uint32_t>(flash.peakFilterReferenceThreshold) * c.sizeAreaScale * flash.defaultSizeMm *
                                   flash.defaultSizeMm;
-    c.field000 = static_cast<uint16_t>(0x100000u / static_cast<uint64_t>(scaleProduct >> 10));
+    c.zValueScale = static_cast<uint16_t>(0x100000u / static_cast<uint64_t>(scaleProduct >> 10));
 
-    // 参考门限到 [field600, field5FC] 区间的线性映射：斜率（有符号除）与截距（无符号除）
-    c.field038 = static_cast<uint32_t>(flash.peakFilterReferenceThreshold * 0x3fff / (flash.field5FC - flash.field600));
-    c.field03C = 0x7fffu - c.field038 * static_cast<uint32_t>(flash.field5FC) / 0x3fffu;
+    // 参考门限到 [rawRefLevel, rawZero] 区间的线性映射：斜率（有符号除）与截距（无符号除）
+    c.rawScale = static_cast<uint32_t>(flash.peakFilterReferenceThreshold * 0x3fff / (flash.rawZero - flash.rawRefLevel));
+    c.rawOffset = 0x7fffu - c.rawScale * static_cast<uint32_t>(flash.rawZero) / 0x3fffu;
 
     const uint32_t refSum = static_cast<uint32_t>(flash.peakFilterReferenceThreshold) + flash.field1656 + flash.field1658 +
                             flash.field165A;
     const int margin = static_cast<int>(refSum * 3u) / 2;
     const uint32_t m = static_cast<uint32_t>(margin);
-    c.field05A = static_cast<int>(m + flash.rawUpperLimit) < 0x10000 ? static_cast<uint16_t>(flash.rawUpperLimit + margin) : 0xffff;
-    c.field05C = static_cast<int>(flash.rawLowerLimit - m) < 0 ? 0 : static_cast<uint16_t>(flash.rawLowerLimit - margin);
-    c.field05E = static_cast<int>(m + flash.rawDeltaLimit) < 0x8000 ? static_cast<uint16_t>(margin + flash.rawDeltaLimit) : 0x7fff;
-    c.field060 = static_cast<int>(static_cast<uint32_t>(-margin) - flash.rawDeltaLimit) < -0x8000
+    c.brokenRawMax = static_cast<int>(m + flash.rawUpperLimit) < 0x10000 ? static_cast<uint16_t>(flash.rawUpperLimit + margin) : 0xffff;
+    c.brokenRawMin = static_cast<int>(flash.rawLowerLimit - m) < 0 ? 0 : static_cast<uint16_t>(flash.rawLowerLimit - margin);
+    c.brokenDeltaMax = static_cast<int>(m + flash.rawDeltaLimit) < 0x8000 ? static_cast<uint16_t>(margin + flash.rawDeltaLimit) : 0x7fff;
+    c.brokenDeltaMin = static_cast<int>(static_cast<uint32_t>(-margin) - flash.rawDeltaLimit) < -0x8000
                      ? static_cast<uint16_t>(0x8000)
                      : static_cast<uint16_t>(-margin - flash.rawDeltaLimit);
 }

@@ -1,6 +1,6 @@
 #pragma once
 // 原始数据的归一化（原 Signal/Rawdata.c，原厂 src/Alg/Rawdata/Rawdata.c）：raw 按 FlashConstPrmt 的比例
-// field038 / 0x3fff 与偏移 field03C 线性换算；走 Dif 缓冲路径（systemFlags bit16）时只缩放 Dif。
+// rawScale / 0x3fff 与偏移 rawOffset 线性换算；走 Dif 缓冲路径（systemFlags bit16）时只缩放 Dif。
 
 #include <cstdint>
 

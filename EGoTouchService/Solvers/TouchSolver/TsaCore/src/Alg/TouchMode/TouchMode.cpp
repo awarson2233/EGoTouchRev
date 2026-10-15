@@ -103,7 +103,7 @@ TouchTable& Cur() { return Touches(); }
 bool StylusOff() { return (Static().featureFlags & kFeatStylus) == 0; }
 bool GloveOn() { return (PrmtDynamic().zTholdFlags & kZTholdGlove) != 0 && (Static().featureFlags & kFeatGloveMode) != 0; }
 bool StylusOn() { return (PrmtDynamic().zTholdFlags & kZTholdStylus) != 0 && (Static().featureFlags & kFeatKnuckle) != 0; }
-bool CoverOn() { return (Static().featureFlags & kFeatSmartCover) != 0 || Static().field3F1 != 0; }
+bool CoverOn() { return (Static().featureFlags & kFeatSmartCover) != 0 || Static().wakeUpExceptionLatch != 0; }
 
 void SuppressAll(uint32_t flag) {
     TouchTable& t = Cur();
@@ -117,7 +117,7 @@ void SuppressAll(uint32_t flag) {
 bool IsClearanceAreaSatisfied(uint8_t idx) {
     const PeakEntry& pk = Peaks().entry[Cur().unit[idx].peakIdx];
     const FlashPrmt& fl = PrmtFlash();
-    const int r = PrevTouches().field00C == 0 || StylusOff() ? 3 : 2;
+    const int r = PrevTouches().stylusCount == 0 || StylusOff() ? 3 : 2;
     bool ok = true;
     for (int row = pk.dim2 - r; row <= pk.dim2 + r; ++row) {
         if (static_cast<uint8_t>(row) >= fl.dim2Len) continue;
@@ -202,7 +202,7 @@ uint8_t StylusFilterProcess() {
 // TouchMode_StylusFilter @ 0x6ba7a0ed
 void StylusFilter() {
     const uint8_t n = StylusFilterProcess();
-    if (StylusGetCoreIndex() != kNoTouch) Cur().field00C = n;
+    if (StylusGetCoreIndex() != kNoTouch) Cur().stylusCount = n;
 }
 
 // ── 各模式的 Detect / Process ────────────────────────────────────────────
@@ -211,7 +211,7 @@ void StylusFilter() {
 void NoObjDetect(int32_t& detect, int32_t& level) {
     detect = kNotDetected;
     level = kLevelConfirmed;
-    if (Cur().count == Cur().field00D) detect = kDetected;
+    if (Cur().count == Cur().gripCount) detect = kDetected;
 }
 
 // TouchMode_FingerDetect @ 0x6ba7911f
@@ -261,7 +261,7 @@ void GloveDetect(int32_t& detect, int32_t& level) {
     if (!glove && !stylus && !CoverOn()) return;
     TouchTable& t = Cur();
     TsaPrpt& pr = Prpt();
-    if (t.count != t.field00D) detect = kDetected;
+    if (t.count != t.gripCount) detect = kDetected;
     if ((pr.touchModeLatched != 0 && (glove || stylus)) || CoverOn()) {
         pr.touchModeLatched = 1;
         level = kLevelConfirmed;
@@ -288,7 +288,7 @@ void GloveFilter() {
     TouchTable& t = Cur();
     for (uint8_t i = 0; i < t.count; ++i) {
         TouchUnit& u = t.unit[i];
-        if ((u.suppressFlags & kSuppressFinger) == 0 && kGloveFilterRatio < u.field088) u.suppressFlags |= kSuppressByMode;
+        if ((u.suppressFlags & kSuppressFinger) == 0 && kGloveFilterRatio < u.gloveGripRatio) u.suppressFlags |= kSuppressByMode;
     }
 }
 
@@ -375,7 +375,7 @@ void Init() {
     SwitchTimer().Stop();
     DebounceTable& db = SwitchDebounce();
     db[kNoObj][kFinger] = 0;
-    db[kFinger][kNoObj] = PrmtFlash().field044 == 0 ? 0x3c : 0;
+    db[kFinger][kNoObj] = PrmtFlash().fastNoObjExit == 0 ? 0x3c : 0;
     db[kNoObj][kGlove] = 0x14;
     db[kGlove][kNoObj] = 200;
     db[kGlove][kFinger] = 0;

@@ -114,15 +114,15 @@ void PostProcess() {
     prev.extFlags = cur.extFlags;
     prev.newExtFlags = cur.newExtFlags;
     prev.reportedCount = cur.reportedCount;
-    prev.field002 = cur.field002;
+    prev.zoneTouchCount = cur.zoneTouchCount;
     prev.maxCoreEllipseRate = cur.maxCoreEllipseRate;
     prev.reportCount = cur.reportCount;
     prev.coreTouchCount = cur.coreTouchCount;
     prev.reportedThisFrame = cur.reportedThisFrame;
     prev.lastReportedId = cur.lastReportedId;
     prev.gripReportedThisFrame = cur.gripReportedThisFrame;
-    prev.field00C = cur.field00C;
-    prev.field00D = cur.field00D;
+    prev.stylusCount = cur.stylusCount;
+    prev.gripCount = cur.gripCount;
     prev.field00E = cur.field00E;
     prev.field00F = cur.field00F;
     prev.abnormalShapeCount = cur.abnormalShapeCount;
@@ -221,10 +221,10 @@ void UnitUpdate(uint8_t prevIdx, uint8_t curIdx) {
 
     if (prev.maxSqDistMmFromPrev < cur.sqDistMmFromPrev) prev.maxSqDistMmFromPrev = cur.sqDistMmFromPrev;
     // 0 表示尚未记录
-    if (prev.minField068 == 0 || cur.field068 < prev.minField068) prev.minField068 = cur.field068;
-    if (prev.minField06A == 0 || cur.field06A < prev.minField06A) prev.minField06A = cur.field06A;
-    if (prev.maxField068 == 0 || prev.maxField068 < cur.field068) prev.maxField068 = cur.field068;
-    if (prev.maxField06A == 0 || prev.maxField06A < cur.field06A) prev.maxField06A = cur.field06A;
+    if (prev.minEdgeRatioDim1 == 0 || cur.edgeRatioDim1 < prev.minEdgeRatioDim1) prev.minEdgeRatioDim1 = cur.edgeRatioDim1;
+    if (prev.minEdgeRatioDim2 == 0 || cur.edgeRatioDim2 < prev.minEdgeRatioDim2) prev.minEdgeRatioDim2 = cur.edgeRatioDim2;
+    if (prev.maxEdgeRatioDim1 == 0 || prev.maxEdgeRatioDim1 < cur.edgeRatioDim1) prev.maxEdgeRatioDim1 = cur.edgeRatioDim1;
+    if (prev.maxEdgeRatioDim2 == 0 || prev.maxEdgeRatioDim2 < cur.edgeRatioDim2) prev.maxEdgeRatioDim2 = cur.edgeRatioDim2;
 
     if (cur.maxPeakZn <= Peaks().entry[cur.peakIdx].zn * 100 / 70) prev.strongZnTime = Static().curTimeMs;
 }

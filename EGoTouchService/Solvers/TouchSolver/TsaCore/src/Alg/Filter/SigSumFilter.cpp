@@ -10,13 +10,13 @@
 namespace Solvers::Tsa::Core::SigSumFilter {
 
 // SigSumFilter_ReserveTouch @ 0x6ba60977
-// 触点按 field098 从大到小排序（选择交换，整单元按字节交换），再去掉第 keep 个之后的触点。keep 为 0 时不处理。
+// 触点按 sigSumAll 从大到小排序（选择交换，整单元按字节交换），再去掉第 keep 个之后的触点。keep 为 0 时不处理。
 void ReserveTouch(int keep) {
     if (keep == 0) return;
     TouchTable& tt = Touches();
     for (int i = 0; i < tt.count - 1; ++i) {
         for (int j = i + 1; j < tt.count; ++j) {
-            if (tt.unit[i].field098 < tt.unit[j].field098) {
+            if (tt.unit[i].sigSumAll < tt.unit[j].sigSumAll) {
                 TouchUnit tmp;
                 std::memcpy(&tmp, &tt.unit[i], sizeof(TouchUnit));
                 std::memcpy(&tt.unit[i], &tt.unit[j], sizeof(TouchUnit));

@@ -152,7 +152,7 @@ void GetMaxEllipseRateInCore() {
     tt.coreTouchCount = 0;
     for (int k = 0; k < tt.count; ++k) {
         const TouchUnit& u = tt.unit[k];
-        if (u.field06E != 0 || u.field06F != 0 || u.zoneShape == 3 || (u.persistFlags & kPersistReported) == 0) continue;
+        if (u.edgeSpanDim1 != 0 || u.edgeSpanDim2 != 0 || u.zoneShape == 3 || (u.persistFlags & kPersistReported) == 0) continue;
         if (tt.maxCoreEllipseRate < u.ellipseRate) tt.maxCoreEllipseRate = u.ellipseRate;
         ++tt.coreTouchCount;
     }
@@ -332,7 +332,7 @@ void Reset() {
 }
 
 // HardwareAnalyzer_GetRaw2RawPrpt @ 0x6baf10dc
-// raw2raw Dif（raw - 上一帧 raw）按扫描线分组（FlashPrmt::field62C 是各线所属的组）统计超门限的格数。
+// raw2raw Dif（raw - 上一帧 raw）按扫描线分组（FlashPrmt::lineGroup 是各线所属的组）统计超门限的格数。
 // 原代码还统计 raw2raw Dif 的极值，没有模块读，不算。
 void GetRaw2RawPrpt() {
     const FlashPrmt& fl = PrmtFlash();
@@ -342,9 +342,9 @@ void GetRaw2RawPrpt() {
     const int finger = fl.fingerThold;
     const int ref = fl.peakFilterReferenceThreshold;
     const auto bigNoise = static_cast<int16_t>(ref * 3);
-    const uint8_t lineLen = fc.field024;
-    const uint8_t lineNum = fc.field025;
-    const uint8_t groupNum = fc.field026;
+    const uint8_t lineLen = fc.lineLen;
+    const uint8_t lineNum = fc.lineNum;
+    const uint8_t groupNum = fc.lineGroupNum;
     TsaAssert(lineLen <= kMaxLineLen);
     RfNoise::SavePrevRaw2RawDif();
     TsaBufferTable& buf = Buffers();
@@ -354,7 +354,7 @@ void GetRaw2RawPrpt() {
         Cmf::ProcessDimCommonOnBuf(buf.raw2RawDifAftCmf, buf.raw2RawDif, fl.dim1Axis == 0 ? 2 : 1, 0x7fff,
                                    PrmtDynamic().cmfThold.grad, fl.dim1Len, fl.dim2Len);
     }
-    // 各线按 field62C 归组，统计每组超噪声的格数；组号不小于 groupNum 的线不计。
+    // 各线按 lineGroup 归组，统计每组超噪声的格数；组号不小于 groupNum 的线不计。
     std::array<int, 256> over{};
     std::array<int, 256> lines{};
     int overLti = 0;
@@ -389,7 +389,7 @@ void GetRaw2RawPrpt() {
         return LineAcc{n, pos, neg, lti, hti, big};
     };
     for (uint32_t line = 0; line < lineNum; ++line) {
-        const uint8_t g = fl.field62C[line];
+        const uint8_t g = fl.lineGroup[line];
         if (g >= groupNum) continue;
         ++lines[g];
         const LineAcc a = alongDim1 ? scan.operator()<1>(dif + line * cols, 1) : scan.operator()<0>(dif + line, cols);

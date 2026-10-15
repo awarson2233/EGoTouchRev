@@ -19,8 +19,8 @@ constexpr uint32_t kSysDifBufPath = 0x10000;  // TsaStatic::systemFlags：走 Di
 constexpr int kUnitScale = 0x3fff;            // 比例 1.0
 
 bool DifBufPath() { return (Static().systemFlags & kSysDifBufPath) != 0; }
-int32_t Scale() { return static_cast<int32_t>(PrmtFlashConst().field038); }
-int32_t Offset() { return static_cast<int32_t>(PrmtFlashConst().field03C); }
+int32_t Scale() { return static_cast<int32_t>(PrmtFlashConst().rawScale); }
+int32_t Offset() { return static_cast<int32_t>(PrmtFlashConst().rawOffset); }
 
 // Rawdata_NormalizeGrid @ 0x6ba6946a（逐格 Rawdata_NormalizeGridUnit @ 0x6ba693f0）
 // raw × 比例 / 0x3fff + 偏移；rawForceNormalize 时 raw 按有符号值算。参数先取到局部量：

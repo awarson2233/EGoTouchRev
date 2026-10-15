@@ -74,9 +74,9 @@ bool IsInBottomZone(Point pos) {
     const FlashPrmt& fl = PrmtFlash();
     const uint16_t x = Out::Pixel2DisplayDim1(pos.dim1);
     const uint16_t y = Out::Pixel2DisplayDim2(pos.dim2);
-    return y >= static_cast<uint16_t>(fl.field09A) - kBottomZoneHeight &&
-           x >= static_cast<uint16_t>(fl.field094) + kBottomZoneSideMargin &&
-           x < static_cast<uint16_t>(fl.field096) - kBottomZoneSideMargin;
+    return y >= static_cast<uint16_t>(fl.displayYMax) - kBottomZoneHeight &&
+           x >= static_cast<uint16_t>(fl.displayXMin) + kBottomZoneSideMargin &&
+           x < static_cast<uint16_t>(fl.displayXMax) - kBottomZoneSideMargin;
 }
 
 bool Within(int a, int b, int range) { return std::abs(a - b) < range; }
@@ -209,7 +209,7 @@ void TouchDownProcess(uint8_t curIdx, uint8_t prevIdx) {
             cur.persistFlags |= kPersistMoveInPending;
             cur.event = TouchEvent::kTouchDownDebounce;
             ++prev.debounceFrames;
-            if (cur.field0F8 < 2) cur.field0F8 = 2;
+            if (cur.minDebounceFrames < 2) cur.minDebounceFrames = 2;
         } else if (MoveInCheck(curIdx, prevIdx)) {
             MarkMoveInCorrected(cur);
         }

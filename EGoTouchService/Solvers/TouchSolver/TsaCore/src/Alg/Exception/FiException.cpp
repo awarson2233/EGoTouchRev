@@ -121,10 +121,10 @@ bool IsWetFinger(TouchZoneUnit& zone) {
 
 // FIException_DebounceTouchZone @ 0x6ba59471
 // 区域异常参照上一帧的全局异常与对应历史触点的区域异常收敛：
-// - 全局为 8：区域或历史触点有异常时，本帧没有湿手指或 field005 > 2 则区域取 8，否则反过来把全局改成区域异常；
+// - 全局为 8：区域或历史触点有异常时，本帧没有湿手指或历史表 reportCount > 2 则区域取 8，否则反过来把全局改成区域异常；
 // - 全局无 0x40 / 0x80 位时，区域异常 2 跟随历史触点的 0x40 / 0x80（取湿手指）或 8；
 // - 全局带 0x40 / 0x80 位时，区域或历史触点有异常就取全局异常。
-// 最后 field005 > 4 时有异常的区域一律取 8。
+// 最后历史表 reportCount > 4 时有异常的区域一律取 8。
 void Debounce(TouchZoneUnit& zone) {
     PrevTouchTable& prev = PrevTouches();
     uint32_t exception = zone.exceptionType;

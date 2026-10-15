@@ -135,7 +135,7 @@ void TimeStep() {
 // 上一帧报了两个以上的点，或可撤下的触点离刚抬起的标记触点够远时判为双手；有握持触点且已过 4 s 时解除。
 void TwoHandDetection() {
     const TsaStatic& stat = Static();
-    bool twoHand = 1 < PrevTouches().field006;
+    bool twoHand = 1 < PrevTouches().outCount;
     bool gripping = false;
     for (uint8_t k = 0; k < Touches().count; ++k) {
         const TouchUnit& u = Cur(k);
@@ -236,10 +236,8 @@ void DifProcess() {
 
 /// 手势处理期间临时改动、处理完恢复的门限与 TZ 参数。
 struct Thresholds {
-    int16_t noiseThold, peakThold, touchThold, field2D6, fingerTouchThold, touchDownThold;
-    uint8_t field2DC, tholdSwitching;
-    int16_t field2DE;
-    uint8_t field2E0;
+    int16_t noiseThold, peakThold, touchThold, fingerTouchThold, touchDownThold;
+    uint8_t tholdSwitching;
     int16_t gripModeSigThold;
     uint8_t sigMult, sigMultNormal;
     uint32_t gripFlags;
@@ -248,9 +246,8 @@ struct Thresholds {
 Thresholds SaveThresholds() {
     const TsaPrpt& pr = Prpt();
     const FlashPrmt& fl = PrmtFlash();
-    return {pr.noiseThold,       pr.peakThold, pr.touchThold,     pr.field2D6, pr.fingerTouchThold, pr.touchDownThold,
-            pr.field2DC,         pr.tholdSwitching, pr.field2DE,   pr.field2E0, fl.gripModeSigThold, fl.sigMult,
-            fl.sigMultNormal,    fl.gripFlags};
+    return {pr.noiseThold,       pr.peakThold, pr.touchThold, pr.fingerTouchThold, pr.touchDownThold, pr.tholdSwitching,
+            fl.gripModeSigThold, fl.sigMult, fl.sigMultNormal, fl.gripFlags};
 }
 
 void RestoreThresholds(const Thresholds& t) {
@@ -259,13 +256,9 @@ void RestoreThresholds(const Thresholds& t) {
     pr.noiseThold = t.noiseThold;
     pr.peakThold = t.peakThold;
     pr.touchThold = t.touchThold;
-    pr.field2D6 = t.field2D6;
     pr.fingerTouchThold = t.fingerTouchThold;
     pr.touchDownThold = t.touchDownThold;
-    pr.field2DC = t.field2DC;
     pr.tholdSwitching = t.tholdSwitching;
-    pr.field2DE = t.field2DE;
-    pr.field2E0 = t.field2E0;
     fl.gripModeSigThold = t.gripModeSigThold;
     fl.sigMult = t.sigMult;
     fl.sigMultNormal = t.sigMultNormal;

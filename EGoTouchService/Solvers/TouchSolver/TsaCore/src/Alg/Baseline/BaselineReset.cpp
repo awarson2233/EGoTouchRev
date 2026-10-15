@@ -302,9 +302,9 @@ bool Check() {
         if (IsAllTouchByAbnormalBaseline()) r = true;
     }
     if (PrevTouches().exceptionFlags == kExceptionTouchMode) {
-        if (Static().field3F1 == 0) r = true;
+        if (Static().wakeUpExceptionLatch == 0) r = true;
     } else {
-        Static().field3F1 = 0;
+        Static().wakeUpExceptionLatch = 0;
     }
     return r;
 }
@@ -343,8 +343,8 @@ bool IsAbnormalTouchDetected() {
     if (prpt.msDifCore.minSig * -4 < prpt.msDifCore.maxSig) return false;
     if (prev.abnormalShapeCount != 0) return true;
     if (n >> 2 < prpt.msDif.bigCount) {
-        if (1 < prev.count - prev.field00D) return true;
-        if (prev.liftOffCount != 0 || prev.field006 == 0 || prev.abnormalShape2Count != 0) return true;
+        if (1 < prev.count - prev.gripCount) return true;
+        if (prev.liftOffCount != 0 || prev.outCount == 0 || prev.abnormalShape2Count != 0) return true;
     }
     return n >> 1 < prpt.msDif.bigCount || ConcurrentTouchDetect();
 }
@@ -355,7 +355,7 @@ bool IsAllFreqsBaselineInitializedDuringTouchLiftOff() {
     if (!Afe::IsIndividualBaselineForEachFreq()) return false;
     TsaPrpt& prpt = Prpt();
     if (Static().resetFlagsCleared == 0 || Afe::IsAlwaysNoisy() ||
-        static_cast<int>(static_cast<uint32_t>(prpt.boundaryPositive) - static_cast<uint32_t>(PrmtFlash().field5FC)) <=
+        static_cast<int>(static_cast<uint32_t>(prpt.boundaryPositive) - static_cast<uint32_t>(PrmtFlash().rawZero)) <=
             PrmtDynamic().peakThold / 2 ||
         3 <= prpt.allFreqInitCount) {
         return false;
@@ -384,7 +384,7 @@ bool IsTriggered2AfeWakeUp() {
         prpt.blPropertyState = kReasonWakeUp;
         const PrevTouchTable& prev = PrevTouches();
         if (prev.exceptionFlags == kExceptionTouchMode) {
-            stat.field3F1 = 1;
+            stat.wakeUpExceptionLatch = 1;
             prpt.blPropertyState = kReasonWakeUpException;
         }
         if ((prev.stateFlags & kStateFlagWakeUp) != 0) prpt.blPropertyState = kReasonWakeUpState;
@@ -737,7 +737,7 @@ bool IsTriggered2() {
 int16_t RawChangedThold(uint16_t k, uint16_t line) {
     const int16_t t = Prpt().noiseThold;
     const FlashConstPrmt& c = PrmtFlashConst();
-    const bool edge = PrmtFlash().dim1Axis == 1 ? (k == 0 || k == c.field024 - 1) : (line == 0 || line == c.field025 - 1);
+    const bool edge = PrmtFlash().dim1Axis == 1 ? (k == 0 || k == c.lineLen - 1) : (line == 0 || line == c.lineNum - 1);
     return edge ? static_cast<int16_t>(t * 4 / 3) : t;
 }
 
@@ -761,7 +761,6 @@ void Init(bool clearLatch) {
     stat.ssNoSignalTimer = 0;
     stat.ssNegSignalTimer = 0;
     stat.ssNegSignalStableTimer = 0;
-    stat.field360 = 0;
     stat.smartCoverOffTimer = 0;
     stat.abnormalType1Timer = 0;
     stat.abnormalType2Timer = 0;
@@ -774,7 +773,6 @@ void Init(bool clearLatch) {
     stat.toeClothRiskTimer = 0;
     stat.toeBackLightShiftTimer = 0;
     stat.toeSsNoSignalTimer = 0;
-    stat.field3D0 = 0;
     stat.cleanState = 0;
     stat.blResetStatus = 0;
     stat.blNoisyTimer = 0;
@@ -783,7 +781,7 @@ void Init(bool clearLatch) {
     stat.rawJumpDetected = 0;
     stat.blUpdatedThisFrame = 0;
     stat.blHwResetRequest = 0;
-    stat.field3F1 = 0;
+    stat.wakeUpExceptionLatch = 0;
     stat.blDebugFlags = 0;
     stat.cleanBaselineValid = 0;
     const size_t bytes = PrmtFlash().sensorNum * size_t{2};
@@ -801,7 +799,7 @@ bool Process(bool reset) {
     stat.blResetCheckEnabled = 1;
     const bool r = reset || (!SafeBaselineApplied() && IsTriggered2());
     if (prpt.blResetFrames < static_cast<uint16_t>(dyn.resetCounterCap)) ++prpt.blResetFrames;
-    if (prpt.blSinceResetFrames < static_cast<uint16_t>(dyn.field05A)) ++prpt.blSinceResetFrames;
+    if (prpt.blSinceResetFrames < static_cast<uint16_t>(dyn.blSinceResetCap)) ++prpt.blSinceResetFrames;
     if (r) prpt.blSinceResetFrames = 0;
     return r;
 }
@@ -880,13 +878,13 @@ bool IsRawChanged(int16_t* stored, bool store) {
     }
     const FlashPrmt& fl = PrmtFlash();
     const FlashConstPrmt& c = PrmtFlashConst();
-    TsaAssert(c.field024 <= kMaxCmfLen);
+    TsaAssert(c.lineLen <= kMaxCmfLen);
     const uint8_t* sensorFlags = TpSensor::Flags();
     const uint16_t first = SideTouch() ? 1 : 0;
-    const uint16_t lines = static_cast<uint16_t>(c.field025 - first);
+    const uint16_t lines = static_cast<uint16_t>(c.lineNum - first);
     uint16_t changed = 0;
     for (uint16_t line = first; line < lines; ++line) {
-        for (uint16_t k = 0; k < c.field024; ++k) {
+        for (uint16_t k = 0; k < c.lineLen; ++k) {
             const auto idx = static_cast<uint16_t>(fl.dim1Axis == 1 ? k + fl.dim1Len * line : line + fl.dim1Len * k);
             const int d = reinterpret_cast<const uint16_t*>(stored)[idx] - cur[idx];
             if (RawChangedThold(k, line) < std::abs(d) && (sensorFlags[idx] & TpSensor::kFlagNotch) == 0) ++changed;

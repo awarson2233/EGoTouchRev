@@ -224,7 +224,7 @@ bool IsLongTimeSsNoSignal() {
 }
 
 // ToeSynaBl_IsAbnormalTouchShape @ 0x6bb4681a（IsBaselineAbnormalSSProtectedByDim1 依赖被裁掉的 SS，恒为 0）
-// 有长条（field066 超过 16）的小触点贴在第 0 / 1 列或最后两列，累计超过 300 ms。
+// 有长条（minEllipseRate 超过 16）的小触点贴在第 0 / 1 列或最后两列，累计超过 300 ms。
 bool IsAbnormalTouchShape(bool skip) {
     TsaStatic& stat = Static();
     if (!Enabled() || !Flag(kFlagShape) || skip) {
@@ -237,7 +237,7 @@ bool IsAbnormalTouchShape(bool skip) {
     for (uint16_t i = 0; i < prev.count; ++i) {
         const PrevTouchUnit& u = prev.unit[i];
         const uint8_t dim1 = Peaks().entry[u.peakIdx].dim1;
-        if (0x10 < u.field066 && (u.persistFlags & kPersistSmallTouch) != 0 && (dim1 < 2 || lastCols < dim1)) abnormal = true;
+        if (0x10 < u.minEllipseRate && (u.persistFlags & kPersistSmallTouch) != 0 && (dim1 < 2 || lastCols < dim1)) abnormal = true;
     }
     if (abnormal) {
         Debug(0x40);

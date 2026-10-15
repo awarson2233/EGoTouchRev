@@ -121,7 +121,7 @@ struct TouchZoneUnit {
     uint8_t gripRatioDim1;  // gripRatioRaw 封顶到 255
     uint8_t gripRatioDim2;
     int16_t maxMinSigOff;  // 覆盖到的格子里 minSigOff 的最大值
-    int16_t field338;  // UnitMaxMinInit 置 0x7fff，无人改写
+    int16_t minSentinel;  // UnitMaxMinInit 置 0x7fff，无人改写
     int16_t minTimeRpt;  // 覆盖到的格子里 timeRpt 的最小值
     uint16_t exceptionRatio[6];  // TZ_GetExceptionRatio：[0] 为二阶矩相对零阶矩的离散度
     uint8_t noiseException;  // 区域异常因全局噪声（0x100）而置位
@@ -144,7 +144,7 @@ struct TouchZoneUnit {
     int16_t minPeakGripTime;  // 各峰所在格 gripTime 的最小值
     int16_t maxPeakGripTimeOff;  // 各峰所在格 gripTimeOff 的最大值
     uint8_t innerCornerSigRatio;  // 峰在内角格时，边缘格相对它的信号比（×16）
-    uint8_t field36D;  // 只有被裁掉的 HIException 写，恒为 0
+    uint8_t hiSkipZ8;  // 只有被裁掉的 HIException 写，恒为 0
     uint8_t reserved36E[0x2];
 };
 static_assert(sizeof(TouchZoneUnit) == 0x370);
@@ -240,7 +240,7 @@ static_assert(offsetof(TouchZoneUnit, moveDim2) == 0x332);
 static_assert(offsetof(TouchZoneUnit, gripRatioDim1) == 0x334);
 static_assert(offsetof(TouchZoneUnit, gripRatioDim2) == 0x335);
 static_assert(offsetof(TouchZoneUnit, maxMinSigOff) == 0x336);
-static_assert(offsetof(TouchZoneUnit, field338) == 0x338);
+static_assert(offsetof(TouchZoneUnit, minSentinel) == 0x338);
 static_assert(offsetof(TouchZoneUnit, minTimeRpt) == 0x33A);
 static_assert(offsetof(TouchZoneUnit, exceptionRatio) == 0x33C);
 static_assert(offsetof(TouchZoneUnit, noiseException) == 0x348);
@@ -259,7 +259,7 @@ static_assert(offsetof(TouchZoneUnit, maxNotGripTime) == 0x366);
 static_assert(offsetof(TouchZoneUnit, minPeakGripTime) == 0x368);
 static_assert(offsetof(TouchZoneUnit, maxPeakGripTimeOff) == 0x36A);
 static_assert(offsetof(TouchZoneUnit, innerCornerSigRatio) == 0x36C);
-static_assert(offsetof(TouchZoneUnit, field36D) == 0x36D);
+static_assert(offsetof(TouchZoneUnit, hiSkipZ8) == 0x36D);
 
 /// TouchZoneUnit::flags
 inline constexpr uint32_t kZoneOuterEdgePeak = 0x00000001u;     // 有峰在外边缘

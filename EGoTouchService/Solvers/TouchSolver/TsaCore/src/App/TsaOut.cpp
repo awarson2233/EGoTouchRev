@@ -77,14 +77,14 @@ void PostProcessUnit(uint8_t idx, uint8_t& pressCount) {
         Report::SetXPos(idx, static_cast<uint16_t>(s.xMax));
     }
     ++tt.reportCount;
-    ++tt.field006;
+    ++tt.outCount;
     if ((u.volatileFlags & kVolPress) != 0) ++pressCount;
     s.lastReportTime = static_cast<int64_t>(s.curTimeMs);
     const uint8_t prevIdx = PrevTouch::GetIdxBasedOnId(u.id);
     if (prevIdx < kMaxTouchNum) {
         PrevTouchUnit& p = PrevTouches().unit[prevIdx];
         if ((p.persistFlags & kPersistTimed) == 0) {
-            p.field458 = s.curTimeMs;
+            p.firstReportTime = s.curTimeMs;
             p.persistFlags |= kPersistTimed;
         }
     }
@@ -93,19 +93,19 @@ void PostProcessUnit(uint8_t idx, uint8_t& pressCount) {
 }  // namespace
 
 // TSAOut_PostProcess @ 0x6ba6a77a（UDFP 事件、侧边触摸被裁掉）
-// 合上智能皮套以外的盖板（field003）且不在游戏场景时，本帧不报点。
+// 本帧有对外报抬起的触点、未开智能皮套且不在游戏场景时，清空触点表，本帧不再报其它点。
 void PostProcess() {
     TouchTable& tt = Touches();
     uint8_t pressCount = 0;
     tt.reportCount = 0;
-    tt.field006 = 0;
+    tt.outCount = 0;
     if (tt.liftOffCount != 0 && (Static().featureFlags & kFeatSmartCover) == 0 && !Scenario::IsGame()) {
         tt.count = 0;
     } else {
         for (int k = static_cast<int8_t>(tt.count) - 1; k >= 0; --k) PostProcessBefUdfpUnit(static_cast<uint8_t>(k));
     }
     for (int k = static_cast<int8_t>(tt.count) - 1; k >= 0; --k) PostProcessUnit(static_cast<uint8_t>(k), pressCount);
-    PrevTouches().field006 = tt.field006;
+    PrevTouches().outCount = tt.outCount;
     TsaStatic& s = Static();
     s.pressCount = pressCount;
     s.extFlags = tt.extFlags;

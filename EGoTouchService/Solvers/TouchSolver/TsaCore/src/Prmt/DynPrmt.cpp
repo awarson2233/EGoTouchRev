@@ -23,7 +23,7 @@ constexpr InitBlock kInitBlocks[] = {
     {offsetof(DynamicPrmt, defaultSizeMm), offsetof(FlashPrmt, defaultSizeMm), 0x1},
     {offsetof(DynamicPrmt, defaultTouchAction), offsetof(FlashPrmt, defaultTouchAction), 0x10},
     {offsetof(DynamicPrmt, zTholdFlags), offsetof(FlashPrmt, zTholdFlags), 0xc},
-    {offsetof(DynamicPrmt, field024), offsetof(FlashPrmt, field608), 0x1e},  // 含 CMF 门限的常态组
+    {offsetof(DynamicPrmt, msSkip), offsetof(FlashPrmt, msSkip), 0x1e},  // 含 CMF 门限的常态组
     {offsetof(DynamicPrmt, chargerNoiseTholdPercent), offsetof(FlashPrmt, chargerNoiseTholdPercent), 0xc},
 };
 
@@ -99,7 +99,6 @@ void UpdateBeforeTouch(int16_t noise, int16_t sideNoise) {
     DynamicPrmt& dyn = PrmtDynamic();
     dyn.stepNoTouch = StepOf(noise, 0x100);
     dyn.stepNoTouchSide = StepOf(sideNoise, 0x100);
-    dyn.field04E = 1;
     if (IdleScan()) dyn.stepNoTouch = static_cast<uint8_t>(dyn.stepNoTouch * 2);
     dyn.stageTimeoutMs = 0x198;
 }
@@ -111,7 +110,6 @@ void UpdateStepAfterTouch(int16_t noise, int16_t sideNoise) {
     dyn.clampAfterTouch = static_cast<int16_t>(noise - 1);
     dyn.clampAfterTouchSide = static_cast<int16_t>(sideNoise - 1);
     dyn.stepAfterTouch = StepOf(noise, 0x40);
-    dyn.field051 = 1;
     if (IdleScan()) {
         dyn.stepAfterTouch = static_cast<int8_t>(dyn.stepAfterTouch) < 0 ? 0xff : static_cast<uint8_t>(dyn.stepAfterTouch * 2);
     }
@@ -147,7 +145,7 @@ void GetBl() {
     UpdateBeforeTouch(noise, sideNoise);
     UpdateStepAfterTouch(noise, sideNoise);
     dyn.resetCounterCap = static_cast<int16_t>(flash.reportRateHz * 200);
-    dyn.field05A = dyn.resetCounterCap;
+    dyn.blSinceResetCap = dyn.resetCounterCap;
     dyn.refThold = flash.peakFilterReferenceThreshold;
     dyn.negRefThold = static_cast<int16_t>(-dyn.refThold);
 }
@@ -171,7 +169,7 @@ void Init() {
     auto* dyn = reinterpret_cast<uint8_t*>(&PrmtDynamic());
     const auto* flash = reinterpret_cast<const uint8_t*>(&PrmtFlash());
     for (const InitBlock& b : kInitBlocks) std::memcpy(dyn + b.dynOffset, flash + b.flashOffset, b.size);
-    PrmtDynamic().field05A = 2000;
+    PrmtDynamic().blSinceResetCap = 2000;
     PrmtDynamic().resetCounterCap = 2000;
     TouchThold::Init();
     GetUnderWaterThold();

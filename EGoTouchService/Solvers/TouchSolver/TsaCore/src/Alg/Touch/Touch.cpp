@@ -232,7 +232,7 @@ void SetVolatileFlagStableTouch(uint8_t curIdx) {
     const bool glove = (dyn.zTholdFlags & 4) != 0 && (stat.featureFlags & kFeatGloveMode) != 0;
     const bool knuckle = (dyn.zTholdFlags & 8) != 0 && (stat.featureFlags & kFeatKnuckle) != 0;
     const bool fingerThold = (Prpt().touchModeLatched == 0 || (!glove && !knuckle)) &&
-                             (stat.featureFlags & kFeatSmartCover) == 0 && stat.field3F1 == 0;
+                             (stat.featureFlags & kFeatSmartCover) == 0 && stat.wakeUpExceptionLatch == 0;
     const int thold = fingerThold ? dyn.znFingerThold : dyn.znTouchDownThold;
     TouchUnit& cur = Cur(curIdx);
     if (static_cast<int>(static_cast<uint32_t>(thold) * 3u) < PeakOf(cur).zn) cur.volatileFlags |= 0x1000;
@@ -307,11 +307,11 @@ void SetVolatileFlag(uint8_t curIdx, uint8_t prevIdx) {
     SetVolatileFlagTouchAxisAbnormal(curIdx, prevIdx);
     if (cur.peakSigRatio < 0x18) cur.volatileFlags |= 0x80000;
     if (cur.sqDistMmFromPrev > 100) cur.volatileFlags |= 0x80;
-    if (cur.field068 > 7 && cur.field06A > 7) cur.persistFlags2 |= 8;
-    if (cur.field070 != 0 && cur.field071 != 0) cur.volatileFlags |= 0x4000;
+    if (cur.edgeRatioDim1 > 7 && cur.edgeRatioDim2 > 7) cur.persistFlags2 |= 8;
+    if (cur.edgeWidthDim1 != 0 && cur.edgeWidthDim2 != 0) cur.volatileFlags |= 0x4000;
 
     // 峰的 Z8 不到中心值的 1/32：孤立尖峰。机型要求时内边缘上的峰不判。
-    const bool checkZ8 = PrmtDynamic().skipZ8CheckOnInnerEdge == 0 || !IsPeakOnInnerDim1Edge(curIdx) || cur.field164 == 0;
+    const bool checkZ8 = PrmtDynamic().skipZ8CheckOnInnerEdge == 0 || !IsPeakOnInnerDim1Edge(curIdx) || cur.hiSkipZ8 == 0;
     if (checkZ8) {
         const PeakEntry& peak = PeakOf(cur);
         if (peak.z8 < peak.sig / 32) {
@@ -379,7 +379,7 @@ void SetPersistFlag(uint8_t curIdx, uint8_t prevIdx) {
         cur.persistFlags |= 4;
     }
     if ((cur.volatileFlags & 0x1000) != 0) cur.persistFlags |= 0x200;
-    if ((prev.persistFlags & 8) != 0 && prev.field0A8 != 6) {
+    if ((prev.persistFlags & 8) != 0 && prev.originType != 6) {
         SetVolatileFlagFalseFlickDetected(curIdx, prevIdx);
         // Touch_SetPersistFlagMoveOverClickSuppressRange @ 0x6ba723e9
         SetPersistFlagMoveOver(curIdx, prev.falseFlickPos.dim1, prev.falseFlickPos.dim2, dyn.clickSuppressDistance, 0x100);
@@ -411,11 +411,11 @@ void UnitUpdateMaxMin(uint8_t curIdx, uint8_t prevIdx) {
     const auto refThold = PrmtFlash().peakFilterReferenceThreshold;
     const auto refSig = static_cast<int16_t>(std::min<int>(Peaks().maxSig, refThold));
 
-    cur.maxField072 = std::max(cur.field072, prev.maxField072);
-    cur.maxField070 = std::max(cur.field070, prev.maxField070);
-    cur.maxField071 = std::max(cur.field071, prev.maxField071);
-    cur.maxField058 = std::max(cur.field058, prev.maxField058);
-    cur.maxField078 = std::max(cur.field078, prev.maxField078);
+    cur.maxEdgeWidthSum = std::max(cur.edgeWidthSum, prev.maxEdgeWidthSum);
+    cur.maxEdgeWidthDim1 = std::max(cur.edgeWidthDim1, prev.maxEdgeWidthDim1);
+    cur.maxEdgeWidthDim2 = std::max(cur.edgeWidthDim2, prev.maxEdgeWidthDim2);
+    cur.maxGripRatio = std::max(cur.gripRatio, prev.maxGripRatio);
+    cur.maxInnerCornerSigRatio = std::max(cur.innerCornerSigRatio, prev.maxInnerCornerSigRatio);
     cur.maxEdgeDistDim1 = std::max(cur.edgeDistDim1, prev.maxEdgeDistDim1);
     cur.maxEdgeDistDim2 = std::max(cur.edgeDistDim2, prev.maxEdgeDistDim2);
     cur.maxSqDistPxFromPrev = std::max(cur.sqDistPxFromPrev, prev.maxSqDistPxFromPrev);
@@ -429,11 +429,11 @@ void UnitUpdateMaxMin(uint8_t curIdx, uint8_t prevIdx) {
         cur.signalScale = prev.signalScale;
     }
     if (prev.age == 0) {
-        cur.minField058 = cur.field058;
+        cur.minGripRatio = cur.gripRatio;
         cur.minEdgeDistDim1 = cur.edgeDistDim1;
         cur.minEdgeDistDim2 = cur.edgeDistDim2;
     } else {
-        cur.minField058 = std::min(cur.field058, prev.minField058);
+        cur.minGripRatio = std::min(cur.gripRatio, prev.minGripRatio);
         cur.minEdgeDistDim1 = std::min(cur.edgeDistDim1, prev.minEdgeDistDim1);
         cur.minEdgeDistDim2 = std::min(cur.edgeDistDim2, prev.minEdgeDistDim2);
     }
@@ -477,7 +477,7 @@ void CheckTrustabilityUnit(uint8_t curIdx, uint8_t prevIdx) {
 
     ++cur.trustFrames;
     if (cur.majorMm > 0x19) cur.persistFlags2 |= 0x20000;
-    if (cur.smoothEllipseRate > 0xe && cur.field0FE > 4) cur.persistFlags2 |= 0x20000;
+    if (cur.smoothEllipseRate > 0xe && cur.cellCount > 4) cur.persistFlags2 |= 0x20000;
     if (cur.sqAccMmFromPrev > 0x19 && cur.sqDistMmFromPrev > 0x19) cur.persistFlags2 |= 0x20000;
     if (cur.exceptionType != 0) cur.persistFlags2 |= 0x20000;
     if (PrevTouches().reportedThisFrame > 1) cur.persistFlags2 |= 0x20000;
@@ -523,10 +523,10 @@ bool IsInAbnormalShapeDetectArea(uint8_t curIdx) {
 bool IsAbnormalShape(uint8_t curIdx) {
     if (IsOff(curIdx)) return false;
     const TouchUnit& cur = Cur(curIdx);
-    if (PrevTouches().field006 != 0 && cur.exceptionType == 0x40 && GetTimeRpt(curIdx) < 0x7fff) return false;
+    if (PrevTouches().outCount != 0 && cur.exceptionType == 0x40 && GetTimeRpt(curIdx) < 0x7fff) return false;
     if (!IsInAbnormalShapeDetectArea(curIdx)) return false;
     if ((cur.volatileFlags & 0x2000000) != 0) return true;
-    if (cur.field066 > 0xe && cur.majorMm > 0x18) return true;
+    if (cur.minEllipseRate > 0xe && cur.majorMm > 0x18) return true;
     if (cur.majorMm > 0x1e) return true;
     if (cur.curMajorMm > 0x27 && cur.dim1Span > 4 && cur.dim2Span > 4 && cur.majorMm > 0x13) return true;
     if ((cur.volatileFlags2 & 0x100) != 0) return true;
@@ -618,8 +618,8 @@ void IirDataProcess(uint8_t curIdx, uint8_t prevIdx) {
     const PrevTouchUnit& prev = Prev(prevIdx);
     cur.shapeIirValid = 1;
     if (IsProject("P116")) {
-        if (cur.field068 > 100) cur.field068 = 100;
-        if (cur.field06A > 100) cur.field06A = 100;
+        if (cur.edgeRatioDim1 > 100) cur.edgeRatioDim1 = 100;
+        if (cur.edgeRatioDim2 > 100) cur.edgeRatioDim2 = 100;
     }
     if (cur.event < 3 || (cur.zoneShape == 3 && prev.zoneShape != 3)) {
         cur.iirMajorMm = cur.majorMm;
@@ -627,18 +627,18 @@ void IirDataProcess(uint8_t curIdx, uint8_t prevIdx) {
         cur.iirMajorPx = cur.majorPx;
         cur.iirMinorPx = cur.minorPx;
         cur.iirAngle = cur.angle;
-        cur.iirField066 = cur.field066;
-        cur.iirField068 = cur.field068;
-        cur.iirField06A = cur.field06A;
+        cur.iirMinEllipseRate = cur.minEllipseRate;
+        cur.iirEdgeRatioDim1 = cur.edgeRatioDim1;
+        cur.iirEdgeRatioDim2 = cur.edgeRatioDim2;
     } else {
         cur.iirMajorMm = static_cast<uint16_t>(IirProcess(prev.iirMajorMm, cur.majorMm));
         cur.iirMinorMm = static_cast<uint16_t>(IirProcess(prev.iirMinorMm, cur.minorMm));
         cur.iirMajorPx = static_cast<uint16_t>(IirProcess(prev.iirMajorPx, cur.majorPx));
         cur.iirMinorPx = static_cast<uint16_t>(IirProcess(prev.iirMinorPx, cur.minorPx));
         cur.iirAngle = static_cast<int8_t>(IirProcess(prev.iirAngle, cur.angle));
-        cur.iirField066 = static_cast<int16_t>(IirProcess(prev.iirField066, cur.field066));
-        cur.iirField068 = static_cast<uint16_t>(IirProcess(prev.iirField068, cur.field068));
-        cur.iirField06A = static_cast<uint16_t>(IirProcess(prev.iirField06A, cur.field06A));
+        cur.iirMinEllipseRate = static_cast<int16_t>(IirProcess(prev.iirMinEllipseRate, cur.minEllipseRate));
+        cur.iirEdgeRatioDim1 = static_cast<uint16_t>(IirProcess(prev.iirEdgeRatioDim1, cur.edgeRatioDim1));
+        cur.iirEdgeRatioDim2 = static_cast<uint16_t>(IirProcess(prev.iirEdgeRatioDim2, cur.edgeRatioDim2));
     }
     if (cur.iirMinorPx == 0) cur.iirMinorPx = 1;
     cur.iirAxisRatioX16 = static_cast<uint8_t>((static_cast<uint32_t>(cur.iirMajorPx) << 4) / cur.iirMinorPx);
@@ -758,12 +758,12 @@ void KeepPrevTouchWithExceptionExcluded() {
     cur.extFlags = prev.extFlags;
     cur.newExtFlags = prev.newExtFlags;
     cur.reportedCount = prev.reportedCount;
-    cur.field002 = prev.field002;
+    cur.zoneTouchCount = prev.zoneTouchCount;
     cur.maxCoreEllipseRate = prev.maxCoreEllipseRate;
     cur.reportCount = prev.reportCount;
     cur.coreTouchCount = prev.coreTouchCount;
-    cur.field00C = prev.field00C;
-    cur.field00D = prev.field00D;
+    cur.stylusCount = prev.stylusCount;
+    cur.gripCount = prev.gripCount;
     cur.field00E = prev.field00E;
     cur.field00F = prev.field00F;
     cur.abnormalShapeCount = prev.abnormalShapeCount;

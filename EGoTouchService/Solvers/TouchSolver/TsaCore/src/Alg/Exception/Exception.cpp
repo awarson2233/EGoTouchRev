@@ -167,7 +167,7 @@ void ProcessTouchZone(TouchZoneUnit& zone) {
 
 // Exception_Process @ 0x6ba58f25
 // 上一帧的噪声异常在手动跳频且未完成时保留，否则清掉；上一帧水下而本帧检出信号反向的水下时也清掉。
-// 然后更新本帧全局异常，据此设噪声等级、field110 与手套参数，清空本帧检出的异常。
+// 然后更新本帧全局异常，据此设噪声等级与手套参数，清空本帧检出的异常。
 void Process() {
     ExceptionState& st = State();
     PrevTouchTable& prev = PrevTouches();
@@ -180,7 +180,6 @@ void Process() {
 
     const uint32_t exception = Touches().exceptionFlags;
     TsaStatic& stat = Static();
-    stat.field110 = exception == 0x40 || exception == kWetFinger ? 1 : 0;
     if (exception == kNoiseLevel2) {
         stat.noiseLevel = 2;
         st.noiseSettleCount = 0;

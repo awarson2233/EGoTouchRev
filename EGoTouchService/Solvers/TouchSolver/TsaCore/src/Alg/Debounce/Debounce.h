@@ -14,7 +14,7 @@ inline constexpr uint32_t kPersistFastClick = 0x40000;
 [[nodiscard]] uint16_t TouchDownNum(uint8_t prevIdx, uint8_t curIdx);
 /// 报过点的触点的抬起防抖帧数。
 [[nodiscard]] uint16_t LiftOffNum(uint8_t prevIdx);
-/// 大物体的面积门限（mm²）：largeObjectSizeMm²，历史表 field003 置位时取 3/4。
+/// 大物体的面积门限（mm²）：largeObjectSizeMm²，历史表上一帧有对外报抬起的触点（liftOffCount 非零）时取 3/4。
 [[nodiscard]] uint16_t LargeObjectSize();
 
 }  // namespace Solvers::Tsa::Core::Debounce

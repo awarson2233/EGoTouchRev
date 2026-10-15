@@ -14,7 +14,7 @@ void Process(int16_t fingerThold, int16_t gloveThold, int16_t* peakThold, int16_
 /// 脚趾（边缘）区域使用特殊门限的机型：P116 / P150 / P186。
 [[nodiscard]] bool ToeUseSpecialThold();
 /// 触点门限与基线噪声门限取 finger 门限（否则取手套门限）：TsaPrpt::touchModeLatched 为 0 或手套 / 指关节模式都未生效，
-/// 且无智能皮套、BLReset 未置 field3F1、无整屏信号失衡。
+/// 且无智能皮套、BLReset 未置 wakeUpExceptionLatch、无整屏信号失衡。
 [[nodiscard]] bool UseFingerThold();
 
 }  // namespace Solvers::Tsa::Core::TouchThold

@@ -3,7 +3,7 @@
 
 namespace Solvers::Tsa::Core::SigSumFilter {
 
-/// 只保留 field098 最大的 keep 个触点；keep 为 0 时不处理。
+/// 只保留 sigSumAll 最大的 keep 个触点；keep 为 0 时不处理。
 void ReserveTouch(int keep);
 
 }  // namespace Solvers::Tsa::Core::SigSumFilter

@@ -55,7 +55,7 @@ void FastClickProcess(uint8_t prevIdx, uint8_t curIdx) {
     TouchUnit& cur = Cur(curIdx);
     const PrevTouchUnit& prev = Prev(prevIdx);
     if (prev.debounceFrames < 4 && cur.sqDistMmFromStart < 0x1f) {
-        if (prev.field066 < 0xb && cur.field066 < 0xb &&
+        if (prev.minEllipseRate < 0xb && cur.minEllipseRate < 0xb &&
             ((cur.volatileFlags & 0x800) == 0 || (prev.volatileFlags & 0x800) == 0)) {
             if ((cur.volatileFlags & 2) != 0 && cur.majorMm < 0x10) cur.persistFlags |= kPersistFastClick;
             if ((cur.volatileFlags & 1) != 0 && prev.majorMm < 0x10) cur.persistFlags |= kPersistFastClick;
@@ -107,9 +107,9 @@ uint16_t TouchDownNum(uint8_t prevIdx, uint8_t curIdx) {
     if (Peaks().count - PrevPeaks().count > 1) num = 1;  // 本帧比上一帧多出不止一个峰
     if ((cur.exceptionType & 0x80) != 0) num = std::max<uint16_t>(num, 2);
     if ((cur.exceptionType & 0x8) != 0 && num == 0) num = 1;
-    if ((cur.exceptionType & 0x200) != 0) num = cur.field098 < 1 ? kNoTouchDown : std::max<uint16_t>(num, 3);
+    if ((cur.exceptionType & 0x200) != 0) num = cur.sigSumAll < 1 ? kNoTouchDown : std::max<uint16_t>(num, 3);
     if (stat.noiseLevel != 0) num = std::max<uint16_t>(num, 2);
-    if (cur.field164 != 0) num = std::max<uint16_t>(num, 3);
+    if (cur.hiSkipZ8 != 0) num = std::max<uint16_t>(num, 3);
     // 否决条件。TouchDownTholdCheck 有副作用，只在 exceptionType bit6 未置位时调用。
     if ((cur.exceptionType & 0x40) != 0 || !TouchDownTholdCheck(prevIdx, curIdx) || (cur.volatileFlags & 0x400) != 0 ||
         static_cast<int32_t>(cur.volatileFlags) < 0 || (cur.volatileFlags & 0x40000000) != 0 ||
@@ -129,7 +129,7 @@ uint16_t TouchDownNum(uint8_t prevIdx, uint8_t curIdx) {
         prev.debounceFrames = 0;  // 上一帧被否决过，防抖从头计
     }
     FastClickProcess(prevIdx, curIdx);
-    num = std::max(num, prev.field0F8);
+    num = std::max(num, prev.minDebounceFrames);
     if (stat.frameIntervalMs > 0xe) num = static_cast<uint16_t>((num + 1) / 2);
     if (flash.noisyTouchDownDebounce != 0) {
         const auto dim1 = static_cast<uint8_t>(cur.rptPos.dim1 >> 8);

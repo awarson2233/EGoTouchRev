@@ -19,7 +19,7 @@ struct ExceptionState {
     uint8_t reserved015[0x3];
     uint32_t detected;  // 本帧检出的异常（各区域与水下检测取最大），Exception_Process 末尾清零
     uint8_t reserved01C[0x2];
-    int16_t field01E;  // HIException 写（被裁掉），RxLineFilter 读
+    int16_t crosstalkPeakFloor;  // 串扰嫌疑触点的峰值下限：HIException 写（被裁掉），RxLineFilter 读
 };
 static_assert(sizeof(ExceptionState) == 0x020);
 static_assert(offsetof(ExceptionState, debounceFrames) == 0x000);
@@ -27,7 +27,7 @@ static_assert(offsetof(ExceptionState, noiseSettleCount) == 0x008);
 static_assert(offsetof(ExceptionState, lastDetected) == 0x010);
 static_assert(offsetof(ExceptionState, wetFinger) == 0x014);
 static_assert(offsetof(ExceptionState, detected) == 0x018);
-static_assert(offsetof(ExceptionState, field01E) == 0x01E);
+static_assert(offsetof(ExceptionState, crosstalkPeakFloor) == 0x01E);
 
 /// HardwareAnalyzer 每帧对 raw2raw Dif（本帧 raw - 上一帧 raw）的统计，按扫描线分组。
 struct Raw2RawPrpt {
@@ -124,7 +124,7 @@ struct TsaStatic {
     int64_t sideIdleReadyTime;
     int64_t idleDebounceStart;  // 可以进 IDLE 的起始时间（ms），-1 为不可进；满 dbEnterIdle 后才放行
     int64_t proxScreenOffTime;  // AFE 进入接近灭屏状态的时间（ms），-1 为不在
-    int64_t field048;
+    uint8_t reserved048[0x8];
     int64_t proximityOnTime;  // 接近检测启用的时间（ms），-1 为未启用
     int64_t proximityOffTime;  // 接近检测关闭的时间（ms）
     int64_t chargerTime;  // 最近一次检出充电器的时间（ms）：之后 2 s 内仍按插着处理
@@ -138,8 +138,7 @@ struct TsaStatic {
     uint8_t reserved09C[0x4];
     uint8_t fullIncellHighPeakFrames;  // 最大峰超过上述门限的连续帧数（到 6 为止）
     uint8_t resetHoldFrames;  // 系统复位请求之后，复位位再保持的帧数
-    uint8_t reserved0A2[0x6];
-    uint8_t field0A8;
+    uint8_t reserved0A2[0x7];
     uint8_t safeDif;  // TSAStatic_SafeDiffCheck：Dif 可信
     uint8_t unsafeDif;  // Dif 可疑（异常形状的触点多）
     uint8_t reserved0AB[0x1];
@@ -149,9 +148,7 @@ struct TsaStatic {
     int32_t frameCounter;
     uint32_t systemFlags;
     uint32_t prevSystemFlags;
-    uint8_t reserved0C4[0x4];
-    int64_t field0C8;
-    int64_t prevField0C8;
+    uint8_t reserved0C4[0x14];
     uint32_t afeStatus;  // AFE 状态位：bit17 raw 跳变、bit18 raw 不稳定、bit19 侧边触摸、bit20 不查脏基线
     uint32_t prevAfeStatus;
     uint64_t curTimeMs;  // 本帧时间（ms）
@@ -164,30 +161,25 @@ struct TsaStatic {
     uint32_t extFeatureFlagsInit;  // 外部可开关的特性位（featureFlags & kFeatExtMask）的初值
     uint32_t featureFlags2;
     uint32_t processingState;  // bit31：互容主流程进行中；bit4：峰 Zn 只取十字五点和
-    uint8_t field110;  // 全局异常为 0x40 / 0x80 时置 1
+    uint8_t reserved110[0x1];
     uint8_t noiseLevel;  // 噪声等级：异常 0x100 时 2、0x8000 时 3，噪声异常结束一段时间后清零
     uint8_t reserved112[0x2];
     uint8_t fullIncellSignalDisparity;  // 整屏 incell 信号失衡（峰检测按 SD 模式处理）
     uint8_t justExitedSpecialCtrlMode;  // 刚退出特殊控制模式
-    uint8_t field116;
+    uint8_t reserved116[0x1];
     uint8_t resetFlagsCleared;  // systemFlags 的复位位本帧刚清掉
     uint8_t resetJustCleared;  // 复位位刚清掉，等本帧是否噪声复位基线
     uint8_t noisyResetAfterReset;  // 复位位清掉之后紧接着噪声复位了基线
     uint8_t signalReverted;  // 信号反向（TSAStatic_IsSignalReverted）
-    uint8_t field11B;
+    uint8_t reserved11B[0x1];
     uint8_t cmfBlocked;  // 本帧不做 CMF（只存 CMF 前的 Dif）
     uint8_t reserved11D[0x1];
     uint16_t rfNoiseFrames;  // 连续检出射频噪声（异常 1）的帧数
     uint16_t maxRfNoiseFrames;
     uint16_t strongTapCount;  // TE：报过点的触点抬起时峰值超过 2 倍 finger 门限、长轴小于 21 mm 的连续次数（到 5 为止）
-    int32_t field124;
-    int32_t field128;
-    int32_t field12C;
-    int32_t field130;
-    int32_t field134;
-    uint8_t reserved138[0x8];
+    uint8_t reserved124[0x1C];
     void* sensorDataCallback;
-    int64_t field148;
+    uint8_t reserved148[0x8];
     uint8_t appScenarioValid;  // 宿主设置过应用类型（appType / reportRateLevel 有效）
     uint8_t reserved151[0x3];
     uint32_t aftGateFlags;  // bit3：查环境温度异常（否则只对 HIMA 参数查）
@@ -197,25 +189,17 @@ struct TsaStatic {
     int32_t appType;  // 宿主的应用类型：4 输入、8 视频、9 游戏、999 其它特殊场景
     uint8_t reserved164[0x100];
     int32_t screenRotation;  // 0 / 1 / 2 / 3：0° / 90° / 180° / 270°
-    int32_t field268;
-    int32_t field26C;
-    int32_t field270;
+    uint8_t reserved268[0xC];
     uint32_t scenarioMask;  // 当前场景位，与 FlashPrmt 的各 *Scenarios 相与
     uint32_t prevExtFlags;
     uint32_t extFlags;  // 本帧 TouchTable::extFlags
     uint32_t newExtFlags;  // 本帧新出现的 extFlags 位；bit21：刚结束硬件复位
-    int32_t field284;
+    uint8_t reserved284[0x4];
     int32_t envTemp;
-    int32_t field28C;
-    uint8_t field290;
-    uint8_t reserved291[0x1];
+    uint8_t reserved28C[0x6];
     int16_t htiThold;  // 可信触点峰值的跟踪值（不超过 peakFilterReferenceThreshold），GetSigThold(1) 取它的 2/5
     uint8_t frameDone;
-    uint8_t field295;
-    uint8_t reserved296[0x2];
-    int32_t field298;
-    int32_t field29C;
-    int32_t field2A0;
+    uint8_t reserved295[0xF];
     char logName[0x32];
     uint8_t reserved2D6[0xA];
     uint16_t xMin;  // 对外 X 坐标的范围
@@ -249,8 +233,7 @@ struct TsaStatic {
     uint8_t ssNegSignalStable;
     uint8_t reserved349[0x7];
     int64_t ssNegSignalStableTimer;
-    uint8_t reserved358[0x8];
-    int64_t field360;
+    uint8_t reserved358[0x10];
     uint64_t smartCoverOffTimer;  // 合上智能皮套后超噪声格数少的累计时间（ms）
     uint64_t abnormalType1Timer;  // 三类基线异常各自的累计时间（ms）
     uint64_t abnormalType2Timer;
@@ -266,7 +249,7 @@ struct TsaStatic {
     uint32_t toeBackLightShiftTimer;
     int32_t toeSsNoSignalTimer;
     uint64_t toeGripRegionTime;  // 两侧握持区域最近一次判为正常的时间（ms）
-    int64_t field3D0;
+    uint8_t reserved3D0[0x8];
     uint32_t cleanState;  // 干净基线状态机（BLReset_BaselineStateMachine），0x10 为已得到干净基线
     uint8_t blSuspect;  // 状态机判过基线可疑
     uint8_t reserved3DD[0x3];
@@ -279,12 +262,12 @@ struct TsaStatic {
     uint8_t blIirUpdated;  // 本帧基线按 IIR 步进过
     uint8_t blHwResetRequest;  // 请求按硬件复位处理基线
     uint8_t blRefreshRequest;  // 请求刷新基线属性
-    uint8_t field3F1;
+    uint8_t wakeUpExceptionLatch;  // 唤醒时全局异常为 TouchMode 异常则置 1，异常解除后清零；按智能皮套处理
     uint8_t reserved3F2[0x2];
     uint32_t blDebugFlags;  // BLReset 各判定的命中位（只写，供调试）
     uint8_t reserved3F8[0x2];
     uint8_t strongFingerFrames;  // TouchMode：手指模式下全局峰 Zn 超过 3 倍手套退出门限的连续帧数
-    uint8_t field3FB;
+    uint8_t reserved3FB[0x1];
     uint8_t vpAllowed;  // TZ：允许插入虚拟峰（区域够长时置 1，连续 5 帧不够长后清 0）
     uint8_t vpDenyFrames;  // 区域不够长的连续帧数（到 5 为止）
     uint8_t reserved3FE[0xA];
@@ -316,7 +299,6 @@ static_assert(offsetof(TsaStatic, idleReadyTime) == 0x028);
 static_assert(offsetof(TsaStatic, sideIdleReadyTime) == 0x030);
 static_assert(offsetof(TsaStatic, idleDebounceStart) == 0x038);
 static_assert(offsetof(TsaStatic, proxScreenOffTime) == 0x040);
-static_assert(offsetof(TsaStatic, field048) == 0x048);
 static_assert(offsetof(TsaStatic, proximityOnTime) == 0x050);
 static_assert(offsetof(TsaStatic, proximityOffTime) == 0x058);
 static_assert(offsetof(TsaStatic, chargerTime) == 0x060);
@@ -329,7 +311,6 @@ static_assert(offsetof(TsaStatic, markedLiftOffTime) == 0x090);
 static_assert(offsetof(TsaStatic, markedLiftOffPos) == 0x098);
 static_assert(offsetof(TsaStatic, fullIncellHighPeakFrames) == 0x0A0);
 static_assert(offsetof(TsaStatic, resetHoldFrames) == 0x0A1);
-static_assert(offsetof(TsaStatic, field0A8) == 0x0A8);
 static_assert(offsetof(TsaStatic, safeDif) == 0x0A9);
 static_assert(offsetof(TsaStatic, unsafeDif) == 0x0AA);
 static_assert(offsetof(TsaStatic, trustedTouchCount) == 0x0AC);
@@ -337,8 +318,6 @@ static_assert(offsetof(TsaStatic, suspectTouchCount) == 0x0B0);
 static_assert(offsetof(TsaStatic, frameCounter) == 0x0B8);
 static_assert(offsetof(TsaStatic, systemFlags) == 0x0BC);
 static_assert(offsetof(TsaStatic, prevSystemFlags) == 0x0C0);
-static_assert(offsetof(TsaStatic, field0C8) == 0x0C8);
-static_assert(offsetof(TsaStatic, prevField0C8) == 0x0D0);
 static_assert(offsetof(TsaStatic, afeStatus) == 0x0D8);
 static_assert(offsetof(TsaStatic, prevAfeStatus) == 0x0DC);
 static_assert(offsetof(TsaStatic, curTimeMs) == 0x0E0);
@@ -349,50 +328,31 @@ static_assert(offsetof(TsaStatic, prevFeatureFlags) == 0x100);
 static_assert(offsetof(TsaStatic, extFeatureFlagsInit) == 0x104);
 static_assert(offsetof(TsaStatic, featureFlags2) == 0x108);
 static_assert(offsetof(TsaStatic, processingState) == 0x10C);
-static_assert(offsetof(TsaStatic, field110) == 0x110);
 static_assert(offsetof(TsaStatic, noiseLevel) == 0x111);
 static_assert(offsetof(TsaStatic, fullIncellSignalDisparity) == 0x114);
 static_assert(offsetof(TsaStatic, justExitedSpecialCtrlMode) == 0x115);
-static_assert(offsetof(TsaStatic, field116) == 0x116);
 static_assert(offsetof(TsaStatic, resetFlagsCleared) == 0x117);
 static_assert(offsetof(TsaStatic, resetJustCleared) == 0x118);
 static_assert(offsetof(TsaStatic, noisyResetAfterReset) == 0x119);
 static_assert(offsetof(TsaStatic, signalReverted) == 0x11A);
-static_assert(offsetof(TsaStatic, field11B) == 0x11B);
 static_assert(offsetof(TsaStatic, cmfBlocked) == 0x11C);
 static_assert(offsetof(TsaStatic, rfNoiseFrames) == 0x11E);
 static_assert(offsetof(TsaStatic, maxRfNoiseFrames) == 0x120);
 static_assert(offsetof(TsaStatic, strongTapCount) == 0x122);
-static_assert(offsetof(TsaStatic, field124) == 0x124);
-static_assert(offsetof(TsaStatic, field128) == 0x128);
-static_assert(offsetof(TsaStatic, field12C) == 0x12C);
-static_assert(offsetof(TsaStatic, field130) == 0x130);
-static_assert(offsetof(TsaStatic, field134) == 0x134);
 static_assert(offsetof(TsaStatic, sensorDataCallback) == 0x140);
-static_assert(offsetof(TsaStatic, field148) == 0x148);
 static_assert(offsetof(TsaStatic, appScenarioValid) == 0x150);
 static_assert(offsetof(TsaStatic, aftGateFlags) == 0x154);
 static_assert(offsetof(TsaStatic, prevAftGateFlags) == 0x158);
 static_assert(offsetof(TsaStatic, reportRateLevel) == 0x15C);
 static_assert(offsetof(TsaStatic, appType) == 0x160);
 static_assert(offsetof(TsaStatic, screenRotation) == 0x264);
-static_assert(offsetof(TsaStatic, field268) == 0x268);
-static_assert(offsetof(TsaStatic, field26C) == 0x26C);
-static_assert(offsetof(TsaStatic, field270) == 0x270);
 static_assert(offsetof(TsaStatic, scenarioMask) == 0x274);
 static_assert(offsetof(TsaStatic, prevExtFlags) == 0x278);
 static_assert(offsetof(TsaStatic, extFlags) == 0x27C);
 static_assert(offsetof(TsaStatic, newExtFlags) == 0x280);
-static_assert(offsetof(TsaStatic, field284) == 0x284);
 static_assert(offsetof(TsaStatic, envTemp) == 0x288);
-static_assert(offsetof(TsaStatic, field28C) == 0x28C);
-static_assert(offsetof(TsaStatic, field290) == 0x290);
 static_assert(offsetof(TsaStatic, htiThold) == 0x292);
 static_assert(offsetof(TsaStatic, frameDone) == 0x294);
-static_assert(offsetof(TsaStatic, field295) == 0x295);
-static_assert(offsetof(TsaStatic, field298) == 0x298);
-static_assert(offsetof(TsaStatic, field29C) == 0x29C);
-static_assert(offsetof(TsaStatic, field2A0) == 0x2A0);
 static_assert(offsetof(TsaStatic, logName) == 0x2A4);
 static_assert(offsetof(TsaStatic, xMin) == 0x2E0);
 static_assert(offsetof(TsaStatic, xMax) == 0x2E2);
@@ -417,7 +377,6 @@ static_assert(offsetof(TsaStatic, ssNegSignal) == 0x338);
 static_assert(offsetof(TsaStatic, ssNegSignalTimer) == 0x340);
 static_assert(offsetof(TsaStatic, ssNegSignalStable) == 0x348);
 static_assert(offsetof(TsaStatic, ssNegSignalStableTimer) == 0x350);
-static_assert(offsetof(TsaStatic, field360) == 0x360);
 static_assert(offsetof(TsaStatic, smartCoverOffTimer) == 0x368);
 static_assert(offsetof(TsaStatic, abnormalType1Timer) == 0x370);
 static_assert(offsetof(TsaStatic, abnormalType2Timer) == 0x378);
@@ -433,7 +392,6 @@ static_assert(offsetof(TsaStatic, toeClothRiskTimer) == 0x3BC);
 static_assert(offsetof(TsaStatic, toeBackLightShiftTimer) == 0x3C0);
 static_assert(offsetof(TsaStatic, toeSsNoSignalTimer) == 0x3C4);
 static_assert(offsetof(TsaStatic, toeGripRegionTime) == 0x3C8);
-static_assert(offsetof(TsaStatic, field3D0) == 0x3D0);
 static_assert(offsetof(TsaStatic, cleanState) == 0x3D8);
 static_assert(offsetof(TsaStatic, blSuspect) == 0x3DC);
 static_assert(offsetof(TsaStatic, cleanTimer) == 0x3E0);
@@ -445,10 +403,9 @@ static_assert(offsetof(TsaStatic, resetDiffRequested) == 0x3ED);
 static_assert(offsetof(TsaStatic, blIirUpdated) == 0x3EE);
 static_assert(offsetof(TsaStatic, blHwResetRequest) == 0x3EF);
 static_assert(offsetof(TsaStatic, blRefreshRequest) == 0x3F0);
-static_assert(offsetof(TsaStatic, field3F1) == 0x3F1);
+static_assert(offsetof(TsaStatic, wakeUpExceptionLatch) == 0x3F1);
 static_assert(offsetof(TsaStatic, blDebugFlags) == 0x3F4);
 static_assert(offsetof(TsaStatic, strongFingerFrames) == 0x3FA);
-static_assert(offsetof(TsaStatic, field3FB) == 0x3FB);
 static_assert(offsetof(TsaStatic, vpAllowed) == 0x3FC);
 static_assert(offsetof(TsaStatic, vpDenyFrames) == 0x3FD);
 static_assert(offsetof(TsaStatic, hiException) == 0x408);
@@ -480,8 +437,7 @@ struct TsaPrpt {
     DifPrpt difCore;  // 去掉最外两列与上下两行的边角
     uint8_t reserved0DC[0x4];
     DifPrpt difInner;  // 内部（不含最外两列与上下两行）
-    uint8_t reserved0FC[0x4];
-    uint8_t reserved100[0x60];
+    uint8_t reserved0FC[0x64];
     int16_t preCmfMaxAbsDif;  // TSAPrpt_GetDifPreCMFPrpt：CMF 前 Dif 的最大绝对值
     uint16_t preCmfOverCount;  // CMF 前 |Dif| 不低于门限的格数
     uint8_t reserved164[0x8];
@@ -491,9 +447,7 @@ struct TsaPrpt {
     DifPrpt msDifCore;
     uint8_t reserved1A8[0x4];
     DifPrpt msDifInner;
-    uint8_t reserved1C8[0x64];
-    uint8_t reserved22C[0x48];
-    uint8_t reserved274[0x4];
+    uint8_t reserved1C8[0xB0];
     uint32_t blStage;  // BLSM 阶段
     uint32_t prevBlStage;
     uint32_t blPropertyFlags;  // BLSM_GetProperty 本帧的基线属性（kBlProp*）
@@ -517,14 +471,12 @@ struct TsaPrpt {
     int16_t noiseThold;  // TouchThold 按噪声触点数与 SNR 换算的噪声门限
     int16_t peakThold;  // TouchThold_Process 按 finger 门限算出的峰门限、触点门限与按下门限
     int16_t touchThold;
-    int16_t field2D6;
+    uint8_t reserved2D6[0x2];
     int16_t fingerTouchThold;  // TouchThold_Init 置为 finger 门限
     int16_t touchDownThold;
-    uint8_t field2DC;
+    uint8_t reserved2DC[0x1];
     uint8_t tholdSwitching;  // TouchThold_IsSwitching
-    int16_t field2DE;
-    uint8_t field2E0;
-    uint8_t reserved2E1[0x3];
+    uint8_t reserved2DE[0x6];
     uint8_t touchModeLatched;  // TouchMode：手套 / 指关节模式已锁定
     uint8_t reserved2E5[0x3];
     uint32_t touchMode;  // TouchMode：当前触控模式（0 无物体、1 手指、2 手套、3 指关节）
@@ -559,7 +511,6 @@ static_assert(offsetof(TsaPrpt, underWaterCells) == 0x0BC);
 static_assert(offsetof(TsaPrpt, underWaterNegCells) == 0x0BE);
 static_assert(offsetof(TsaPrpt, difCore) == 0x0C0);
 static_assert(offsetof(TsaPrpt, difInner) == 0x0E0);
-static_assert(offsetof(TsaPrpt, reserved100) == 0x100);
 static_assert(offsetof(TsaPrpt, preCmfMaxAbsDif) == 0x160);
 static_assert(offsetof(TsaPrpt, preCmfOverCount) == 0x162);
 static_assert(offsetof(TsaPrpt, reserved164) == 0x164);
@@ -567,7 +518,6 @@ static_assert(offsetof(TsaPrpt, msDif) == 0x16C);
 static_assert(offsetof(TsaPrpt, msUnderWaterCells) == 0x188);
 static_assert(offsetof(TsaPrpt, msDifCore) == 0x18C);
 static_assert(offsetof(TsaPrpt, msDifInner) == 0x1AC);
-static_assert(offsetof(TsaPrpt, reserved22C) == 0x22C);
 static_assert(offsetof(TsaPrpt, blStage) == 0x278);
 static_assert(offsetof(TsaPrpt, prevBlStage) == 0x27C);
 static_assert(offsetof(TsaPrpt, blPropertyFlags) == 0x280);
@@ -586,13 +536,9 @@ static_assert(offsetof(TsaPrpt, tzAgeLastTime) == 0x2C8);
 static_assert(offsetof(TsaPrpt, noiseThold) == 0x2D0);
 static_assert(offsetof(TsaPrpt, peakThold) == 0x2D2);
 static_assert(offsetof(TsaPrpt, touchThold) == 0x2D4);
-static_assert(offsetof(TsaPrpt, field2D6) == 0x2D6);
 static_assert(offsetof(TsaPrpt, fingerTouchThold) == 0x2D8);
 static_assert(offsetof(TsaPrpt, touchDownThold) == 0x2DA);
-static_assert(offsetof(TsaPrpt, field2DC) == 0x2DC);
 static_assert(offsetof(TsaPrpt, tholdSwitching) == 0x2DD);
-static_assert(offsetof(TsaPrpt, field2DE) == 0x2DE);
-static_assert(offsetof(TsaPrpt, field2E0) == 0x2E0);
 static_assert(offsetof(TsaPrpt, touchModeLatched) == 0x2E4);
 static_assert(offsetof(TsaPrpt, touchMode) == 0x2E8);
 static_assert(offsetof(TsaPrpt, touchModeLevel) == 0x2EC);

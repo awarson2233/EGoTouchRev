@@ -98,11 +98,11 @@ int16_t BasedOnExperience(int16_t thold) {
 }
 
 // TouchThold_GetPeakThold @ 0x6ba7cee9
-// 手指模式取 finger 门限（信号失衡时减半）；手套 / 指关节 / 智能皮套 / field3F1 下取手套门限，
+// 手指模式取 finger 门限（信号失衡时减半）；手套 / 指关节 / 智能皮套 / wakeUpExceptionLatch 下取手套门限，
 // 但 touchMode 为 1、touchModeLevel 为 2 且动态门限允许（zTholdFlags bit1）时仍按手指处理。
 int16_t GetPeakThold(int16_t fingerThold, int16_t gloveThold) {
     const TsaPrpt& prpt = Prpt();
-    if (!GloveOrKnuckleActive() && !SmartCover() && Static().field3F1 == 0) {
+    if (!GloveOrKnuckleActive() && !SmartCover() && Static().wakeUpExceptionLatch == 0) {
         return HalvePeakThold() ? static_cast<int16_t>(fingerThold / 2) : fingerThold;
     }
     // 原代码为 (2 >> touchMode) & 1，移位量按 x86 取低 5 位
@@ -139,7 +139,7 @@ bool IsSwitching() { return Prpt().tholdSwitching != 0; }
 
 bool UseFingerThold() {
     const TsaStatic& stat = Static();
-    return (Prpt().touchModeLatched == 0 || !GloveOrKnuckleActive()) && !SmartCover() && stat.field3F1 == 0 &&
+    return (Prpt().touchModeLatched == 0 || !GloveOrKnuckleActive()) && !SmartCover() && stat.wakeUpExceptionLatch == 0 &&
            stat.fullIncellSignalDisparity == 0;
 }
 
@@ -151,17 +151,12 @@ void Init() {
     prpt.touchThold = flash.fingerThold;
     prpt.fingerTouchThold = flash.fingerThold;
     prpt.touchDownThold = flash.fingerThold;
-    prpt.field2DC = static_cast<uint8_t>(flash.reportRateHz >> 2);
-    prpt.field2D6 = prpt.touchThold;
     prpt.noiseThold = prpt.touchThold;
-    prpt.field2E0 = 10;
-    prpt.field2DE = prpt.touchThold;
     prpt.tholdSwitching = 0;
-    Static().field3FB = 0;
 }
 
 // TouchThold_Process @ 0x6ba7d0ee
-// 峰门限：历史表只有一个触点、field005 为 1 且它的 volatileFlags bit12 未置位时取 3/4，再不低于经验门限。
+// 峰门限：历史表只有一个触点、reportCount 为 1 且它的 volatileFlags bit12 未置位时取 3/4，再不低于经验门限。
 // 触点门限：finger 或手套门限，不低于噪声门限与峰门限。
 void Process(int16_t fingerThold, int16_t gloveThold, int16_t* peakThold, int16_t* touchThold, int16_t* touchDownThold) {
     const int16_t peak = GetPeakThold(fingerThold, gloveThold);

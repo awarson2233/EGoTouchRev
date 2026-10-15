@@ -135,7 +135,7 @@ void HeavyGripRegionDetect() {
 void SafeTouchDetect() {
     TouchUnit& u = CurG();
     bool safe;
-    if (u.field059 == 0 && 1 < u.age) {
+    if (u.gripRegion == 0 && 1 < u.age) {
         safe = true;
     } else {
         safe = BasicIsFlick() || (u.gripFlags & kGripPeakAbsNotGrip) != 0 || IsInExcludedRegion(Ctx().cur) ||
@@ -194,7 +194,7 @@ bool IsHigherPriorityTouchNormal(uint8_t a, uint8_t b) {
 int GetCoreDim1Distance(uint8_t a, uint8_t b) {
     const TouchUnit& ua = Cur(a);
     const TouchUnit& ub = Cur(b);
-    const int d = GetDim2Distance(ua.field03C, ua.field03D, ub.field03C, ub.field03D);
+    const int d = GetDim2Distance(ua.zoneMinDim1, ua.zoneMaxDim1, ub.zoneMinDim1, ub.zoneMaxDim1);
     const int dim2 = static_cast<int>(ua.pos.dim2) - static_cast<int>(ub.pos.dim2);
     if (-0x200 < dim2 && dim2 < 0x200 && !Touch::IsOff(a) && !Touch::IsOff(b)) return d;
     return 100;
@@ -250,7 +250,7 @@ void GetShapeFlag() {
     }
     if (IsInPalmRegion(cur) && (u.shapeIirValid != 0 || Touch::IsOff(cur))) {
         if (0x20 < u.iirAxisRatioX16 && 0xc < u.iirMajorMm) u.gripFlags |= kGripPalmShape;
-        if (0xe < u.iirField066) u.gripFlags |= kGripPalmShape2;
+        if (0xe < u.iirMinEllipseRate) u.gripFlags |= kGripPalmShape2;
     }
     if (0x2f < u.iirAxisRatioX16 && 0xe < u.iirMajorMm) u.gripFlags |= kGripElongated;
 }
@@ -271,7 +271,7 @@ bool IsInPalmRegion(uint8_t curIdx) { return IsTouchInHeavyRegion(curIdx); }
 int GetCoreDim2Distance(uint8_t a, uint8_t b) {
     const TouchUnit& ua = Cur(a);
     const TouchUnit& ub = Cur(b);
-    const int d = GetDim2Distance(ua.field03E, ua.field03F, ub.field03E, ub.field03F);
+    const int d = GetDim2Distance(ua.zoneMinDim2, ua.zoneMaxDim2, ub.zoneMinDim2, ub.zoneMaxDim2);
     const int dim1 = static_cast<int>(ua.pos.dim1) - static_cast<int>(ub.pos.dim1);
     if (-0x200 < dim1 && dim1 < 0x200 && !Touch::IsOff(a) && !Touch::IsOff(b)) return d;
     return 100;
@@ -383,7 +383,7 @@ int GetDim2Distance(uint8_t aStart, uint8_t aEnd, uint8_t bStart, uint8_t bEnd) 
 int GetSideDim2Distance(uint8_t coreIdx, uint8_t sideIdx) {
     const TouchUnit& u = Cur(coreIdx);
     const TouchUnit& s = TouchesSide().unit[sideIdx];
-    const int d = GetDim2Distance(u.field03E, u.field03F, s.field03E, s.field03F);
+    const int d = GetDim2Distance(u.zoneMinDim2, u.zoneMaxDim2, s.zoneMinDim2, s.zoneMaxDim2);
     if (Touch::IsSideCoreInSameZone(coreIdx, sideIdx) || Touch::IsOff(coreIdx)) return 100;
     const int dim1 = static_cast<int>(s.pos.dim1) - static_cast<int>(TouchesGrid().unit[coreIdx].pos.dim1);
     return -0x200 < dim1 && dim1 < 0x200 ? d : 100;

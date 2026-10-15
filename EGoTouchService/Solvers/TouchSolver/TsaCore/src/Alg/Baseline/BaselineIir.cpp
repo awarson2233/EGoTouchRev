@@ -89,7 +89,7 @@ void Reset() {
         CopyChecked(buf.bl, kBlBytes, buf.preCmfRaw, GridBytes());
     } else {
         const uint16_t n = PrmtFlash().sensorNum;
-        for (uint16_t i = 0; i < n; ++i) buf.bl[i] = static_cast<int16_t>(PrmtFlash().field5FC);
+        for (uint16_t i = 0; i < n; ++i) buf.bl[i] = static_cast<int16_t>(PrmtFlash().rawZero);
     }
     if (ProxBl() != nullptr) CopyChecked(ProxBl(), kBlBytes, buf.bl, GridBytes());
 }

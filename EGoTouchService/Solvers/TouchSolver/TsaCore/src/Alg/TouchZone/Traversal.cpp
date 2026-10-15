@@ -69,7 +69,7 @@ void UnitMaxMinInit(TouchZoneUnit& z, int16_t thold) {
     z.minTimeHand = INT16_MAX;
     z.minGripTime = INT16_MAX;
     z.maxMinSigOff = INT16_MIN;
-    z.field338 = INT16_MAX;
+    z.minSentinel = INT16_MAX;
     z.minTimeRpt = INT16_MAX;
 }
 

@@ -105,7 +105,7 @@ int MmToPixel(uint8_t mm) { return static_cast<int>(static_cast<uint32_t>(PrmtFl
 uint32_t MmToDisplayPixel(uint8_t mm) {
     const FlashPrmt& flash = PrmtFlash();
     const uint16_t res = std::max(flash.dim1Res, flash.dim2Res);
-    return static_cast<uint32_t>(mm) * res * 16u / flash.field02E;
+    return static_cast<uint32_t>(mm) * res * 16u / flash.mmToPixelDivisor;
 }
 
 // TS_PixelToMM @ 0x6ba7c561

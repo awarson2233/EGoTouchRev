@@ -134,9 +134,7 @@ void InitSysModule() {
     const FlashPrmt& fl = PrmtFlash();
     s.prevTimeMs = 0;
     s.frameCounter = 0;
-    s.field110 = 0;
     s.noiseLevel = 0;
-    s.field116 = 0;
     s.featureFlags = fl.featureFlagsForce | fl.featureFlagsDefault;
     s.prevFeatureFlags = s.featureFlags;
     s.extFeatureFlagsInit = s.featureFlags & kFeatExtMask;
@@ -145,30 +143,16 @@ void InitSysModule() {
     s.maxRfNoiseFrames = 0;
     s.strongTapCount = 0;
     s.prevSystemFlags = 0;
-    s.prevField0C8 = 0;
     s.prevAfeStatus = 0;
-    s.field124 = 0;
-    s.field128 = 0;
-    s.field12C = 0;
-    s.field130 = 0;
-    s.field134 = 0;
     s.resetJustCleared = 0;
     s.noisyResetAfterReset = 0;
     s.signalReverted = 0;
     s.cmfBlocked = 0;
     s.newExtFlags = 0;
     s.prevExtFlags = 0;
-    s.field284 = 4;
     s.fullIncellSignalDisparity = 0;
     s.envTemp = 0;
-    s.field28C = 0;
     s.screenRotation = 0;
-    s.field270 = 0;
-    s.field295 = 0;
-    s.field290 = 0;
-    s.field298 = 0;
-    s.field29C = 0;
-    s.field2A0 = 0;
     s.frameDone = 0;
 }
 
@@ -198,7 +182,6 @@ void InitInternalModule() {
     s.markedLiftOffTime = 0;
     s.fullIncellHighPeakFrames = 0;
     s.resetHoldFrames = 0;
-    s.field0A8 = 0;
     s.trustedTouchCount = 0;
     s.suspectTouchCount = 0;
     s.safeDif = 0;
@@ -216,19 +199,15 @@ void Init() {
     s.logName[0x31] = '\0';
     if (InitOnce() != 0) {
         s.scenarioMask = 0;
-        s.field11B = 1;
         s.xMin = 0;
         s.xMax = static_cast<int16_t>(Report::XRes() - 1);
         s.yMin = 0;
         s.yMax = static_cast<int16_t>(Report::YRes() - 1);
-        s.field26C = 0;
         s.htiThold = PrmtFlash().peakFilterReferenceThreshold;
         s.proximityOnTime = kNone;
         s.proximityOffTime = kNone;
-        s.field048 = kNone;
         s.aftGateFlags = 1;
         s.prevAftGateFlags = 1;
-        s.field268 = 0;
     }
     InitOnce() = 0;
 }
@@ -236,7 +215,6 @@ void Init() {
 // TSAStatic_PreProcess @ 0x6baa1bb0
 void PreProcess() {
     TsaStatic& s = Static();
-    s.field28C = 0;
     s.prevPressCount = s.pressCount;
     s.prevAllFreqNoisy = s.allFreqNoisy;
     s.prevAfeIdle = s.afeIdle;
@@ -246,7 +224,7 @@ void PreProcess() {
     s.afeIdle = Afe::IsInIdle() ? 1 : 0;
     s.afeSideIdle = Afe::IsInSideIdle();
     s.prevNoisyBlReset = s.noisyBlReset;
-    s.signalReverted = s.field3F1;
+    s.signalReverted = s.wakeUpExceptionLatch;
     if (!Afe::IsProximityScreenOff()) {
         s.proxScreenOffTime = kNone;
     } else if (s.proxScreenOffTime == kNone) {
@@ -255,7 +233,6 @@ void PreProcess() {
     if (!IsProximityEnabled()) {
         if (s.proximityOnTime != kNone) s.proximityOffTime = static_cast<int64_t>(s.curTimeMs);
         s.proximityOnTime = kNone;
-        s.field048 = kNone;
     } else {
         if (s.proximityOnTime == kNone) s.proximityOnTime = static_cast<int64_t>(s.curTimeMs);
         s.proximityOffTime = kNone;
@@ -284,7 +261,6 @@ void PostProcess() {
     s.blHwResetRequest = 0;
     s.prevSystemFlags = s.systemFlags;
     s.prevTimeMs = s.curTimeMs;
-    s.prevField0C8 = s.field0C8;
     s.prevFeatureFlags = s.featureFlags;
     s.prevAfeStatus = s.afeStatus;
     s.prevExtFlags = s.extFlags;
@@ -477,7 +453,7 @@ void SafeDiffCheck() {
     }
     if (s.safeDif != 0) return;
     const PrevTouchTable& prev = PrevTouches();
-    if (3 < static_cast<int>(prev.count) - prev.field00D && prev.abnormalShapeCount != 0) s.unsafeDif = 1;
+    if (3 < static_cast<int>(prev.count) - prev.gripCount && prev.abnormalShapeCount != 0) s.unsafeDif = 1;
     if (2 < prev.abnormalShapeCount) s.unsafeDif = 1;
     if ((s.featureFlags & kFeatSmartCover) == 0 && prev.abnormalShape3Count != 0) s.unsafeDif = 1;
 }

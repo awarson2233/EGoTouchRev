@@ -67,7 +67,7 @@ void NoTouchStep(int16_t& thold, int16_t& step) {
 
 // BLSM_SaveNormalBl @ 0x6ba4d0c3
 void SaveNormalBl() {
-    if (Static().field3F1 != 0 || PrevTouches().exceptionFlags == 0x2000) return;
+    if (Static().wakeUpExceptionLatch != 0 || PrevTouches().exceptionFlags == 0x2000) return;
     CopyChecked(Buffers().blNormal, 0x2648, Buffers().bl, PrmtFlash().sensorNum * size_t{2});
 }
 
@@ -362,7 +362,7 @@ bool IsTouched() { return Prpt().blStage == kStageTouched; }
 // BLSM_IsOKToIDLE @ 0x6ba4d7fd
 bool IsOkToIdle() {
     const uint32_t stage = Prpt().blStage;
-    if (PrmtFlash().field044 == 0) return stage == kStageNoTouch;
+    if (PrmtFlash().fastNoObjExit == 0) return stage == kStageNoTouch;
     return stage == kStageNoTouch || stage == kStageLiftOff || stage == kStageAfterTouch || stage == kStageSmallSig;
 }
 
