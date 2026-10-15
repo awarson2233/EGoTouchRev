@@ -276,7 +276,7 @@ Chip::FrameRead Chip::GetFrame(void) {
         }
     }
 
-    // TouchPipeline 没有自己的 IDLE 请求：连续无输入帧够多、IC 又还没进 IDLE 时由这里下发
+    // parser-only 模式不跑 TSACore，没有 IDLE 请求：连续无输入帧够多、IC 又还没进 IDLE 时由这里下发
     if (ShouldEnterIdle(m_zeroFrameCount, fingerNow || stylusNow) && m_autoIdle) {
         m_zeroFrameCount = 0;
         if (afe_mode.load() != THP_AFE_MODE::Idle) {

@@ -17,7 +17,7 @@
   <String Id="ServiceDisplayName" Value="EGoTouch 电容触控控制器驱动" />
   <String Id="ServiceDescription" Value="EGoTouch 电容触控控制器驱动服务 — 负责触摸屏帧采集、算法处理与 HID 报告注入。该服务随系统自动启动，以 SYSTEM 账户运行，无需用户干预。" />
   <String Id="ServiceDisplayNameTest" Value="EGoTouch 电容触控控制器驱动（测试版）" />
-  <String Id="ServiceDescriptionTest" Value="EGoTouch 电容触控控制器驱动服务（测试版）— 包含诊断上位机 EGoTouchApp 与 BT MCU 协议测试工具 BtMcuTestTool，适用于开发调试场景。" />
+  <String Id="ServiceDescriptionTest" Value="EGoTouch 电容触控控制器驱动服务（测试版）— 包含 BT MCU 协议测试工具 BtMcuTestTool，适用于开发调试场景。" />
 
   <!-- ═══════════════════════════════════════════════════════════
        WixUI_InstallDir 欢迎页

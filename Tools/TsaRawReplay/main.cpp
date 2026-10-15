@@ -1,8 +1,7 @@
 // TsaRawReplay —— 把一段 .dvrbin 录制灌进 TsaCoreSolver（反编译的 TSACore 手指管线），
-// 逐帧打印 frame.touch.output.contacts。加 --legacy 时改用 TouchPipeline 并输出同一格式，
-// 两次运行的 CSV 可以直接对比（TSACore 是进程级单例，A/B 只能分进程跑）。
+// 逐帧打印 frame.touch.output.contacts（TSACore 是进程级单例，A/B 只能分进程跑）。
 //
-//   TsaRawReplay.exe <file.dvrbin> [--legacy] [--to N] [--dump N] [--charger] [--quiet]
+//   TsaRawReplay.exe <file.dvrbin> [--to N] [--dump N] [--charger] [--quiet]
 //                    [--afe] [--idle-exit N] [--hold N K]
 //                    [--pen X Y A B] [--pen-hover] [--pen-tilt TX TY] [--pen-word W] [--pen-interleave]
 //                    [--stylus-solver] [--state-digest FILE] [--state-dump STEP FILE] [--profile]
@@ -45,7 +44,6 @@
 #include "SolverTypes.h"
 #include "StateTrace.h"
 #include "StylusSolver/StylusPipeline.h"
-#include "TouchSolver/TouchPipeline.h"
 #include "TsaCore/TsaCoreApi.h"
 #include "TsaCore/TsaCoreSolver.h"
 
@@ -225,7 +223,7 @@ int main(int argc, char** argv) {
         return TsaReplay::DiffSnapshots(a, b, TSA_RAW_ROOT, argc == 5 ? argv[4] : "") == 0 ? 0 : 1;
     }
     if (argc < 2) {
-        std::fprintf(stderr, "usage: TsaRawReplay <file.dvrbin> [--legacy] [--to N] [--dump N] [--charger] [--quiet] "
+        std::fprintf(stderr, "usage: TsaRawReplay <file.dvrbin> [--to N] [--dump N] [--charger] [--quiet] "
                              "[--afe] [--idle-exit N] [--hold N K] [--pen X Y A B] [--pen-hover] "
                              "[--pen-tilt TX TY] [--pen-word W] [--pen-interleave] [--stylus-solver] "
                              "[--state-digest FILE] [--state-dump STEP FILE] [--profile | --profile-frame]\n"
@@ -237,7 +235,6 @@ int main(int argc, char** argv) {
     int idleExit = -1;
     int holdFrame = -1;
     int holdCount = 0;
-    bool legacy = false;
     bool charger = false;
     bool quiet = false;
     bool profile = false;
@@ -262,7 +259,6 @@ int main(int argc, char** argv) {
             holdFrame = std::atoi(argv[++i]);
             holdCount = std::atoi(argv[++i]);
         }
-        else if (std::strcmp(argv[i], "--legacy") == 0) legacy = true;
         else if (std::strcmp(argv[i], "--charger") == 0) charger = true;
         else if (std::strcmp(argv[i], "--quiet") == 0) quiet = true;
         else if (std::strcmp(argv[i], "--profile") == 0) profile = true;
@@ -304,16 +300,14 @@ int main(int argc, char** argv) {
         return 1;
     }
     if (to < 0 || to > static_cast<int>(frames.size())) to = static_cast<int>(frames.size());
-    std::fprintf(stderr, "loaded %zu frames (dvr v%d), solver=%s\n", frames.size(), version,
-                 legacy ? "TouchPipeline" : "TsaCoreSolver");
+    std::fprintf(stderr, "loaded %zu frames (dvr v%d), solver=%s\n", frames.size(), version, "TsaCoreSolver");
 
     // 比对工具自检：先占掉一些大小不一的堆块，让后面所有对象换个地址。状态摘要不应随之改变
     std::vector<std::unique_ptr<char[]>> skew;
     for (int i = 0; i < heapSkew; ++i) skew.push_back(std::make_unique<char[]>(static_cast<size_t>(64 + i * 37 % 4096)));
 
-    // 两个解算器都带大块状态，放堆上
+    // 解算器带大块状态，放堆上
     auto tsa = std::make_unique<Solvers::Tsa::TsaCoreSolver>();
-    auto pipeline = std::make_unique<Solvers::TouchPipeline>();
     auto stylus = std::make_unique<Solvers::StylusPipeline>();
     uint32_t btSeqSeen = 0;
     tsa->SetChargerPlugged(charger);
@@ -324,7 +318,7 @@ int main(int argc, char** argv) {
     bool penMode = false, penInRange = false;
 
     std::FILE* digestFile = nullptr;
-    if (digestPath != nullptr && !legacy) {
+    if (digestPath != nullptr) {
         digestFile = std::fopen(digestPath, "w");
         if (digestFile == nullptr) {
             std::fprintf(stderr, "cannot write %s\n", digestPath);
@@ -352,7 +346,7 @@ int main(int argc, char** argv) {
         }
         return true;
     };
-    if (!legacy && !traceState(-1, -1)) return 1;
+    if (!traceState(-1, -1)) return 1;
 
     int fed = 0, withTouch = 0, dispatched = 0;
     int step = 0;   // 喂进解算器的帧序号，--hold 重复的帧也计数
@@ -380,7 +374,7 @@ int main(int argc, char** argv) {
 
     for (int fi = 0; fi < to; ++fi) {
         Solvers::HeatmapFrame& f = frames[static_cast<size_t>(fi)];
-        if (pen && !legacy && fi >= penFrom && fi <= penTo) {
+        if (pen && fi >= penFrom && fi <= penTo) {
             // CSV 的像素 → StylusSolver 的坐标（面板原始行列方向，每节点 1024 单位）
             const float dim1 = penX * static_cast<float>(Frame::kRxCount) * 1024.0f / 2560.0f;
             const float dim2 = penY * static_cast<float>(Frame::kTxCount) * 1024.0f / 1600.0f;
@@ -400,7 +394,7 @@ int main(int argc, char** argv) {
             if (penInterleave && (fi & 1) != 0) f.masterWasRead = false;
         }
         decltype(f.stylus.input.btSample) recordedBt{};
-        if (stylusSolver && !legacy) {
+        if (stylusSolver) {
             // 录制里的蓝牙采样是当时管线看到的最新一包，序号变了才算新包
             const auto bt = f.stylus.input.btSample;
             recordedBt = bt;
@@ -411,16 +405,10 @@ int main(int argc, char** argv) {
             }
             stylus->Process(f);
         }
-        // 驱动跳过 master 的帧只有 TSACore 接（原版每帧都调它）
-        if (!f.masterWasRead && legacy) continue;
 
-        const int repeats = (fi == holdFrame && !legacy) ? holdCount + 1 : 1;
+        const int repeats = (fi == holdFrame) ? holdCount + 1 : 1;
         bool dispatch = false;
         for (int rp = 0; rp < repeats; ++rp, ++step) {
-            if (legacy) {
-                dispatch = pipeline->Process(f);
-                continue;
-            }
             if (fi == idleExit && rp == 0) tsa->OnAfeIdleExit();
             // 时间戳取录制里的接收时间（没有时按 120 Hz 合成），回放结果只取决于输入；
             // --hold 多喂的帧每帧顺延 8 ms
@@ -485,7 +473,7 @@ int main(int argc, char** argv) {
                 tsa->OnAfeActionExecuted(action, true);
             }
         }
-        if (!legacy && fi == dump) {
+        if (fi == dump) {
             const int16_t* dif = tsa->DiffGrid();
             for (int r = 0; dif != nullptr && r < Frame::kTxCount; ++r) {
                 for (int c = 0; c < Frame::kRxCount; ++c) {
@@ -517,10 +505,7 @@ int main(int argc, char** argv) {
     }
     std::fprintf(stderr, "fed %d frames, %d dispatched, %d with touches, max %zu touches", fed, dispatched,
                  withTouch, maxTouch);
-    if (!legacy) {
-        std::fprintf(stderr, ", tsa available=%d, afe status bits seen 0x%02x", tsa->IsAvailable() ? 1 : 0,
-                     statusSeen);
-    }
+    std::fprintf(stderr, ", tsa available=%d, afe status bits seen 0x%02x", tsa->IsAvailable() ? 1 : 0, statusSeen);
     std::fputc('\n', stderr);
     if (profile) PrintProfile();
     return 0;

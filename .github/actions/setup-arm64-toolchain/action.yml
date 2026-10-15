@@ -1,0 +1,27 @@
+name: Set up the ARM64 clang toolchain
+description: MSVC ARM64 environment (SDK, linker) plus the latest LLVM release for Windows on ARM
+
+runs:
+  using: composite
+  steps:
+    - name: Configure MSVC for ARM64
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: arm64
+
+    - name: Install the latest LLVM (woa64)
+      shell: pwsh
+      run: |
+        $release = Invoke-RestMethod -Headers @{ "User-Agent" = "GitHubActions" } `
+          -Uri "https://api.github.com/repos/llvm/llvm-project/releases/latest"
+        $asset = $release.assets | Where-Object { $_.name -match '^LLVM-.*-woa64\.exe$' } | Select-Object -First 1
+        if (-not $asset) { throw "No Windows ARM64 LLVM installer in the latest llvm-project release." }
+
+        $installer = Join-Path $env:RUNNER_TEMP $asset.name
+        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $installer
+        Start-Process -FilePath $installer -ArgumentList "/S" -Wait -NoNewWindow
+
+        $llvmBin = "C:\Program Files\LLVM\bin"
+        if (-not (Test-Path (Join-Path $llvmBin "clang++.exe"))) { throw "LLVM did not install clang++.exe to $llvmBin." }
+        $llvmBin >> $env:GITHUB_PATH
+        & (Join-Path $llvmBin "clang++.exe") --version

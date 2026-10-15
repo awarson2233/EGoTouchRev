@@ -1,158 +1,79 @@
-name: Publish ARM64 MSI Release
+name: Release
 
+# 每次推到 main：release-please 按 Conventional Commits 维护一个「chore(main): release x.y.z」PR
+# （版本号 + CHANGELOG.md）。合并这个 PR 之后，同一个工作流打 tag、建 GitHub Release，再构建安装包传上去。
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
+  pull-requests: write
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  build-arm64-release:
-    # Use the native GitHub-hosted Windows ARM64 runner.
-    runs-on: windows-11-arm
+  release-please:
+    runs-on: ubuntu-24.04
     outputs:
-      release_tag: ${{ steps.version.outputs.release_tag }}
-
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - id: release
+        uses: googleapis/release-please-action@v4
         with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  build-installers:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: windows-11-arm
+    env:
+      RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
+      MSI_VERSION: ${{ needs.release-please.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
           submodules: recursive
-          fetch-depth: 0
 
-      - name: Resolve release version
-        id: version
+      - uses: ./.github/actions/setup-arm64-toolchain
+
+      - name: Configure
+        run: >
+          cmake -G Ninja -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+          -DCMAKE_C_COMPILER_TARGET=arm64-pc-windows-msvc -DCMAKE_CXX_COMPILER_TARGET=arm64-windows-msvc
+          -DHIMAX_ENABLE_NEON=ON -DEGO_BUILD_TOOLS=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Build installers
         shell: pwsh
         run: |
-          $tag = "${{ github.ref_name }}"
-          if ($tag -notmatch '^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') {
-            throw "Release tag '$tag' must match vMAJOR.MINOR.PATCH, for example v1.2.3."
-          }
-
-          $major = [int]$matches[1]
-          $minor = [int]$matches[2]
-          $patch = [int]$matches[3]
-
-          if ($major -gt 255 -or $minor -gt 255 -or $patch -gt 65535) {
-            throw "MSI ProductVersion '$major.$minor.$patch' is out of range: major/minor <= 255 and patch <= 65535."
-          }
-
-          $msiVersion = "$major.$minor.$patch"
-          "RELEASE_TAG=$tag" >> $env:GITHUB_ENV
-          "MSI_VERSION=$msiVersion" >> $env:GITHUB_ENV
-          "release_tag=$tag" >> $env:GITHUB_OUTPUT
-          "msi_version=$msiVersion" >> $env:GITHUB_OUTPUT
-
-          Write-Host "Release tag: $tag"
-          Write-Host "MSI version: $msiVersion"
-
-      - name: Configure MSVC for ARM64
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: arm64
-
-      - name: Install Latest LLVM (ARM64)
-        shell: pwsh
-        run: |
-          $release = Invoke-RestMethod `
-            -Headers @{ "User-Agent" = "GitHubActions" } `
-            -Uri "https://api.github.com/repos/llvm/llvm-project/releases/latest"
-          $asset = $release.assets |
-            Where-Object { $_.name -match '^LLVM-.*-woa64\.exe$' } |
-            Select-Object -First 1
-
-          if (-not $asset) {
-            throw "No Windows ARM64 LLVM installer asset found in latest llvm-project release."
-          }
-
-          $installer = Join-Path $env:RUNNER_TEMP $asset.name
-          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $installer
-          Start-Process -FilePath $installer -ArgumentList "/S" -Wait -NoNewWindow
-
-          $llvmBin = "C:\Program Files\LLVM\bin"
-          if (-not (Test-Path (Join-Path $llvmBin "clang++.exe"))) {
-            throw "LLVM installation did not provide clang++.exe at $llvmBin."
-          }
-
-          $llvmBin >> $env:GITHUB_PATH
-          & (Join-Path $llvmBin "clang++.exe") --version
-
-      - name: CMake Configure (clang/clang++)
-        # On a native ARM64 host, we can use the ARM64-native clang/clang++.
-        run: |
-          cmake -G "Ninja" -S . -B build `
-                -DCMAKE_BUILD_TYPE=Release `
-                -DCMAKE_C_COMPILER=clang `
-                -DCMAKE_CXX_COMPILER=clang++ `
-                -DCMAKE_C_COMPILER_TARGET=arm64-pc-windows-msvc `
-                -DCMAKE_CXX_COMPILER_TARGET=arm64-windows-msvc `
-                -DHIMAX_ENABLE_NEON=ON `
-                -DEGO_BUILD_TESTS=OFF `
-                -DEGO_BUILD_TOOLS=OFF
-
-      - name: CMake Build
-        run: cmake --build build --config Release --parallel
-
-      - name: Install WiX Toolset
-        run: dotnet tool install --global wix
-
-      - name: Build Installers
-        run: |
+          dotnet tool install --global wix
           wix eula accept wix7
           wix extension add -g WixToolset.UI.wixext
 
-          $assetDir = "build\release-assets"
-          New-Item -ItemType Directory -Force -Path $assetDir | Out-Null
+          $out = "build\release-assets"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          wix build -ext WixToolset.UI.wixext -arch arm64 -d BuildVersion=$env:MSI_VERSION scripts\EGoTouchSetup.wxs `
+            -loc scripts\zh-CN.wxl -out "$out\EGoTouchSetup_arm64_$env:RELEASE_TAG.msi"
+          wix build -ext WixToolset.UI.wixext -arch arm64 -d BuildVersion=$env:MSI_VERSION scripts\EGoTouchTestSetup.wxs `
+            -loc scripts\zh-CN.wxl -out "$out\EGoTouchTestSetup_arm64_$env:RELEASE_TAG.msi"
 
-          wix build -ext WixToolset.UI.wixext -arch arm64 -d BuildVersion=$env:MSI_VERSION scripts\EGoTouchSetup.wxs -loc scripts\zh-CN.wxl -out "$assetDir\EGoTouchSetup_arm64_$($env:RELEASE_TAG).msi"
+          Get-ChildItem $out -File | ForEach-Object {
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash)  $($_.Name)"
+          } | Set-Content "$out\SHA256SUMS.txt" -Encoding utf8
 
-      - name: Generate SHA256 checksums
-        run: |
-          $assetDir = "build\release-assets"
-          $installers = @(
-            "$assetDir\EGoTouchSetup_arm64_$($env:RELEASE_TAG).msi"
-          )
-
-          $checksumLines = foreach ($installer in $installers) {
-            if (-not (Test-Path $installer)) {
-              throw "Missing WiX installer artifact: $installer"
-            }
-            $hash = Get-FileHash -Path $installer -Algorithm SHA256
-            "$($hash.Hash)  $(Split-Path -Leaf $installer)"
-          }
-
-          $checksumFile = "$assetDir\EGoTouch_arm64_$($env:RELEASE_TAG)_SHA256SUMS.txt"
-          $checksumLines | Set-Content -Path $checksumFile -Encoding UTF8
-
-      - name: Upload release assets artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: egotouch-arm64-${{ github.ref_name }}
-          path: build/release-assets/*
-          if-no-files-found: error
-          retention-days: 7
-
-  publish-release:
-    runs-on: ubuntu-24.04
-    needs: build-arm64-release
-
-    steps:
-      - name: Download release assets artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: egotouch-arm64-${{ needs.build-arm64-release.outputs.release_tag }}
-          path: release-assets
-
-      - name: Upload release assets
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ needs.build-arm64-release.outputs.release_tag }}
-          name: EGoTouch ${{ needs.build-arm64-release.outputs.release_tag }}
-          generate_release_notes: true
-          fail_on_unmatched_files: true
-          files: |
-            release-assets/*.msi
+      - name: Upload to the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload $env:RELEASE_TAG (Get-ChildItem build\release-assets -File).FullName --clobber

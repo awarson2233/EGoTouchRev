@@ -31,6 +31,15 @@ namespace Himax {
         EGO_RAWDATA = 4,
     };
 
+    /// 面板身份：himax_thp_drv!getProjectID_OTP 从显示驱动 OTP 里读出的机型号（W273AS2700 / 2710 是 CSOT，
+    /// 1310 / 1300 是 BOE），外加 B4h 第 8 字节的面板版次（BOE 1300 上 'J' 是老版面板）。
+    struct PanelIdentity {
+        std::string projectId;
+        bool known = false;          // projectId 在原厂的已知型号表里
+        uint8_t revisionCode = 0;    // g_PanelRevisionCode
+        uint8_t e2 = 0;              // E2h，原厂只打日志
+    };
+
     class Chip {
         private:
             std::unique_ptr<HalDevice> m_master;
@@ -86,6 +95,13 @@ namespace Himax {
             ChipResult<> himax_switch_mode_inspection(THP_INSPECTION_ENUM mode);
             ChipResult<> hx_set_N_frame(uint8_t nFrame);
             ChipResult<> InitFailed(const char* step, const ChipResult<>& res);
+
+            // ── 面板 OTP（thp_afe_open_project 里的 getProjectID_OTP）─────
+            mutable std::mutex m_panelMu;
+            std::optional<PanelIdentity> m_panel;
+            bool m_panelTried = false;           // 只在 worker 线程读写
+            bool ReadOtpProjectSlot(uint16_t slot, std::string& id, PanelIdentity& extra);
+            void ReadPanelIdentity();
             ChipResult<> ApplyFrameReadPolicy();
             void ResetFrameReadState();
 
@@ -146,7 +162,7 @@ namespace Himax {
             bool ReopenDevices();
             /// 面板电源真值：SPB 驱动的 ACPI 读取，bit0 = 屏幕已上电。读取失败返回空。
             std::optional<bool> ReadPanelPower();
-            /// true：连续无输入帧够多时 Chip 自己进 IDLE（TouchPipeline 用）。TSACore 解算时关掉，
+            /// true：连续无输入帧够多时 Chip 自己进 IDLE（parser-only 模式不解算时用）。TSACore 解算时关掉，
             /// 改由 TSACore 的 IDLE 请求下发 EnterIdle。
             void SetAutoIdleEnabled(bool enabled) noexcept { m_autoIdle = enabled; }
             /// IC 在最近一帧的帧尾里自报的模式（word0 == 1 即 IDLE）。宿主不维护自己的 IDLE 状态。
@@ -164,6 +180,8 @@ namespace Himax {
             ChipResult<> check_bus(void);
             /// 最近一次 Init 失败在哪一步（成功后为空串）
             const char* LastInitFailStep() const noexcept { return m_lastInitFailStep; }
+            /// 首次 Init 时从 OTP 读到的面板身份；还没读或读失败为空。任意线程可调。
+            std::optional<PanelIdentity> GetPanelIdentity() const;
 
             /// 取一帧的结果，对应 thp_afe_get_frame 的三种出口。
             enum class FrameRead : uint8_t {

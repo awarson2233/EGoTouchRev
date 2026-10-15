@@ -58,28 +58,6 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
-    },
-    {
-      "name": "arm64-Debug-TsaCore",
-      "displayName": "arm64 Debug (TSACore finger solver)",
-      "inherits": "arm64-Debug",
-      "cacheVariables": {
-        "EGO_TOUCH_SOLVER_TSACORE": {
-          "type": "BOOL",
-          "value": "ON"
-        }
-      }
-    },
-    {
-      "name": "arm64-Release-TsaCore",
-      "displayName": "arm64 Release (TSACore finger solver)",
-      "inherits": "arm64-Release",
-      "cacheVariables": {
-        "EGO_TOUCH_SOLVER_TSACORE": {
-          "type": "BOOL",
-          "value": "ON"
-        }
-      }
     }
   ],
   "buildPresets": [
@@ -91,28 +69,6 @@
     {
       "name": "arm64-Release",
       "displayName": "arm64 Release Build",
-      "configurePreset": "arm64-Release"
-    },
-    {
-      "name": "arm64-Debug-TsaCore",
-      "displayName": "arm64 Debug Build (TSACore finger solver)",
-      "configurePreset": "arm64-Debug-TsaCore"
-    },
-    {
-      "name": "arm64-Release-TsaCore",
-      "displayName": "arm64 Release Build (TSACore finger solver)",
-      "configurePreset": "arm64-Release-TsaCore"
-    }
-  ],
-  "testPresets": [
-    {
-      "name": "arm64-Debug",
-      "displayName": "arm64 Debug Test",
-      "configurePreset": "arm64-Debug"
-    },
-    {
-      "name": "arm64-Release",
-      "displayName": "arm64 Release Test",
       "configurePreset": "arm64-Release"
     }
   ]

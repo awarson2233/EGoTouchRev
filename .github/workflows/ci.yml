@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    name: Build (ARM64 Release)
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-arm64-toolchain
+
+      - name: Configure
+        run: >
+          cmake -G Ninja -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+          -DCMAKE_C_COMPILER_TARGET=arm64-pc-windows-msvc -DCMAKE_CXX_COMPILER_TARGET=arm64-windows-msvc
+          -DHIMAX_ENABLE_NEON=ON -DEGO_BUILD_TOOLS=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: egotouch-arm64-${{ github.sha }}
+          path: build/*.exe
+          if-no-files-found: error
+          retention-days: 14

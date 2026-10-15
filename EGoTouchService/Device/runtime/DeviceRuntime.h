@@ -27,7 +27,7 @@ struct ValidationResult;
 
 #include "himax/HimaxChip.h"
 #include "himax/PanelPowerWatcher.h"
-#include "TouchSolver/TouchPipeline.h"
+#include "MasterFrameParser.h"
 #include "TouchSolver/TsaCore/TsaCoreSolver.h"
 #include "vhf/VhfReporter.h"
 #include "StylusSolver/StylusPipeline.h"
@@ -333,9 +333,6 @@ public:
     void SetVhfTransposeEnabled(bool enabled);
     bool IsVhfTransposeEnabled() const;
     void SetMasterParserOnlyMode(bool enabled);
-    /// 手指解算器切换：true 用 TsaCoreSolver（反编译的 TSACore），false 用 TouchPipeline。
-    void SetTsaCoreSolverEnabled(bool enabled);
-    bool IsTsaCoreSolverEnabled() const;
 
     /// 注入 BT MCU 压感值（由 PenBridge 线程写入，StylusPipeline 帧内读取）
     void IngestBtMcuPressure(uint16_t p);
@@ -357,6 +354,8 @@ public:
 
     RuntimeSnapshot GetSnapshot() const;
     RuntimePenState GetPenStateSnapshot() const;
+    /// 第一次建链时从显示驱动 OTP 读到的面板型号；还没建链或读失败为空
+    std::optional<Himax::PanelIdentity> GetPanelIdentity() const { return m_chip.GetPanelIdentity(); }
     PenAfeReplayState GetPenAfeReplayStateSnapshot() const;
     std::vector<HistoryEntry> GetHistory(std::size_t n = 200) const;
     void ClearHistory();
@@ -478,14 +477,13 @@ private:
     std::atomic<bool> m_autoMode{false};
     std::atomic<bool> m_stylusVhfEnabled{true};
     std::atomic<bool> m_masterParserOnly{false};
-    std::atomic<bool> m_useTsaCoreSolver{EGOTOUCH_TOUCH_SOLVER_TSACORE != 0};
     std::atomic<PenButtonMode> m_penButtonMode{PenButtonMode::OemCustom};
     std::atomic<PenButtonRoute> m_penButtonRoute{PenButtonRoute::VhfOnly};
     std::atomic<bool> m_penButtonRouteExplicit{false};
     SyntheticPenButtonInjector m_synthPenButton;
     Himax::Chip m_chip;
     Himax::PanelPowerWatcher m_panelWatcher;
-    Solvers::TouchPipeline m_touchPipeline;
+    Solvers::MasterFrameParser m_frameParser;
     Solvers::Tsa::TsaCoreSolver m_tsaCoreSolver;
     Solvers::StylusPipeline m_stylusPipeline;
     mutable std::mutex m_pipelineMu;

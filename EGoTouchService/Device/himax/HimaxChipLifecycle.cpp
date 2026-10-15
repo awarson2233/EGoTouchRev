@@ -4,7 +4,10 @@
 #include "Logger.h"
 #include "FrameLayout.h"
 
+#include <algorithm>
 #include <array>
+#include <cstring>
+#include <initializer_list>
 #include <vector>
 #include <windows.h>
 
@@ -287,6 +290,170 @@ ChipResult<> Chip::himax_mcu_power_on_init(void) {
     return std::unexpected(ChipError::Timeout);
 }
 
+namespace {
+
+// ── himax_thp_drv 读 OTP 用到的几个寄存器原语 ─────────────────────────────
+
+ChipResult<> WriteU32(HalDevice* dev, uint32_t addr, uint32_t value) {
+    uint8_t b[4];
+    detail::ParseAddressLittleEndian(value, b, 4);
+    return HimaxProtocol::register_write(dev, addr, b, 4);
+}
+
+/// register_write_vertify_1 / _2：写 4 字节后读回，只比较 mask 覆盖的低位
+bool WriteVerify(HalDevice* dev, uint32_t addr, uint32_t value, uint32_t mask) {
+    if (!WriteU32(dev, addr, value)) return false;
+    uint8_t b[4]{};
+    if (!HimaxProtocol::register_read(dev, addr, b, 4)) return false;
+    const uint32_t got = b[0] | (b[1] << 8) | (b[2] << 16) | (static_cast<uint32_t>(b[3]) << 24);
+    return (got & mask) == (value & mask);
+}
+
+/// FUN_18001b8a0 / FUN_18001b910：显示驱动寄存器写，地址 (reg | 0x30000) << 12，数据首字节是 reg 本身。
+/// 长度不是 4 的倍数时 writeRegisterRaw_intf 再补一笔 0x0C = 0x01。
+bool DdRegWrite(HalDevice* dev, std::initializer_list<uint8_t> data) {
+    const uint8_t reg = *data.begin();
+    const uint32_t len = static_cast<uint32_t>(data.size());
+    if (!HimaxProtocol::register_write(dev, (reg | 0x30000u) << 12, data.begin(), len)) return false;
+    if (len % 4 != 0) {
+        const uint8_t one = 0x01;
+        if (!dev->WriteBus(0x0C, nullptr, &one, 1)) return false;
+    }
+    return true;
+}
+
+/// hx_ddreg_read_byte：关 burst，读 ((reg | 0x30000) << 2 | bank) << 10 | offset 的首字节，再开 burst
+bool DdRegReadByte(HalDevice* dev, uint8_t reg, uint8_t bank, uint8_t offset, uint8_t& out) {
+    uint8_t b[4]{};
+    const uint32_t addr = (((reg | 0x30000u) << 2 | (bank & 3u)) << 10) | offset;
+    const bool ok = static_cast<bool>(HimaxProtocol::register_read(dev, addr, b, 4));
+    if (ok) out = b[0];
+    const uint8_t burstOn = 0x13;
+    (void)dev->WriteBus(0x0D, nullptr, &burstOn, 1);
+    return ok;
+}
+
+/// FUN_18001b560（hx_ddreg_set）：开 = 0x9000009C←0xDD、0x90000280←0xA5；关反序清零。每步后等 10 ms。
+bool DdRegAccess(HalDevice* dev, bool enable) {
+    if (enable) {
+        (void)WriteVerify(dev, 0x9000009C, 0xDD, 0xFF);
+        Sleep(10);
+        const bool ok = WriteVerify(dev, 0x90000280, 0xA5, 0xFF);
+        Sleep(10);
+        return ok;
+    }
+    (void)WriteVerify(dev, 0x90000280, 0x00, 0xFF);
+    Sleep(10);
+    const bool ok = WriteVerify(dev, 0x9000009C, 0x00, 0xFF);
+    Sleep(10);
+    return ok;
+}
+
+template <typename F>
+bool RetryEvery10ms(int extraTries, F&& step) {
+    for (int i = 0;; ++i) {
+        if (step()) return true;
+        if (i >= extraTries) return false;
+        Sleep(10);
+    }
+}
+
+bool SafeMode(HalDevice* dev, bool on) {
+    for (int i = 0; i < 6; ++i) {
+        if (HimaxProtocol::safeModeSetRaw(dev, on)) return true;
+    }
+    return false;
+}
+
+// hx_validate_ProjectID 的已知型号表
+constexpr std::array<const char*, 4> kKnownProjectIds = {"W273AS2700", "W273AS2710", "W273AS1310", "W273AS1300"};
+// getProjectID_OTP 依次试的三个 OTP 槽
+constexpr std::array<uint16_t, 3> kOtpProjectSlots = {0x0F18, 0x0F3A, 0x0F5C};
+
+} // namespace
+
+bool Chip::ReadOtpProjectSlot(uint16_t slot, std::string& id, PanelIdentity& extra) {
+    HalDevice* dev = m_master.get();
+    if (!SafeMode(dev, true)) {
+        LOG_WARN("HimaxChip", __func__, GetStateStr(), "safeModeSetRaw true failed");
+        return false;
+    }
+    if (!RetryEvery10ms(20, [&] { return WriteVerify(dev, 0x9000800C, 0xAC53, 0xFFFF); })) {
+        LOG_WARN("HimaxChip", __func__, GetStateStr(), "Failed to LPWUtmrIntAddr");
+        return false;
+    }
+    if (!RetryEvery10ms(20, [&] { return static_cast<bool>(WriteU32(dev, 0x90008010, 0x35CA)); })) {
+        LOG_WARN("HimaxChip", __func__, GetStateStr(), "Failed to LPWUtmrCtrlAddr");
+        return false;
+    }
+    if (!RetryEvery10ms(20, [&] { return DdRegAccess(dev, true); })) {
+        LOG_WARN("HimaxChip", __func__, GetStateStr(), "Failed to hx_ddreg_set(true)");
+        return false;
+    }
+
+    // EB / B9 两道口令，BB 选 OTP 地址后触发读出，等 50 ms 再从 B1 bank 3 取 10 个字符
+    bool ok = DdRegWrite(dev, {0xEB, 0x55, 0x66, 0xCC});
+    Sleep(10);
+    ok &= DdRegWrite(dev, {0xB9, 0x83, 0x12, 0x1A});
+    Sleep(10);
+    ok &= DdRegWrite(dev, {0xBB, 0x02, static_cast<uint8_t>(slot >> 8), static_cast<uint8_t>(slot)});
+    Sleep(10);
+    ok &= DdRegWrite(dev, {0xBB, 0x0A});
+    Sleep(50);
+
+    char chars[10]{};
+    for (uint8_t i = 0; i < 10; ++i) {
+        uint8_t c = 0;
+        ok &= DdRegReadByte(dev, 0xB1, 3, static_cast<uint8_t>(1 + i), c);
+        chars[i] = static_cast<char>(c);
+        Sleep(1);
+    }
+    id.assign(chars, strnlen(chars, sizeof(chars)));
+
+    // BB 写回原值
+    static constexpr std::array<uint8_t, 12> kBbRestore = {0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x70, 0x00, 0x0B};
+    ok &= static_cast<bool>(HimaxProtocol::register_write(dev, 0x300BB000, kBbRestore.data(), static_cast<uint32_t>(kBbRestore.size())));
+    Sleep(10);
+    (void)DdRegReadByte(dev, 0xB4, 0, 8, extra.revisionCode);
+    (void)DdRegReadByte(dev, 0xE2, 0, 1, extra.e2);
+
+    if (!RetryEvery10ms(20, [&] { return DdRegAccess(dev, false); })) {
+        LOG_WARN("HimaxChip", __func__, GetStateStr(), "Failed to hx_ddreg_set(false)");
+        return false;
+    }
+    if (!SafeMode(dev, false)) {
+        LOG_WARN("HimaxChip", __func__, GetStateStr(), "safeModeSetRaw false failed");
+        return false;
+    }
+    Sleep(10);
+    return ok;
+}
+
+void Chip::ReadPanelIdentity() {
+    PanelIdentity panel;
+    std::string id;
+    for (std::size_t i = 0; i < kOtpProjectSlots.size(); ++i) {
+        if (!ReadOtpProjectSlot(kOtpProjectSlots[i], id, panel)) {
+            LOG_WARN("HimaxChip", __func__, GetStateStr(), "OTP read failed at slot 0x{:03X}", kOtpProjectSlots[i]);
+            return;
+        }
+        panel.known = std::find_if(kKnownProjectIds.begin(), kKnownProjectIds.end(),
+                                   [&](const char* k) { return id == k; }) != kKnownProjectIds.end();
+        if (panel.known) break;
+        LOG_WARN("HimaxChip", __func__, GetStateStr(), "Got wrong id = {}, re-try!", id);
+    }
+    panel.projectId = id;
+    LOG_INFO("HimaxChip", __func__, GetStateStr(), "Project ID = {} (known={}, revision=0x{:02X}, E2h=0x{:02X})",
+             panel.projectId, panel.known, panel.revisionCode, panel.e2);
+    std::lock_guard lock(m_panelMu);
+    m_panel = std::move(panel);
+}
+
+std::optional<PanelIdentity> Chip::GetPanelIdentity() const {
+    std::lock_guard lock(m_panelMu);
+    return m_panel;
+}
+
 ChipResult<> Chip::InitFailed(const char* step, const ChipResult<>& res) {
     m_lastInitFailStep = step;
     LOG_WARN("HimaxChip", "Init", GetStateStr(), "Init failed at step '{}': {} (master win32={}, slave win32={}).",
@@ -298,6 +465,14 @@ ChipResult<> Chip::InitFailed(const char* step, const ChipResult<>& res) {
 ChipResult<> Chip::Init(void) {
     if (auto res = hx_hw_reset_ahb_intf(DeviceType::Master); !res) return InitFailed("hw_reset", res);
     Sleep(10);
+    // 原厂每次 open_project 都先读 OTP 再复位开扫；面板不会变，这里只在第一次建链时读，读完再复位一次，
+    // 留下的安全模式 / LPWU 定时器改动都随复位清掉
+    if (!m_panelTried) {
+        m_panelTried = true;
+        ReadPanelIdentity();
+        if (auto res = hx_hw_reset_ahb_intf(DeviceType::Master); !res) return InitFailed("hw_reset", res);
+        Sleep(10);
+    }
     LOG_INFO("HimaxChip", __func__, GetStateStr(), "Starting initialization sequence...");
 
     std::array<uint8_t, 4> tmp_data = {0xA5, 0x5A, 0x00, 0x00};
