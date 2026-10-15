@@ -39,6 +39,7 @@
 #include "Common/Image.h"
 #include "Common/Memory.h"
 #include "Extension/HardwareAnalyzer/HardwareAnalyzer.h"
+#include "Extension/Thenar/Thenar.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 #include "Prmt/TsaPrmt.h"
@@ -107,7 +108,7 @@ void MsInitCommon(bool full) {
     BadChannel::Init();
     HandGesture_Init();
     if (full) Baseline::ClearRefreshRequest();
-    Thenar_Init();
+    Thenar::Init();
 }
 
 // TSA_MSInitProject @ 0x6ba90994
@@ -309,7 +310,7 @@ void Processing(const int16_t* raw, uint32_t ctrl, uint64_t timeMs) {
     }
     if (s.frameDone == 0) s.systemFlags |= kSysProcessingActive;
     if ((s.systemFlags & kSysSkipMs) == 0) MsProcess(raw);
-    Thenar_ProcessInfoByDif();
+    Thenar::ProcessInfoByDif();
     if (AsaEnabled()) {
         Asa::Process(ctrl);
         if ((s.featureFlags & kFeatStylusAft) != 0 && (s.aftGateFlags & 4) == 0) StylusAft::Process();

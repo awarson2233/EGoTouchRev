@@ -45,10 +45,5 @@ bool GripFilter_IsPeakAbsNotGrip(uint8_t peakIdx);
 uint32_t GripFilter_GetTrackingThold(void);
 uint8_t GripFilter_IsMergeHandlerSensorEnabled(uint8_t dim1, uint8_t dim2);
 
-// Rejection/Thenar.c
-void Thenar_Init(void);
-void Thenar_ProcessInfoByDif(void);
-void Thenar_UnitCopy(uint8_t* dst, uint8_t* src);
-bool Thenar_UpdateExternalInfo(void);
 
 }  // extern "C"

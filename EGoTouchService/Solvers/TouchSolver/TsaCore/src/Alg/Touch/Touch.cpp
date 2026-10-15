@@ -18,6 +18,7 @@
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
 #include "Extension/HardwareAnalyzer/HardwareAnalyzer.h"
+#include "Extension/Thenar/Thenar.h"
 #include "Extension/Thenar/ThenarData.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
@@ -775,7 +776,7 @@ void KeepPrevTouchWithExceptionExcluded() {
     cur.stateFlags = prev.stateFlags;
     cur.lastLargeObjectTime = prev.lastLargeObjectTime;
     cur.field138 = prev.field138;
-    Thenar_UnitCopy(reinterpret_cast<uint8_t*>(&cur.thenar), reinterpret_cast<uint8_t*>(&prev.thenar));
+    Thenar::CopyInfo(cur.thenar, prev.thenar);
     for (uint8_t i = 0; i < prev.count; ++i) UnitCopy(i, i);
     cur.count = prev.count;
 }
@@ -878,16 +879,6 @@ void ProcessExtInfo() {
     touches.extFlags |= 0x100;
     touches.extFlags |= 0x200;
     AntiTouch_Report();
-}
-
-// Touch_ThenarFeatureReset @ 0x6bb30bf0
-void ThenarFeatureReset() {
-    ThenarInfo& thenar = Touches().thenar;
-    thenar.pointCount = 0;
-    thenar.point[0].value[4] = 0;
-    thenar.point[0].value[2] = 0;
-    thenar.point[0].value[0] = 0;
-    thenar.point[0].value[1] = 0;
 }
 
 // Touch_CreatePostReport @ 0x6ba76a03
@@ -1060,9 +1051,7 @@ void Touch_SetEdgeDist(uint8_t curIdx) { T::SetEdgeDist(curIdx); }
 void Touch_ProcessAftTouchEvent(void) { T::ProcessAftTouchEvent(); }
 void Touch_ProcessBetaGrip(void) { T::ProcessBetaGrip(); }
 void Touch_ProcessExtInfo(void) { T::ProcessExtInfo(); }
-void Touch_ThenarFeatureReset(void) { T::ThenarFeatureReset(); }
 void Touch_CreatePostReport(uint8_t curIdx, uint8_t) { T::CreatePostReport(curIdx); }
-void Touch_GetFltSQDistPixelFromPrevPos(uint8_t curIdx, uint8_t prevIdx) { T::GetFltSqDistPixelFromPrevPos(curIdx, prevIdx); }
 uint16_t Touch_GetSQDistMMInBetween(uint8_t idxA, uint8_t idxB) { return T::GetSqDistMmInBetween(idxA, idxB); }
 uint16_t Touch_GetSQDistMM(uint16_t dim1A, uint16_t dim2A, uint16_t dim1B, uint16_t dim2B) {
     return T::GetSqDistMm(dim1A, dim2A, dim1B, dim2B);

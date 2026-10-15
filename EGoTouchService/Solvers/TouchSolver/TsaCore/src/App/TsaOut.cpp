@@ -7,6 +7,7 @@
 #include "App/Scenario.h"
 #include "App/Sys.h"
 #include "App/TsaStatic.h"
+#include "Extension/Thenar/Thenar.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 
@@ -111,7 +112,7 @@ void PostProcess() {
     s.extFlags = tt.extFlags;
     s.newExtFlags = s.extFlags & ~s.prevExtFlags;
     if (Sys::IsHwResetPrev() && !Sys::IsHwReset()) s.newExtFlags |= kNewExtHwResetDone;
-    Thenar_UpdateExternalInfo();
+    Thenar::UpdateExternalInfo();
 }
 
 // TSAOut_DisplayXPos @ 0x6ba6a241 / TSAOut_DisplayYPos @ 0x6ba6a293

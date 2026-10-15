@@ -2064,8 +2064,6 @@ void Touch_CreatePostReport(byte param_1, byte param_2);
 // Touch_GetDistToLogicEdge @ 0x6ba73009 (Tracking\Touch.c)
 short Touch_GetDistToLogicEdge(int param_1,short param_2,short param_3);
 
-// Touch_GetFltSQDistPixelFromPrevPos @ 0x6ba73cc1 (Tracking\Touch.c)
-void Touch_GetFltSQDistPixelFromPrevPos(byte param_1,byte param_2);
 
 // Touch_GetFormattedTimeInterval @ 0x6ba76329 (Tracking\Touch.c)
 short Touch_GetFormattedTimeInterval(short param_1);
@@ -2172,8 +2170,6 @@ void Touch_SetEdgeDist(byte param_1);
 
 
 
-// Touch_ThenarFeatureReset @ 0x6bb30bf0 (Tracking\Touch.c)
-void Touch_ThenarFeatureReset(void);
 
 
 // Touch_UnitCopy @ 0x6ba74462 (Tracking\Touch.c)
@@ -2196,36 +2192,6 @@ undefined8 Touch_ValidComparison(byte param_1,byte param_2);
 
 
 
-// Thenar_ProcessInfoByDif @ 0x6bb315e8 (Rejection\Thenar.c)
-void Thenar_ProcessInfoByDif(void);
-// Thenar_UnitCopy @ 0x6bb2fd40 (Rejection\Thenar.c)
-void Thenar_UnitCopy(undefined1 *param_1,undefined1 *param_2);
-// Thenar_EventUpdate @ 0x6bb30eb3 (Rejection\Thenar.c)
-void Thenar_EventUpdate(void);
-// Thenar_ProcessInfoByDifTraditional @ 0x6bb31392 (Rejection\Thenar.c)
-void Thenar_ProcessInfoByDifTraditional(void);
-// Thenar_UpdateExternalInfo @ 0x6bb2fe59 (Rejection\Thenar.c)
-bool Thenar_UpdateExternalInfo(void);
-// Thenar_EventUpdateUnit @ 0x6bb30d38 (Rejection\Thenar.c)
-void Thenar_EventUpdateUnit(int param_1,uint param_2,uint param_3);
-// Thenar_ProcessGensture @ 0x6bb2fefc (Rejection\Thenar.c)
-void Thenar_ProcessGensture(short param_1);
-// Thenar_SideHandDetectByCoreTouch @ 0x6bb300a5 (Rejection\Thenar.c)
-void Thenar_SideHandDetectByCoreTouch(byte param_1);
-// Thenar_FeatureExtraction @ 0x6bb30c47 (Rejection\Thenar.c)
-void Thenar_FeatureExtraction(undefined8 param_1,undefined2 param_2);
-// Thenar_UpdateDetectFeature @ 0x6bb30f99 (Rejection\Thenar.c)
-undefined8 * Thenar_UpdateDetectFeature(undefined8 *param_1);
-// Thenar_Init @ 0x6bb2fce0 (Rejection\Thenar.c)
-void Thenar_Init(void);
-// Thenar_FeatureExtractionUnit @ 0x6bb306a0 (Rejection\Thenar.c)
-void Thenar_FeatureExtractionUnit(longlong param_1,ushort param_2,short param_3,ushort param_4,undefined2 param_5);
-// Thenar_FeatureGradient @ 0x6bb3032e (Rejection\Thenar.c)
-short Thenar_FeatureGradient(longlong param_1,ushort param_2,undefined4 param_3,ushort param_4, undefined8 param_5);
-// Thenar_FeatureUpdateEdgeWidthX @ 0x6bb30495 (Rejection\Thenar.c)
-short Thenar_FeatureUpdateEdgeWidthX(longlong param_1,ushort param_2,undefined4 param_3,ushort param_4,byte param_5);
-// Thenar_FeatureUnitPostUpdate @ 0x6bb305f5 (Rejection\Thenar.c)
-void Thenar_FeatureUnitPostUpdate(byte param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
 // Self_Reset @ 0x6ba6a920 (Signal\Self.c)
 void Self_Reset(void);
 

@@ -34,7 +34,6 @@ void ProcessAftTouchEvent();
 void ProcessBetaGrip();
 /// 表头 extFlags 记下水下 / 出水 / 拿起 / 放下等外部状态，然后 AntiTouch 上报。
 void ProcessExtInfo();
-void ThenarFeatureReset();
 /// 首次对外报点时，在起点与当前点之间插值补进历史轨迹。
 void CreatePostReport(uint8_t curIdx);
 
