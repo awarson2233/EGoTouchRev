@@ -20,6 +20,15 @@ typedef struct TsaCore_StateBlock {
 } TsaCore_StateBlock;
 size_t TsaCore_StateBlocks(TsaCore_StateBlock* out, size_t capacity);
 
+// 分段计时（Common/Profile.cpp）：主流程各步骤的累计耗时与次数，构建时打开 EGO_TSACORE_PROFILE 才有数据，
+// 否则返回 0。name 是调用表达式，TSA_ProcessingAFEFrame 一项是整帧。返回项数，只写入前 capacity 项。
+typedef struct TsaCore_ProfileEntry {
+    const char* name;
+    uint64_t ns;
+    uint64_t count;
+} TsaCore_ProfileEntry;
+size_t TsaCore_ProfileEntries(TsaCore_ProfileEntry* out, size_t capacity);
+
 uint64_t TSA_InitAFEProject_UI(int64_t projectName, int64_t afeStruct, int64_t caps);
 int      TSA_ProcessingAFEFrame(void* frame, uint32_t ctrl, uint64_t timestampMs);
 

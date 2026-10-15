@@ -5,7 +5,7 @@
 //   TsaRawReplay.exe <file.dvrbin> [--legacy] [--to N] [--dump N] [--charger] [--quiet]
 //                    [--afe] [--idle-exit N] [--hold N K]
 //                    [--pen X Y A B] [--pen-hover] [--pen-tilt TX TY] [--pen-word W] [--pen-interleave]
-//                    [--stylus-solver] [--state-digest FILE] [--state-dump STEP FILE]
+//                    [--stylus-solver] [--state-digest FILE] [--state-dump STEP FILE] [--profile]
 //   TsaRawReplay.exe --state-diff A B [SYMBOL]
 //
 //   --afe          把 TSACore 的闭环请求与要下发的 AFE 动作打到 stderr（请求只在变化时打印）
@@ -17,6 +17,10 @@
 //   --state-dump STEP FILE  把第 STEP 次喂帧之后的完整状态写成快照文件
 //   --state-diff A B [SYM]  比较两份快照，按符号名列出不同的区间（给了 SYM 就只列名字含它的）；有差异时退出码为 1
 //   --heap-skew N           自检用：先分配 N 个大小不一的堆块再建解算器，摘要不应因此改变
+//
+// 性能：
+//   --profile      结束时把 TSACore 各步骤的累计耗时打到 stderr（PROF 纳秒 次数 步骤），按耗时降序。
+//                  要求算法库以 EGO_TSACORE_PROFILE=ON 构建，否则没有数据（Compare-Reference -Benchmark 会这样构建）
 //
 // 录制里没有笔的时候，可以注入一支模拟笔来走通手指侧依赖笔状态的逻辑（只对 TsaCoreSolver 生效）：
 //   --pen X Y A B      第 A..B 帧（闭区间）笔尖落在 (X, Y)，单位与输出 CSV 相同（显示像素）。
@@ -41,8 +45,10 @@
 #include "StateTrace.h"
 #include "StylusSolver/StylusPipeline.h"
 #include "TouchSolver/TouchPipeline.h"
+#include "TsaCore/TsaCoreApi.h"
 #include "TsaCore/TsaCoreSolver.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -194,6 +200,20 @@ bool SameRequests(const Solvers::Tsa::AfeRequests& a, const Solvers::Tsa::AfeReq
 
 } // namespace
 
+void PrintProfile() {
+    std::vector<TsaCore_ProfileEntry> entries(TsaCore_ProfileEntries(nullptr, 0));
+    entries.resize(std::min(entries.size(), TsaCore_ProfileEntries(entries.data(), entries.size())));
+    if (entries.empty()) {
+        std::fprintf(stderr, "no profile data: build with -DEGO_TSACORE_PROFILE=ON\n");
+        return;
+    }
+    std::sort(entries.begin(), entries.end(), [](const auto& a, const auto& b) { return a.ns > b.ns; });
+    for (const auto& e : entries) {
+        std::fprintf(stderr, "PROF %12llu %8llu %s\n", static_cast<unsigned long long>(e.ns),
+                     static_cast<unsigned long long>(e.count), e.name);
+    }
+}
+
 int main(int argc, char** argv) {
     if ((argc == 4 || argc == 5) && std::strcmp(argv[1], "--state-diff") == 0) {
         TsaReplay::StateSnapshot a, b;
@@ -207,7 +227,7 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "usage: TsaRawReplay <file.dvrbin> [--legacy] [--to N] [--dump N] [--charger] [--quiet] "
                              "[--afe] [--idle-exit N] [--hold N K] [--pen X Y A B] [--pen-hover] "
                              "[--pen-tilt TX TY] [--pen-word W] [--pen-interleave] [--stylus-solver] "
-                             "[--state-digest FILE] [--state-dump STEP FILE]\n"
+                             "[--state-digest FILE] [--state-dump STEP FILE] [--profile]\n"
                              "       TsaRawReplay --state-diff A B [SYMBOL]\n");
         return 2;
     }
@@ -219,6 +239,7 @@ int main(int argc, char** argv) {
     bool legacy = false;
     bool charger = false;
     bool quiet = false;
+    bool profile = false;
     bool afe = false;
     bool pen = false;
     bool penHover = false;
@@ -243,6 +264,7 @@ int main(int argc, char** argv) {
         else if (std::strcmp(argv[i], "--legacy") == 0) legacy = true;
         else if (std::strcmp(argv[i], "--charger") == 0) charger = true;
         else if (std::strcmp(argv[i], "--quiet") == 0) quiet = true;
+        else if (std::strcmp(argv[i], "--profile") == 0) profile = true;
         else if (std::strcmp(argv[i], "--afe") == 0) afe = true;
         else if (std::strcmp(argv[i], "--pen") == 0 && i + 4 < argc) {
             pen = true;
@@ -495,5 +517,6 @@ int main(int argc, char** argv) {
                      statusSeen);
     }
     std::fputc('\n', stderr);
+    if (profile) PrintProfile();
     return 0;
 }

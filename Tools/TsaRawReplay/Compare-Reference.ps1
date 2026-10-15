@@ -38,6 +38,11 @@
 .PARAMETER Coverage
   不做比较，改为统计这批录制与场景对当前算法代码的覆盖率，结果写到 build/tsa-coverage。
 
+.PARAMETER Benchmark
+  不做比较，改为计时：以 -O2 加 EGO_TSACORE_PROFILE 构建到 build/tsa-bench，逐个串行回放（纯回放场景），
+  跑 -Rounds 轮取最快的一轮，打印每帧耗时与耗时最多的 -Top 个步骤（步骤耗时含其子步骤）。
+  回放工具只有 Debug 配置（调试版 CRT），绝对值比服务的 Release 构建略高，用来看相对变化。
+
 .EXAMPLE
   pwsh Tools/TsaRawReplay/Compare-Reference.ps1
   pwsh Tools/TsaRawReplay/Compare-Reference.ps1 -Recordings C:\ProgramData\EGoTouchRev\exports\dvr, D:\rec\pen.dvrbin -SelfCheck
@@ -52,7 +57,10 @@ param(
     [switch]$SelfCheck,
     [switch]$Coverage,
     [switch]$Full,
-    [switch]$State
+    [switch]$State,
+    [switch]$Benchmark,
+    [int]$Rounds = 3,
+    [int]$Top = 20
 )
 
 $ErrorActionPreference = 'Stop'
@@ -159,6 +167,50 @@ function Get-Scenarios {
     )
     # 默认只跑覆盖面互不重叠的三个：纯回放、静止后退出 idle、模拟笔书写
     $Full ? $list : @($list | Where-Object { $_.Name -in 'plain', 'idle', 'pen-write' })
+}
+
+# ── 计时 ────────────────────────────────────────────────────────────────
+
+if ($Benchmark) {
+    $benchDir = Join-Path $root 'build/tsa-bench'
+    Write-Host 'building benchmark (-O2, EGO_TSACORE_PROFILE)...'
+    Push-Location $root
+    try {
+        Invoke-Native 'configure benchmark build' {
+            cmake --preset $Preset -B $benchDir '-DEGO_TSACORE_EXTRA_FLAGS=-O2' '-DEGO_TSACORE_PROFILE=ON'
+        }
+        Invoke-Native 'benchmark build' { cmake --build $benchDir --target TsaRawReplay }
+    } finally {
+        Pop-Location
+    }
+    $exe = Join-Path $benchDir 'TsaRawReplay.exe'
+    $recordings = @(Get-RecordingFiles)
+    # 逐个串行跑（并行会互相抢核心与缓存）；每轮把全部录制的耗时相加，各步骤取各轮中最小的一轮
+    $best = @{}
+    $frames = 0
+    for ($round = 0; $round -lt $Rounds; $round++) {
+        $sum = @{}
+        $roundFrames = 0
+        foreach ($recording in $recordings) {
+            $text = & $exe $recording --quiet --afe --profile 2>&1
+            foreach ($line in $text) {
+                if ("$line" -match '^PROF\s+(\d+)\s+(\d+)\s+(.+)$') { $sum[$Matches[3]] = [double]$sum[$Matches[3]] + [double]$Matches[1] }
+                elseif ("$line" -match '^fed (\d+) frames') { $roundFrames += [int]$Matches[1] }
+            }
+        }
+        if (-not $sum.ContainsKey('TSA_ProcessingAFEFrame')) { throw 'no profile data from the benchmark build' }
+        $frames = $roundFrames
+        foreach ($k in $sum.Keys) { if (-not $best.ContainsKey($k) -or $sum[$k] -lt $best[$k]) { $best[$k] = $sum[$k] } }
+    }
+    $total = $best['TSA_ProcessingAFEFrame']
+    $rows = $best.GetEnumerator() | Sort-Object Value -Descending | ForEach-Object {
+        [pscustomobject]@{ Step = $_.Key; UsPerFrame = [Math]::Round($_.Value / $frames / 1000, 2); Percent = [Math]::Round(100 * $_.Value / $total, 1) }
+    }
+    $rows | Format-Table -AutoSize | Out-String -Width 200 | Set-Content (Join-Path $benchDir 'profile.txt')
+    Write-Host ("`n{0} recordings, {1} frames, best of {2} rounds: {3:F1} us/frame" -f $recordings.Count, $frames, $Rounds, ($total / $frames / 1000))
+    $rows | Select-Object -First $Top | Format-Table -AutoSize | Out-String -Width 200 | Write-Host
+    Write-Host "full table: $(Join-Path $benchDir 'profile.txt')"
+    exit 0
 }
 
 # ── 构建 ────────────────────────────────────────────────────────────────

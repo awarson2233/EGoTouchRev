@@ -17,7 +17,7 @@ struct SelfData {
     int32_t sum[kMaxLineNum];                // 全部格的 Dif 之和
     int32_t negSum[kMaxLineNum];             // 负 Dif 之和
     int32_t posSum[kMaxLineNum];             // 非负 Dif 之和
-    int16_t innerStrongCount[kMaxLineNum];   // 中间格里强正信号的格数
+    int16_t reserved780[kMaxLineNum];
     int16_t maxAbs[kMaxLineNum];             // |Dif| 的最大值
     int32_t strongSum[kMaxLineNum];          // 强信号之和（正负相抵）
     int32_t innerStrongSum[kMaxLineNum];
@@ -28,7 +28,7 @@ struct SelfData {
     int32_t field1900[kMaxLineNum];          // TZ 借来记每线未达门限的格数
 };
 static_assert(sizeof(SelfData) == 0x1b80);
-static_assert(offsetof(SelfData, innerStrongCount) == 0x780);
+static_assert(offsetof(SelfData, reserved780) == 0x780);
 static_assert(offsetof(SelfData, maxAbs) == 0x8c0);
 static_assert(offsetof(SelfData, strongSum) == 0xa00);
 static_assert(offsetof(SelfData, innerStrongAbsSum) == 0x1180);

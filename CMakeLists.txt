@@ -302,6 +302,11 @@ if (EGO_TSACORE_EXTRA_FLAGS)
     separate_arguments(_ego_tsacore_extra NATIVE_COMMAND "${EGO_TSACORE_EXTRA_FLAGS}")
     target_compile_options(TsaCore PRIVATE ${_ego_tsacore_extra})
 endif()
+# 分段计时（Common/Profile.h）：主流程每个步骤记累计耗时，回放 --profile 打印。默认关，打开后有计时开销
+option(EGO_TSACORE_PROFILE "Time each TSACore pipeline step (TsaRawReplay --profile)" OFF)
+if (EGO_TSACORE_PROFILE)
+    target_compile_definitions(TsaCore PRIVATE TSACORE_PROFILE)
+endif()
 # TsaCoreSolver 直接调用 TsaCore 的导出
 target_link_libraries(Solvers PUBLIC TsaCore)
 # Let Common see Solvers headers for SharedFrameBuffer

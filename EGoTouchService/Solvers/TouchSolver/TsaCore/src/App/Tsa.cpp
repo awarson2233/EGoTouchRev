@@ -37,6 +37,7 @@
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
 #include "Common/Bss.h"
+#include "Common/Profile.h"
 #include "Common/Memory.h"
 #include "Extension/HandGesture/HandGesture.h"
 #include "Extension/HardwareAnalyzer/HardwareAnalyzer.h"
@@ -185,39 +186,39 @@ void KeepPrevTouches() {
 // 峰检测到报点
 void TrackAndReport() {
     FlashPrmt& fl = PrmtFlash();
-    Prmt::Process();
-    Peak::Process();
+    TSA_STEP(Prmt::Process());
+    TSA_STEP(Peak::Process());
     TouchZone::PeaksBeforeSwitchDif() = Peaks();
     fl.gripFlags |= kGripRegionPass;
-    GripFilter::RegionProcess();
-    Buffer::PrevFrameProcess();
-    TouchZone::Process();
+    TSA_STEP(GripFilter::RegionProcess());
+    TSA_STEP(Buffer::PrevFrameProcess());
+    TSA_STEP(TouchZone::Process());
     fl.gripFlags &= ~kGripRegionPass;
-    RxLineFilter::Process();
-    SigSumFilter::ReserveTouch(fl.sigSumReserveTouch);
-    Ctd::EcProcess();
-    IdTracking::Process(false);
-    Touch::AssignPreIdxBasedOnId();
-    PrevTouch::AssignCurIdxBasedOnId();
-    TouchSize::Process();
-    TouchEvent::Process();
-    Buffer::PreProcess();
-    EdgeRecovery::Process();
-    TouchAction::Process();
-    TouchSize::PostProcess();
-    TouchAction::PostProcess();
-    Exception::Process();
-    GripFilter::Process();
-    TouchMode::Process();
-    AntiTouch::Process();
-    Touch::ProcessBetaGrip();
-    TouchReport::Process();
-    Touch::ProcessExtInfo();
-    HardwareAnalyzer::PostProcess();
-    HandGesture::Process();
-    PrevTouch::PostProcess();
-    PrevPeak::Process();
-    Buffer::PostProcess();
+    TSA_STEP(RxLineFilter::Process());
+    TSA_STEP(SigSumFilter::ReserveTouch(fl.sigSumReserveTouch));
+    TSA_STEP(Ctd::EcProcess());
+    TSA_STEP(IdTracking::Process(false));
+    TSA_STEP(Touch::AssignPreIdxBasedOnId());
+    TSA_STEP(PrevTouch::AssignCurIdxBasedOnId());
+    TSA_STEP(TouchSize::Process());
+    TSA_STEP(TouchEvent::Process());
+    TSA_STEP(Buffer::PreProcess());
+    TSA_STEP(EdgeRecovery::Process());
+    TSA_STEP(TouchAction::Process());
+    TSA_STEP(TouchSize::PostProcess());
+    TSA_STEP(TouchAction::PostProcess());
+    TSA_STEP(Exception::Process());
+    TSA_STEP(GripFilter::Process());
+    TSA_STEP(TouchMode::Process());
+    TSA_STEP(AntiTouch::Process());
+    TSA_STEP(Touch::ProcessBetaGrip());
+    TSA_STEP(TouchReport::Process());
+    TSA_STEP(Touch::ProcessExtInfo());
+    TSA_STEP(HardwareAnalyzer::PostProcess());
+    TSA_STEP(HandGesture::Process());
+    TSA_STEP(PrevTouch::PostProcess());
+    TSA_STEP(PrevPeak::Process());
+    TSA_STEP(Buffer::PostProcess());
 }
 
 // TSA_MSProcess @ 0x6ba90e43
@@ -226,104 +227,104 @@ void TrackAndReport() {
 void MsProcess(const int16_t* raw) {
     TsaStatic& s = Static();
     s.processingState |= kProcMsActive;
-    DataSwitch::ToGrid();
+    TSA_STEP(DataSwitch::ToGrid());
     if (raw == nullptr || PrmtDynamic().field024 != 0) {  // 后者原本还要求自容 raw 无效，自容被裁掉后恒成立
-        if (Sys::IsHwReset()) MsReset();
-        MsEnd();
+        if (Sys::IsHwReset()) TSA_STEP(MsReset());
+        TSA_STEP(MsEnd());
         return;
     }
     TsaBufferTable& b = Buffers();
     const size_t bytes = PrmtFlash().sensorNum * 2u;
     const size_t gridBytes = GridBufSize() * 2u;
-    HardwareAnalyzer::Reset();
-    if (Sys::IsHwReset()) MsReset();
-    Touch::Clean();
-    CopyChecked(b.preDif, gridBytes, b.dif, bytes);
+    TSA_STEP(HardwareAnalyzer::Reset());
+    if (Sys::IsHwReset()) TSA_STEP(MsReset());
+    TSA_STEP(Touch::Clean());
+    TSA_STEP(CopyChecked(b.preDif, gridBytes, b.dif, bytes));
     const bool difPath = (s.systemFlags & kSysDifBufPath) != 0;
     if (!difPath) {
-        CopyChecked(b.raw, 0x2648, raw, bytes);
-        TpSensor::ProcessRaw();
+        TSA_STEP(CopyChecked(b.raw, 0x2648, raw, bytes));
+        TSA_STEP(TpSensor::ProcessRaw());
     } else {
-        CopyChecked(b.dif, 0x2648, raw, bytes);
+        TSA_STEP(CopyChecked(b.dif, 0x2648, raw, bytes));
     }
-    Rawdata::Process();
-    HardwareAnalyzer::Process();
+    TSA_STEP(Rawdata::Process());
+    TSA_STEP(HardwareAnalyzer::Process());
     if (HardwareAnalyzer::IsToBypassCurrentFrame()) {
-        Touch::KeepPrevTouchWithExceptionExcluded();
-        Baseline::CalcDiffCommon(b.dif, b.raw, b.bl);
-        Property::GetDifPreCmf();
-        CopyChecked(b.difGrid, gridBytes, b.preDif, bytes);
-        MsEnd();
+        TSA_STEP(Touch::KeepPrevTouchWithExceptionExcluded());
+        TSA_STEP(Baseline::CalcDiffCommon(b.dif, b.raw, b.bl));
+        TSA_STEP(Property::GetDifPreCmf());
+        TSA_STEP(CopyChecked(b.difGrid, gridBytes, b.preDif, bytes));
+        TSA_STEP(MsEnd());
         return;
     }
-    Prmt::PreProcess();
-    CopyChecked(b.preCmfRaw, 0x2648, b.raw, bytes);
+    TSA_STEP(Prmt::PreProcess());
+    TSA_STEP(CopyChecked(b.preCmfRaw, 0x2648, b.raw, bytes));
     if (!difPath) {
         const FlashPrmt& fl = PrmtFlash();
-        Baseline::CalcDiffCommon(b.dif, b.raw, b.bl);
-        Property::GetDifPreCmf();
-        Baseline::UpdateForRawUnstable();
+        TSA_STEP(Baseline::CalcDiffCommon(b.dif, b.raw, b.bl));
+        TSA_STEP(Property::GetDifPreCmf());
+        TSA_STEP(Baseline::UpdateForRawUnstable());
         SelfForBlReset() = SelfBuf();
-        if (fl.cmfEnabled != 0) Rawdata::Cmf();
-        if ((s.featureFlags & kFeatUnderWater) != 0) Exception::CheckUnderWater();
-        Baseline::Process(Sys::IsHwReset(), false);
+        if (fl.cmfEnabled != 0) TSA_STEP(Rawdata::Cmf());
+        if ((s.featureFlags & kFeatUnderWater) != 0) TSA_STEP(Exception::CheckUnderWater());
+        TSA_STEP(Baseline::Process(Sys::IsHwReset(), false));
         if (!Baseline::IsReset()) {
-            if (fl.cmfEnabled == 0) Cmf::Process();
-            GridIir::Process();
+            if (fl.cmfEnabled == 0) TSA_STEP(Cmf::Process());
+            TSA_STEP(GridIir::Process());
         }
     }
-    HardwareAnalyzer::ProcessDif();
-    TpSensor::Process();
-    Property::Get(reinterpret_cast<const uint16_t*>(b.raw), reinterpret_cast<const uint16_t*>(b.bl));
+    TSA_STEP(HardwareAnalyzer::ProcessDif());
+    TSA_STEP(TpSensor::Process());
+    TSA_STEP(Property::Get(reinterpret_cast<const uint16_t*>(b.raw), reinterpret_cast<const uint16_t*>(b.bl)));
     TsaPrpt& p = Prpt();
     p.msDif = p.dif;
     p.msUnderWaterCells = p.underWaterCells;
     p.msDifCore = p.difCore;
     p.msDifInner = p.difInner;
-    Self::Process();
-    ToeSynaBl::GetSidePrpt();
-    CheckRawDirection();
+    TSA_STEP(Self::Process());
+    TSA_STEP(ToeSynaBl::GetSidePrpt());
+    TSA_STEP(CheckRawDirection());
     if (HardwareAnalyzer::IsToBypassCurrentFrame()) {
-        KeepPrevTouches();
+        TSA_STEP(KeepPrevTouches());
         return;
     }
-    TrackAndReport();
-    MsEnd();
+    TSA_STEP(TrackAndReport());
+    TSA_STEP(MsEnd());
 }
 
 // TSA_Processing @ 0x6ba9a443
 void Processing(const int16_t* raw, uint32_t ctrl, uint64_t timeMs) {
     TsaStatic& s = Static();
-    Afe::PreProcess();
+    TSA_STEP(Afe::PreProcess());
     s.curTimeMs = timeMs;
-    Sys::UpdateCtrlFlags(ctrl);
-    Sys::PreProcess();
-    Baseline::PreProcess();
+    TSA_STEP(Sys::UpdateCtrlFlags(ctrl));
+    TSA_STEP(Sys::PreProcess());
+    TSA_STEP(Baseline::PreProcess());
     if ((ctrl & kCtrlAfeAutoCheck) != 0) {
         Afe::AutoCheckProcess(reinterpret_cast<const uint16_t*>(raw), static_cast<uint16_t>(PrmtFlash().sensorNum * 2),
                               ctrl, timeMs);
-        Sys::PostProcess();
+        TSA_STEP(Sys::PostProcess());
         return;
     }
-    if (Afe::IsInAutoCheck()) Afe::ClearAutoCheckFlag();
+    if (Afe::IsInAutoCheck()) TSA_STEP(Afe::ClearAutoCheckFlag());
     if ((s.systemFlags & kSysSuspended) != 0) {
-        Sys::PostProcess();
+        TSA_STEP(Sys::PostProcess());
         return;
     }
     if (s.frameDone == 0) s.systemFlags |= kSysProcessingActive;
-    if ((s.systemFlags & kSysSkipMs) == 0) MsProcess(raw);
-    Thenar::ProcessInfoByDif();
+    if ((s.systemFlags & kSysSkipMs) == 0) TSA_STEP(MsProcess(raw));
+    TSA_STEP(Thenar::ProcessInfoByDif());
     if (AsaEnabled()) {
-        Asa::Process(ctrl);
-        if ((s.featureFlags & kFeatStylusAft) != 0 && (s.aftGateFlags & 4) == 0) StylusAft::Process();
+        TSA_STEP(Asa::Process(ctrl));
+        if ((s.featureFlags & kFeatStylusAft) != 0 && (s.aftGateFlags & 4) == 0) TSA_STEP(StylusAft::Process());
     }
-    Out::PostProcess();
-    ReportHwException();
-    Sys::PostProcess();
+    TSA_STEP(Out::PostProcess());
+    TSA_STEP(ReportHwException());
+    TSA_STEP(Sys::PostProcess());
     s.frameDone = 1;
     ++s.frameCounter;
-    Afe::Process();
-    PitchSizeRemap();
+    TSA_STEP(Afe::Process());
+    TSA_STEP(PitchSizeRemap());
 }
 
 // TSAMS_IsReadyForIDLEMode @ 0x6ba9998b（HardwareAnalyzer 从不阻止进 IDLE）
@@ -503,6 +504,7 @@ uint64_t TSA_InitAFEProject_UI(int64_t project, int64_t afeInfo, int64_t caps) {
                                                    reinterpret_cast<const A::Caps*>(caps)));
 }
 int TSA_ProcessingAFEFrame(void* frame, uint32_t ctrl, uint64_t timeMs) {
+    TSA_PROFILE_SCOPE("TSA_ProcessingAFEFrame");
     return T::ProcessAfeFrame(static_cast<const A::Frame*>(frame), ctrl, timeMs);
 }
 void TSA_MSReset(void) { T::MsReset(); }
