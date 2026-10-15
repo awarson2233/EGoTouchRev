@@ -14,12 +14,18 @@ runs:
       run: |
         $release = Invoke-RestMethod -Headers @{ "User-Agent" = "GitHubActions" } `
           -Uri "https://api.github.com/repos/llvm/llvm-project/releases/latest"
-        $asset = $release.assets | Where-Object { $_.name -match '^LLVM-.*-woa64\.exe$' } | Select-Object -First 1
+        # 23.x 起发 .msi，更早的版本是 NSIS .exe
+        $asset = $release.assets | Where-Object { $_.name -match '^LLVM-.*-woa64\.(msi|exe)$' } | Select-Object -First 1
         if (-not $asset) { throw "No Windows ARM64 LLVM installer in the latest llvm-project release." }
 
         $installer = Join-Path $env:RUNNER_TEMP $asset.name
         Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $installer
-        Start-Process -FilePath $installer -ArgumentList "/S" -Wait -NoNewWindow
+        if ($installer.EndsWith(".msi")) {
+          $p = Start-Process msiexec.exe -ArgumentList "/i `"$installer`" /qn /norestart" -Wait -PassThru -NoNewWindow
+          if ($p.ExitCode -ne 0) { throw "msiexec exited with $($p.ExitCode)." }
+        } else {
+          Start-Process -FilePath $installer -ArgumentList "/S" -Wait -NoNewWindow
+        }
 
         $llvmBin = "C:\Program Files\LLVM\bin"
         if (-not (Test-Path (Join-Path $llvmBin "clang++.exe"))) { throw "LLVM did not install clang++.exe to $llvmBin." }
