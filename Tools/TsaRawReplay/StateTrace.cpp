@@ -154,10 +154,10 @@ bool StateSnapshot::Capture() {
     blocks.clear();
     orphanHeapBlocks = 0;
 
-    const size_t count = TSACoreRaw_StateBlocks(nullptr, 0);
+    const size_t count = TsaCore_StateBlocks(nullptr, 0);
     if (count == static_cast<size_t>(-1) || count == 0) return false;
-    std::vector<TSACoreRaw_StateBlock> raw(count);
-    if (TSACoreRaw_StateBlocks(raw.data(), raw.size()) != count) return false;
+    std::vector<TsaCore_StateBlock> raw(count);
+    if (TsaCore_StateBlocks(raw.data(), raw.size()) != count) return false;
 
     const uint8_t* const image = raw[0].data;
     const uint64_t imageSize = raw[0].size;

@@ -18,8 +18,6 @@ constexpr uint8_t kRecalCheckFrames = 15;   // 到这一帧为止统计越界
 constexpr uint8_t kRecalMinHits = 3;        // 越界帧数达到它即请求重新校准
 constexpr uint64_t kAutoCalMinMs = 300000;  // 自动校准开始 5 分钟后才允许退出
 constexpr uint32_t kSysReset = 0x1;
-constexpr uint32_t kCtrlRecal = 0x2;        // TsaStatic::specialControlFlags
-constexpr uint32_t kCtrlCompensated = 0x100;
 constexpr int kCompensateMin = 5;           // 偏移超过 4 才补偿
 constexpr int16_t kCompensateStep = 5;
 
@@ -66,7 +64,6 @@ void Process() {
     } else {
         if (kRecalMinHits <= stat.recalBoundaryHits && !AutoCalibration()) {
             stat.justExitedSpecialCtrlMode = 1;
-            stat.specialControlFlags |= kCtrlRecal;
         }
         stat.recalBoundaryHits = 0;
     }
@@ -94,7 +91,6 @@ void Compensation() {
     int16_t* bl = Buffers().bl;
     const uint16_t n = PrmtFlash().sensorNum;
     for (uint16_t i = 0; i < n; ++i) bl[i] = static_cast<int16_t>(stat.signalReverted == 0 ? bl[i] - step : bl[i] + step);
-    stat.specialControlFlags |= kCtrlCompensated;
 }
 
 }  // namespace Solvers::Tsa::Core::Baseline

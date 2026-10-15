@@ -27,7 +27,6 @@ constexpr uint32_t kPersistNoIdMapping = 0x200000;        // PrevTouchUnit::pers
 constexpr uint32_t kPersist2NoIncAccThold = 0x3000000;    // PrevTouchUnit::persistFlags2：不放大加速度门限
 constexpr uint16_t kIncAccTholdSqDistMm = 0x19;           // 帧间位移平方（mm²）达到此值时放大加速度门限
 constexpr uint32_t kGripIdMappingCancelled = 0x200;       // TouchUnit::gripFlags：GripFilter 取消了配对
-constexpr uint32_t kSpecialAccTooLarge = 0x4;             // TsaStatic::specialControlFlags
 
 /// 历史下标 → 当前下标（kNoMatch 为没配上）。
 using Matching = std::array<uint8_t, kMaxTouchNum>;
@@ -256,7 +255,6 @@ void AccCheck(Matching& match, bool strict) {
         const bool inc = IsToIncAccThold(c, p);
         if ((inc || strict ? accThold << 2 : accThold) < acc) {
             match[p] = kNoMatch;
-            Static().specialControlFlags |= kSpecialAccTooLarge;
         } else if (GripFilter::IsToCancelIdMapping(c, p)) {
             match[p] = kNoMatch;
             Cur(c).gripFlags |= kGripIdMappingCancelled;

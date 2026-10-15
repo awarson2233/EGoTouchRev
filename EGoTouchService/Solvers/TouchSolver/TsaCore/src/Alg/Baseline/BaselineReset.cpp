@@ -63,7 +63,6 @@ enum DebugFlag : uint32_t {
     kDbgDirty = 0x2000,
 };
 
-constexpr uint32_t kCtrlBlReset = 0x1;           // TsaStatic::specialControlFlags
 constexpr uint32_t kAfeRawJump = 0x20000;         // TsaStatic::afeStatus
 constexpr uint32_t kAfeRawUnstable = 0x40000;
 constexpr uint32_t kAfeSideTouch = 0x80000;
@@ -383,7 +382,6 @@ bool IsTriggered2AfeWakeUp() {
         stat.blResetDebounce = 0;
         stat.blWakeUpTimer = 0;
         prpt.blPropertyState = kReasonWakeUp;
-        stat.specialControlFlags |= kCtrlBlReset;
         const PrevTouchTable& prev = PrevTouches();
         if (prev.exceptionFlags == kExceptionTouchMode) {
             stat.field3F1 = 1;
@@ -698,7 +696,6 @@ void BaselineStateUpdate(bool reset) {
 void Trigger(uint32_t reason, bool clearClean) {
     if (clearClean) Static().cleanBaselineValid = 0;
     Prpt().blPropertyState = reason;
-    Static().specialControlFlags |= kCtrlBlReset;
 }
 
 // BLReset_IsTriggered2 @ 0x6ba4bc66（SensorData、NotchProtect 被裁掉）

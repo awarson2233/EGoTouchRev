@@ -5407,4 +5407,4 @@ void Init() {
 }  // namespace Solvers::Tsa::Core::Image
 
 // 宿主入口：在任何 TSA_* 调用之前执行一次。
-void TSACoreRaw_InitImage(void) { Solvers::Tsa::Core::Image::Init(); }
+void TsaCore_InitImage(void) { Solvers::Tsa::Core::Image::Init(); }

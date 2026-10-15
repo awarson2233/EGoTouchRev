@@ -26,8 +26,6 @@ namespace {
 constexpr uint32_t kSysDifBufPath = 0x10000;        // TsaStatic::systemFlags
 constexpr uint32_t kFeat2BadChannel = 0x08;          // TsaStatic::featureFlags2
 constexpr uint32_t kFeat2RfNoise = 0x10;
-constexpr uint32_t kSpecialHwException = 0x10;       // TsaStatic::specialControlFlags：本帧有异常要上报
-constexpr uint32_t kSpecialCtrlException = 0x400;
 constexpr uint32_t kTouchExcHw = 0x400;              // TouchTable::exceptionFlags
 constexpr uint32_t kTouchExcRecal = 0x1000;
 constexpr uint32_t kTouchExcBaselineReset = 0x2000;
@@ -444,7 +442,6 @@ void PostProcess() {
         const uint32_t ex = TouchExceptionFlags();
         if ((ex & kTouchExcBaselineReset) != 0) SetException(kExcBaselineReset);
         if ((ex & kTouchExcRecal) != 0 && 0x32 < Static().recalFrames) SetException(kExcRecal);
-        if ((Static().specialControlFlags & kSpecialCtrlException) != 0) SetException(kExcSpecialControl);
         CheckEnvTemp();
         PostProcessTouch();
         AfeRawJump();
@@ -467,7 +464,6 @@ int GetDetectedException() {
             break;
         }
     }
-    if (code != 0) Static().specialControlFlags |= kSpecialHwException;
     return code;
 }
 

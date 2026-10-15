@@ -287,9 +287,9 @@ ego_configure_solvers_target(Solvers)
 set(TSACORE_RAW_ROOT "${SOLVERS_ROOT}/TouchSolver/raw")
 set(TSACORE_SRC_ROOT "${SOLVERS_ROOT}/TouchSolver/TsaCore/src")
 file(GLOB_RECURSE TSACORE_CPP_SOURCES CONFIGURE_DEPENDS "${TSACORE_SRC_ROOT}/*.cpp")
-add_library(TSACoreRaw STATIC ${TSACORE_CPP_SOURCES})
-target_include_directories(TSACoreRaw PRIVATE "${TSACORE_SRC_ROOT}")
-target_compile_options(TSACoreRaw PRIVATE
+add_library(TsaCore STATIC ${TSACORE_CPP_SOURCES})
+target_include_directories(TsaCore PRIVATE "${TSACORE_SRC_ROOT}")
+target_compile_options(TsaCore PRIVATE
     -fno-strict-aliasing
     -fwrapv
     -ffp-contract=off
@@ -297,13 +297,13 @@ target_compile_options(TSACoreRaw PRIVATE
 )
 # 比对与覆盖率用：给算法库单独追加编译选项（如 -O2、-fprofile-instr-generate -fcoverage-mapping），
 # 回放工具其余部分保持 Debug
-set(EGO_TSA_RAW_EXTRA_FLAGS "" CACHE STRING "Extra compile options for the TSACore algorithm library")
-if (EGO_TSA_RAW_EXTRA_FLAGS)
-    separate_arguments(_ego_tsa_raw_extra NATIVE_COMMAND "${EGO_TSA_RAW_EXTRA_FLAGS}")
-    target_compile_options(TSACoreRaw PRIVATE ${_ego_tsa_raw_extra})
+set(EGO_TSACORE_EXTRA_FLAGS "" CACHE STRING "Extra compile options for the TSACore algorithm library")
+if (EGO_TSACORE_EXTRA_FLAGS)
+    separate_arguments(_ego_tsacore_extra NATIVE_COMMAND "${EGO_TSACORE_EXTRA_FLAGS}")
+    target_compile_options(TsaCore PRIVATE ${_ego_tsacore_extra})
 endif()
-# TsaCoreSolver 直接调用 TSACoreRaw 的导出
-target_link_libraries(Solvers PUBLIC TSACoreRaw)
+# TsaCoreSolver 直接调用 TsaCore 的导出
+target_link_libraries(Solvers PUBLIC TsaCore)
 # Let Common see Solvers headers for SharedFrameBuffer
 target_include_directories(Common PUBLIC "${SOLVERS_ROOT}")
 
@@ -579,11 +579,11 @@ if (EGO_BUILD_TESTS)
     add_executable(DvrReplay Tools/DvrReplay/main.cpp)
     target_link_libraries(DvrReplay PRIVATE DVRCore Solvers Common)
 
-    # 同一段 .dvrbin 灌进 TSACoreRaw（反编译 TSACore），逐帧打印 TSA_Rpt* 输出
+    # 同一段 .dvrbin 灌进 TsaCore（反编译 TSACore），逐帧打印 TSA_Rpt* 输出
     add_executable(TsaRawReplay Tools/TsaRawReplay/main.cpp Tools/TsaRawReplay/StateTrace.cpp)
     target_link_libraries(TsaRawReplay PRIVATE DVRCore Solvers Common)
     target_compile_definitions(TsaRawReplay PRIVATE TSA_RAW_ROOT="${TSACORE_RAW_ROOT}")
-    if (EGO_TSA_RAW_EXTRA_FLAGS MATCHES "fprofile-instr-generate")
+    if (EGO_TSACORE_EXTRA_FLAGS MATCHES "fprofile-instr-generate")
         target_link_options(TsaRawReplay PRIVATE -fprofile-instr-generate)
     endif()
 

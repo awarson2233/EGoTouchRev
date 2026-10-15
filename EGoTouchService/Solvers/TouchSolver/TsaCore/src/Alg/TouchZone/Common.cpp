@@ -142,11 +142,10 @@ uint16_t ZValue(int32_t sigSum) {
 }
 
 // TZ_UpdateTouchFlag @ 0x6ba7fe99
-// 区域标志翻译成触点标志；几类异常形状还记到表头 stateFlags 与 TsaStatic::specialControlFlags。
+// 区域标志翻译成触点标志；几类异常形状还记到表头 stateFlags。
 void UpdateTouchFlag(const TouchZoneUnit& z, uint8_t idx) {
     TouchTable& touches = Touches();
     TouchUnit& t = touches.unit[idx];
-    uint32_t& special = Static().specialControlFlags;
     const uint32_t f = z.flags;
     if ((f & kZoneOnBorder) == 0) t.volatileFlags |= 4;
     if ((f & kZoneNearBorder) == 0) t.volatileFlags2 |= 0x1000;
@@ -158,19 +157,15 @@ void UpdateTouchFlag(const TouchZoneUnit& z, uint8_t idx) {
     if ((f & kZoneIsolated) != 0) {
         t.volatileFlags |= 0x2000000;
         touches.stateFlags |= 0x10;
-        special |= 0x800;
     }
     if ((f & kZoneCmfWeak) != 0) {
         t.volatileFlags |= 0x1000000;
-        special |= 0x20;
     }
     if ((f & kZoneCmfSideNoise) != 0) {
         t.volatileFlags |= 0x20000000;
-        special |= 0x20;
     }
     if (z.shape == kShapeLargeObject) {
         t.volatileFlags |= 0x2000;
-        special |= 0x800;
     }
     if ((f & kZoneEdgeMerged) != 0) t.volatileFlags2 |= 0x2000;
     if ((f & kZoneGripSeparated) != 0) t.persistFlags4 |= 1;

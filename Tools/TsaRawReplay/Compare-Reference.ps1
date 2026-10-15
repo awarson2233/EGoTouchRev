@@ -169,7 +169,7 @@ try {
     if ($Coverage) {
         $covDir = Join-Path $root 'build/tsa-coverage'
         Invoke-Native 'configure coverage build' {
-            cmake --preset $Preset -B $covDir '-DEGO_TSA_RAW_EXTRA_FLAGS=-fprofile-instr-generate -fcoverage-mapping'
+            cmake --preset $Preset -B $covDir '-DEGO_TSACORE_EXTRA_FLAGS=-fprofile-instr-generate -fcoverage-mapping'
         }
         Invoke-Native 'coverage build' { cmake --build $covDir --target TsaRawReplay }
         $newExe = Join-Path $covDir 'TsaRawReplay.exe'

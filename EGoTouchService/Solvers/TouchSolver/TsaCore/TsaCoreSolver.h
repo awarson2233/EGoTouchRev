@@ -1,8 +1,8 @@
 #pragma once
 // ══════════════════════════════════════════════════════════════════════
-// TsaCoreSolver — 用反编译的 TSACore 手指管线（TSACoreRaw）解算触点的外观类。
+// TsaCoreSolver — 用反编译的 TSACore 手指管线（TsaCore）解算触点的外观类。
 //
-//   SPI master 帧 ─► HimaxAfeAdapter ─► TsaHostShim ─► TSACoreRaw
+//   SPI master 帧 ─► HimaxAfeAdapter ─► TsaHostShim ─► TsaCore
 //   SPI slave 帧  ─►   （笔帧状态）      ▲   │              │
 //   frame.stylus.output（StylusSolver）──┘   │              │
 //                         ▲            TsaAfeControl        │

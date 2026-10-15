@@ -62,7 +62,7 @@ void Free(void* p) {
 extern "C" {
 
 // 宿主（回放）：镜像在前，堆缓冲按分配次序。
-size_t TSACoreRaw_StateBlocks(TSACoreRaw_StateBlock* out, size_t capacity) {
+size_t TsaCore_StateBlocks(TsaCore_StateBlock* out, size_t capacity) {
     namespace M = Solvers::Tsa::Core::Mem;
     namespace I = Solvers::Tsa::Core::Image;
     if (M::g_overflowed) return static_cast<size_t>(-1);

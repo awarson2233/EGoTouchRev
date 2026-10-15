@@ -244,7 +244,6 @@ void PreProcess() {
     s.afeIdle = Afe::IsInIdle() ? 1 : 0;
     s.afeSideIdle = Afe::IsInSideIdle();
     s.prevNoisyBlReset = s.noisyBlReset;
-    s.specialControlFlags = 0;
     s.signalReverted = s.field3F1;
     if (!Afe::IsProximityScreenOff()) {
         s.proxScreenOffTime = kNone;

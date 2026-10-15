@@ -166,8 +166,7 @@ struct TsaStatic {
     uint8_t reserved09C[0x4];
     uint8_t fullIncellHighPeakFrames;  // 最大峰超过上述门限的连续帧数（到 6 为止）
     uint8_t resetHoldFrames;  // 系统复位请求之后，复位位再保持的帧数
-    uint8_t reserved0A2[0x2];
-    uint32_t specialControlFlags;
+    uint8_t reserved0A2[0x6];
     uint8_t field0A8;
     uint8_t safeDif;  // TSAStatic_SafeDiffCheck：Dif 可信
     uint8_t unsafeDif;  // Dif 可疑（异常形状的触点多）
@@ -358,7 +357,6 @@ static_assert(offsetof(TsaStatic, markedLiftOffTime) == 0x090);
 static_assert(offsetof(TsaStatic, markedLiftOffPos) == 0x098);
 static_assert(offsetof(TsaStatic, fullIncellHighPeakFrames) == 0x0A0);
 static_assert(offsetof(TsaStatic, resetHoldFrames) == 0x0A1);
-static_assert(offsetof(TsaStatic, specialControlFlags) == 0x0A4);
 static_assert(offsetof(TsaStatic, field0A8) == 0x0A8);
 static_assert(offsetof(TsaStatic, safeDif) == 0x0A9);
 static_assert(offsetof(TsaStatic, unsafeDif) == 0x0AA);

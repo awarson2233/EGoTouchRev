@@ -21,7 +21,6 @@ namespace {
 constexpr uint64_t kNoiseSettleLimit = 0x52;      // noiseSettleCount 超过它时噪声等级清零，计数封顶于它加一
 constexpr uint16_t kDebounceNoException = 300;    // 回到无异常要连续检出的帧数
 constexpr uint16_t kDebounceException = 10;       // 进入其它异常要连续检出的帧数
-constexpr uint32_t kChangedControlFlag = 0x80;    // 全局异常字变化时置于 TsaStatic::specialControlFlags
 constexpr uint8_t kZTholdGlove = 0x04;            // DynamicPrmt::zTholdFlags 的手套位
 
 bool IsFullIncell() { return PrmtFlash().sensorArchitecture == kFullIncell; }
@@ -168,8 +167,7 @@ void ProcessTouchZone(TouchZoneUnit& zone) {
 
 // Exception_Process @ 0x6ba58f25
 // 上一帧的噪声异常在手动跳频且未完成时保留，否则清掉；上一帧水下而本帧检出信号反向的水下时也清掉。
-// 然后更新本帧全局异常，据此设噪声等级、field110 与手套参数，清空本帧检出的异常；全局异常变化时
-// 置 specialControlFlags 的 kChangedControlFlag。
+// 然后更新本帧全局异常，据此设噪声等级、field110 与手套参数，清空本帧检出的异常。
 void Process() {
     ExceptionState& st = State();
     PrevTouchTable& prev = PrevTouches();
@@ -198,7 +196,6 @@ void Process() {
     }
     UpdateGloveParams(exception);
     st.detected = 0;
-    if (Touches().exceptionFlags != PrevTouches().exceptionFlags) Static().specialControlFlags |= kChangedControlFlag;
 }
 
 }  // namespace Solvers::Tsa::Core::Exception

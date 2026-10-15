@@ -29,7 +29,6 @@ constexpr uint8_t kZTholdGlove = 0x4;
 constexpr uint8_t kZTholdStylus = 0x8;
 constexpr uint8_t kStylusFirst = 0x8;       // DynamicPrmt::touchModeFlags
 constexpr uint32_t kFeatStylus = 0x1000;    // TsaStatic::featureFlags
-constexpr uint32_t kSpecialMultiStylus = 0x200;  // TsaStatic::specialControlFlags：同时有多支笔
 
 constexpr uint32_t kSuppressFinger = 0x1;   // TouchUnit::suppressFlags
 constexpr uint32_t kSuppressByMode = 0x2;   // 当前模式下不报
@@ -178,7 +177,6 @@ uint8_t StylusFilterProcess() {
         }
     }
     if (n <= 1) return n;
-    Static().specialControlFlags |= kSpecialMultiStylus;
     if (!topFound) keep = farthest;
     for (uint8_t i = 0; i < t.count; ++i) {
         if (i == keep) continue;

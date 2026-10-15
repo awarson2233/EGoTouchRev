@@ -316,7 +316,6 @@ void SetVolatileFlag(uint8_t curIdx, uint8_t prevIdx) {
         const PeakEntry& peak = PeakOf(cur);
         if (peak.z8 < peak.sig / 32) {
             cur.volatileFlags |= 0x80000000;
-            stat.specialControlFlags |= 0x40;
         }
     }
 
@@ -331,7 +330,6 @@ void SetVolatileFlag(uint8_t curIdx, uint8_t prevIdx) {
     if ((prev.persistFlags & 0x4000) != 0 || (cur.volatileFlags & 0x800000) != 0) {
         if (Baseline::CheckAbnormalTouch(curIdx)) cur.volatileFlags |= 0x400000;
     }
-    if (prev.age == 0 && cur.exceptionType != 0) stat.specialControlFlags |= 0x80;
     GetPeakSumPosSig(curIdx, prevIdx);
     UpdateHandEnum(curIdx, prevIdx);
 }

@@ -22,7 +22,6 @@ constexpr int kDimRow = 1;                       // 按行（沿 Dim1）
 constexpr int kDimCol = 2;                       // 按列（沿 Dim2）
 constexpr uint32_t kMethod2d = 1;
 constexpr uint32_t kSmartCoverFollowNormal = 2;  // cmfMethodSmartCover 为 2 时沿用常态的方法
-constexpr uint32_t kSpecialCmfOverNoise = 0x8;   // TsaStatic::specialControlFlags：某条线的公共噪声超过噪声门限
 constexpr size_t kAftCmfDifBytes = 0x2648;
 constexpr int16_t kToeEdgeThold = 200;           // ToE 特殊门限时两端各两条线的门限
 constexpr int16_t kGameThold = 0x4b0;
@@ -216,7 +215,6 @@ int ProcessDimUnitOnBuf(int16_t* dst, const int16_t* src, int dim, uint8_t line,
 int16_t ProcessDimUnit(int dim, uint8_t line, int16_t thold, int16_t grad, uint8_t cols, uint8_t rows) {
     int16_t* dif = Buffers().dif;
     const auto noise = static_cast<int16_t>(ProcessDimUnitOnBuf(dif, dif, dim, line, thold, grad, cols, rows));
-    if (Prpt().noiseThold < noise) Static().specialControlFlags |= kSpecialCmfOverNoise;
     return noise;
 }
 
