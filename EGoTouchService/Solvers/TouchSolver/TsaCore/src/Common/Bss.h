@@ -77,8 +77,7 @@ struct alignas(64) BssLayout {
     std::byte pkAccessedFlagSubTZ[0x8];  // g_pkAccessedFlagSubTZ
     std::byte tzAccess[0x10];  // g_tzAccess
     std::byte subTZAccess[0x10];  // g_subTZAccess
-    std::byte tzBufferBin[0x19000];  // g_tzBufferBin
-    std::byte tzBufferHighRes[0x32000];  // g_tzBufferHighRes
+    std::byte reserved049980[0x4b000];
     std::byte afu[0x50];  // g_afu
     std::byte pkBeforeSDCAccessedFlag[0x4];  // g_pkBeforeSDCAccessedFlag
     std::byte pkAccessedFlag[0x2c];  // g_pkAccessedFlag
@@ -178,8 +177,6 @@ static_assert(offsetof(BssLayout, subTZ) == 0x049680);
 static_assert(offsetof(BssLayout, pkAccessedFlagSubTZ) == 0x049958);
 static_assert(offsetof(BssLayout, tzAccess) == 0x049960);
 static_assert(offsetof(BssLayout, subTZAccess) == 0x049970);
-static_assert(offsetof(BssLayout, tzBufferBin) == 0x049980);
-static_assert(offsetof(BssLayout, tzBufferHighRes) == 0x062980);
 static_assert(offsetof(BssLayout, afu) == 0x094980);
 static_assert(offsetof(BssLayout, pkBeforeSDCAccessedFlag) == 0x0949d0);
 static_assert(offsetof(BssLayout, pkAccessedFlag) == 0x0949d4);

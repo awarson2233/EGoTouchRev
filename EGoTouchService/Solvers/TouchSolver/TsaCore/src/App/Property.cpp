@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
@@ -42,36 +43,63 @@ using Blocks = std::array<BlockAcc, kBlockNum>;
 
 uint8_t*& BlockIdx() { return Slot<uint8_t*>(Bss().blockIdx); }  // g_tsaBlockIdx
 
+/// 同一行里属于同一区块的一段连续格 [begin, end)（格下标）。由 Init 按 g_tsaBlockIdx 切出，网格尺寸不变就不变。
+struct Run {
+    uint16_t begin;
+    uint16_t end;
+    uint8_t row;
+    uint8_t block;
+};
+std::vector<Run> g_runs;
+
+/// 第一次出现 v 的格，[begin, end) 里一定有。
+int FirstIndexOf(const int16_t* p, int begin, int v) {
+    int i = begin;
+    while (p[i] != v) ++i;
+    return i;
+}
+
 // TSA_GetDifPrptCommon @ 0x6baa1035
-// |Dif| 不低于噪声门限的格按正负累计和与个数。
+// |Dif| 不低于噪声门限的格按正负累计和与个数。原代码逐格更新所在区块的累计量；这里按区块的连续段累计：
+// 段内的和与计数可向量化，极值先求段内最值、比当前值更优时再找它第一次出现的格，结果与逐格更新相同
+// （极值都取扫描顺序第一次出现的格）。
 void Accumulate(Blocks& blocks) {
-    const FlashPrmt& fl = PrmtFlash();
-    const int16_t thold = Prpt().noiseThold;
+    const int thold = Prpt().noiseThold;
     const int16_t* dif = Buffers().dif;
-    const uint8_t* idx = BlockIdx();
-    for (uint8_t r = 0; r < fl.dim2Len; ++r) {
-        for (uint8_t c = 0; c < fl.dim1Len; ++c, ++dif, ++idx) {
-            const int16_t v = *dif;
-            BlockAcc& b = blocks[*idx];
-            if (b.maxSig < v) {
-                b.maxSig = v;
-                b.maxDim1 = c;
-                b.maxDim2 = r;
-            }
-            if (v < b.minSig) {
-                b.minSig = v;
-                b.minDim1 = c;
-                b.minDim2 = r;
-            }
-            if (thold <= v) {
-                b.posSum += v;
-                ++b.posCount;
-            } else if (v <= -thold) {
-                b.negSum += v;
-                ++b.negCount;
-            }
-            if (kBigSig < v || v < -kBigSig) ++b.bigCount;
+    const int cols = PrmtFlash().dim1Len;
+    for (const Run& run : g_runs) {
+        int mx = INT16_MIN;
+        int mn = INT16_MAX;
+        int posSum = 0, negSum = 0, posCount = 0, negCount = 0, bigCount = 0;
+        for (int i = run.begin; i < run.end; ++i) {
+            const int v = dif[i];
+            mx = std::max(mx, v);
+            mn = std::min(mn, v);
+            const bool pos = thold <= v;
+            const bool neg = !pos && v <= -thold;
+            posSum += pos ? v : 0;
+            posCount += pos ? 1 : 0;
+            negSum += neg ? v : 0;
+            negCount += neg ? 1 : 0;
+            bigCount += kBigSig < v || v < -kBigSig ? 1 : 0;
         }
+        BlockAcc& b = blocks[run.block];
+        const int rowStart = run.row * cols;
+        if (b.maxSig < mx) {
+            b.maxSig = static_cast<int16_t>(mx);
+            b.maxDim1 = static_cast<uint8_t>(FirstIndexOf(dif, run.begin, mx) - rowStart);
+            b.maxDim2 = run.row;
+        }
+        if (mn < b.minSig) {
+            b.minSig = static_cast<int16_t>(mn);
+            b.minDim1 = static_cast<uint8_t>(FirstIndexOf(dif, run.begin, mn) - rowStart);
+            b.minDim2 = run.row;
+        }
+        b.posSum += posSum;
+        b.negSum += negSum;
+        b.posCount = static_cast<int16_t>(b.posCount + posCount);
+        b.negCount = static_cast<int16_t>(b.negCount + negCount);
+        b.bigCount = static_cast<uint16_t>(b.bigCount + bigCount);
     }
 }
 
@@ -120,52 +148,65 @@ void Combine(DifPrpt& out, const Blocks& blocks, uint32_t mask) {
     std::memset(reinterpret_cast<uint8_t*>(&out) + sizeof(DifPrpt), 0, 4);
 }
 
+/// 第一次出现 v 的格，[begin, n) 里一定有。
+int FirstIndexOf(const uint16_t* p, int begin, uint16_t v) {
+    int i = begin;
+    while (p[i] != v) ++i;
+    return i;
+}
+
 // TSA_GetRawPrpt @ 0x6baa0839
-// 整屏 raw 的极值与所在格（同一格只算一次，先比上界）；内圈（去掉最外一圈）的极值与 raw / 基线平均。
+// 整屏 raw 的极值与所在格；内圈（去掉最外一圈）的极值与 raw / 基线平均。
+// 原代码逐格「先比上界（初值 0），不是新高时才比下界（初值 0xffff）」，都是严格比较。新高与新低只可能在下界
+// 第一次更新之前同时成立：那之后下界不高于上界，新高不会低于下界。所以上界是第一次出现的最大值；下界是
+// 从第一个不是新高的格 p 起第一次出现的最小值。
 void GetRawPrpt(const uint16_t* raw, const uint16_t* bl) {
     const FlashPrmt& fl = PrmtFlash();
-    const uint8_t cols = fl.dim1Len;
-    const uint8_t rows = fl.dim2Len;
-    uint16_t hi = 0, lo = 0xffff, innerHi = 0, innerLo = 0xffff;
-    uint8_t hiDim1 = 0, hiDim2 = 0, loDim1 = 0, loDim2 = 0;
-    uint32_t rawSum = 0, blSum = 0;
-    int i = 0;
-    for (uint8_t r = 0; r < rows; ++r) {
-        const bool edgeRow = r == 0 || r == rows - 1u;
-        for (uint8_t c = 0; c < cols; ++c, ++i) {
-            const uint16_t v = raw[i];
-            if (hi < v) {
-                hi = v;
-                hiDim1 = c;
-                hiDim2 = r;
-            } else if (v < lo) {
-                lo = v;
-                loDim1 = c;
-                loDim2 = r;
-            }
-            if (!edgeRow && c != 0 && c != cols - 1u) {
-                rawSum += v;
-                blSum += bl[i];
-                innerHi = std::max(innerHi, v);
-                innerLo = std::min(innerLo, v);
-            }
-        }
-    }
-    const uint32_t n = (fl.dim1Len - 2u) * (fl.dim2Len - 2u);
+    const int cols = fl.dim1Len;
+    const int rows = fl.dim2Len;
+    const int n = cols * rows;
     TsaPrpt& p = Prpt();
-    p.blAvg = static_cast<uint16_t>(blSum / n);
+    int first = 0;
+    for (uint16_t run = 0; first < n && run < raw[first]; ++first) run = raw[first];
+    uint16_t hi = 0;
+    uint16_t lo = 0xffff;
+    for (int i = 0; i < n; ++i) hi = std::max(hi, raw[i]);
+    for (int i = first; i < n; ++i) lo = std::min(lo, raw[i]);
     p.boundaryPositive = hi;
     p.boundaryNegative = lo;
+    p.boundaryPositiveDim1 = 0;
+    p.boundaryPositiveDim2 = 0;
+    p.boundaryNegativeDim1 = 0;
+    p.boundaryNegativeDim2 = 0;
+    if (hi != 0) {
+        const int i = FirstIndexOf(raw, 0, hi);
+        p.boundaryPositiveDim1 = static_cast<uint8_t>(i % cols);
+        p.boundaryPositiveDim2 = static_cast<uint8_t>(i / cols);
+    }
+    if (lo != 0xffff) {
+        const int i = FirstIndexOf(raw, first, lo);
+        p.boundaryNegativeDim1 = static_cast<uint8_t>(i % cols);
+        p.boundaryNegativeDim2 = static_cast<uint8_t>(i / cols);
+    }
+    uint16_t innerHi = 0, innerLo = 0xffff;
+    uint32_t rawSum = 0, blSum = 0;
+    for (int r = 1; r < rows - 1; ++r) {
+        for (int i = r * cols + 1; i < r * cols + cols - 1; ++i) {
+            rawSum += raw[i];
+            blSum += bl[i];
+            innerHi = std::max(innerHi, raw[i]);
+            innerLo = std::min(innerLo, raw[i]);
+        }
+    }
+    const uint32_t inner = (fl.dim1Len - 2u) * (fl.dim2Len - 2u);
+    p.blAvg = static_cast<uint16_t>(blSum / inner);
     p.rawMax = innerHi;
     p.rawMin = innerLo;
-    p.rawAvg = static_cast<uint16_t>(rawSum / n);
-    p.boundaryPositiveDim1 = hiDim1;
-    p.boundaryPositiveDim2 = hiDim2;
-    p.boundaryNegativeDim1 = loDim1;
-    p.boundaryNegativeDim2 = loDim2;
+    p.rawAvg = static_cast<uint16_t>(rawSum / inner);
 }
 
 // TSA_GetDifPrpt @ 0x6baa0f9a
+// 原代码另把 dif 拷一份快照、再组合一组边缘统计（difSnapshot / difEdge），没有模块读，不做。
 void GetDifPrpt() {
     Blocks blocks{};
     Accumulate(blocks);
@@ -177,8 +218,6 @@ void GetDifPrpt() {
     if (wide) all = (s.afeStatus & kAfeRawUnstable) != 0 ? Mask({kInner, kSecondCols, kBottomCorners, kBottomRow}) : 0x7f & ~Mask({kOuterCols});
     Combine(p.dif, blocks, all);
     Combine(p.difInner, blocks, Mask({kInner}));
-    std::memcpy(&p.difSnapshot, &p.dif, 0x20);
-    Combine(p.difEdge, blocks, wide ? Mask({kOuterCols, kSecondCols, kTopCorners, kBottomCorners}) : Mask({kOuterCols}));
 }
 
 }  // namespace
@@ -216,6 +255,15 @@ void Init() {
         at(c) = kTopRow;
         at(c + (rows - 1) * cols) = kBottomRow;
     }
+    g_runs.clear();
+    for (uint32_t r = 0; r < rows; ++r) {
+        for (uint32_t c = 0; c < cols;) {
+            const uint32_t begin = r * cols + c;
+            const uint8_t block = idx[begin];
+            while (c < cols && idx[r * cols + c] == block) ++c;
+            g_runs.push_back({static_cast<uint16_t>(begin), static_cast<uint16_t>(r * cols + c), static_cast<uint8_t>(r), block});
+        }
+    }
 }
 
 // TSA_GetPrpt @ 0x6baa0db6
@@ -225,38 +273,25 @@ void Get(const uint16_t* raw, const uint16_t* bl) {
 }
 
 // TSAPrpt_GetDifPreCMFPrpt @ 0x6baa13be
-// 极值只在正向极值未更新时才比负向；超门限按 |Dif| ≥ noiseThold 计。
+// 超门限按 |Dif| ≥ noiseThold 计。原代码的极值初值都是 0，「先比上界、不是新高才比下界」：上界不低于 0、
+// 下界不高于 0，两者不会同时成立，所以就是 max(0, 最大值) 与 min(0, 最小值)。极值本身与所在格没有模块读，
+// 只留最大绝对值。
 void GetDifPreCmf() {
     const FlashPrmt& fl = PrmtFlash();
-    const int16_t thold = Prpt().noiseThold;
+    const int thold = Prpt().noiseThold;
     const int16_t* dif = Buffers().dif;
-    int16_t over = 0;
-    int16_t hi = 0, lo = 0;
-    uint8_t hiDim1 = 0, hiDim2 = 0, loDim1 = 0, loDim2 = 0;
-    for (uint8_t r = 0; r < fl.dim2Len; ++r) {
-        for (uint8_t c = 0; c < fl.dim1Len; ++c, ++dif) {
-            const int16_t v = *dif;
-            if (thold <= v || v <= -thold) ++over;
-            if (hi < v) {
-                hi = v;
-                hiDim1 = c;
-                hiDim2 = r;
-            } else if (v < lo) {
-                lo = v;
-                loDim1 = c;
-                loDim2 = r;
-            }
-        }
+    const int n = fl.dim1Len * fl.dim2Len;
+    int over = 0;
+    int hi = 0, lo = 0;
+    for (int i = 0; i < n; ++i) {
+        const int v = dif[i];
+        over += thold <= v || v <= -thold ? 1 : 0;
+        hi = std::max(hi, v);
+        lo = std::min(lo, v);
     }
     TsaPrpt& p = Prpt();
     p.preCmfOverCount = static_cast<uint16_t>(over);
-    p.preCmfMaxAbsDif = static_cast<int16_t>(std::max<int>(hi, -lo));
-    p.preCmfMaxDif = hi;
-    p.preCmfMaxDim1 = hiDim1;
-    p.preCmfMaxDim2 = hiDim2;
-    p.preCmfMinDif = lo;
-    p.preCmfMinDim1 = loDim1;
-    p.preCmfMinDim2 = loDim2;
+    p.preCmfMaxAbsDif = static_cast<int16_t>(std::max(hi, -lo));
 }
 
 // TSA_GetMinSigPrpt @ 0x6baa1f03

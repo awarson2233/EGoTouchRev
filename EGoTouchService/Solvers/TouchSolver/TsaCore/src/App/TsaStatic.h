@@ -31,8 +31,7 @@ static_assert(offsetof(ExceptionState, field01E) == 0x01E);
 
 /// HardwareAnalyzer 每帧对 raw2raw Dif（本帧 raw - 上一帧 raw）的统计，按扫描线分组。
 struct Raw2RawPrpt {
-    int16_t maxDif;
-    int16_t minDif;
+    uint8_t reserved000[0x4];
     uint16_t overNoiseCount;  // |Dif| 超过噪声门限的格数
     uint16_t overBigNoiseCount;  // 再超过 3 倍 peakFilterReferenceThreshold 的格数
     uint16_t overNoiseAfterCmf;  // CMF 后 |Dif| 仍超过噪声门限的格数（只在 sensorArchitecture 2 下统计）
@@ -45,8 +44,6 @@ struct Raw2RawPrpt {
     uint8_t reserved019[0x3];
 };
 static_assert(sizeof(Raw2RawPrpt) == 0x01C);
-static_assert(offsetof(Raw2RawPrpt, maxDif) == 0x000);
-static_assert(offsetof(Raw2RawPrpt, minDif) == 0x002);
 static_assert(offsetof(Raw2RawPrpt, overNoiseCount) == 0x004);
 static_assert(offsetof(Raw2RawPrpt, overBigNoiseCount) == 0x006);
 static_assert(offsetof(Raw2RawPrpt, overNoiseAfterCmf) == 0x008);
@@ -69,31 +66,6 @@ static_assert(offsetof(BrokenSensorZ8, dim2) == 0x001);
 static_assert(offsetof(BrokenSensorZ8, timerMs) == 0x008);
 
 /// TsaPrpt 里一个方向的线统计极值（Self_GetPropertyDim），下标相对该方向的第一条线。
-struct SelfPrpt {
-    int32_t maxSum;
-    uint8_t maxSumIdx;
-    uint8_t reserved005[0x3];
-    int32_t minSum;
-    uint8_t minSumIdx;
-    uint8_t reserved00D[0x3];
-    int32_t maxPosSum;
-    uint8_t maxPosSumIdx;
-    uint8_t reserved015[0x3];
-    int32_t minNegSum;
-    uint8_t minNegSumIdx;
-    uint8_t reserved01D[0x3];
-    int32_t strongSumTotal;  // 各线 strongSum 之和
-};
-static_assert(sizeof(SelfPrpt) == 0x024);
-static_assert(offsetof(SelfPrpt, maxSum) == 0x000);
-static_assert(offsetof(SelfPrpt, maxSumIdx) == 0x004);
-static_assert(offsetof(SelfPrpt, minSum) == 0x008);
-static_assert(offsetof(SelfPrpt, minSumIdx) == 0x00C);
-static_assert(offsetof(SelfPrpt, maxPosSum) == 0x010);
-static_assert(offsetof(SelfPrpt, maxPosSumIdx) == 0x014);
-static_assert(offsetof(SelfPrpt, minNegSum) == 0x018);
-static_assert(offsetof(SelfPrpt, minNegSumIdx) == 0x01C);
-static_assert(offsetof(SelfPrpt, strongSumTotal) == 0x020);
 
 /// 一组格上 Dif 的统计（TSA_CombineBlock）：极值与所在格，以及 |Dif| 不低于噪声门限的正负格的和与个数。
 struct DifPrpt {
@@ -509,18 +481,10 @@ struct TsaPrpt {
     uint8_t reserved0DC[0x4];
     DifPrpt difInner;  // 内部（不含最外两列与上下两行）
     uint8_t reserved0FC[0x4];
-    DifPrpt difSnapshot;  // dif 刚统计出来时的副本（之后 dif 会被各模块改写）
-    uint8_t reserved11C[0x24];
-    DifPrpt difEdge;  // 最外一列（featureFlags 0x8000 时加上其余边缘）
-    uint8_t reserved15C[0x4];
+    uint8_t reserved100[0x60];
     int16_t preCmfMaxAbsDif;  // TSAPrpt_GetDifPreCMFPrpt：CMF 前 Dif 的最大绝对值
     uint16_t preCmfOverCount;  // CMF 前 |Dif| 不低于门限的格数
-    int16_t preCmfMaxDif;
-    int16_t preCmfMinDif;
-    uint8_t preCmfMaxDim1;
-    uint8_t preCmfMaxDim2;
-    uint8_t preCmfMinDim1;
-    uint8_t preCmfMinDim2;
+    uint8_t reserved164[0x8];
     DifPrpt msDif;  // 互容主流程统计完属性时 dif / difCore / difInner 的副本，后续模块改写前的值
     int16_t msUnderWaterCells;  // underWaterCells 的同期副本
     uint8_t reserved18A[0x2];
@@ -528,8 +492,7 @@ struct TsaPrpt {
     uint8_t reserved1A8[0x4];
     DifPrpt msDifInner;
     uint8_t reserved1C8[0x64];
-    SelfPrpt selfCols;  // 各列的线统计极值
-    SelfPrpt selfRows;  // 各行的线统计极值
+    uint8_t reserved22C[0x48];
     uint8_t reserved274[0x4];
     uint32_t blStage;  // BLSM 阶段
     uint32_t prevBlStage;
@@ -596,22 +559,15 @@ static_assert(offsetof(TsaPrpt, underWaterCells) == 0x0BC);
 static_assert(offsetof(TsaPrpt, underWaterNegCells) == 0x0BE);
 static_assert(offsetof(TsaPrpt, difCore) == 0x0C0);
 static_assert(offsetof(TsaPrpt, difInner) == 0x0E0);
-static_assert(offsetof(TsaPrpt, difSnapshot) == 0x100);
-static_assert(offsetof(TsaPrpt, difEdge) == 0x140);
+static_assert(offsetof(TsaPrpt, reserved100) == 0x100);
 static_assert(offsetof(TsaPrpt, preCmfMaxAbsDif) == 0x160);
 static_assert(offsetof(TsaPrpt, preCmfOverCount) == 0x162);
-static_assert(offsetof(TsaPrpt, preCmfMaxDif) == 0x164);
-static_assert(offsetof(TsaPrpt, preCmfMinDif) == 0x166);
-static_assert(offsetof(TsaPrpt, preCmfMaxDim1) == 0x168);
-static_assert(offsetof(TsaPrpt, preCmfMaxDim2) == 0x169);
-static_assert(offsetof(TsaPrpt, preCmfMinDim1) == 0x16A);
-static_assert(offsetof(TsaPrpt, preCmfMinDim2) == 0x16B);
+static_assert(offsetof(TsaPrpt, reserved164) == 0x164);
 static_assert(offsetof(TsaPrpt, msDif) == 0x16C);
 static_assert(offsetof(TsaPrpt, msUnderWaterCells) == 0x188);
 static_assert(offsetof(TsaPrpt, msDifCore) == 0x18C);
 static_assert(offsetof(TsaPrpt, msDifInner) == 0x1AC);
-static_assert(offsetof(TsaPrpt, selfCols) == 0x22C);
-static_assert(offsetof(TsaPrpt, selfRows) == 0x250);
+static_assert(offsetof(TsaPrpt, reserved22C) == 0x22C);
 static_assert(offsetof(TsaPrpt, blStage) == 0x278);
 static_assert(offsetof(TsaPrpt, prevBlStage) == 0x27C);
 static_assert(offsetof(TsaPrpt, blPropertyFlags) == 0x280);

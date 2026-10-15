@@ -15,8 +15,7 @@ inline constexpr int kMaxLineNum = 160;  // 列数 + 行数的上限
 /// g_tsaBufSelf / g_tsaBufSelfForBlRst。强信号指 Dif 不小于 0x4b 或小于 -0x4a；inner 不含线的两端格。
 struct SelfData {
     int32_t sum[kMaxLineNum];                // 全部格的 Dif 之和
-    int32_t negSum[kMaxLineNum];             // 负 Dif 之和
-    int32_t posSum[kMaxLineNum];             // 非负 Dif 之和
+    int32_t reserved280[2 * kMaxLineNum];
     int16_t reserved780[kMaxLineNum];
     int16_t maxAbs[kMaxLineNum];             // |Dif| 的最大值
     int32_t strongSum[kMaxLineNum];          // 强信号之和（正负相抵）

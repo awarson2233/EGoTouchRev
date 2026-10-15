@@ -332,14 +332,15 @@ void Reset() {
 }
 
 // HardwareAnalyzer_GetRaw2RawPrpt @ 0x6baf10dc
-// raw2raw Dif（raw - 上一帧 raw）按扫描线分组（FlashPrmt::field62C 是各线所属的组）统计极值与超门限的格数。
+// raw2raw Dif（raw - 上一帧 raw）按扫描线分组（FlashPrmt::field62C 是各线所属的组）统计超门限的格数。
+// 原代码还统计 raw2raw Dif 的极值，没有模块读，不算。
 void GetRaw2RawPrpt() {
     const FlashPrmt& fl = PrmtFlash();
     const FlashConstPrmt& fc = PrmtFlashConst();
     TsaPrpt& prpt = Prpt();
-    const int16_t noise = prpt.noiseThold;
-    const int16_t ref = fl.peakFilterReferenceThreshold;
-    const int16_t finger = fl.fingerThold;
+    const int noise = prpt.noiseThold;
+    const int finger = fl.fingerThold;
+    const int ref = fl.peakFilterReferenceThreshold;
     const auto bigNoise = static_cast<int16_t>(ref * 3);
     const uint8_t lineLen = fc.field024;
     const uint8_t lineNum = fc.field025;
@@ -348,58 +349,57 @@ void GetRaw2RawPrpt() {
     RfNoise::SavePrevRaw2RawDif();
     TsaBufferTable& buf = Buffers();
     Baseline::CalcDiffCommon(buf.raw2RawDif, buf.raw, buf.preHwRaw);
-    Cmf::ProcessDimCommonOnBuf(buf.raw2RawDifAftCmf, buf.raw2RawDif, fl.dim1Axis == 0 ? 2 : 1, 0x7fff,
-                               PrmtDynamic().cmfThold.grad, fl.dim1Len, fl.dim2Len);
-    Raw2RawPrpt r{};
-    r.maxDif = INT16_MIN;
-    r.minDif = INT16_MAX;
+    // CMF 之后的 raw2raw Dif 只有 GetNumOverNoiseAfterCmf 在 SOF（方法 1）或 Hybrid Incell 下读，其余情况不算。
+    if (Cmf::GetMethod() == 1 || fl.sensorArchitecture == 2) {
+        Cmf::ProcessDimCommonOnBuf(buf.raw2RawDifAftCmf, buf.raw2RawDif, fl.dim1Axis == 0 ? 2 : 1, 0x7fff,
+                                   PrmtDynamic().cmfThold.grad, fl.dim1Len, fl.dim2Len);
+    }
+    // 各线按 field62C 归组，统计每组超噪声的格数；组号不小于 groupNum 的线不计。
+    std::array<int, 256> over{};
+    std::array<int, 256> lines{};
+    int overLti = 0;
+    int overHti = 0;
+    int overBigNoise = 0;
+    int posSum = 0;
+    int negSum = 0;
+    const int16_t* dif = buf.raw2RawDif;
+    for (uint32_t line = 0; line < lineNum; ++line) {
+        const uint8_t g = fl.field62C[line];
+        if (g >= groupNum) continue;
+        ++lines[g];
+        const uint32_t first = fl.dim1Axis == 0 ? line : line * fl.dim1Len;
+        const uint32_t step = fl.dim1Axis == 0 ? fl.dim1Len : 1;
+        int n = 0;
+        for (uint32_t k = 0; k < lineLen; ++k) {
+            const int v = dif[first + k * step];
+            const int a = std::abs(v);
+            const bool o = noise < a;
+            n += o ? 1 : 0;
+            posSum += o && 0 < v ? v : 0;
+            negSum += o && v < 1 ? v : 0;
+            overLti += o && finger < a ? 1 : 0;
+            overHti += o && finger < a && ref < a ? 1 : 0;
+            overBigNoise += o && finger < a && ref < a && bigNoise < a ? 1 : 0;
+        }
+        over[g] += n;
+    }
     int16_t total = 0;
     uint8_t maxPercent = 0;
     for (uint32_t g = 0; g < groupNum; ++g) {
-        int over = 0;
-        int lines = 0;
-        for (uint32_t line = 0; line < lineNum; ++line) {
-            if (fl.field62C[line] != g) continue;
-            ++lines;
-            for (uint32_t k = 0; k < lineLen; ++k) {
-                const uint32_t i = fl.dim1Axis == 0 ? line + k * fl.dim1Len : k + line * fl.dim1Len;
-                const int16_t v = buf.raw2RawDif[i];
-                if (r.maxDif < v) r.maxDif = v;
-                if (v < r.minDif) r.minDif = v;
-                const int a = std::abs(v);
-                if (a <= noise) continue;
-                ++over;
-                if (v < 1) {
-                    r.negSum += v;
-                } else {
-                    r.posSum += v;
-                }
-                if (finger < a) {
-                    ++r.overLtiCount;
-                    if (ref < a) {
-                        ++r.overHtiCount;
-                        if (bigNoise < a) ++r.overBigNoiseCount;
-                    }
-                }
-            }
-        }
-        total = static_cast<int16_t>(total + over);
-        int cells = lineLen * lines;
+        total = static_cast<int16_t>(total + over[g]);
+        int cells = lineLen * lines[g];
         if (cells == 0) cells = 1;
-        const int percent = over * 100 / cells;
+        const int percent = over[g] * 100 / cells;
         if (maxPercent < percent) maxPercent = static_cast<uint8_t>(percent);
     }
-    const int16_t afterCmf = GetNumOverNoiseAfterCmf();
     Raw2RawPrpt& out = prpt.raw2Raw;
-    out.maxDif = r.maxDif;
-    out.minDif = r.minDif;
     out.overNoiseCount = static_cast<uint16_t>(total);
-    out.overBigNoiseCount = r.overBigNoiseCount;
-    out.overNoiseAfterCmf = static_cast<uint16_t>(afterCmf);
-    out.overHtiCount = r.overHtiCount;
-    out.overLtiCount = r.overLtiCount;
-    out.posSum = r.posSum;
-    out.negSum = r.negSum;
+    out.overNoiseAfterCmf = static_cast<uint16_t>(GetNumOverNoiseAfterCmf());
+    out.overLtiCount = static_cast<uint16_t>(overLti);
+    out.overHtiCount = static_cast<uint16_t>(overHti);
+    out.overBigNoiseCount = static_cast<uint16_t>(overBigNoise);
+    out.posSum = posSum;
+    out.negSum = negSum;
     out.maxOverNoisePercent = maxPercent;
 }
 

@@ -19,8 +19,6 @@ namespace {
 constexpr int kHrScale = 4;                 // 每格插值成 4×4 个点
 constexpr int kPhaseNum = 5;                // 插值核的相位数（0..4 对应距左邻格 0..1 格）
 constexpr int16_t kMaxEdgeDot = 150;
-constexpr size_t kHighResDifBytes = 0x32000;
-constexpr size_t kHighResBinBytes = 0x19000;
 constexpr double kAxisToRadius = 2.449489742783178;  // √6：AxisFromMoments 的轴长为 √(6λ)
 constexpr double kPi = 3.14159265;
 
@@ -37,9 +35,6 @@ constexpr std::array<Offset, 8> kDirs = {{{0, -1}, {-1, -1}, {-1, 0}, {-1, 1}, {
 using Kernel = float[kPhaseNum][4];
 /// g_afu：双三次插值核，[相位][抽头]。
 Kernel& Kernels() { return Slot<Kernel>(Bss().afu); }
-/// g_tzBufferHighRes / g_tzBufferBin：插值结果与按门限二值化的结果，行宽 dim1Len × 4（只写不读）。
-int16_t* HighResDif() { return &Slot<int16_t>(Bss().tzBufferHighRes); }
-uint8_t* HighResBin() { return &Slot<uint8_t>(Bss().tzBufferBin); }
 /// edgeDot_11595：镜像补全用的轮廓点副本。
 EdgeDot* MirrorDots() { return &Slot<EdgeDot>(Bss().contourEdgeDot); }
 
@@ -98,26 +93,15 @@ int HighResSig(const TouchZoneUnit& z, int x, int y) {
     return static_cast<int>(Weighted(w, Kernels()[x - cellDim1 * kHrScale], Kernels()[y - cellDim2 * kHrScale]));
 }
 
-// TZ_Interpolate @ 0x6ba8613f / TZ_CalcHighResDif @ 0x6ba8607c
-// 插值范围取外接框外扩一格（夹在屏内）；逐点插值并按区域门限二值化。
-void Interpolate(TouchZoneUnit& z) {
+// TZ_Interpolate @ 0x6ba8613f
+// 插值范围取外接框外扩一格（夹在屏内）。原代码还把范围内逐点的插值与按门限二值化的结果写进
+// g_tzBufferHighRes / g_tzBufferBin（TZ_CalcHighResDif），没有模块读，不做；轮廓跟踪按需现算。
+void SetInterpolationRange(TouchZoneUnit& z) {
     const FlashPrmt& fl = PrmtFlash();
-    const int thold = z.sigThold;
-    ClearChecked(HighResDif(), kHighResDifBytes, static_cast<size_t>(fl.dim2Len * kHrScale) * fl.dim1Len * 8);
-    ClearChecked(HighResBin(), kHighResBinBytes, static_cast<size_t>(fl.dim2Len * kHrScale * fl.dim1Len * kHrScale));
     z.hrMinDim1 = static_cast<int16_t>(std::max(z.minDim1 - 1, 0) * kHrScale);
     z.hrMaxDim1 = static_cast<int16_t>(std::min(z.maxDim1 + 1, fl.dim1Len - 1) * kHrScale);
     z.hrMinDim2 = static_cast<int16_t>(std::max(z.minDim2 - 1, 0) * kHrScale);
     z.hrMaxDim2 = static_cast<int16_t>(std::min(z.maxDim2 + 1, fl.dim2Len - 1) * kHrScale);
-    const int stride = fl.dim1Len * kHrScale;
-    for (int x = z.hrMinDim1; x <= z.hrMaxDim1; ++x) {
-        for (int y = z.hrMinDim2; y <= z.hrMaxDim2; ++y) {
-            const int idx = x + y * stride;
-            const int v = HighResSig(z, x, y);
-            HighResDif()[idx] = static_cast<int16_t>(v);
-            if (thold < v) HighResBin()[idx] = 1;
-        }
-    }
 }
 
 // TZ_FindContourFirstDotDim2 @ 0x6ba86380
@@ -335,7 +319,7 @@ void ContourInit() {
 
 // TZ_GetContour @ 0x6ba87571
 void GetContour(TouchZoneUnit& z) {
-    Interpolate(z);
+    SetInterpolationRange(z);
     TraceEdge(z);
     CircleRate(z);
     z.ellipseRate = EllipseRate(z.edgeDot, z.edgeDotCount);

@@ -40,7 +40,8 @@
 
 .PARAMETER Benchmark
   不做比较，改为计时：以 -O2 加 EGO_TSACORE_PROFILE 构建到 build/tsa-bench，逐个串行回放（纯回放场景），
-  跑 -Rounds 轮取最快的一轮，打印每帧耗时与耗时最多的 -Top 个步骤（步骤耗时含其子步骤）。
+  跑 -Rounds 轮取最快的一轮，打印每帧耗时与耗时最多的 -Top 个步骤（步骤耗时含其子步骤）。回放钉在
+  -Affinity 指定的核上（默认 0xF0，Snapdragon 8cx Gen 3 的四个大核）并以高优先级运行。
   回放工具只有 Debug 配置（调试版 CRT），绝对值比服务的 Release 构建略高，用来看相对变化。
 
 .EXAMPLE
@@ -59,8 +60,9 @@ param(
     [switch]$Full,
     [switch]$State,
     [switch]$Benchmark,
-    [int]$Rounds = 3,
-    [int]$Top = 20
+    [int]$Rounds = 5,
+    [int]$Top = 20,
+    [long]$Affinity = 0xF0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -185,6 +187,21 @@ if ($Benchmark) {
     }
     $exe = Join-Path $benchDir 'TsaRawReplay.exe'
     $recordings = @(Get-RecordingFiles)
+    # 大小核机器上调度器会把回放放到小核、频率也随负载变化：钉在大核（-Affinity）、高优先级运行，返回 stderr。
+    function Invoke-Pinned {
+        param([string]$Exe, [string[]]$ArgList)
+        $psi = [System.Diagnostics.ProcessStartInfo]::new($Exe, ($ArgList -join ' '))
+        $psi.RedirectStandardError = $true
+        $psi.RedirectStandardOutput = $true
+        $psi.UseShellExecute = $false
+        $p = [System.Diagnostics.Process]::Start($psi)
+        $p.ProcessorAffinity = [IntPtr]$Affinity
+        $p.PriorityClass = 'High'
+        $null = $p.StandardOutput.ReadToEndAsync()
+        $err = $p.StandardError.ReadToEnd()
+        $p.WaitForExit()
+        $err
+    }
     # 逐个串行跑（并行会互相抢核心与缓存）；每轮把全部录制的耗时相加，各步骤取各轮中最小的一轮
     $best = @{}
     $frames = 0
@@ -192,8 +209,8 @@ if ($Benchmark) {
         $sum = @{}
         $roundFrames = 0
         foreach ($recording in $recordings) {
-            $text = & $exe $recording --quiet --afe --profile 2>&1
-            foreach ($line in $text) {
+            $text = Invoke-Pinned $exe @("`"$recording`"", '--quiet', '--afe', '--profile')
+            foreach ($line in ($text -split "`r?`n")) {
                 if ("$line" -match '^PROF\s+(\d+)\s+(\d+)\s+(.+)$') { $sum[$Matches[3]] = [double]$sum[$Matches[3]] + [double]$Matches[1] }
                 elseif ("$line" -match '^fed (\d+) frames') { $roundFrames += [int]$Matches[1] }
             }
