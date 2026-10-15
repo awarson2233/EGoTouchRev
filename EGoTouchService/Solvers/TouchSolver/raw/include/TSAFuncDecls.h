@@ -324,57 +324,6 @@ ushort ASA_GetDim1Res(void);
 // ASA_GetDim2Res @ 0x6bac761d (Rejection\ASA.c)
 ushort ASA_GetDim2Res(void);
 
-// ASA_GetGridNopressSafeTablePtr @ 0x6bac7e41 (Rejection\ASA.c)
-ushort * ASA_GetGridNopressSafeTablePtr(void);
-
-// ASA_GetGridNopressTableLinePtr @ 0x6bac7de4 (Rejection\ASA.c)
-ushort * ASA_GetGridNopressTableLinePtr(void);
-
-// ASA_GetGridNopressTablePtr @ 0x6bac7df7 (Rejection\ASA.c)
-ushort * ASA_GetGridNopressTablePtr(void);
-
-// ASA_GetGridNopressTableShortTermPtr @ 0x6bac7e0a (Rejection\ASA.c)
-ushort * ASA_GetGridNopressTableShortTermPtr(void);
-
-// ASA_GetGridNopressTableShortTermTx2Ptr @ 0x6bac7e2e (Rejection\ASA.c)
-ushort * ASA_GetGridNopressTableShortTermTx2Ptr(void);
-
-// ASA_GetGridNopressTableTx2Ptr @ 0x6bac7e1b (Rejection\ASA.c)
-ushort * ASA_GetGridNopressTableTx2Ptr(void);
-
-// ASA_GetGridTiedDePalmNoiseTx1Ptr @ 0x6bac7f35 (Rejection\ASA.c)
-byte * ASA_GetGridTiedDePalmNoiseTx1Ptr(char param_1);
-
-// ASA_GetGridTiedDePalmNoiseTx2Ptr @ 0x6bac7f62 (Rejection\ASA.c)
-byte * ASA_GetGridTiedDePalmNoiseTx2Ptr(char param_1);
-
-// ASA_GetGridTiedDeTraceNoiseTx1Ptr @ 0x6bac7edb (Rejection\ASA.c)
-ushort * ASA_GetGridTiedDeTraceNoiseTx1Ptr(char param_1);
-
-// ASA_GetGridTiedDeTraceNoiseTx2Ptr @ 0x6bac7f08 (Rejection\ASA.c)
-byte * ASA_GetGridTiedDeTraceNoiseTx2Ptr(char param_1);
-
-// ASA_GetGridTiedHandPtr @ 0x6bac7e54 (Rejection\ASA.c)
-ushort * ASA_GetGridTiedHandPtr(char param_1);
-
-// ASA_GetGridTiedOriTx1Ptr @ 0x6bac7e81 (Rejection\ASA.c)
-ushort * ASA_GetGridTiedOriTx1Ptr(char param_1);
-
-// ASA_GetGridTiedOriTx2Ptr @ 0x6bac7eae (Rejection\ASA.c)
-ushort * ASA_GetGridTiedOriTx2Ptr(char param_1);
-
-// ASA_GetOriDataToShowTX1Ptr @ 0x6bac7bd8 (Rejection\ASA.c)
-AsaDataRuntimeV2 * ASA_GetOriDataToShowTX1Ptr(void);
-
-// ASA_GetOriDataToShowTX2Ptr @ 0x6bac7c02 (Rejection\ASA.c)
-AsaDataRuntimeV2 * ASA_GetOriDataToShowTX2Ptr(void);
-
-// ASA_GetPeakFlagToShowTX1Ptr @ 0x6bac7c2c (Rejection\ASA.c)
-ushort * ASA_GetPeakFlagToShowTX1Ptr(void);
-
-// ASA_GetPeakFlagToShowTX2Ptr @ 0x6bac7c3f (Rejection\ASA.c)
-ushort * ASA_GetPeakFlagToShowTX2Ptr(void);
-
 // ASA_GetRptInRange @ 0x6bac757f (Rejection\ASA.c)
 bool ASA_GetRptInRange(void);
 
@@ -392,18 +341,6 @@ ushort ASA_GetRptYPos(void);
 
 // ASA_GetRptYTilt @ 0x6bac766a (Rejection\ASA.c)
 short ASA_GetRptYTilt(void);
-
-// ASA_GetTx1LineDataPtr @ 0x6bac7726 (Rejection\ASA.c)
-AsaDataRuntimeV2 * ASA_GetTx1LineDataPtr(void);
-
-// ASA_GetTx1PreCmfLineDataPtr @ 0x6bac7cc4 (Rejection\ASA.c)
-ushort * ASA_GetTx1PreCmfLineDataPtr(void);
-
-// ASA_GetTx2LineDataPtr @ 0x6bac7750 (Rejection\ASA.c)
-ushort * ASA_GetTx2LineDataPtr(void);
-
-// ASA_GetTx2PreCmfLineDataPtr @ 0x6bac7cf4 (Rejection\ASA.c)
-ushort * ASA_GetTx2PreCmfLineDataPtr(void);
 
 // ASA_InitAFEProject @ 0x6bac4eb9 (Rejection\ASA.c)
 undefined8 ASA_InitAFEProject(undefined8 param_1,undefined8 param_2);
@@ -1641,12 +1578,6 @@ void HandGesture_DifUnit(byte param_1,byte param_2);
 // HandGesture_Free @ 0x6baedd66 (Rejection\HandGesture.c)
 void HandGesture_Free(void);
 
-// HandGesture_GetHandGestureBL @ 0x6baef9e2 (Rejection\HandGesture.c)
-undefined8 HandGesture_GetHandGestureBL(void);
-
-// HandGesture_GetHandGestureDif @ 0x6baef9ef (Rejection\HandGesture.c)
-undefined8 HandGesture_GetHandGestureDif(void);
-
 // HandGesture_GetPkThold @ 0x6baef045 (Rejection\HandGesture.c)
 int HandGesture_GetPkThold(void);
 
@@ -2739,9 +2670,6 @@ void TSADynPrmt_UpdateStepAftTch(short param_1,short param_2);
 // TSAMS_GetDifPtr @ 0x6ba91631 (Core\TSAMS.c)
 undefined8 TSAMS_GetDifPtr(void);
 
-// TSAMS_GetSelfDifPtr @ 0x6ba9166f (Core\TSAMS.c)
-undefined * TSAMS_GetSelfDifPtr(void);
-
 // TSAMS_IsOKToEnterIDLEMode @ 0x6ba99ad6 (Core\TSAMS.c)
 bool TSAMS_IsOKToEnterIDLEMode(void);
 
@@ -3185,246 +3113,6 @@ ushort TSA_GetYLength(void);
 
 // TSA_GetYRes @ 0x6ba9af2b (Core\TSA.c)
 ushort TSA_GetYRes(void);
-
-// TSA_GridDataAftCMFDiffInit @ 0x6ba92f26 (Core\TSA.c)
-void TSA_GridDataAftCMFDiffInit(int param_1);
-
-// TSA_GridDataAftDim1CMFDiffInit @ 0x6ba9391c (Core\TSA.c)
-void TSA_GridDataAftDim1CMFDiffInit(int param_1);
-
-// TSA_GridDataAftNotchCorrectDiffInit @ 0x6ba93f86 (Core\TSA.c)
-void TSA_GridDataAftNotchCorrectDiffInit(int param_1);
-
-// TSA_GridDataAftPcaFilterDifInit @ 0x6ba93421 (Core\TSA.c)
-void TSA_GridDataAftPcaFilterDifInit(int param_1);
-
-// TSA_GridDataAftSSCMFDiffInit @ 0x6ba92a1e (Core\TSA.c)
-void TSA_GridDataAftSSCMFDiffInit(int param_1);
-
-// TSA_GridDataAftSSChargerNFilterDiffInit @ 0x6ba92bcc (Core\TSA.c)
-void TSA_GridDataAftSSChargerNFilterDiffInit(int param_1);
-
-// TSA_GridDataAfterDilateInit @ 0x6ba94d21 (Core\TSA.c)
-void TSA_GridDataAfterDilateInit(int param_1);
-
-// TSA_GridDataAfterErodeInit @ 0x6ba94e89 (Core\TSA.c)
-void TSA_GridDataAfterErodeInit(int param_1);
-
-// TSA_GridDataBaselineInit @ 0x6ba94451 (Core\TSA.c)
-void TSA_GridDataBaselineInit(int param_1);
-
-// TSA_GridDataCMFRemapBackInit @ 0x6ba948de (Core\TSA.c)
-void TSA_GridDataCMFRemapBackInit(int param_1);
-
-// TSA_GridDataCMFRemapInit @ 0x6ba9476f (Core\TSA.c)
-void TSA_GridDataCMFRemapInit(int param_1);
-
-// TSA_GridDataCmfDraftNeighborDistanceInit @ 0x6ba930cf (Core\TSA.c)
-void TSA_GridDataCmfDraftNeighborDistanceInit(int param_1);
-
-// TSA_GridDataCmfDraftWeightInit @ 0x6ba93773 (Core\TSA.c)
-void TSA_GridDataCmfDraftWeightInit(int param_1);
-
-// TSA_GridDataCmfNeighborDistanceInit @ 0x6ba93278 (Core\TSA.c)
-void TSA_GridDataCmfNeighborDistanceInit(int param_1);
-
-// TSA_GridDataCmfWeightInit @ 0x6ba935ca (Core\TSA.c)
-void TSA_GridDataCmfWeightInit(int param_1);
-
-// TSA_GridDataCommonModeNoiseInit @ 0x6ba92d7a (Core\TSA.c)
-void TSA_GridDataCommonModeNoiseInit(int param_1);
-
-// TSA_GridDataDifSafeBL2BLCMFInit @ 0x6ba960f2 (Core\TSA.c)
-void TSA_GridDataDifSafeBL2BLCMFInit(int param_1);
-
-// TSA_GridDataDifSafeBL2BLInit @ 0x6ba95f7e (Core\TSA.c)
-void TSA_GridDataDifSafeBL2BLInit(int param_1);
-
-// TSA_GridDataDifSafeBL2RawCMFInit @ 0x6ba95e0a (Core\TSA.c)
-void TSA_GridDataDifSafeBL2RawCMFInit(int param_1);
-
-// TSA_GridDataDifSafeBL2RawInit @ 0x6ba95c96 (Core\TSA.c)
-void TSA_GridDataDifSafeBL2RawInit(int param_1);
-
-// TSA_GridDataDiffInit @ 0x6ba91df5 (Core\TSA.c)
-void TSA_GridDataDiffInit(int param_1);
-
-// TSA_GridDataDistanceMapInit @ 0x6ba94bb8 (Core\TSA.c)
-void TSA_GridDataDistanceMapInit(int param_1);
-
-// TSA_GridDataGridIIRDifInit @ 0x6ba940f5 (Core\TSA.c)
-void TSA_GridDataGridIIRDifInit(int param_1);
-
-// TSA_GridDataGripRegionInit @ 0x6ba96f5b (Core\TSA.c)
-void TSA_GridDataGripRegionInit(int param_1);
-
-// TSA_GridDataGripStageInit @ 0x6ba970ca (Core\TSA.c)
-void TSA_GridDataGripStageInit(int param_1);
-
-// TSA_GridDataGripTimeInit @ 0x6ba97239 (Core\TSA.c)
-void TSA_GridDataGripTimeInit(int param_1);
-
-// TSA_GridDataGripTimeOffInit @ 0x6ba973a8 (Core\TSA.c)
-void TSA_GridDataGripTimeOffInit(int param_1);
-
-// TSA_GridDataHandGestureAreaInit @ 0x6ba97966 (Core\TSA.c)
-void TSA_GridDataHandGestureAreaInit(int param_1);
-
-// TSA_GridDataHandGestureBaselineInit @ 0x6ba97517 (Core\TSA.c)
-void TSA_GridDataHandGestureBaselineInit(int param_1);
-
-// TSA_GridDataHandGestureDifInit @ 0x6ba97687 (Core\TSA.c)
-void TSA_GridDataHandGestureDifInit(int param_1);
-
-// TSA_GridDataHandGestureTZInit @ 0x6ba977fb (Core\TSA.c)
-void TSA_GridDataHandGestureTZInit(int param_1);
-
-// TSA_GridDataHandGestureTZPrevInit @ 0x6ba97ad1 (Core\TSA.c)
-void TSA_GridDataHandGestureTZPrevInit(int param_1);
-
-// TSA_GridDataHandGestureTimeInit @ 0x6ba97c3c (Core\TSA.c)
-void TSA_GridDataHandGestureTimeInit(int param_1);
-
-// TSA_GridDataInit @ 0x6ba98f53 (Core\TSA.c)
-void TSA_GridDataInit(void);
-
-// TSA_GridDataMaxSigDownInit @ 0x6ba96266 (Core\TSA.c)
-void TSA_GridDataMaxSigDownInit(int param_1);
-
-// TSA_GridDataMinSigOffInit @ 0x6ba963dc (Core\TSA.c)
-void TSA_GridDataMinSigOffInit(int param_1);
-
-// TSA_GridDataNormalBaselineInit @ 0x6ba945fd (Core\TSA.c)
-void TSA_GridDataNormalBaselineInit(int param_1);
-
-// TSA_GridDataOneOrderDiffRxInit @ 0x6ba93ac5 (Core\TSA.c)
-void TSA_GridDataOneOrderDiffRxInit(int param_1);
-
-// TSA_GridDataPeakFlagTx1 @ 0x6ba98213 (Core\TSA.c)
-void TSA_GridDataPeakFlagTx1(int param_1);
-
-// TSA_GridDataPeakFlagTx2 @ 0x6ba9838e (Core\TSA.c)
-void TSA_GridDataPeakFlagTx2(int param_1);
-
-// TSA_GridDataPreCMFDiffInit @ 0x6ba9286a (Core\TSA.c)
-void TSA_GridDataPreCMFDiffInit(int param_1);
-
-// TSA_GridDataPreDiffInit @ 0x6ba91c7f (Core\TSA.c)
-void TSA_GridDataPreDiffInit(int param_1);
-
-// TSA_GridDataPreHWRawInit @ 0x6ba92120 (Core\TSA.c)
-void TSA_GridDataPreHWRawInit(int param_1);
-
-// TSA_GridDataPreNotchCorrectDiffInit @ 0x6ba93e17 (Core\TSA.c)
-void TSA_GridDataPreNotchCorrectDiffInit(int param_1);
-
-// TSA_GridDataPreRawInit @ 0x6ba91967 (Core\TSA.c)
-void TSA_GridDataPreRawInit(int param_1);
-
-// TSA_GridDataPreUnifiedDifInit @ 0x6ba91fad (Core\TSA.c)
-void TSA_GridDataPreUnifiedDifInit(int param_1);
-
-// TSA_GridDataPreUnifiedRawInit @ 0x6ba91ad6 (Core\TSA.c)
-void TSA_GridDataPreUnifiedRawInit(int param_1);
-
-// TSA_GridDataProxBaselineInit @ 0x6ba954fb (Core\TSA.c)
-void TSA_GridDataProxBaselineInit(int param_1);
-
-// TSA_GridDataProxDifInit @ 0x6ba94ff1 (Core\TSA.c)
-void TSA_GridDataProxDifInit(int param_1);
-
-// TSA_GridDataProxIIRRawInit @ 0x6ba9519f (Core\TSA.c)
-void TSA_GridDataProxIIRRawInit(int param_1);
-
-// TSA_GridDataProxTZInit @ 0x6ba956a5 (Core\TSA.c)
-void TSA_GridDataProxTZInit(int param_1);
-
-// TSA_GridDataProxZnDifInit @ 0x6ba9534d (Core\TSA.c)
-void TSA_GridDataProxZnDifInit(int param_1);
-
-// TSA_GridDataRaw2RawDiff2Init @ 0x6ba9257e (Core\TSA.c)
-void TSA_GridDataRaw2RawDiff2Init(int param_1);
-
-// TSA_GridDataRaw2RawDiff3Init @ 0x6ba926f4 (Core\TSA.c)
-void TSA_GridDataRaw2RawDiff3Init(int param_1);
-
-// TSA_GridDataRaw2RawDiffCmfInit @ 0x6ba92408 (Core\TSA.c)
-void TSA_GridDataRaw2RawDiffCmfInit(int param_1);
-
-// TSA_GridDataRaw2RawDiffInit @ 0x6ba92292 (Core\TSA.c)
-void TSA_GridDataRaw2RawDiffInit(int param_1);
-
-// TSA_GridDataRawInit @ 0x6ba917bb (Core\TSA.c)
-void TSA_GridDataRawInit(int param_1);
-
-// TSA_GridDataSDInit @ 0x6ba942a1 (Core\TSA.c)
-void TSA_GridDataSDInit(int param_1);
-
-// TSA_GridDataSafeBaselineInit @ 0x6ba95b26 (Core\TSA.c)
-void TSA_GridDataSafeBaselineInit(int param_1);
-
-// TSA_GridDataSideTZInit @ 0x6ba95848 (Core\TSA.c)
-void TSA_GridDataSideTZInit(int param_1);
-
-// TSA_GridDataSideTouchInit @ 0x6ba959b3 (Core\TSA.c)
-void TSA_GridDataSideTouchInit(int param_1);
-
-// TSA_GridDataSilentTouchNumInit @ 0x6ba9699f (Core\TSA.c)
-void TSA_GridDataSilentTouchNumInit(int param_1);
-
-// TSA_GridDataSubTZInit @ 0x6ba96dec (Core\TSA.c)
-void TSA_GridDataSubTZInit(int param_1);
-
-// TSA_GridDataTZFlagInit @ 0x6ba94a4d (Core\TSA.c)
-void TSA_GridDataTZFlagInit(int param_1);
-
-// TSA_GridDataTZIDInit @ 0x6ba96b0e (Core\TSA.c)
-void TSA_GridDataTZIDInit(int param_1);
-
-// TSA_GridDataTZZoneInit @ 0x6ba96c7d (Core\TSA.c)
-void TSA_GridDataTZZoneInit(int param_1);
-
-// TSA_GridDataTouchOffTimeInit @ 0x6ba96830 (Core\TSA.c)
-void TSA_GridDataTouchOffTimeInit(int param_1);
-
-// TSA_GridDataTouchOnTimeInit @ 0x6ba96552 (Core\TSA.c)
-void TSA_GridDataTouchOnTimeInit(int param_1);
-
-// TSA_GridDataTouchRptTimeInit @ 0x6ba966c1 (Core\TSA.c)
-void TSA_GridDataTouchRptTimeInit(int param_1);
-
-// TSA_GridDataTwoOrderDiffRxInit @ 0x6ba93c6e (Core\TSA.c)
-void TSA_GridDataTwoOrderDiffRxInit(int param_1);
-
-// TSA_GridDataUnknownInit @ 0x6ba98ddd (Core\TSA.c)
-void TSA_GridDataUnknownInit(int param_1);
-
-// TSA_GridDatatzAgeInit @ 0x6ba97da7 (Core\TSA.c)
-void TSA_GridDatatzAgeInit(int param_1);
-
-// TSA_GridDatatzOriTx1 @ 0x6ba97f1d (Core\TSA.c)
-void TSA_GridDatatzOriTx1(int param_1);
-
-// TSA_GridDatatzOriTx2 @ 0x6ba98098 (Core\TSA.c)
-void TSA_GridDatatzOriTx2(int param_1);
-
-// TSA_GridNopressSafeTable @ 0x6ba98ae9 (Core\TSA.c)
-void TSA_GridNopressSafeTable(int param_1);
-
-// TSA_GridNopressTable @ 0x6ba98509 (Core\TSA.c)
-void TSA_GridNopressTable(int param_1);
-
-// TSA_GridNopressTableShortTerm @ 0x6ba98681 (Core\TSA.c)
-void TSA_GridNopressTableShortTerm(int param_1);
-
-// TSA_GridNopressTableTx2 @ 0x6ba987f9 (Core\TSA.c)
-void TSA_GridNopressTableTx2(int param_1);
-
-// TSA_GridNopressTableTx2ShortTerm @ 0x6ba98971 (Core\TSA.c)
-void TSA_GridNopressTableTx2ShortTerm(int param_1);
-
-// TSA_GridTiedGridUpdate @ 0x6ba98c61 (Core\TSA.c)
-void TSA_GridTiedGridUpdate(int param_1,undefined8 param_2,char *param_3);
 
 // TSA_InStylusHPP2Mode @ 0x6ba9c70b (Core\TSA.c)
 bool TSA_InStylusHPP2Mode(void);

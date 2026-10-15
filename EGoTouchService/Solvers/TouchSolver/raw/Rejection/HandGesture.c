@@ -722,30 +722,6 @@ void HandGesture_CopyDiff(void)
 
 
 // ============================================================================
-// Function: HandGesture_GetHandGestureBL @ 6baef9e2
-// ============================================================================
-
-undefined8 HandGesture_GetHandGestureBL(void)
-
-{
-                    /* 0xaf9e2  848  HandGesture_GetHandGestureBL */
-  return g_tsaBufHandGestureBL;
-}
-
-
-// ============================================================================
-// Function: HandGesture_GetHandGestureDif @ 6baef9ef
-// ============================================================================
-
-undefined8 HandGesture_GetHandGestureDif(void)
-
-{
-                    /* 0xaf9ef  849  HandGesture_GetHandGestureDif */
-  return g_tsaBufHandGestureDif;
-}
-
-
-// ============================================================================
 // Function: HandGesture_IsRelatedGripDetected @ 6baee4eb
 // ============================================================================
 
