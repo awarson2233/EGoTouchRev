@@ -176,7 +176,7 @@ void TouchDownProcess(uint8_t curIdx) {
     prev.startPos = cur.pos;
     prev.field360 = cur.field084;
     prev.field3D4 = Point{cur.field068, cur.field06A};
-    prev.smoothZ9 = cur.z9;
+    prev.smoothEllipseRate = cur.ellipseRate;
     prev.curIdx = curIdx;
     prev.age = 0;
     prev.field380 = Static().curTimeMs;

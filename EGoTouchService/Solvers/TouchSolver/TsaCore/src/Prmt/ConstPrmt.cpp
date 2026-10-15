@@ -84,12 +84,12 @@ void Init() {
                             flash.field165A;
     const int margin = static_cast<int>(refSum * 3u) / 2;
     const uint32_t m = static_cast<uint32_t>(margin);
-    c.field05A = static_cast<int>(m + flash.field1652) < 0x10000 ? static_cast<uint16_t>(flash.field1652 + margin) : 0xffff;
-    c.field05C = static_cast<int>(flash.field1650 - m) < 0 ? 0 : static_cast<uint16_t>(flash.field1650 - margin);
-    c.field05E = static_cast<int>(m + flash.field1654) < 0x8000 ? static_cast<uint16_t>(margin + flash.field1654) : 0x7fff;
-    c.field060 = static_cast<int>(static_cast<uint32_t>(-margin) - flash.field1654) < -0x8000
+    c.field05A = static_cast<int>(m + flash.rawUpperLimit) < 0x10000 ? static_cast<uint16_t>(flash.rawUpperLimit + margin) : 0xffff;
+    c.field05C = static_cast<int>(flash.rawLowerLimit - m) < 0 ? 0 : static_cast<uint16_t>(flash.rawLowerLimit - margin);
+    c.field05E = static_cast<int>(m + flash.rawDeltaLimit) < 0x8000 ? static_cast<uint16_t>(margin + flash.rawDeltaLimit) : 0x7fff;
+    c.field060 = static_cast<int>(static_cast<uint32_t>(-margin) - flash.rawDeltaLimit) < -0x8000
                      ? static_cast<uint16_t>(0x8000)
-                     : static_cast<uint16_t>(-margin - flash.field1654);
+                     : static_cast<uint16_t>(-margin - flash.rawDeltaLimit);
 }
 
 }  // namespace Solvers::Tsa::Core::ConstPrmt

@@ -115,9 +115,9 @@ void PostProcess() {
     prev.newExtFlags = cur.newExtFlags;
     prev.reportedCount = cur.reportedCount;
     prev.field002 = cur.field002;
-    prev.field014 = cur.field014;
+    prev.maxCoreEllipseRate = cur.maxCoreEllipseRate;
     prev.field005 = cur.field005;
-    prev.field007 = cur.field007;
+    prev.coreTouchCount = cur.coreTouchCount;
     prev.reportedThisFrame = cur.reportedThisFrame;
     prev.lastReportedId = cur.lastReportedId;
     prev.gripReportedThisFrame = cur.gripReportedThisFrame;

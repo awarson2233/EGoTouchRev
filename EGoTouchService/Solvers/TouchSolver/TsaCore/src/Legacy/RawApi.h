@@ -37,6 +37,7 @@ uint16_t TSA_GetYRes(void);
 uint32_t TSA_IsUnderWaterDetected(void);
 uint32_t TSA_IsOutOfWaterDetected(void);
 char* TSA_GetPrmtName(void);
+int TSA_GetMaxCMFNoiseValue(void);
 int16_t TSA_GetMinSigPrpt(void);
 uint64_t TSA_IsGameScenario(void);
 uint32_t TSA_IsWindowsPadFeatureEnabled(void);
@@ -85,6 +86,7 @@ uint32_t TSAStatic_GetSigThold(int mode);
 uint8_t TSAStatic_IsAllFreqNoisy(void);
 uint8_t TSAStatic_IsAllFreqBecomeNoisy(void);
 bool TSAStatic_IsHWReset(void);
+bool TSAStatic_IsChargerPluggedNoDebounce(void);
 
 // Core/TSAPrunedImpl.c
 void CMFRemap_Init(void);
@@ -109,7 +111,5 @@ void Thenar_UnitCopy(uint8_t* dst, uint8_t* src);
 
 
 
-// Signal/HardwareAnalyzer.c
-void HardwareAnalyzer_ReportToTSA(void);
 
 }  // extern "C"

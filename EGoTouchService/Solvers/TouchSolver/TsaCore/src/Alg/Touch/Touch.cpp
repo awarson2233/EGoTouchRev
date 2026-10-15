@@ -13,6 +13,7 @@
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
+#include "Extension/HardwareAnalyzer/HardwareAnalyzer.h"
 #include "Extension/Thenar/ThenarData.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
@@ -472,7 +473,7 @@ void CheckTrustabilityUnit(uint8_t curIdx, uint8_t prevIdx) {
 
     ++cur.trustFrames;
     if (cur.majorMm > 0x19) cur.persistFlags2 |= 0x20000;
-    if (cur.smoothZ9 > 0xe && cur.field0FE > 4) cur.persistFlags2 |= 0x20000;
+    if (cur.smoothEllipseRate > 0xe && cur.field0FE > 4) cur.persistFlags2 |= 0x20000;
     if (cur.sqAccMmFromPrev > 0x19 && cur.sqDistMmFromPrev > 0x19) cur.persistFlags2 |= 0x20000;
     if (cur.exceptionType != 0) cur.persistFlags2 |= 0x20000;
     if (PrevTouches().reportedThisFrame > 1) cur.persistFlags2 |= 0x20000;
@@ -754,9 +755,9 @@ void KeepPrevTouchWithExceptionExcluded() {
     cur.newExtFlags = prev.newExtFlags;
     cur.reportedCount = prev.reportedCount;
     cur.field002 = prev.field002;
-    cur.field014 = prev.field014;
+    cur.maxCoreEllipseRate = prev.maxCoreEllipseRate;
     cur.field005 = prev.field005;
-    cur.field007 = prev.field007;
+    cur.coreTouchCount = prev.coreTouchCount;
     cur.field00B = prev.field00B;
     cur.field00C = prev.field00C;
     cur.field00D = prev.field00D;
@@ -766,7 +767,7 @@ void KeepPrevTouchWithExceptionExcluded() {
     cur.abnormalShape2Count = prev.abnormalShape2Count;
     cur.abnormalShape3Count = prev.abnormalShape3Count;
     cur.abnormalShape4Count = prev.abnormalShape4Count;
-    HardwareAnalyzer_ReportToTSA();
+    HardwareAnalyzer::ReportToTsa();
     prev.exceptionFlags = cur.exceptionFlags & ~0x400u;
     cur.stateFlags = prev.stateFlags;
     cur.lastLargeObjectTime = prev.lastLargeObjectTime;
@@ -810,7 +811,7 @@ void UnitRemove(uint8_t curIdx) {
 void UnitUpdate(uint8_t curIdx, uint8_t prevIdx) {
     TouchUnit& cur = Cur(curIdx);
     const PrevTouchUnit& prev = Prev(prevIdx);
-    cur.smoothZ9 = static_cast<int16_t>((prev.smoothZ9 * 7 + cur.z9) / 8);
+    cur.smoothEllipseRate = static_cast<int16_t>((prev.smoothEllipseRate * 7 + cur.ellipseRate) / 8);
     cur.trustFrames = prev.trustFrames;
     cur.prevDt = prev.dt;
     cur.dt = GetFormattedTimeInterval(

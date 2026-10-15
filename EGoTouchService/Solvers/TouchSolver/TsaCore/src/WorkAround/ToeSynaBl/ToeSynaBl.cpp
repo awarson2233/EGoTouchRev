@@ -409,7 +409,7 @@ bool BackLightShiftUnit(uint16_t percent) {
 }
 
 // ToeSynaBl_CheckNumOverNoise @ 0x6bb45640
-bool CheckNumOverNoise() { return Enabled() && Prpt().field00C <= 4; }
+bool CheckNumOverNoise() { return Enabled() && Prpt().raw2Raw.overLtiCount <= 4; }
 
 // ToeSynaBl_IsBaselineAbnormalAftScreenOn @ 0x6bb465b4
 // 亮屏后自容的列、行统计都偏高、超噪声格少时看背光偏移，持续 0x14e ms 即复位。

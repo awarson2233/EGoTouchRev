@@ -249,9 +249,9 @@ void RegisterTouch(TouchZoneUnit& z) {
     t.majorPx = z.majorAxis;
     t.minorPx = z.minorAxis;
     t.angle = z.angle;
-    t.z9 = z.ellipseRate;
+    t.ellipseRate = z.ellipseRate;
     t.field064 = z.ellipseRateMirror;
-    t.field066 = std::min(t.field064, t.z9);
+    t.field066 = std::min(t.field064, t.ellipseRate);
     t.zoneShape = static_cast<int32_t>(z.shape);
     t.sigSum = z.sigSum;
     t.field090 = z.gripRegionSigSum;

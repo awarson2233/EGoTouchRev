@@ -36,7 +36,7 @@ struct TsaBufferTable {
     int16_t* commonModeNoise;  // CMF：每格减去的公共噪声
     int16_t* preHwRaw;
     int16_t* raw2RawDif;
-    void* raw2RawDifAftCmf;
+    int16_t* raw2RawDifAftCmf;  // raw2RawDif 按扫描线 CMF 之后
     void* preDif;
     int16_t* gridIirDif;  // GridIIR：上一帧滤波后的 Dif
     void* blGrid;

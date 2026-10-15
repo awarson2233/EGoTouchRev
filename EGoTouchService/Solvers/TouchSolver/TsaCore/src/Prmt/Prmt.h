@@ -260,13 +260,14 @@ struct FlashPrmt {
     SensorTranslate sensorTranslate[20];
     uint8_t brokenSensorCompensation;  // TPSensor：用邻格外推补偿坏传感器的 Dif
     uint8_t reservedA87[0xBC9];
-    uint16_t field1650;
-    uint16_t field1652;
-    uint16_t field1654;
+    uint16_t rawLowerLimit;  // 坏点：raw 的上下限与相邻格之差的限（ConstPrmt 再放宽一个余量）
+    uint16_t rawUpperLimit;
+    uint16_t rawDeltaLimit;
     uint16_t field1656;
     uint16_t field1658;
     uint16_t field165A;
-    uint8_t reserved165C[0x4];
+    uint8_t difBrokenCheck;  // HardwareAnalyzer：按 Dif 查坏点（只在 Full Incell 下）
+    uint8_t reserved165D[0x3];
     uint32_t proxConfig;
     uint32_t proxTriggerThold;
     uint32_t proxLiftOffTholdMin;
@@ -486,12 +487,13 @@ static_assert(offsetof(FlashPrmt, sensorOffset) == 0x94D);
 static_assert(offsetof(FlashPrmt, sensorTranslateNum) == 0xA0D);
 static_assert(offsetof(FlashPrmt, sensorTranslate) == 0xA0E);
 static_assert(offsetof(FlashPrmt, brokenSensorCompensation) == 0xA86);
-static_assert(offsetof(FlashPrmt, field1650) == 0x1650);
-static_assert(offsetof(FlashPrmt, field1652) == 0x1652);
-static_assert(offsetof(FlashPrmt, field1654) == 0x1654);
+static_assert(offsetof(FlashPrmt, rawLowerLimit) == 0x1650);
+static_assert(offsetof(FlashPrmt, rawUpperLimit) == 0x1652);
+static_assert(offsetof(FlashPrmt, rawDeltaLimit) == 0x1654);
 static_assert(offsetof(FlashPrmt, field1656) == 0x1656);
 static_assert(offsetof(FlashPrmt, field1658) == 0x1658);
 static_assert(offsetof(FlashPrmt, field165A) == 0x165A);
+static_assert(offsetof(FlashPrmt, difBrokenCheck) == 0x165C);
 static_assert(offsetof(FlashPrmt, proxConfig) == 0x1660);
 static_assert(offsetof(FlashPrmt, proxTriggerThold) == 0x1664);
 static_assert(offsetof(FlashPrmt, proxLiftOffTholdMin) == 0x1668);

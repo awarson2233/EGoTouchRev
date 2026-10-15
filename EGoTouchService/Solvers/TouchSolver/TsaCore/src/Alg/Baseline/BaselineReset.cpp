@@ -216,8 +216,8 @@ bool IsLongTimeRawJumpDetected() {
     const FlashPrmt& fl = PrmtFlash();
     if (fl.sensorArchitecture == 3) {
         const uint32_t limit = static_cast<uint32_t>(fl.sensorNum * 3) >> 2;
-        if (limit < prpt.overNoiseCount || limit < prpt.field020) stat.rawJumpLatched = 1;
-        if (0x5a < prpt.field018 || 0x5a < prpt.field034) stat.rawJumpLatched = 1;
+        if (limit < prpt.raw2Raw.overNoiseCount || limit < prpt.prevRaw2Raw.overNoiseCount) stat.rawJumpLatched = 1;
+        if (0x5a < prpt.raw2Raw.maxOverNoisePercent || 0x5a < prpt.prevRaw2Raw.maxOverNoisePercent) stat.rawJumpLatched = 1;
     }
     if (stat.rawJumpLatched == 0 || AFE_IsAlwaysNoisy()) {
         stat.rawJumpTimer = 0;
@@ -226,7 +226,7 @@ bool IsLongTimeRawJumpDetected() {
         return false;
     }
     bool r = false;
-    if (prpt.overNoiseCount < 0x28 && fl.sensorNum >> 1 < prpt.field162) {
+    if (prpt.raw2Raw.overNoiseCount < 0x28 && fl.sensorNum >> 1 < prpt.field162) {
         if (!IsTouchProtectOnRawJump()) {
             if (stat.rawJumpTimer < 0x54) {
                 AddInterval(stat.rawJumpTimer);
@@ -513,7 +513,7 @@ bool IsFullPanelOverNoise() {
 
 // BLReset_IsBaselineAbnormalType2 @ 0x6ba4b295
 void IsBaselineAbnormalType2(bool game, bool overNoise, bool protected2) {
-    const bool hit = overNoise && !game && !IsBaselineClean() && Prpt().field008 < 5 && IsFullPanelOverNoise() && !protected2;
+    const bool hit = overNoise && !game && !IsBaselineClean() && Prpt().raw2Raw.overNoiseAfterCmf < 5 && IsFullPanelOverNoise() && !protected2;
     Accumulate(hit, kDbgAbnormal2, Static().abnormalType2Timer);
 }
 
@@ -522,7 +522,7 @@ void IsBaselineAbnormalType3(bool game, bool overNoise, bool protected2) {
     const TsaPrpt& prpt = Prpt();
     TsaStatic& stat = Static();
     const bool hit = overNoise && !game && PrmtDynamic().smallThold < -prpt.field18E && 2 < prpt.field1A2 &&
-                     prpt.field008 < 3 && prpt.field16C * 2 < prpt.field16E * -3 && !IsTouchToBeProtected() && !protected2 &&
+                     prpt.raw2Raw.overNoiseAfterCmf < 3 && prpt.field16C * 2 < prpt.field16E * -3 && !IsTouchToBeProtected() && !protected2 &&
                      (prpt.field180 * 4u < prpt.field182 || prpt.field178 * 4 < -prpt.field17C);
     if (hit && !ToeSynaBl::IsWaterDetected()) {
         Debug(kDbgAbnormal3);
@@ -584,14 +584,14 @@ bool IsAfeRawJump() {
 }
 
 // BLReset_CheckTouchTrustability @ 0x6ba4a613
-// 不贴边的小触点（标记 0x20000000、z9 不超过 12、峰值不小于负向极值的一半）可信帧数加一，其余减一。
+// 不贴边的小触点（标记 0x20000000、椭圆度不超过 12、峰值不小于负向极值的一半）可信帧数加一，其余减一。
 void CheckTouchTrustability() {
     PrevTouchTable& prev = PrevTouches();
     const InnerPeak inner;
     const int negPeak = -Prpt().sigPeakNegative;
     for (uint16_t i = 0; i < prev.count; ++i) {
         PrevTouchUnit& u = prev.unit[i];
-        const bool trusted = inner(u) && (u.persistFlags & kPersistSmallTouch) != 0 && u.z9 <= 0xc && negPeak < u.maxPeakSig * 2;
+        const bool trusted = inner(u) && (u.persistFlags & kPersistSmallTouch) != 0 && u.ellipseRate <= 0xc && negPeak < u.maxPeakSig * 2;
         if (trusted) {
             if (u.blTrustFrames < kMaxTrustFrames) ++u.blTrustFrames;
         } else if (u.blTrustFrames < kMaxTrustFrames && u.blTrustFrames != 0) {
@@ -682,7 +682,7 @@ void BaselineStateUpdate(bool reset) {
     bool touched = false;
     for (uint16_t i = 0; i < prev.count; ++i) {
         const PrevTouchUnit& u = prev.unit[i];
-        if (inner(u) && (u.persistFlags & kPersistSmallTouch) != 0 && u.z9 < 0xc) {
+        if (inner(u) && (u.persistFlags & kPersistSmallTouch) != 0 && u.ellipseRate < 0xc) {
             touched = true;
             break;
         }
@@ -813,7 +813,7 @@ bool IsBaselineNoisy() {
     const uint32_t prev = prpt.prevBlPropertyState;
     if (prev != kReasonNoisy && prev != 3 && prev != 0 && AFE_IsAlwaysNoisy()) stat.blNoisyTimer = Interval<uint64_t>();
     if (stat.blNoisyTimer == 0) return false;
-    if (prpt.overNoiseCount < 6) {
+    if (prpt.raw2Raw.overNoiseCount < 6) {
         stat.blNoisyReset = 1;
         stat.blNoisyTimer = 0;
         return true;
@@ -828,11 +828,11 @@ bool IsBaselineNoisy() {
 }
 
 // BLReset_CheckNumOverNoise @ 0x6ba4850e
-// 超噪声的格少（Hybrid Incell 另看 field008，Toe 机型另看 field00C）。不成立时记调试位。
+// 超噪声的格少（Hybrid Incell 另看 overNoiseAfterCmf，Toe 机型另看 overLtiCount）。不成立时记调试位。
 bool CheckNumOverNoise() {
     const TsaPrpt& prpt = Prpt();
-    if (prpt.overNoiseCount < 5) return true;
-    if (PrmtFlash().sensorArchitecture == 2 && prpt.field008 < 3) return true;
+    if (prpt.raw2Raw.overNoiseCount < 5) return true;
+    if (PrmtFlash().sensorArchitecture == 2 && prpt.raw2Raw.overNoiseAfterCmf < 3) return true;
     if (!SafeBaselineApplied() && ToeSynaBl::CheckNumOverNoise()) return true;
     Debug(kDbgNumOverNoise);
     return false;
@@ -852,7 +852,7 @@ bool IsTouchToBeProtected2(bool needTwo) {
     uint16_t n = 0;
     for (uint16_t i = 0; i < prev.count; ++i) {
         const PrevTouchUnit& u = prev.unit[i];
-        if (!inner(u) || (u.persistFlags & kPersistSmallTouch) == 0 || 0xd <= u.z9 || u.signalScale <= peakLimit ||
+        if (!inner(u) || (u.persistFlags & kPersistSmallTouch) == 0 || 0xd <= u.ellipseRate || u.signalScale <= peakLimit ||
             u.maxPeakSig * 2 <= -prpt.sigPeakNegative) {
             continue;
         }

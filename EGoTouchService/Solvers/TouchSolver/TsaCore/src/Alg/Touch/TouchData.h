@@ -89,8 +89,8 @@ struct TouchUnit {
     int16_t maxMinSigOff;  // 来源区域里各格 minSigOff 的最大值
     int16_t field05C;
     int16_t field05E;
-    int16_t z9;  // 峰周围九宫格的信号和
-    int16_t smoothZ9;  // (前一帧 smoothZ9·7 + z9) / 8
+    int16_t ellipseRate;  // 来源区域的椭圆度（TouchZoneUnit::ellipseRate）
+    int16_t smoothEllipseRate;  // (前一帧 smoothEllipseRate·7 + ellipseRate) / 8
     int16_t field064;
     int16_t field066;
     uint16_t field068;
@@ -241,8 +241,8 @@ static_assert(offsetof(TouchUnit, field059) == 0x059);
 static_assert(offsetof(TouchUnit, maxMinSigOff) == 0x05A);
 static_assert(offsetof(TouchUnit, field05C) == 0x05C);
 static_assert(offsetof(TouchUnit, field05E) == 0x05E);
-static_assert(offsetof(TouchUnit, z9) == 0x060);
-static_assert(offsetof(TouchUnit, smoothZ9) == 0x062);
+static_assert(offsetof(TouchUnit, ellipseRate) == 0x060);
+static_assert(offsetof(TouchUnit, smoothEllipseRate) == 0x062);
 static_assert(offsetof(TouchUnit, field064) == 0x064);
 static_assert(offsetof(TouchUnit, field066) == 0x066);
 static_assert(offsetof(TouchUnit, field068) == 0x068);
@@ -386,8 +386,8 @@ struct PrevTouchUnit {
     int16_t maxMinSigOff;  // 来源区域里各格 minSigOff 的最大值
     int16_t field05C;
     int16_t field05E;
-    int16_t z9;  // 峰周围九宫格的信号和
-    int16_t smoothZ9;  // (前一帧 smoothZ9·7 + z9) / 8
+    int16_t ellipseRate;  // 来源区域的椭圆度（TouchZoneUnit::ellipseRate）
+    int16_t smoothEllipseRate;  // (前一帧 smoothEllipseRate·7 + ellipseRate) / 8
     int16_t field064;
     int16_t field066;
     uint16_t field068;
@@ -592,8 +592,8 @@ static_assert(offsetof(PrevTouchUnit, field059) == 0x059);
 static_assert(offsetof(PrevTouchUnit, maxMinSigOff) == 0x05A);
 static_assert(offsetof(PrevTouchUnit, field05C) == 0x05C);
 static_assert(offsetof(PrevTouchUnit, field05E) == 0x05E);
-static_assert(offsetof(PrevTouchUnit, z9) == 0x060);
-static_assert(offsetof(PrevTouchUnit, smoothZ9) == 0x062);
+static_assert(offsetof(PrevTouchUnit, ellipseRate) == 0x060);
+static_assert(offsetof(PrevTouchUnit, smoothEllipseRate) == 0x062);
 static_assert(offsetof(PrevTouchUnit, field064) == 0x064);
 static_assert(offsetof(PrevTouchUnit, field066) == 0x066);
 static_assert(offsetof(PrevTouchUnit, field068) == 0x068);
@@ -748,7 +748,7 @@ struct TouchTable {
     uint8_t field004;
     uint8_t field005;
     uint8_t field006;
-    uint8_t field007;
+    uint8_t coreTouchCount;  // HardwareAnalyzer：报过点、不贴边、非多指拆分的触点数
     uint8_t reportedThisFrame;  // 本帧对外报点且未抬起的触点数
     uint8_t lastReportedId;  // 其中最后一个的 ID
     uint8_t gripReportedThisFrame;  // 其中带握持 / 合并标记的个数
@@ -761,7 +761,7 @@ struct TouchTable {
     uint8_t abnormalShape2Count;
     uint8_t abnormalShape3Count;
     uint8_t abnormalShape4Count;
-    uint16_t field014;
+    int16_t maxCoreEllipseRate;  // 这些触点椭圆度的最大值
     uint8_t reserved016[0x2];
     uint32_t extFlags;  // 外部状态位：水下 0x20 / 出水 0x40 / 接近 0x80 / 拿起 0x100 / 放下 0x200 …
     uint32_t newExtFlags;  // 本帧新出现的 extFlags 位
@@ -783,7 +783,7 @@ static_assert(offsetof(TouchTable, field003) == 0x003);
 static_assert(offsetof(TouchTable, field004) == 0x004);
 static_assert(offsetof(TouchTable, field005) == 0x005);
 static_assert(offsetof(TouchTable, field006) == 0x006);
-static_assert(offsetof(TouchTable, field007) == 0x007);
+static_assert(offsetof(TouchTable, coreTouchCount) == 0x007);
 static_assert(offsetof(TouchTable, reportedThisFrame) == 0x008);
 static_assert(offsetof(TouchTable, lastReportedId) == 0x009);
 static_assert(offsetof(TouchTable, gripReportedThisFrame) == 0x00A);
@@ -796,7 +796,7 @@ static_assert(offsetof(TouchTable, abnormalShapeCount) == 0x010);
 static_assert(offsetof(TouchTable, abnormalShape2Count) == 0x011);
 static_assert(offsetof(TouchTable, abnormalShape3Count) == 0x012);
 static_assert(offsetof(TouchTable, abnormalShape4Count) == 0x013);
-static_assert(offsetof(TouchTable, field014) == 0x014);
+static_assert(offsetof(TouchTable, maxCoreEllipseRate) == 0x014);
 static_assert(offsetof(TouchTable, extFlags) == 0x018);
 static_assert(offsetof(TouchTable, newExtFlags) == 0x01C);
 static_assert(offsetof(TouchTable, exceptionFlags) == 0x020);
@@ -817,7 +817,7 @@ struct PrevTouchTable {
     uint8_t field004;
     uint8_t field005;
     uint8_t field006;
-    uint8_t field007;
+    uint8_t coreTouchCount;  // HardwareAnalyzer：报过点、不贴边、非多指拆分的触点数
     uint8_t reportedThisFrame;  // 本帧对外报点且未抬起的触点数
     uint8_t lastReportedId;  // 其中最后一个的 ID
     uint8_t gripReportedThisFrame;  // 其中带握持 / 合并标记的个数
@@ -830,7 +830,7 @@ struct PrevTouchTable {
     uint8_t abnormalShape2Count;
     uint8_t abnormalShape3Count;
     uint8_t abnormalShape4Count;
-    uint16_t field014;
+    int16_t maxCoreEllipseRate;  // 这些触点椭圆度的最大值
     uint8_t reserved016[0x2];
     uint32_t extFlags;  // 外部状态位：水下 0x20 / 出水 0x40 / 接近 0x80 / 拿起 0x100 / 放下 0x200 …
     uint32_t newExtFlags;  // 本帧新出现的 extFlags 位
@@ -852,7 +852,7 @@ static_assert(offsetof(PrevTouchTable, field003) == 0x003);
 static_assert(offsetof(PrevTouchTable, field004) == 0x004);
 static_assert(offsetof(PrevTouchTable, field005) == 0x005);
 static_assert(offsetof(PrevTouchTable, field006) == 0x006);
-static_assert(offsetof(PrevTouchTable, field007) == 0x007);
+static_assert(offsetof(PrevTouchTable, coreTouchCount) == 0x007);
 static_assert(offsetof(PrevTouchTable, reportedThisFrame) == 0x008);
 static_assert(offsetof(PrevTouchTable, lastReportedId) == 0x009);
 static_assert(offsetof(PrevTouchTable, gripReportedThisFrame) == 0x00A);
@@ -865,7 +865,7 @@ static_assert(offsetof(PrevTouchTable, abnormalShapeCount) == 0x010);
 static_assert(offsetof(PrevTouchTable, abnormalShape2Count) == 0x011);
 static_assert(offsetof(PrevTouchTable, abnormalShape3Count) == 0x012);
 static_assert(offsetof(PrevTouchTable, abnormalShape4Count) == 0x013);
-static_assert(offsetof(PrevTouchTable, field014) == 0x014);
+static_assert(offsetof(PrevTouchTable, maxCoreEllipseRate) == 0x014);
 static_assert(offsetof(PrevTouchTable, extFlags) == 0x018);
 static_assert(offsetof(PrevTouchTable, newExtFlags) == 0x01C);
 static_assert(offsetof(PrevTouchTable, exceptionFlags) == 0x020);

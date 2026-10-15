@@ -29,7 +29,45 @@ static_assert(offsetof(ExceptionState, wetFinger) == 0x014);
 static_assert(offsetof(ExceptionState, detected) == 0x018);
 static_assert(offsetof(ExceptionState, field01E) == 0x01E);
 
-/// g_tsaStaticGrid（经 g_tsaStaticPtr 选用）：系统级运行状态。
+/// HardwareAnalyzer 每帧对 raw2raw Dif（本帧 raw - 上一帧 raw）的统计，按扫描线分组。
+struct Raw2RawPrpt {
+    int16_t maxDif;
+    int16_t minDif;
+    uint16_t overNoiseCount;  // |Dif| 超过噪声门限的格数
+    uint16_t overBigNoiseCount;  // 再超过 3 倍 peakFilterReferenceThreshold 的格数
+    uint16_t overNoiseAfterCmf;  // CMF 后 |Dif| 仍超过噪声门限的格数（只在 sensorArchitecture 2 下统计）
+    uint16_t overHtiCount;  // 超过噪声门限且超过 peakFilterReferenceThreshold 的格数
+    uint16_t overLtiCount;  // 超过噪声门限且超过 fingerThold 的格数
+    uint8_t reserved00E[0x2];
+    int32_t posSum;  // 超过噪声门限的正 Dif 之和
+    int32_t negSum;  // 超过噪声门限的非正 Dif 之和
+    uint8_t maxOverNoisePercent;  // 各组扫描线里超噪声格占比的最大值（%）
+    uint8_t reserved019[0x3];
+};
+static_assert(sizeof(Raw2RawPrpt) == 0x01C);
+static_assert(offsetof(Raw2RawPrpt, maxDif) == 0x000);
+static_assert(offsetof(Raw2RawPrpt, minDif) == 0x002);
+static_assert(offsetof(Raw2RawPrpt, overNoiseCount) == 0x004);
+static_assert(offsetof(Raw2RawPrpt, overBigNoiseCount) == 0x006);
+static_assert(offsetof(Raw2RawPrpt, overNoiseAfterCmf) == 0x008);
+static_assert(offsetof(Raw2RawPrpt, overHtiCount) == 0x00A);
+static_assert(offsetof(Raw2RawPrpt, overLtiCount) == 0x00C);
+static_assert(offsetof(Raw2RawPrpt, posSum) == 0x010);
+static_assert(offsetof(Raw2RawPrpt, negSum) == 0x014);
+static_assert(offsetof(Raw2RawPrpt, maxOverNoisePercent) == 0x018);
+
+/// DifZ8 坏点的候选：同一格持续被判时计时，到 0x683 ms 即确认为坏点（计时置 5000）。
+struct BrokenSensorZ8 {
+    uint8_t dim1;
+    uint8_t dim2;
+    uint8_t reserved002[0x6];
+    int64_t timerMs;
+};
+static_assert(sizeof(BrokenSensorZ8) == 0x010);
+static_assert(offsetof(BrokenSensorZ8, dim1) == 0x000);
+static_assert(offsetof(BrokenSensorZ8, dim2) == 0x001);
+static_assert(offsetof(BrokenSensorZ8, timerMs) == 0x008);
+
 /// TsaPrpt 里一个方向的线统计极值（Self_GetPropertyDim），下标相对该方向的第一条线。
 struct SelfPrpt {
     int32_t maxSum;
@@ -57,10 +95,13 @@ static_assert(offsetof(SelfPrpt, minNegSum) == 0x018);
 static_assert(offsetof(SelfPrpt, minNegSumIdx) == 0x01C);
 static_assert(offsetof(SelfPrpt, strongSumTotal) == 0x020);
 
+/// g_tsaStaticGrid（经 g_tsaStaticPtr 选用）：系统级运行状态。
 struct TsaStatic {
     uint8_t reserved000[0x3];
     uint8_t afeIdle;  // AFE 处于 IDLE 模式（TSAStatic_PreProcess 每帧取）
-    uint8_t reserved004[0x74];
+    uint8_t reserved004[0x9];
+    uint8_t largeDisplayNoise;  // 显示噪声大
+    uint8_t reserved00E[0x6A];
     uint64_t fullIncellHighPeakTime;  // 最大峰持续超过 3 倍 finger 门限时的时间（ms）
     uint64_t msInitTime;  // 互容主流程初始化的时间（ms）；只有系统复位才更新
     uint64_t autoCalibrationStartTime;  // AFE 开始自动校准的时间（ms）
@@ -103,9 +144,15 @@ struct TsaStatic {
     uint8_t signalReverted;  // 信号反向（TSAStatic_IsSignalReverted）
     uint8_t reserved11B[0x1];
     uint8_t cmfBlocked;  // 本帧不做 CMF（只存 CMF 前的 Dif）
-    uint8_t reserved11D[0x5];
+    uint8_t reserved11D[0x1];
+    uint16_t rfNoiseFrames;  // 连续检出射频噪声（异常 1）的帧数
+    uint16_t maxRfNoiseFrames;
     uint16_t strongTapCount;  // TE：报过点的触点抬起时峰值超过 2 倍 finger 门限、长轴小于 21 mm 的连续次数（到 5 为止）
-    uint8_t reserved124[0x1C4];
+    uint8_t reserved124[0x30];
+    uint32_t aftGateFlags;  // bit3：查环境温度异常（否则只对 HIMA 参数查）
+    uint8_t reserved158[0x130];
+    int32_t envTemp;
+    uint8_t reserved28C[0x5C];
     uint8_t blResetLatched;  // BLReset：收到过硬件复位，Init 带参数时清零
     uint8_t recalFrames;  // BLRecal：系统复位后的帧数（到 15 为止）
     uint8_t recalBoundaryHits;  // 其中 raw 边界越界的帧数
@@ -178,6 +225,7 @@ struct TsaStatic {
 };
 static_assert(sizeof(TsaStatic) == 0x450);
 static_assert(offsetof(TsaStatic, afeIdle) == 0x003);
+static_assert(offsetof(TsaStatic, largeDisplayNoise) == 0x00D);
 static_assert(offsetof(TsaStatic, fullIncellHighPeakTime) == 0x078);
 static_assert(offsetof(TsaStatic, msInitTime) == 0x080);
 static_assert(offsetof(TsaStatic, autoCalibrationStartTime) == 0x088);
@@ -207,7 +255,11 @@ static_assert(offsetof(TsaStatic, justExitedSpecialCtrlMode) == 0x115);
 static_assert(offsetof(TsaStatic, resetFlagsCleared) == 0x117);
 static_assert(offsetof(TsaStatic, signalReverted) == 0x11A);
 static_assert(offsetof(TsaStatic, cmfBlocked) == 0x11C);
+static_assert(offsetof(TsaStatic, rfNoiseFrames) == 0x11E);
+static_assert(offsetof(TsaStatic, maxRfNoiseFrames) == 0x120);
 static_assert(offsetof(TsaStatic, strongTapCount) == 0x122);
+static_assert(offsetof(TsaStatic, aftGateFlags) == 0x154);
+static_assert(offsetof(TsaStatic, envTemp) == 0x288);
 static_assert(offsetof(TsaStatic, blResetLatched) == 0x2E8);
 static_assert(offsetof(TsaStatic, recalFrames) == 0x2E9);
 static_assert(offsetof(TsaStatic, recalBoundaryHits) == 0x2EA);
@@ -266,30 +318,30 @@ static_assert(offsetof(TsaStatic, fiException) == 0x430);
 
 /// g_tsaPrpt：每帧统计的全局属性。
 struct TsaPrpt {
-    uint8_t reserved000[0x4];
-    uint16_t overNoiseCount;  // Dif 超过噪声门限的格数
-    uint8_t reserved006[0x2];
-    uint16_t field008;
-    uint8_t reserved00A[0x2];
-    uint16_t field00C;
-    uint8_t reserved00E[0xA];
-    uint8_t field018;
-    uint8_t reserved019[0x7];
-    uint16_t field020;
-    uint8_t reserved022[0x12];
-    uint8_t field034;
-    uint8_t reserved035[0x5D];
+    Raw2RawPrpt raw2Raw;
+    Raw2RawPrpt prevRaw2Raw;
+    uint8_t brokenSensorNum;  // brokenSensor 的有效项数
+    uint8_t brokenByDifZ8;  // 本帧有 DifZ8 坏点被确认
+    uint8_t brokenByDif;  // 有格按 Dif 判为坏点
+    uint8_t reserved03B[0x5];
+    BrokenSensorZ8 brokenSensor[5];
+    uint8_t reserved090[0x2];
     uint16_t boundaryPositive;  // raw 的上下边界
     uint16_t boundaryNegative;
-    uint8_t reserved096[0x4];
+    uint16_t rawMax;
+    uint16_t rawMin;
     uint16_t field09A;
-    uint8_t reserved09C[0x4];
+    uint8_t boundaryPositiveDim1;  // boundaryPositive / Negative 所在的格
+    uint8_t boundaryPositiveDim2;
+    uint8_t boundaryNegativeDim1;
+    uint8_t boundaryNegativeDim2;
     int16_t sigPeakPositive;  // Dif 的正向极值
     int16_t sigPeakNegative;  // Dif 的负向极值
     uint8_t specialThreshCol;  // 用特殊门限的列
-    uint8_t reserved0A5[0x1];
+    uint8_t specialThreshRow;
     uint8_t nextSideThreshCol;
-    uint8_t reserved0A7[0x5];
+    uint8_t nextSideThreshRow;
+    uint8_t reserved0A8[0x4];
     int32_t field0AC;
     int32_t field0B0;
     uint8_t reserved0B4[0x4];
@@ -304,7 +356,8 @@ struct TsaPrpt {
     uint8_t reserved0CC[0x14];
     int16_t field0E0;
     int16_t field0E2;
-    uint8_t reserved0E4[0x7E];
+    uint8_t reserved0E4[0x7C];
+    int16_t field160;
     uint16_t field162;
     uint8_t reserved164[0x8];
     int16_t field16C;
@@ -374,19 +427,27 @@ struct TsaPrpt {
     uint8_t reserved304[0x3C];
 };
 static_assert(sizeof(TsaPrpt) == 0x340);
-static_assert(offsetof(TsaPrpt, overNoiseCount) == 0x004);
-static_assert(offsetof(TsaPrpt, field008) == 0x008);
-static_assert(offsetof(TsaPrpt, field00C) == 0x00C);
-static_assert(offsetof(TsaPrpt, field018) == 0x018);
-static_assert(offsetof(TsaPrpt, field020) == 0x020);
-static_assert(offsetof(TsaPrpt, field034) == 0x034);
+static_assert(offsetof(TsaPrpt, raw2Raw) == 0x000);
+static_assert(offsetof(TsaPrpt, prevRaw2Raw) == 0x01C);
+static_assert(offsetof(TsaPrpt, brokenSensorNum) == 0x038);
+static_assert(offsetof(TsaPrpt, brokenByDifZ8) == 0x039);
+static_assert(offsetof(TsaPrpt, brokenByDif) == 0x03A);
+static_assert(offsetof(TsaPrpt, brokenSensor) == 0x040);
 static_assert(offsetof(TsaPrpt, boundaryPositive) == 0x092);
 static_assert(offsetof(TsaPrpt, boundaryNegative) == 0x094);
+static_assert(offsetof(TsaPrpt, rawMax) == 0x096);
+static_assert(offsetof(TsaPrpt, rawMin) == 0x098);
 static_assert(offsetof(TsaPrpt, field09A) == 0x09A);
+static_assert(offsetof(TsaPrpt, boundaryPositiveDim1) == 0x09C);
+static_assert(offsetof(TsaPrpt, boundaryPositiveDim2) == 0x09D);
+static_assert(offsetof(TsaPrpt, boundaryNegativeDim1) == 0x09E);
+static_assert(offsetof(TsaPrpt, boundaryNegativeDim2) == 0x09F);
 static_assert(offsetof(TsaPrpt, sigPeakPositive) == 0x0A0);
 static_assert(offsetof(TsaPrpt, sigPeakNegative) == 0x0A2);
 static_assert(offsetof(TsaPrpt, specialThreshCol) == 0x0A4);
+static_assert(offsetof(TsaPrpt, specialThreshRow) == 0x0A5);
 static_assert(offsetof(TsaPrpt, nextSideThreshCol) == 0x0A6);
+static_assert(offsetof(TsaPrpt, nextSideThreshRow) == 0x0A7);
 static_assert(offsetof(TsaPrpt, field0AC) == 0x0AC);
 static_assert(offsetof(TsaPrpt, field0B0) == 0x0B0);
 static_assert(offsetof(TsaPrpt, field0B8) == 0x0B8);
@@ -397,6 +458,7 @@ static_assert(offsetof(TsaPrpt, field0C2) == 0x0C2);
 static_assert(offsetof(TsaPrpt, field0C8) == 0x0C8);
 static_assert(offsetof(TsaPrpt, field0E0) == 0x0E0);
 static_assert(offsetof(TsaPrpt, field0E2) == 0x0E2);
+static_assert(offsetof(TsaPrpt, field160) == 0x160);
 static_assert(offsetof(TsaPrpt, field162) == 0x162);
 static_assert(offsetof(TsaPrpt, field16C) == 0x16C);
 static_assert(offsetof(TsaPrpt, field16E) == 0x16E);
