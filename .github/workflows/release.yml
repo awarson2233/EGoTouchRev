@@ -68,7 +68,8 @@ jobs:
           wix build -ext WixToolset.UI.wixext -arch arm64 -d BuildVersion=$env:MSI_VERSION scripts\EGoTouchTestSetup.wxs `
             -loc scripts\zh-CN.wxl -out "$out\EGoTouchTestSetup_arm64_$env:RELEASE_TAG.msi"
 
-          Get-ChildItem $out -File | ForEach-Object {
+          # wix 会在旁边留下 .wixpdb 调试文件，只发 .msi
+          Get-ChildItem $out -Filter *.msi | ForEach-Object {
             "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash)  $($_.Name)"
           } | Set-Content "$out\SHA256SUMS.txt" -Encoding utf8
 
@@ -76,4 +77,4 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload $env:RELEASE_TAG (Get-ChildItem build\release-assets -File).FullName --clobber
+        run: gh release upload $env:RELEASE_TAG (Get-ChildItem build\release-assets -Include *.msi, SHA256SUMS.txt -File -Recurse).FullName --clobber
