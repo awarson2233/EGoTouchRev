@@ -14,7 +14,12 @@
   三样全部逐字节相同才算通过。状态摘要不同的时候，会在第一次出现差异的那一帧把两边的完整状态导出来，
   按符号名列出不同的字段。重构 TSACore 的每一步都应当跑它。
 
-  参考版本检出在 build/tsa-reference/<提交> 下（git worktree），只在第一次用到时构建。
+  参考版本检出在 build/tsa-reference/<提交> 下（git worktree），只在第一次用到时构建；它的回放结果按
+  录制（路径、大小、修改时间）与场景参数缓存在同一目录下，参考提交不变就不再重跑。所有回放按处理器数并行。
+
+.PARAMETER O2
+  另建一份算法库开 -O2 的构建（build/tsa-raw-O2），同样的录制与场景再跑一遍，状态摘要须与当前 Debug
+  构建逐字节相同：查未定义行为、未初始化读等随优化变化的问题。
 
 .PARAMETER Reference
   参考提交。行为有意变更（修了真实的缺陷）之后，把标签挪到新的提交上。
@@ -43,7 +48,8 @@ param(
     [string[]]$Recordings = @('C:\ProgramData\EGoTouchRev\exports\dvr'),
     [string]$Only = '',
     [switch]$SelfCheck,
-    [switch]$Coverage
+    [switch]$Coverage,
+    [switch]$O2
 )
 
 $ErrorActionPreference = 'Stop'
@@ -82,6 +88,20 @@ function Start-Replay {
     } finally {
         if ($ProfileFile) { Remove-Item Env:LLVM_PROFILE_FILE }
     }
+}
+
+# 回放排队，最多同时跑处理器数个
+$script:running = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
+function Start-Queued {
+    param([string]$Exe, [string]$Recording, [object[]]$ReplayArgs, [string]$OutBase, [string]$ProfileFile = '')
+    while ($script:running.Count -ge [Environment]::ProcessorCount) {
+        $script:running.RemoveAll({ param($p) $p.HasExited }) | Out-Null
+        if ($script:running.Count -ge [Environment]::ProcessorCount) { Start-Sleep -Milliseconds 20 }
+    }
+    $p = Start-Replay $Exe $Recording $ReplayArgs $OutBase $ProfileFile
+    $null = $p.Handle   # 先取句柄，退出后才读得到 ExitCode
+    $script:running.Add($p)
+    $p
 }
 
 function Test-SameFile {
@@ -152,6 +172,16 @@ try {
         Invoke-Native 'build' { cmake --build --preset $Preset --target TsaRawReplay }
         $newExe = Join-Path $root "build/$Preset/TsaRawReplay.exe"
     }
+    $o2Exe = $null
+    if ($O2 -and -not $Coverage) {
+        $o2Dir = Join-Path $root 'build/tsa-raw-O2'
+        if (-not (Test-Path (Join-Path $o2Dir 'CMakeCache.txt'))) {
+            Invoke-Native 'configure O2 build' { cmake --preset $Preset -B $o2Dir '-DEGO_TSA_RAW_EXTRA_FLAGS=-O2' }
+        }
+        Write-Host 'building current tree (algorithm -O2)...'
+        Invoke-Native 'O2 build' { cmake --build $o2Dir --target TsaRawReplay }
+        $o2Exe = Join-Path $o2Dir 'TsaRawReplay.exe'
+    }
 } finally {
     Pop-Location
 }
@@ -184,7 +214,8 @@ $outRoot = Join-Path $root ($Coverage ? 'build/tsa-coverage/runs' : 'build/tsa-c
 if (Test-Path $outRoot) { Remove-Item $outRoot -Recurse -Force }
 New-Item $outRoot -ItemType Directory | Out-Null
 
-$results = @()
+# 先把所有回放排上（参考版本命中缓存的不跑），全部结束后再逐项比较
+$jobs = @()
 foreach ($recording in Get-RecordingFiles) {
     $recName = [System.IO.Path]::GetFileNameWithoutExtension($recording)
     $info = Get-RecordingInfo $newExe $recording
@@ -192,70 +223,101 @@ foreach ($recording in Get-RecordingFiles) {
         Write-Warning "$recName has no frames, skipped"
         continue
     }
+    $file = Get-Item $recording
     foreach ($scenario in Get-Scenarios $info) {
         $label = "$recName/$($scenario.Name)"
         if ($Only -and $label -notlike "*$Only*") { continue }
         $dir = Join-Path $outRoot $label
         New-Item $dir -ItemType Directory -Force | Out-Null
+        $job = [pscustomobject]@{ Label = $label; Recording = $recording; Scenario = $scenario; Frames = $info.Frames; Dir = $dir
+                                  New = $null; Ref = $null; RefBase = $null; RefExit = $null; O2Run = $null }
 
         if ($Coverage) {
-            $run = Start-Replay $newExe $recording $scenario.Args "$dir/new" "$dir/run.profraw"
-            $run | Wait-Process
-            $results += [pscustomobject]@{ Run = $label; Frames = $info.Frames; Result = ($run.ExitCode -eq 0 ? 'ran' : "exit $($run.ExitCode)") }
+            $job.New = Start-Queued $newExe $recording $scenario.Args "$dir/new" "$dir/run.profraw"
+            $jobs += $job
             continue
         }
 
-        $refRun = Start-Replay $refExe $recording $scenario.Args "$dir/ref"
-        $newRun = Start-Replay $newExe $recording $scenario.Args "$dir/new"
-        $refRun, $newRun | Wait-Process
-        $failures = @()
-        if ($refRun.ExitCode -ne 0) { $failures += "reference exit $($refRun.ExitCode)" }
-        if ($newRun.ExitCode -ne 0) { $failures += "current exit $($newRun.ExitCode)" }
-        if (-not $failures) {
-            foreach ($kind in 'csv', 'err', 'dig') {
-                if (-not (Test-SameFile "$dir/ref.$kind" "$dir/new.$kind")) { $failures += $kind }
-            }
+        $key = "$($file.FullName)|$($file.Length)|$($file.LastWriteTimeUtc.Ticks)|$($scenario.Args -join ' ')"
+        $hash = [System.Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes($key))).Substring(0, 16)
+        $job.RefBase = Join-Path $refSrc "runs/$hash"
+        if (Test-Path "$($job.RefBase).exit") {
+            $job.RefExit = [int](Get-Content "$($job.RefBase).exit")
+        } else {
+            New-Item (Split-Path $job.RefBase) -ItemType Directory -Force | Out-Null
+            $job.Ref = Start-Queued $refExe $recording $scenario.Args $job.RefBase
         }
-
-        $detail = ''
-        if ($failures -contains 'csv' -or $failures -contains 'err') {
-            $kind = ($failures -contains 'csv') ? 'csv' : 'err'
-            $d = Get-FirstDifference "$dir/ref.$kind" "$dir/new.$kind"
-            $detail = "$kind line $($d.Line):`n    ref: $($d.A)`n    new: $($d.B)"
-        }
-        if ($failures -contains 'dig') {
-            $d = Get-FirstDifference "$dir/ref.dig" "$dir/new.dig"
-            $step = ($d.A -split ' ')[0]
-            if ($step -match '^-?\d+$') {
-                # 在第一处不同的那一帧把两边的完整状态导出来，列出不同的字段
-                $r = Start-Process $refExe -ArgumentList (@("`"$recording`"") + $scenario.Args + @('--quiet', '--state-dump', $step, "`"$dir/ref.state`"")) `
-                    -NoNewWindow -PassThru -RedirectStandardOutput "$dir/dump-ref.out" -RedirectStandardError "$dir/dump-ref.err"
-                $c = Start-Process $newExe -ArgumentList (@("`"$recording`"") + $scenario.Args + @('--quiet', '--state-dump', $step, "`"$dir/new.state`"")) `
-                    -NoNewWindow -PassThru -RedirectStandardOutput "$dir/dump-new.out" -RedirectStandardError "$dir/dump-new.err"
-                $r, $c | Wait-Process
-                $diff = & $newExe --state-diff "$dir/ref.state" "$dir/new.state" 2>&1
-                $diff | Set-Content "$dir/state-diff.txt"
-                $detail += ($detail ? "`n" : '') + "state first differs after step $step (A = reference, B = current):`n    " +
-                    (($diff | Select-Object -First 16) -join "`n    ") + "`n    ... full list: $dir/state-diff.txt"
-            } else {
-                $detail += ($detail ? "`n" : '') + "digest header differs:`n    ref: $($d.A)`n    new: $($d.B)"
-            }
-        }
-
-        if ($SelfCheck -and $scenario.Name -eq 'plain') {
-            $again = Start-Replay $refExe $recording ($scenario.Args + @('--heap-skew', 3000)) "$dir/ref-again"
-            $again | Wait-Process
-            if (-not (Test-SameFile "$dir/ref.dig" "$dir/ref-again.dig")) { $failures += 'self-check (reference digest is not reproducible)' }
-        }
-
-        $results += [pscustomobject]@{
-            Run    = $label
-            Frames = $info.Frames
-            Result = ($failures ? ('DIFFERS: ' + ($failures -join ', ')) : 'identical')
-            Detail = $detail
-        }
-        Write-Host ("  {0,-52} {1}" -f $label, $results[-1].Result)
+        $job.New = Start-Queued $newExe $recording $scenario.Args "$dir/new"
+        if ($o2Exe) { $job.O2Run = Start-Queued $o2Exe $recording $scenario.Args "$dir/o2" }
+        $jobs += $job
     }
+}
+$script:running | Wait-Process
+
+$results = @()
+foreach ($job in $jobs) {
+    $label = $job.Label; $dir = $job.Dir; $recording = $job.Recording; $scenario = $job.Scenario
+    if ($Coverage) {
+        $results += [pscustomobject]@{ Run = $label; Frames = $job.Frames; Result = ($job.New.ExitCode -eq 0 ? 'ran' : "exit $($job.New.ExitCode)") }
+        continue
+    }
+    if ($job.Ref) {
+        $job.RefExit = $job.Ref.ExitCode
+        Set-Content "$($job.RefBase).exit" $job.RefExit   # 写完退出码才算缓存完整
+    }
+    $refBase = $job.RefBase
+    $failures = @()
+    if ($job.RefExit -ne 0) { $failures += "reference exit $($job.RefExit)" }
+    if ($job.New.ExitCode -ne 0) { $failures += "current exit $($job.New.ExitCode)" }
+    if (-not $failures) {
+        foreach ($kind in 'csv', 'err', 'dig') {
+            if (-not (Test-SameFile "$refBase.$kind" "$dir/new.$kind")) { $failures += $kind }
+        }
+    }
+    if ($job.O2Run -and ($job.O2Run.ExitCode -ne 0 -or -not (Test-SameFile "$dir/o2.dig" "$dir/new.dig"))) { $failures += 'O2' }
+
+    $detail = ''
+    if ($failures -contains 'csv' -or $failures -contains 'err') {
+        $kind = ($failures -contains 'csv') ? 'csv' : 'err'
+        $d = Get-FirstDifference "$refBase.$kind" "$dir/new.$kind"
+        $detail = "$kind line $($d.Line):`n    ref: $($d.A)`n    new: $($d.B)"
+    }
+    if ($failures -contains 'O2') {
+        $d = Get-FirstDifference "$dir/new.dig" "$dir/o2.dig"
+        $detail += ($detail ? "`n" : '') + "O2 digest first differs: $(if ($d) { "line $($d.Line), step $(($d.A -split ' ')[0])" } else { "exit $($job.O2Run.ExitCode)" })"
+    }
+    if ($failures -contains 'dig') {
+        $d = Get-FirstDifference "$refBase.dig" "$dir/new.dig"
+        $step = ($d.A -split ' ')[0]
+        if ($step -match '^-?\d+$') {
+            # 在第一处不同的那一帧把两边的完整状态导出来，列出不同的字段
+            $r = Start-Process $refExe -ArgumentList (@("`"$recording`"") + $scenario.Args + @('--quiet', '--state-dump', $step, "`"$dir/ref.state`"")) `
+                -NoNewWindow -PassThru -RedirectStandardOutput "$dir/dump-ref.out" -RedirectStandardError "$dir/dump-ref.err"
+            $c = Start-Process $newExe -ArgumentList (@("`"$recording`"") + $scenario.Args + @('--quiet', '--state-dump', $step, "`"$dir/new.state`"")) `
+                -NoNewWindow -PassThru -RedirectStandardOutput "$dir/dump-new.out" -RedirectStandardError "$dir/dump-new.err"
+            $r, $c | Wait-Process
+            $diff = & $newExe --state-diff "$dir/ref.state" "$dir/new.state" 2>&1
+            $diff | Set-Content "$dir/state-diff.txt"
+            $detail += ($detail ? "`n" : '') + "state first differs after step $step (A = reference, B = current):`n    " +
+                (($diff | Select-Object -First 16) -join "`n    ") + "`n    ... full list: $dir/state-diff.txt"
+        } else {
+            $detail += ($detail ? "`n" : '') + "digest header differs:`n    ref: $($d.A)`n    new: $($d.B)"
+        }
+    }
+
+    if ($SelfCheck -and $scenario.Name -eq 'plain') {
+        $again = Start-Replay $refExe $recording ($scenario.Args + @('--heap-skew', 3000)) "$dir/ref-again"
+        $again | Wait-Process
+        if (-not (Test-SameFile "$refBase.dig" "$dir/ref-again.dig")) { $failures += 'self-check (reference digest is not reproducible)' }
+    }
+
+    $results += [pscustomobject]@{
+        Run    = $label
+        Frames = $job.Frames
+        Result = ($failures ? ('DIFFERS: ' + ($failures -join ', ')) : 'identical')
+        Detail = $detail
+    }
+    Write-Host ("  {0,-52} {1}" -f $label, $results[-1].Result)
 }
 
 # ── 汇总 ────────────────────────────────────────────────────────────────
