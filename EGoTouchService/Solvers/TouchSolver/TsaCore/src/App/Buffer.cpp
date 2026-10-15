@@ -139,7 +139,7 @@ bool Malloc() {
         !Alloc(b.rawStoredSinceMutualSsNotMatch, n) || !Alloc(b.tzPrev, n) || !Alloc(b.tzZonePrev, n) || !Alloc(b.tzZone, n) ||
         !Alloc(b.tzId, n) || !Alloc(b.subTz, n) || !Alloc(b.timeOff, n) || !Alloc(b.timeDown, n) || !Alloc(b.timeRpt, n) ||
         !Alloc(b.minSigOff, n) || !Alloc(b.gripStage, n) || !Alloc(b.gripTime, n) || !Alloc(b.gripTimeOff, n) ||
-        !Alloc(b.gripRegion, n) || !Alloc(b.maxSigDown, n) || !Alloc(b.silentTouchNum, n) || !Alloc(PreCmfDif(), n) ||
+        !Alloc(b.gripRegion, n) || !Alloc(b.maxSigDown, n) || !Alloc(b.silentTouchNum, n) ||
         !Alloc(b.preDif, n) || !Alloc(b.preHwRaw, n) || !Alloc(b.raw2RawDif, n) || !Alloc(b.raw2RawDifAftCmf, n) ||
         !Alloc(b.commonModeNoise, map) || !Alloc(b.rawCapture, n) || !Alloc(b.rawCaptureNextSide, n) || !Alloc(b.tzAge, n) ||
         !Alloc(b.cleanBaseline, n) || !Alloc(b.preUnnormalizedRaw, n) || !Alloc(b.rawGrid, n)) {
@@ -181,7 +181,6 @@ void Free() {
     Release(b.gripRegion);
     Release(b.maxSigDown);
     Release(b.silentTouchNum);
-    Release(PreCmfDif());
     Release(b.preDif);
     Release(b.preHwRaw);
     Release(b.raw2RawDif);

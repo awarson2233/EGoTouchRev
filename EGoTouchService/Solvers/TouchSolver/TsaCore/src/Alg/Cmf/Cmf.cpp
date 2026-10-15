@@ -22,7 +22,6 @@ constexpr int kDimRow = 1;                       // 按行（沿 Dim1）
 constexpr int kDimCol = 2;                       // 按列（沿 Dim2）
 constexpr uint32_t kMethod2d = 1;
 constexpr uint32_t kSmartCoverFollowNormal = 2;  // cmfMethodSmartCover 为 2 时沿用常态的方法
-constexpr size_t kAftCmfDifBytes = 0x2648;
 constexpr int16_t kToeEdgeThold = 200;           // ToE 特殊门限时两端各两条线的门限
 constexpr int16_t kGameThold = 0x4b0;
 constexpr int16_t kGameGrad = 200;
@@ -56,12 +55,6 @@ static_assert(sizeof(NoiseState) == 0xc0);
 
 NoiseState& Noise() { return Slot<NoiseState>(Bss().cmfNoise); }
 uint8_t& PreCmfDifLogEnabled() { return Slot<uint8_t>(Bss().preCMFDiffLogEnabled); }
-/// 每条线相邻格之差与二阶差（方向随 dim1Axis）。
-int16_t* OneOrderDiff() { return &Slot<int16_t>(Bss().bufOneOrderDiffRx); }
-int16_t* TwoOrderDiff() { return &Slot<int16_t>(Bss().bufTwoOrderDiffRx); }
-/// Dim1 方向 CMF 之后、全部 CMF 之后的 Dif。
-int16_t* AftDim1CmfDif() { return &Slot<int16_t>(Bss().bufAftDim1CMFDif); }
-int16_t* AftCmfDif() { return &Slot<int16_t>(Bss().bufAftCMFDif); }
 
 // CMF_InitNoiseData @ 0x6ba4d9e0
 void InitNoiseData(const int32_t* data) {
@@ -255,34 +248,6 @@ void GameCommonNoise() {
     }
 }
 
-// CMF_SaveOrderDiff @ 0x6ba4ecaa
-// dim1Axis 为 1 时扫描线是行，否则是列。二阶差两端清零的下标按另一方向算（原厂如此）。
-void SaveOrderDiff() {
-    const FlashPrmt& fl = PrmtFlash();
-    const uint32_t cols = fl.dim1Len;
-    const bool lineIsRow = fl.dim1Axis == 1;
-    const uint8_t lines = fl.dim1Axis == 0 ? fl.dim1Len : fl.dim2Len;
-    const uint8_t len = fl.dim1Axis == 0 ? fl.dim2Len : fl.dim1Len;
-    const auto at = [&](uint32_t line, uint32_t k) {
-        return static_cast<uint16_t>(lineIsRow ? k + line * cols : line + k * cols);
-    };
-    const auto atCross = [&](uint32_t line, uint32_t k) {
-        return static_cast<uint16_t>(lineIsRow ? line + k * cols : k + line * cols);
-    };
-    const int16_t* dif = Buffers().dif;
-    int16_t* d1 = OneOrderDiff();
-    int16_t* d2 = TwoOrderDiff();
-    for (uint8_t a = 0; a < lines; ++a) {
-        d1[at(a, 0)] = 0;
-        for (uint8_t k = 1; k < len; ++k) d1[at(a, k)] = static_cast<int16_t>(dif[at(a, k)] - dif[at(a, k - 1)]);
-    }
-    for (uint8_t a = 0; a < lines; ++a) {
-        d2[atCross(a, 0)] = 0;
-        d2[atCross(a, len - 1u)] = 0;
-        for (uint8_t k = 1; k < len - 1; ++k) d2[at(a, k)] = static_cast<int16_t>(d1[at(a, k + 1)] - d1[at(a, k)]);
-    }
-}
-
 // CMF_SavePreCmfDif @ 0x6ba4f0c9
 // 调试日志：按 CMFRemap 的映射表把 CMF 前的 Dif 追加到 preCMFDiff.csv。CMFRemap 被裁掉后表的行列数为 0，
 // 只剩打开、关闭文件。
@@ -332,8 +297,7 @@ void Process() {
     const FlashPrmt& fl = PrmtFlash();
     const DynamicPrmt& dyn = PrmtDynamic();
     TsaBufferTable& buf = Buffers();
-    CopyChecked(PreCmfDif(), GridBufSize() * size_t{2}, buf.dif, fl.sensorNum * size_t{2});
-    SaveOrderDiff();
+    // CMF 前的 Dif（g_tsaBufPreCMFDif）、一阶 / 二阶差（CMF_SaveOrderDiff）、Dim1 后与全部 CMF 后的 Dif 都只写不读，不做。
     SavePreCmfDif();
     if (Static().cmfBlocked != 0) return;
     if (GetMethod() != kMethod2d) {  // 2D 滤波被裁掉
@@ -343,9 +307,7 @@ void Process() {
         ProcessDim(fl.dim1Axis == 0 ? kDimCol : kDimRow, dyn.cmfThold.amp, dyn.cmfThold.grad, cols, rows);
         if (Static().blRefreshRequest == 0) Baseline::Compensation();
         if (dyn.cmfThold.gameCommonNoise != 0 && Scenario::IsGame()) GameCommonNoise();
-        CopyChecked(AftDim1CmfDif(), kAftCmfDifBytes, buf.dif, fl.sensorNum * size_t{2});
     }
-    CopyChecked(AftCmfDif(), kAftCmfDifBytes, buf.dif, fl.sensorNum * size_t{2});
 }
 
 }  // namespace Solvers::Tsa::Core::Cmf

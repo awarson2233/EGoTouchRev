@@ -25,17 +25,11 @@ namespace Solvers::Tsa::Core::TouchZone {
 
 namespace {
 
-constexpr size_t kMaxSensorNum = 0x1324;       // tz / subTz / 膨胀腐蚀结果缓冲的容量
-constexpr int8_t kMorphologyThold = 0x14;      // 区域图编码不小于它的格子算在区域里
+constexpr size_t kMaxSensorNum = 0x1324;       // tz / subTz 缓冲的容量
 constexpr uint8_t kZoneAgeSlots = 30;          // 区号 0..29 各记一个最大年龄
 constexpr uint16_t kNewAge = 2;
 constexpr uint32_t kExcFloating = 0x8;         // 全局异常：悬浮
 constexpr uint32_t kFeatStylus = 0x1000;
-
-/// g_tsaDistanceMapBuf：TZ_Transform 的距离图；g_tsaFlagAfterDilate / Erode：区域图膨胀 / 腐蚀一格后的结果。
-int8_t* DistanceMap() { return &Slot<int8_t>(Bss().distanceMapBuf); }
-int8_t* FlagAfterDilate() { return &Slot<int8_t>(Bss().flagAfterDilate); }
-int8_t* FlagAfterErode() { return &Slot<int8_t>(Bss().flagAfterErode); }
 
 const PeakEntry& PeakAt(uint8_t idx) { return Peaks().entry[idx]; }
 
@@ -241,52 +235,6 @@ void CentroidToTouch(TouchZoneUnit& z, uint8_t peak) {
 
 // ── 区域图的后处理 ───────────────────────────────────────────────────────
 
-// TZ_Transform @ 0x6ba8ca70
-// 两遍扫描求每格到最近的区域格（erode 时为非区域格）的曼哈顿距离，再按距离是否超过 radius 重写 img：
-// 膨胀时距离不超过 radius 的格子记 1，腐蚀时距离超过 radius 的格子记 1。
-void Transform(int8_t* img, int8_t thold, bool erode, int8_t radius) {
-    const FlashPrmt& fl = PrmtFlash();
-    const uint32_t cols = fl.dim1Len;
-    const uint32_t rows = fl.dim2Len;
-    int8_t* dist = DistanceMap();
-    auto at = [&](uint32_t c, uint32_t r) { return static_cast<uint16_t>(cols * r + c); };
-    auto relax = [&](uint16_t idx, uint16_t from) {
-        if (dist[from] + 1 < dist[idx]) dist[idx] = static_cast<int8_t>(dist[from] + 1);
-    };
-    for (int c = static_cast<int>(cols) - 1; c >= 0; --c) {
-        for (int r = static_cast<int>(rows) - 1; r >= 0; --r) {
-            const uint16_t idx = at(c, r);
-            const bool inside = erode ? img[idx] < thold : thold <= img[idx];
-            if (inside) {
-                dist[idx] = 0;
-                continue;
-            }
-            dist[idx] = static_cast<int8_t>(rows + cols);
-            if (c + 1 < static_cast<int>(cols)) relax(idx, at(c + 1, r));
-            if (r + 1 < static_cast<int>(rows)) relax(idx, at(c, r + 1));
-        }
-    }
-    for (int c = 0; c < static_cast<int>(cols); ++c) {
-        for (int r = 0; r < static_cast<int>(rows); ++r) {
-            const uint16_t idx = at(c, r);
-            if (c > 0) relax(idx, static_cast<uint16_t>(idx - 1));
-            if (r > 0) relax(idx, at(c, r - 1));
-            img[idx] = (radius < dist[idx]) == erode ? 1 : 0;
-        }
-    }
-}
-
-// TZ_DilateAndErode @ 0x6ba8bcf4
-// 区域图（编码不小于 0x14 的格子）分别膨胀、腐蚀一格，结果供后续模块使用。
-void DilateAndErode() {
-    const uint16_t n = PrmtFlash().sensorNum;
-    for (int8_t* dst : {FlagAfterDilate(), FlagAfterErode()}) {
-        TsaAssert(n <= kMaxSensorNum);
-        if (n <= kMaxSensorNum) std::memcpy(dst, Buffers().tz, n);
-        Transform(dst, kMorphologyThold, dst == FlagAfterErode(), 1);
-    }
-}
-
 // TZ_UpdateGripFlagDim @ 0x6ba8b70a
 // 握持年龄模式下补上首 / 末列：未被区域覆盖、|Dif| 超过 finger 门限的格子记为类别 7；
 // 从强格走到弱格时 tag 前进一档，让下一段强格成为另一个区域。
@@ -349,7 +297,7 @@ void PeakBasedProcess() {
         }
     }
     if ((fl.gripFlags & kGripAge) != 0) UpdateGripFlag(buf.tz);
-    DilateAndErode();
+    // TZ_DilateAndErode：把区域图膨胀 / 腐蚀一格写进 g_tsaFlagAfterDilate / Erode，没有模块读它们，不做。
 }
 
 // ── 握持区域年龄 ─────────────────────────────────────────────────────────

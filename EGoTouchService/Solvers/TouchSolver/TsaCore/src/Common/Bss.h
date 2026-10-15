@@ -82,35 +82,22 @@ struct alignas(64) BssLayout {
     std::byte afu[0x50];  // g_afu
     std::byte pkBeforeSDCAccessedFlag[0x4];  // g_pkBeforeSDCAccessedFlag
     std::byte pkAccessedFlag[0x2c];  // g_pkAccessedFlag
-    std::byte reserved094a00[0x2680];
-    std::byte bufOneOrderDiffRx[0x2680];  // g_tsaBufOneOrderDiffRx
-    std::byte reserved099700[0x180];
+    std::byte reserved094a00[0x4e80];
     std::byte bufSelf[0x1b80];  // g_tsaBufSelf
     std::byte reserved09b400[0x4f48];
     std::byte gridMapBufSize[0x38];  // g_gridMapBufSize
-    std::byte reserved0a0380[0x2680];
-    std::byte bufAftCMFDif[0x2680];  // g_tsaBufAftCMFDif
+    std::byte reserved0a0380[0x4d00];
     std::byte bufSelfForBlRst[0x1b80];  // g_tsaBufSelfForBlRst
-    std::byte reserved0a6c00[0x5200];
-    std::byte flagAfterDilate[0x1340];  // g_tsaFlagAfterDilate
-    std::byte reserved0ad140[0x2648];
+    std::byte reserved0a6c00[0x8b88];
     std::byte bufTemp[0x38];  // g_tsaBufTemp
-    std::byte flagAfterErode[0x1340];  // g_tsaFlagAfterErode
-    std::byte reserved0b0b00[0x2680];
-    std::byte bufTwoOrderDiffRx[0x2680];  // g_tsaBufTwoOrderDiffRx
-    std::byte reserved0b5800[0x280];
+    std::byte reserved0af7c0[0x62c0];
     std::byte gridBufSize[0x40];  // g_gridBufSize
-    std::byte distanceMapBuf[0x1340];  // g_tsaDistanceMapBuf
-    std::byte reserved0b6e00[0x2648];
-    std::byte bufPreCMFDif[0x38];  // g_tsaBufPreCMFDif
-    std::byte reserved0b9480[0x2900];
+    std::byte reserved0b5ac0[0x62c0];
     std::byte bufSSPreCMFDif[0x280];  // g_tsaBufSSPreCMFDif
     std::byte reserved0bc000[0x2900];
     std::byte bufSsDifForBl[0x280];  // g_tsaBufSsDifForBl
     std::byte lineBufSize[0x40];  // g_lineBufSize
-    std::byte reserved0bebc0[0x2680];
-    std::byte bufAftDim1CMFDif[0x2680];  // g_tsaBufAftDim1CMFDif
-    std::byte reserved0c38c0[0x2648];
+    std::byte reserved0bebc0[0x7348];
     std::byte maxDimSize[0x38];  // g_maxDimSize
     std::byte reserved0c5f40[0x5700];
     std::byte prpt[0x340];  // g_tsaPrpt
@@ -196,22 +183,14 @@ static_assert(offsetof(BssLayout, tzBufferHighRes) == 0x062980);
 static_assert(offsetof(BssLayout, afu) == 0x094980);
 static_assert(offsetof(BssLayout, pkBeforeSDCAccessedFlag) == 0x0949d0);
 static_assert(offsetof(BssLayout, pkAccessedFlag) == 0x0949d4);
-static_assert(offsetof(BssLayout, bufOneOrderDiffRx) == 0x097080);
 static_assert(offsetof(BssLayout, bufSelf) == 0x099880);
 static_assert(offsetof(BssLayout, gridMapBufSize) == 0x0a0348);
-static_assert(offsetof(BssLayout, bufAftCMFDif) == 0x0a2a00);
 static_assert(offsetof(BssLayout, bufSelfForBlRst) == 0x0a5080);
-static_assert(offsetof(BssLayout, flagAfterDilate) == 0x0abe00);
 static_assert(offsetof(BssLayout, bufTemp) == 0x0af788);
-static_assert(offsetof(BssLayout, flagAfterErode) == 0x0af7c0);
-static_assert(offsetof(BssLayout, bufTwoOrderDiffRx) == 0x0b3180);
 static_assert(offsetof(BssLayout, gridBufSize) == 0x0b5a80);
-static_assert(offsetof(BssLayout, distanceMapBuf) == 0x0b5ac0);
-static_assert(offsetof(BssLayout, bufPreCMFDif) == 0x0b9448);
 static_assert(offsetof(BssLayout, bufSSPreCMFDif) == 0x0bbd80);
 static_assert(offsetof(BssLayout, bufSsDifForBl) == 0x0be900);
 static_assert(offsetof(BssLayout, lineBufSize) == 0x0beb80);
-static_assert(offsetof(BssLayout, bufAftDim1CMFDif) == 0x0c1240);
 static_assert(offsetof(BssLayout, maxDimSize) == 0x0c5f08);
 static_assert(offsetof(BssLayout, prpt) == 0x0cb640);
 static_assert(offsetof(BssLayout, difBlockPrpt) == 0x0cb980);

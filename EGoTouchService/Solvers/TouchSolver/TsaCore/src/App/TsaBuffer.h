@@ -110,8 +110,7 @@ static_assert(offsetof(TsaBufferTable, gripRegion) == 0x150);
 [[nodiscard]] inline uint16_t& LineBufSize() noexcept { return Slot<uint16_t>(Bss().lineBufSize); }     // dim1Len + dim2Len
 [[nodiscard]] inline uint16_t& MaxDimSize() noexcept { return Slot<uint16_t>(Bss().maxDimSize); }      // max(dim1Len, dim2Len)
 
-/// 缓冲表之外的两块网格缓冲：CMF 前的 Dif，侧边区域图。
-[[nodiscard]] inline int16_t*& PreCmfDif() noexcept { return Slot<int16_t*>(Bss().bufPreCMFDif); }
+/// 缓冲表之外的侧边区域图。
 [[nodiscard]] inline int8_t*& SideTz() noexcept { return Slot<int8_t*>(Bss().bufTzSide); }
 
 /// 传感器 (dim1, dim2) 在网格缓冲里的下标，按 16 位截断。
