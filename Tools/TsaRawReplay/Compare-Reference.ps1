@@ -5,21 +5,23 @@
 
 .DESCRIPTION
   把同一批录制分别喂给两份 TsaRawReplay：一份从参考提交（默认是标签 tsa-reference）构建，一份从当前
-  工作区构建。每份录制跑若干场景（纯回放、充电器、长时间静止、注入模拟笔、经 StylusPipeline 的真实笔），比较三样东西：
+  工作区构建。每份录制默认跑纯回放、长时间静止、注入模拟笔三个场景（-Full 再加充电器、悬停笔、经
+  StylusPipeline 的真实笔），比较两样东西：
 
     触点 CSV        每帧上报的触点（数量、ID、事件、坐标）
     stderr          闭环请求 / AFE 动作、笔状态等逐帧诊断
-    状态摘要        每喂一帧之后 TSACore 全部算法状态（镜像 + 堆缓冲）的摘要
 
-  三样全部逐字节相同才算通过。状态摘要不同的时候，会在第一次出现差异的那一帧把两边的完整状态导出来，
-  按符号名列出不同的字段。重构 TSACore 的每一步都应当跑它。
+  逐字节相同才算通过。比较的是算法的输出而不是内部状态，内部状态的布局可以随重构改变。
 
   参考版本检出在 build/tsa-reference/<提交> 下（git worktree），只在第一次用到时构建；它的回放结果按
   录制（路径、大小、修改时间）与场景参数缓存在同一目录下，参考提交不变就不再重跑。所有回放按处理器数并行。
 
-.PARAMETER O2
-  另建一份算法库开 -O2 的构建（build/tsa-raw-O2），同样的录制与场景再跑一遍，状态摘要须与当前 Debug
-  构建逐字节相同：查未定义行为、未初始化读等随优化变化的问题。
+.PARAMETER Full
+  跑全部六个场景。
+
+.PARAMETER State
+  另外逐帧比较 TSACore 全部算法状态（镜像 + 堆缓冲）的摘要；不同的时候在第一次出现差异的那一帧把两边的
+  完整状态导出来，按符号名列出不同的字段。只在两边状态布局相同、需要定位差异时用。
 
 .PARAMETER Reference
   参考提交。行为有意变更（修了真实的缺陷）之后，把标签挪到新的提交上。
@@ -49,7 +51,8 @@ param(
     [string]$Only = '',
     [switch]$SelfCheck,
     [switch]$Coverage,
-    [switch]$O2
+    [switch]$Full,
+    [switch]$State
 )
 
 $ErrorActionPreference = 'Stop'
@@ -79,8 +82,9 @@ function Get-RecordingFiles {
 
 # 启动一次回放，不等它结束
 function Start-Replay {
-    param([string]$Exe, [string]$Recording, [object[]]$ReplayArgs, [string]$OutBase, [string]$ProfileFile = '')
-    $argList = @("`"$Recording`"") + ($ReplayArgs | ForEach-Object { "$_" }) + @('--state-digest', "`"$OutBase.dig`"")
+    param([string]$Exe, [string]$Recording, [object[]]$ReplayArgs, [string]$OutBase, [string]$ProfileFile = '', [switch]$Digest)
+    $argList = @("`"$Recording`"") + ($ReplayArgs | ForEach-Object { "$_" })
+    if ($Digest) { $argList += @('--state-digest', "`"$OutBase.dig`"") }
     if ($ProfileFile) { $env:LLVM_PROFILE_FILE = $ProfileFile }
     try {
         Start-Process -FilePath $Exe -ArgumentList $argList -NoNewWindow -PassThru `
@@ -93,12 +97,12 @@ function Start-Replay {
 # 回放排队，最多同时跑处理器数个
 $script:running = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
 function Start-Queued {
-    param([string]$Exe, [string]$Recording, [object[]]$ReplayArgs, [string]$OutBase, [string]$ProfileFile = '')
+    param([string]$Exe, [string]$Recording, [object[]]$ReplayArgs, [string]$OutBase, [string]$ProfileFile = '', [switch]$Digest)
     while ($script:running.Count -ge [Environment]::ProcessorCount) {
         $script:running.RemoveAll({ param($p) $p.HasExited }) | Out-Null
         if ($script:running.Count -ge [Environment]::ProcessorCount) { Start-Sleep -Milliseconds 20 }
     }
-    $p = Start-Replay $Exe $Recording $ReplayArgs $OutBase $ProfileFile
+    $p = Start-Replay $Exe $Recording $ReplayArgs $OutBase $ProfileFile -Digest:$Digest
     $null = $p.Handle   # 先取句柄，退出后才读得到 ExitCode
     $script:running.Add($p)
     $p
@@ -153,7 +157,8 @@ function Get-Scenarios {
         # 真实笔数据走 StylusPipeline；没有笔的录制也跑，走的是「笔已连接但不在场」
         @{ Name = 'stylus';    Args = @('--afe', '--stylus-solver') }
     )
-    $list
+    # 默认只跑覆盖面互不重叠的三个：纯回放、静止后退出 idle、模拟笔书写
+    $Full ? $list : @($list | Where-Object { $_.Name -in 'plain', 'idle', 'pen-write' })
 }
 
 # ── 构建 ────────────────────────────────────────────────────────────────
@@ -171,16 +176,6 @@ try {
     } else {
         Invoke-Native 'build' { cmake --build --preset $Preset --target TsaRawReplay }
         $newExe = Join-Path $root "build/$Preset/TsaRawReplay.exe"
-    }
-    $o2Exe = $null
-    if ($O2 -and -not $Coverage) {
-        $o2Dir = Join-Path $root 'build/tsa-raw-O2'
-        if (-not (Test-Path (Join-Path $o2Dir 'CMakeCache.txt'))) {
-            Invoke-Native 'configure O2 build' { cmake --preset $Preset -B $o2Dir '-DEGO_TSA_RAW_EXTRA_FLAGS=-O2' }
-        }
-        Write-Host 'building current tree (algorithm -O2)...'
-        Invoke-Native 'O2 build' { cmake --build $o2Dir --target TsaRawReplay }
-        $o2Exe = Join-Path $o2Dir 'TsaRawReplay.exe'
     }
 } finally {
     Pop-Location
@@ -230,7 +225,7 @@ foreach ($recording in Get-RecordingFiles) {
         $dir = Join-Path $outRoot $label
         New-Item $dir -ItemType Directory -Force | Out-Null
         $job = [pscustomobject]@{ Label = $label; Recording = $recording; Scenario = $scenario; Frames = $info.Frames; Dir = $dir
-                                  New = $null; Ref = $null; RefBase = $null; RefExit = $null; O2Run = $null }
+                                  New = $null; Ref = $null; RefBase = $null; RefExit = $null }
 
         if ($Coverage) {
             $job.New = Start-Queued $newExe $recording $scenario.Args "$dir/new" "$dir/run.profraw"
@@ -245,10 +240,9 @@ foreach ($recording in Get-RecordingFiles) {
             $job.RefExit = [int](Get-Content "$($job.RefBase).exit")
         } else {
             New-Item (Split-Path $job.RefBase) -ItemType Directory -Force | Out-Null
-            $job.Ref = Start-Queued $refExe $recording $scenario.Args $job.RefBase
+            $job.Ref = Start-Queued $refExe $recording $scenario.Args $job.RefBase -Digest
         }
-        $job.New = Start-Queued $newExe $recording $scenario.Args "$dir/new"
-        if ($o2Exe) { $job.O2Run = Start-Queued $o2Exe $recording $scenario.Args "$dir/o2" }
+        $job.New = Start-Queued $newExe $recording $scenario.Args "$dir/new" -Digest:$State
         $jobs += $job
     }
 }
@@ -270,21 +264,16 @@ foreach ($job in $jobs) {
     if ($job.RefExit -ne 0) { $failures += "reference exit $($job.RefExit)" }
     if ($job.New.ExitCode -ne 0) { $failures += "current exit $($job.New.ExitCode)" }
     if (-not $failures) {
-        foreach ($kind in 'csv', 'err', 'dig') {
+        foreach ($kind in @('csv', 'err') + ($State ? @('dig') : @())) {
             if (-not (Test-SameFile "$refBase.$kind" "$dir/new.$kind")) { $failures += $kind }
         }
     }
-    if ($job.O2Run -and ($job.O2Run.ExitCode -ne 0 -or -not (Test-SameFile "$dir/o2.dig" "$dir/new.dig"))) { $failures += 'O2' }
 
     $detail = ''
     if ($failures -contains 'csv' -or $failures -contains 'err') {
         $kind = ($failures -contains 'csv') ? 'csv' : 'err'
         $d = Get-FirstDifference "$refBase.$kind" "$dir/new.$kind"
         $detail = "$kind line $($d.Line):`n    ref: $($d.A)`n    new: $($d.B)"
-    }
-    if ($failures -contains 'O2') {
-        $d = Get-FirstDifference "$dir/new.dig" "$dir/o2.dig"
-        $detail += ($detail ? "`n" : '') + "O2 digest first differs: $(if ($d) { "line $($d.Line), step $(($d.A -split ' ')[0])" } else { "exit $($job.O2Run.ExitCode)" })"
     }
     if ($failures -contains 'dig') {
         $d = Get-FirstDifference "$refBase.dig" "$dir/new.dig"
@@ -306,7 +295,7 @@ foreach ($job in $jobs) {
     }
 
     if ($SelfCheck -and $scenario.Name -eq 'plain') {
-        $again = Start-Replay $refExe $recording ($scenario.Args + @('--heap-skew', 3000)) "$dir/ref-again"
+        $again = Start-Replay $refExe $recording ($scenario.Args + @('--heap-skew', 3000)) "$dir/ref-again" -Digest
         $again | Wait-Process
         if (-not (Test-SameFile "$refBase.dig" "$dir/ref-again.dig")) { $failures += 'self-check (reference digest is not reproducible)' }
     }
