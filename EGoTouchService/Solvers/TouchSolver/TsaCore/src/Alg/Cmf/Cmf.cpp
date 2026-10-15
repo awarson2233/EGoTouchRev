@@ -27,9 +27,6 @@ constexpr int16_t kGameThold = 0x4b0;
 constexpr int16_t kGameGrad = 200;
 constexpr int kMaxLineLen = 0x102;
 
-/// 一条线上相邻格的分类（CMF_NoiseCal）。
-enum class Cell : int { kFlat = 1, kRise = 2, kFall = 3, kHigh = 4, kLow = 5 };
-
 /// Dif 相近的一段连续平坦格。
 struct NoiseCluster {
     int32_t sum;
@@ -57,9 +54,8 @@ NoiseState& Noise() { return Slot<NoiseState>(Bss().cmfNoise); }
 uint8_t& PreCmfDifLogEnabled() { return Slot<uint8_t>(Bss().preCMFDiffLogEnabled); }
 
 // CMF_InitNoiseData @ 0x6ba4d9e0
-void InitNoiseData(const int32_t* data) {
-    NoiseState& st = Noise();
-    ClearChecked(&st, sizeof(NoiseState), sizeof(NoiseState));
+void InitNoiseData(NoiseState& st, const int32_t* data) {
+    ZeroFill(st);
     st.data = data;
     st.weight = nullptr;
     st.lastIdx = 0xffff;
@@ -74,8 +70,7 @@ void AddToCluster(NoiseCluster& c, int32_t v) {
 
 // CMF_PushNoiseData @ 0x6ba4da6a
 // 紧接上一个格的归入同一簇；否则归入最近值与之相差不到 grad 的簇，都不是就开新簇（最多 10 簇，满了归入上一簇）。
-void PushNoiseData(uint16_t idx, int16_t grad) {
-    NoiseState& st = Noise();
+void PushNoiseData(NoiseState& st, uint16_t idx, int16_t grad) {
     const int32_t v = st.data[idx];
     if (idx == st.lastIdx + 1) {
         AddToCluster(st.cluster[st.cur], v);
@@ -109,8 +104,7 @@ void PushNoiseData(uint16_t idx, int16_t grad) {
 
 // CMF_NoiseStatistics @ 0x6ba4deb4（无权重的分支）
 // 均值最小的簇格数更多、或均值为正时取它，否则取均值绝对值最小的簇。
-void NoiseStatistics() {
-    NoiseState& st = Noise();
+void NoiseStatistics(NoiseState& st) {
     int16_t minAvg = 0x7fff;
     uint8_t minAvgCount = 0;
     int16_t minAbs = 0x7fff;
@@ -139,31 +133,25 @@ void NoiseStatistics() {
 }
 
 // CMF_NoiseCal @ 0x6ba4e376
-// 超过 ±thold 的格与相邻差超过 ±grad 的格不参与；连续两格都平坦时前一格进入聚类。
+// 每格分为高、低（超过 ±thold）、升、降（与前一格之差超过 ±grad）与平坦五类；连续两格都平坦时前一格进入
+// 聚类。只有「平坦」参与判断，这里直接算平坦标志（无分支：分类随噪声逐格随机，分支几乎总是预测失败）。
+// 聚类在局部状态上做，结束时写回 g_cmfNoise。
 void NoiseCal(const int32_t* line, int n, int thold, int grad) {
-    std::array<Cell, kMaxLineLen> cls;
+    std::array<uint8_t, kMaxLineLen> flat;
     auto prev = static_cast<int16_t>(line[0]);
-    for (uint8_t i = 1; i < n; ++i) {
+    for (int i = 1; i < n; ++i) {
         const auto v = static_cast<int16_t>(line[i]);
         const auto d = static_cast<int16_t>(v - prev);
-        if (thold < v) {
-            cls[i] = Cell::kHigh;
-        } else if (v < -thold) {
-            cls[i] = Cell::kLow;
-        } else if (grad < d) {
-            cls[i] = Cell::kRise;
-        } else if (d < -grad) {
-            cls[i] = Cell::kFall;
-        } else {
-            cls[i] = Cell::kFlat;
-        }
+        flat[i] = (v <= thold) & (-thold <= v) & (d <= grad) & (-grad <= d);
         prev = v;
     }
-    InitNoiseData(line);
-    for (uint8_t i = 1; i < n - 1; ++i) {
-        if (cls[i] == Cell::kFlat && cls[i + 1] == Cell::kFlat) PushNoiseData(i, static_cast<int16_t>(grad));
+    NoiseState st;
+    InitNoiseData(st, line);
+    for (int i = 1; i < n - 1; ++i) {
+        if ((flat[i] & flat[i + 1]) != 0) PushNoiseData(st, static_cast<uint16_t>(i), static_cast<int16_t>(grad));
     }
-    NoiseStatistics();
+    NoiseStatistics(st);
+    Noise() = st;
 }
 
 // CMF_ProcessCoreWeight @ 0x6ba4e55b（经 CMF_ProcessCore）
