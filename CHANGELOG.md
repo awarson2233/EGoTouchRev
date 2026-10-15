@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.0](https://github.com/awarson2233/EGoTouchRev/compare/v1.2.0...v1.3.0) (2026-10-15)
+
+
+### ✨ 新功能
+
+* **tsacore:** 按 OTP 面板 id 自动选用面板配置 ([33b7e13](https://github.com/awarson2233/EGoTouchRev/commit/33b7e13a17ecbc2b3c393d0d66f452e9e22371a8))
+* **tsacore:** 按 OTP 面板 id 自动选用面板配置 ([1785220](https://github.com/awarson2233/EGoTouchRev/commit/1785220dabc34f1deb65306ea14451baa1e739df))
+
+
+### 🐛 修复
+
+* **recorder:** 日志文件名写成实际的 EGoTouchRecorder.txt ([530a4cf](https://github.com/awarson2233/EGoTouchRev/commit/530a4cf992c1c1387be8201a10b11bfdd389817f))
+
 ## [1.2.0](https://github.com/awarson2233/EGoTouchRev/compare/v1.1.2...v1.2.0) (2026-10-15)
 
 
