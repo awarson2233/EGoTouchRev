@@ -50,6 +50,7 @@
 #include "Rejection/TouchReport/TouchReport.h"
 #include "WorkAround/BadChannel/BadChannel.h"
 #include "WorkAround/ToeSynaBl/ToeSynaBl.h"
+#include "Rejection/GripFilter/GripFilter.h"
 
 namespace Solvers::Tsa::Core::Tsa {
 
@@ -106,7 +107,7 @@ void MsInitCommon(bool full) {
     Exception::Init();
     AntiTouch::Init();
     HardwareAnalyzer::Init();
-    GripFilter_Init();
+    GripFilter::Init();
     BadChannel::Init();
     HandGesture::Init();
     if (full) Baseline::ClearRefreshRequest();
@@ -189,7 +190,7 @@ void TrackAndReport() {
     Peak::Process();
     TouchZone::PeaksBeforeSwitchDif() = Peaks();
     fl.gripFlags |= kGripRegionPass;
-    GripFilter_RegionProcess();
+    GripFilter::RegionProcess();
     Buffer::PrevFrameProcess();
     TouchZone::Process();
     fl.gripFlags &= ~kGripRegionPass;
@@ -207,7 +208,7 @@ void TrackAndReport() {
     TouchSize::PostProcess();
     TouchAction::PostProcess();
     Exception::Process();
-    GripFilter_Process();
+    GripFilter::Process();
     TouchMode::Process();
     AntiTouch::Process();
     Touch::ProcessBetaGrip();
@@ -329,7 +330,7 @@ void Processing(const int16_t* raw, uint32_t ctrl, uint64_t timeMs) {
 // TSAMS_IsReadyForIDLEMode @ 0x6ba9998b（HardwareAnalyzer 从不阻止进 IDLE）
 bool IsMsReadyForIdle() {
     bool ready = true;
-    if (GripFilter_IsOKToEnterIDLE() == 0) {
+    if (!GripFilter::IsOkToEnterIdle()) {
         if (Prpt().touchMode != 0) ready = false;
         if (!Baseline::IsOkToIdle()) ready = false;
     }

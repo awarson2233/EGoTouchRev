@@ -23,6 +23,7 @@
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 #include "Rejection/AntiTouch/AntiTouch.h"
+#include "Rejection/GripFilter/GripFilter.h"
 
 namespace Solvers::Tsa::Core::Touch {
 
@@ -515,7 +516,7 @@ bool IsInAbnormalShapeDetectArea(uint8_t curIdx) {
     const uint8_t margin = (Static().featureFlags & kFeatSideTouch) != 0 ? 3 : 2;
     if (static_cast<uint16_t>(margin * 0x100) < cur.maxEdgeDistDim1 && 0x200 < cur.maxEdgeDistDim2) return true;
     if (cur.dim1Span < static_cast<uint8_t>(margin * 2) || cur.dim2Span < 4) {
-        if (!ByteTrue(GripFilter_IsGripOrTbd(Prev(cur.prevIdx).gripStage))) return true;
+        if (!GripFilter::IsGripOrTbd(Prev(cur.prevIdx).gripStage)) return true;
         return (cur.gripFlags & 0x10000000) != 0;
     }
     return true;
@@ -675,7 +676,7 @@ void ProcessAftTouchEventUnit(uint8_t curIdx) {
 
     if (IsLiftOffDueToMerged(curIdx, prevIdx)) {
         cur.persistFlags2 |= 0x1000000;
-        if (GripFilter_IsGripOrTbdTouch(curIdx) != 0 && PrevPeak::IsOnOuterEdge(cur.peakIdx)) {
+        if (GripFilter::IsGripOrTbdTouch(curIdx) && PrevPeak::IsOnOuterEdge(cur.peakIdx)) {
             GetMergedInfo(curIdx);
         }
     }
@@ -975,7 +976,7 @@ bool IsException(uint8_t curIdx, uint8_t prevIdx) {
 
 // Touch_IsGrip @ 0x6ba742be
 bool IsGrip(uint8_t curIdx) {
-    return GripFilter_IsGripTouch(curIdx);
+    return GripFilter::IsGripTouch(curIdx);
 }
 
 // Touch_IsGhostByMinSigOff @ 0x6ba7160b
@@ -1052,7 +1053,6 @@ void Touch_ProcessAftTouchEvent(void) { T::ProcessAftTouchEvent(); }
 void Touch_ProcessBetaGrip(void) { T::ProcessBetaGrip(); }
 void Touch_ProcessExtInfo(void) { T::ProcessExtInfo(); }
 void Touch_CreatePostReport(uint8_t curIdx, uint8_t) { T::CreatePostReport(curIdx); }
-uint16_t Touch_GetSQDistMMInBetween(uint8_t idxA, uint8_t idxB) { return T::GetSqDistMmInBetween(idxA, idxB); }
 uint32_t Touch_GetSQDistPixel(uint16_t dim1A, uint16_t dim2A, uint16_t dim1B, uint16_t dim2B) {
     return T::GetSqDistPixel(dim1A, dim2A, dim1B, dim2B);
 }

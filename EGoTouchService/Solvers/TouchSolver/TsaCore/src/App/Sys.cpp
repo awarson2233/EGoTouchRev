@@ -499,7 +499,6 @@ bool TSAStatic_IsHWReset(void) { return S::IsHwReset(); }
 uint32_t TSAStatic_IsAFTModeEnabled(void) { return S::IsAftModeEnabled() ? 1 : 0; }
 uint64_t TSAStatic_IsSafeBaselineApplied(void) { return S::IsSafeBaselineApplied() ? 1 : 0; }
 uint8_t TSAStatic_IsSignalReverted(void) { return S::IsSignalReverted() ? 1 : 0; }
-uint64_t TSAStatic_IsScreenRotated(void) { return S::IsScreenRotated() ? 1 : 0; }
 uint8_t TSAStatic_IsChargerPlugged(void) { return S::IsChargerPlugged() ? 1 : 0; }
 uint8_t TSAStatic_IsAllFreqNoisy(void) { return S::IsAllFreqNoisy() ? 1 : 0; }
 uint8_t TSAStatic_IsAllFreqBecomeNoisy(void) { return S::IsAllFreqBecomeNoisy() ? 1 : 0; }

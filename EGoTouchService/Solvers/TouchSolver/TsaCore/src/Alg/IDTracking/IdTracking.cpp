@@ -12,6 +12,7 @@
 #include "App/TsaStatic.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
+#include "Rejection/GripFilter/GripFilter.h"
 
 namespace Solvers::Tsa::Core::IdTracking {
 
@@ -92,7 +93,7 @@ int32_t GetAcc(uint8_t curIdx, uint8_t prevIdx) {
 // 噪声等级 ≥ 2 或上一帧位移已经较大。
 bool IsToIncAccThold(uint8_t curIdx, uint8_t prevIdx) {
     const PrevTouchUnit& prev = Prev(prevIdx);
-    if (!GripFilter_IsPeakAbsGrip(Cur(curIdx).peakIdx) && prev.gripStage == 1) return false;
+    if (!GripFilter::IsPeakAbsGrip(Cur(curIdx).peakIdx) && prev.gripStage == 1) return false;
     if ((prev.persistFlags2 & kPersist2NoIncAccThold) != 0) return false;
     if (Touch::IsException(curIdx, prevIdx) || Static().noiseLevel >= 2) return true;
     return prev.maxSqDistMmFromPrev >= kIncAccTholdSqDistMm;
@@ -257,7 +258,7 @@ void AccCheck(Matching& match, bool strict) {
         if ((inc || strict ? accThold << 2 : accThold) < acc) {
             match[p] = kNoMatch;
             Static().specialControlFlags |= kSpecialAccTooLarge;
-        } else if (GripFilter_IsToCancelIDMapping(c, p)) {
+        } else if (GripFilter::IsToCancelIdMapping(c, p)) {
             match[p] = kNoMatch;
             Cur(c).gripFlags |= kGripIdMappingCancelled;
         }

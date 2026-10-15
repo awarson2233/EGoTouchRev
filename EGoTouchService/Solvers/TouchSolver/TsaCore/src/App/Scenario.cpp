@@ -252,7 +252,4 @@ void TSA_EnableScenario(uint32_t mask) { Sc::Enable(mask); }
 void TSA_DisableScenario(uint32_t mask) { Sc::Disable(mask); }
 void TSA_SetScreenRotateState(int state) { Sc::SetScreenRotateState(state); }
 uint64_t TSA_IsGameScenario(void) { return Sc::IsGame() ? 1 : 0; }
-bool TSA_IsTypingScenario(void) { return Sc::IsTyping(); }
-uint64_t TSA_IsJustEnterTypingScenario(void) { return Sc::IsJustEnterTyping() ? 1 : 0; }
-bool TSA_IsVideoScenario(void) { return Sc::IsVideo(); }
 }  // extern "C"

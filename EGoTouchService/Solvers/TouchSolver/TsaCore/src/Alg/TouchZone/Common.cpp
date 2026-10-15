@@ -95,7 +95,7 @@ uint8_t CalcGripRatio(uint32_t sides, const TouchZoneUnit& z, uint32_t* hitSides
 
 // TZ_UpdateGripRatio @ 0x6ba7faa8
 // field088：按手套过滤的边算的握持比；field058：边上最大信号不超过最强峰一半的方向不算，按左右（系统标志
-// 0x80 时四边）算的握持比，贴到的边记在 field084。
+// 0x80 时四边）算的握持比，贴到的边记在 touchSide。
 void UpdateGripRatio(uint8_t idx, const TouchZoneUnit& z) {
     TouchUnit& t = TouchAt(idx);
     uint32_t hit = 0;
@@ -105,7 +105,7 @@ void UpdateGripRatio(uint8_t idx, const TouchZoneUnit& z) {
     const uint16_t r2 = z.edgeMaxSigDim2 <= halfPeak ? 0 : z.gripRatioDim2;
     const uint32_t sides = (Static().systemFlags & 0x80) != 0 ? 0xf : 0xc;
     t.field058 = CalcGripRatio(sides, z, &hit, r1, r2);
-    t.field084 = hit;
+    t.touchSide = hit;
 }
 
 // TZ_CentroidEdgeFlag @ 0x6ba7f3cb

@@ -21,19 +21,6 @@ uint64_t Exception_GetDetectedChargerNoise(void);
 
 
 // Rejection/GripFilter.c
-void GripFilter_Init(void);
-uint8_t GripFilter_IsOKToEnterIDLE(void);
-void GripFilter_Process(void);
-void GripFilter_RegionProcess(void);
-char GripFilter_IsGripOrTbdTouch(uint8_t idx);
-bool GripFilter_IsGripTouch(uint8_t idx);
-uint64_t GripFilter_IsGripOrTbd(int32_t gripStage);
-bool GripFilter_IsPeakAbsGrip(uint8_t peakIdx);
-bool GripFilter_IsToCancelIDMapping(uint8_t curIdx, uint8_t prevIdx);
-uint64_t GripFilter_IsGrip(int32_t gripStage);
-bool GripFilter_IsPeakAbsNotGrip(uint8_t peakIdx);
-uint32_t GripFilter_GetTrackingThold(void);
-uint8_t GripFilter_IsMergeHandlerSensorEnabled(uint8_t dim1, uint8_t dim2);
 
 
 }  // extern "C"

@@ -39,9 +39,8 @@ inline constexpr uint8_t kNoPeak = kMaxPeakNum;
 [[nodiscard]] inline uint32_t& SdcPeakAccessed() noexcept { return Image::At<uint32_t>(0x6bc139d0); }
 /// g_tzBuffer：生长时遍历到的格子的 Dif，轮廓插值的输入。
 [[nodiscard]] inline int16_t*& ZoneSig() noexcept { return Image::At<int16_t*>(0x6bb80fc0); }
-/// g_peaksBeforeSwitchDifBuffer：切换 Dif 前的峰表；g_peaksGrid：Grid 的峰表。
+/// g_peaksBeforeSwitchDifBuffer：切换 Dif 前的峰表。
 [[nodiscard]] inline PeakTable& PeaksBeforeSwitchDif() noexcept { return Image::At<PeakTable>(0x6bbc0b40); }
-[[nodiscard]] inline PeakTable& PeaksGrid() noexcept { return Image::At<PeakTable>(0x6bbc0980); }
 /// g_tsaBufTimeHand：每格自手掌按下以来的时间。
 [[nodiscard]] inline int16_t* TimeHand() noexcept { return Image::At<int16_t*>(0x6bba3518); }
 /// g_tsaBufSelf 里 TZ 借用的两段（每个区域重新清零），下标 dim1，或 dim1Len + dim2：

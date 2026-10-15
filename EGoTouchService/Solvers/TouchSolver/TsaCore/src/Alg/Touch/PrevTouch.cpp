@@ -342,12 +342,10 @@ using Solvers::Tsa::Core::HistoryEntry;
 extern "C" {
 void PrevTouch_Release(void) { PT::Release(); }
 uint8_t PrevTouch_GetIdxBasedOnID(char id) { return PT::GetIdxBasedOnId(static_cast<uint8_t>(id)); }
-uint8_t PrevTouch_GetIdxBasedOnCurIdx(uint8_t curIdx) { return PT::GetIdxBasedOnCurIdx(curIdx); }
 uint64_t PrevTouch_IsValidId(char id) { return PT::IsValidId(static_cast<uint8_t>(id)); }
 void PrevTouch_PostProcess(void) { PT::PostProcess(); }
 void PrevTouch_UnitCopy(uint8_t prevIdx, uint8_t curIdx) { PT::UnitCopy(prevIdx, curIdx); }
 void PrevTouch_UnitUpdate(uint8_t prevIdx, uint8_t curIdx) { PT::UnitUpdate(prevIdx, curIdx); }
-void PrevTouch_HistoryBufferClean(uint8_t prevIdx) { PT::HistoryBufferClean(prevIdx); }
 uint64_t PrevTouch_HistoryBufferPush(uint8_t prevIdx, uint64_t* entry) {
     return PT::HistoryBufferPush(prevIdx, *reinterpret_cast<const HistoryEntry*>(entry));
 }

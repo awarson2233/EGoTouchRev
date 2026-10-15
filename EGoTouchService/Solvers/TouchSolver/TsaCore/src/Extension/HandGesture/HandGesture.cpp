@@ -23,6 +23,7 @@
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 #include "Prmt/TsaPrmt.h"
+#include "Rejection/GripFilter/GripFilter.h"
 
 namespace Solvers::Tsa::Core::HandGesture {
 
@@ -172,7 +173,7 @@ bool IsGripRelated(uint8_t curIdx, uint8_t prevIdx) {
     const bool invalid = IsDistInvalid(p.pos, u.pos);
     if (!correlated || invalid) return false;
     Cur(p.curIdx).gripFlags |= kGripHandRelated;
-    return GripFilter_IsGrip(p.gripStage) != 0;
+    return GripFilter::IsGrip(p.gripStage);
 }
 
 // HandGesture_IsRelatedGripDetected @ 0x6baee4eb
@@ -415,4 +416,3 @@ bool Is2HandDetected() { return (g_state.flags & kTwoHand) != 0; }
 }  // namespace Solvers::Tsa::Core::HandGesture
 
 // raw 的调用方（GripFilter）
-extern "C" bool HandGesture_Is2HandDetected(void) { return Solvers::Tsa::Core::HandGesture::Is2HandDetected(); }

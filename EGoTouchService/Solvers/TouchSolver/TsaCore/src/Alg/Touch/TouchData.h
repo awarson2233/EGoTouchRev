@@ -113,7 +113,7 @@ struct TouchUnit {
     int16_t maxRefPeakSig;  // 整条轨迹上 min(全局最大峰值, 参考阈值) 的最大值
     int16_t maxPeakSig;  // 整条轨迹上本触点峰值的最大值
     int32_t maxPeakZn;  // 整条轨迹上本触点峰 Zn 的最大值
-    uint32_t field084;
+    uint32_t touchSide;  // 所贴的边（TSA side：上 1、下 2、左 4、右 8）
     uint8_t field088;
     uint8_t reserved089[0x3];
     int32_t sigSum;  // 区域正信号和
@@ -263,7 +263,7 @@ static_assert(offsetof(TouchUnit, signalScale) == 0x07A);
 static_assert(offsetof(TouchUnit, maxRefPeakSig) == 0x07C);
 static_assert(offsetof(TouchUnit, maxPeakSig) == 0x07E);
 static_assert(offsetof(TouchUnit, maxPeakZn) == 0x080);
-static_assert(offsetof(TouchUnit, field084) == 0x084);
+static_assert(offsetof(TouchUnit, touchSide) == 0x084);
 static_assert(offsetof(TouchUnit, field088) == 0x088);
 static_assert(offsetof(TouchUnit, sigSum) == 0x08C);
 static_assert(offsetof(TouchUnit, field090) == 0x090);
@@ -407,7 +407,7 @@ struct PrevTouchUnit {
     int16_t maxRefPeakSig;  // 整条轨迹上 min(全局最大峰值, 参考阈值) 的最大值
     int16_t maxPeakSig;  // 整条轨迹上本触点峰值的最大值
     int32_t maxPeakZn;  // 整条轨迹上本触点峰 Zn 的最大值
-    uint32_t field084;
+    uint32_t touchSide;  // 所贴的边（TSA side：上 1、下 2、左 4、右 8）
     uint8_t field088;
     uint8_t reserved089[0x3];
     int32_t sigSum;  // 区域正信号和
@@ -612,7 +612,7 @@ static_assert(offsetof(PrevTouchUnit, signalScale) == 0x07A);
 static_assert(offsetof(PrevTouchUnit, maxRefPeakSig) == 0x07C);
 static_assert(offsetof(PrevTouchUnit, maxPeakSig) == 0x07E);
 static_assert(offsetof(PrevTouchUnit, maxPeakZn) == 0x080);
-static_assert(offsetof(PrevTouchUnit, field084) == 0x084);
+static_assert(offsetof(PrevTouchUnit, touchSide) == 0x084);
 static_assert(offsetof(PrevTouchUnit, field088) == 0x088);
 static_assert(offsetof(PrevTouchUnit, sigSum) == 0x08C);
 static_assert(offsetof(PrevTouchUnit, field090) == 0x090);

@@ -341,455 +341,155 @@ void GridIIR_Process(void);
 
 
 
-// GripFilterCheckMultiGripUnit @ 0x6bae73f3 (Rejection\GripFilter.c)
-void GripFilterCheckMultiGripUnit(byte param_1);
 
-// GripFilter_AboveGripDetect @ 0x6bae698c (Rejection\GripFilter.c)
-void GripFilter_AboveGripDetect(void);
 
-// GripFilter_BackToGrip @ 0x6bae24a1 (Rejection\GripFilter.c)
-void GripFilter_BackToGrip(void);
 
-// GripFilter_BasicIsAbsGrip @ 0x6bae3fc1 (Rejection\GripFilter.c)
-bool GripFilter_BasicIsAbsGrip(void);
 
-// GripFilter_BasicIsAbsGripAbnormal @ 0x6bae3d07 (Rejection\GripFilter.c)
-undefined8 GripFilter_BasicIsAbsGripAbnormal(void);
 
-// GripFilter_BasicIsAbsGripPrmt @ 0x6bae3c2f (Rejection\GripFilter.c)
-undefined8 GripFilter_BasicIsAbsGripPrmt(void);
 
-// GripFilter_BasicIsAbsNotGrip @ 0x6bae4262 (Rejection\GripFilter.c)
-bool GripFilter_BasicIsAbsNotGrip(void);
 
-// GripFilter_BasicIsFlick @ 0x6bae81d7 (Rejection\GripFilter.c)
-undefined8 GripFilter_BasicIsFlick(void);
 
-// GripFilter_BasicIsTempGrip @ 0x6bae39aa (Rejection\GripFilter.c)
-undefined8 GripFilter_BasicIsTempGrip(void);
 
-// GripFilter_BasicIsTempGripAbnormal @ 0x6bae3618 (Rejection\GripFilter.c)
-undefined8 GripFilter_BasicIsTempGripAbnormal(void);
 
-// GripFilter_BasicProcess @ 0x6bae4ab3 (Rejection\GripFilter.c)
-void GripFilter_BasicProcess(byte param_1,byte param_2);
 
-// GripFilter_CheckCornerMultiGrip @ 0x6bae7964 (Rejection\GripFilter.c)
-void GripFilter_CheckCornerMultiGrip(void);
 
-// GripFilter_CheckMultiGrip @ 0x6bae7d07 (Rejection\GripFilter.c)
-void GripFilter_CheckMultiGrip(void);
 
-// GripFilter_CheckMultiGripOnCore @ 0x6bae7701 (Rejection\GripFilter.c)
-void GripFilter_CheckMultiGripOnCore(void);
 
-// GripFilter_CheckMultiGripOnSide @ 0x6bae773c (Rejection\GripFilter.c)
-void GripFilter_CheckMultiGripOnSide(void);
 
-// GripFilter_CheckScreenRotatedMultiGrip @ 0x6bae7b19 (Rejection\GripFilter.c)
-void GripFilter_CheckScreenRotatedMultiGrip(void);
 
-// GripFilter_ClearDeadZoneFlag @ 0x6bae5565 (Rejection\GripFilter.c)
-void GripFilter_ClearDeadZoneFlag(void);
 
-// GripFilter_CloseGripDetect @ 0x6bae6e5b (Rejection\GripFilter.c)
-void GripFilter_CloseGripDetect(void);
 
-// GripFilter_CloseGripOnCore @ 0x6bae6b13 (Rejection\GripFilter.c)
-void GripFilter_CloseGripOnCore(void);
 
-// GripFilter_CloseGripOnSide @ 0x6bae6cf9 (Rejection\GripFilter.c)
-void GripFilter_CloseGripOnSide(void);
 
-// GripFilter_DeadZoneInit @ 0x6bae596d (Rejection\GripFilter.c)
-void GripFilter_DeadZoneInit(void);
 
-// GripFilter_DeadzoneReset @ 0x6bae4ce0 (Rejection\GripFilter.c)
-void GripFilter_DeadzoneReset(void);
 
-// GripFilter_FastMoveDetect @ 0x6bae65ff (Rejection\GripFilter.c)
-void GripFilter_FastMoveDetect(void);
 
-// GripFilter_GetAbsThold @ 0x6bae65e3 (Rejection\GripFilter.c)
-int GripFilter_GetAbsThold(ushort param_1);
 
-// GripFilter_GetCenterLevel @ 0x6baea5fb (Rejection\GripFilter.c)
-byte GripFilter_GetCenterLevel(byte param_1);
 
-// GripFilter_GetClickGripRatio @ 0x6baec860 (Rejection\GripFilter.c)
-undefined1 GripFilter_GetClickGripRatio(void);
 
-// GripFilter_GetCoreDim1Distance @ 0x6bae5fc9 (Rejection\GripFilter.c)
-undefined4 GripFilter_GetCoreDim1Distance(byte param_1,byte param_2);
 
-// GripFilter_GetCoreDim2Distance @ 0x6bae5e21 (Rejection\GripFilter.c)
-undefined4 GripFilter_GetCoreDim2Distance(byte param_1,byte param_2);
 
-// GripFilter_GetCoreDistance @ 0x6bae6171 (Rejection\GripFilter.c)
-int GripFilter_GetCoreDistance(undefined1 param_1,undefined1 param_2);
 
-// GripFilter_GetCtdDistToEdge @ 0x6bae61b9 (Rejection\GripFilter.c)
-undefined2 GripFilter_GetCtdDistToEdge(byte param_1);
 
-// GripFilter_GetDelayTime @ 0x6bae4796 (Rejection\GripFilter.c)
-undefined2 GripFilter_GetDelayTime(void);
 
-// GripFilter_GetDim2Distance @ 0x6bae5dd6 (Rejection\GripFilter.c)
-int GripFilter_GetDim2Distance(byte param_1,byte param_2,byte param_3,byte param_4);
 
-// GripFilter_GetEdge @ 0x6bae9854 (Rejection\GripFilter.c)
-undefined8 GripFilter_GetEdge(void);
 
-// GripFilter_GetEdgeClickRatioThold @ 0x6baecad0 (Rejection\GripFilter.c)
-ushort GripFilter_GetEdgeClickRatioThold(char param_1);
 
-// GripFilter_GetEdgeWidthEnd @ 0x6bae4d95 (Rejection\GripFilter.c)
-char GripFilter_GetEdgeWidthEnd(ushort param_1,ushort param_2,byte param_3);
 
-// GripFilter_GetEdgeWidthStart @ 0x6bae4d44 (Rejection\GripFilter.c)
-char GripFilter_GetEdgeWidthStart(ushort param_1,ushort param_2);
 
-// GripFilter_GetGripLevel @ 0x6baea5a5 (Rejection\GripFilter.c)
-byte GripFilter_GetGripLevel(byte param_1);
 
-// GripFilter_GetPrmt @ 0x6bae43a3 (Rejection\GripFilter.c)
-void GripFilter_GetPrmt(void);
 
-// GripFilter_GetProperty @ 0x6bae9747 (Rejection\GripFilter.c)
-void GripFilter_GetProperty(void);
 
-// GripFilter_GetPropertyGlobal @ 0x6bae990d (Rejection\GripFilter.c)
-void GripFilter_GetPropertyGlobal(void);
 
-// GripFilter_GetQuality @ 0x6bae42bc (Rejection\GripFilter.c)
-void GripFilter_GetQuality(void);
 
-// GripFilter_GetRatioTholdLevelExtra @ 0x6baec8e8 (Rejection\GripFilter.c)
-void GripFilter_GetRatioTholdLevelExtra(byte *param_1);
 
-// GripFilter_GetSafeDistToEdgeThold @ 0x6bae5d57 (Rejection\GripFilter.c)
-undefined2 GripFilter_GetSafeDistToEdgeThold(void);
 
-// GripFilter_GetSafeTouchThold @ 0x6bae5d10 (Rejection\GripFilter.c)
-int GripFilter_GetSafeTouchThold(void);
 
-// GripFilter_GetScreenRotatedCtdDistToEdge @ 0x6bae6220 (Rejection\GripFilter.c)
-undefined2 GripFilter_GetScreenRotatedCtdDistToEdge(byte param_1);
 
-// GripFilter_GetShapeFlag @ 0x6bae9201 (Rejection\GripFilter.c)
-void GripFilter_GetShapeFlag(void);
 
-// GripFilter_GetSideDim2Distance @ 0x6bae6287 (Rejection\GripFilter.c)
-undefined4 GripFilter_GetSideDim2Distance(byte param_1,byte param_2);
 
-// GripFilter_GetSideTouchOnTime @ 0x6bae6425 (Rejection\GripFilter.c)
-int GripFilter_GetSideTouchOnTime(byte param_1);
 
-// GripFilter_GetStage @ 0x6bae492d (Rejection\GripFilter.c)
-void GripFilter_GetStage(void);
 
-// GripFilter_GetTouchedLevel @ 0x6baea6a0 (Rejection\GripFilter.c)
-byte GripFilter_GetTouchedLevel(byte param_1);
 
-// GripFilter_GetTrackingThold @ 0x6bae5d38 (Rejection\GripFilter.c)
-undefined4 GripFilter_GetTrackingThold(void);
 
-// GripFilter_GrapDetect @ 0x6bae71df (Rejection\GripFilter.c)
-void GripFilter_GrapDetect(void);
 
-// GripFilter_HeavyGripRegionDetect @ 0x6bae8d98 (Rejection\GripFilter.c)
-void GripFilter_HeavyGripRegionDetect(void);
 
-// GripFilter_IDLEProcess @ 0x6bae1c75 (Rejection\GripFilter.c)
-void GripFilter_IDLEProcess(void);
 
-// GripFilter_Init @ 0x6bae174a (Rejection\GripFilter.c)
-void GripFilter_Init(void);
 
-// GripFilter_Is2HandGame @ 0x6bae1e40 (Rejection\GripFilter.c)
-undefined8 GripFilter_Is2HandGame(void);
 
-// GripFilter_IsAbnormalLiftOff @ 0x6bae340f (Rejection\GripFilter.c)
-undefined8 GripFilter_IsAbnormalLiftOff(void);
 
-// GripFilter_IsAbsGrip @ 0x6bae1bd9 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsAbsGrip(byte param_1);
 
-// GripFilter_IsBackToGrip @ 0x6bae237b (Rejection\GripFilter.c)
-undefined8 GripFilter_IsBackToGrip(void);
 
-// GripFilter_IsBackToGripAllowed @ 0x6bae1f52 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsBackToGripAllowed(void);
 
-// GripFilter_IsBackToGripSatisfied @ 0x6bae1fd5 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsBackToGripSatisfied(void);
 
-// GripFilter_IsCoreTouchChangeInTime @ 0x6bae2c51 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsCoreTouchChangeInTime(ushort param_1);
 
-// GripFilter_IsCornerGripClick @ 0x6bae7060 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsCornerGripClick(void);
 
-// GripFilter_IsCornerLongPressAllowed @ 0x6bae25b3 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsCornerLongPressAllowed(void);
 
-// GripFilter_IsDelayTimeOut @ 0x6bae47ec (Rejection\GripFilter.c)
-undefined8 GripFilter_IsDelayTimeOut(void);
 
-// GripFilter_IsEnableWeakenCornerClickSupress @ 0x6baec9fe (Rejection\GripFilter.c)
-undefined8 GripFilter_IsEnableWeakenCornerClickSupress(void);
 
-// GripFilter_IsFlickAllowed @ 0x6bae7dbd (Rejection\GripFilter.c)
-undefined8 GripFilter_IsFlickAllowed(void);
 
-// GripFilter_IsFlickDetected @ 0x6bae80e0 (Rejection\GripFilter.c)
-bool GripFilter_IsFlickDetected(void);
 
-// GripFilter_IsGlobalSuppressedClick @ 0x6bae82c8 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsGlobalSuppressedClick(void);
 
-// GripFilter_IsGrip @ 0x6bae193f (Rejection\GripFilter.c)
-undefined8 GripFilter_IsGrip(int param_1);
 
-// GripFilter_IsGripCriteriaDeadzone @ 0x6bae4df8 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsGripCriteriaDeadzone(byte param_1);
 
-// GripFilter_IsGripMergeAllowed @ 0x6bae1eda (Rejection\GripFilter.c)
-bool GripFilter_IsGripMergeAllowed(void);
 
-// GripFilter_IsGripOrTbd @ 0x6bae1966 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsGripOrTbd(int param_1);
 
-// GripFilter_IsGripOrTbdTouch @ 0x6bae1995 (Rejection\GripFilter.c)
-char GripFilter_IsGripOrTbdTouch(byte param_1);
 
-// GripFilter_IsGripTouch @ 0x6bae19d1 (Rejection\GripFilter.c)
-bool GripFilter_IsGripTouch(byte param_1);
 
-// GripFilter_IsHeavyCornerTouched @ 0x6baea7ca (Rejection\GripFilter.c)
-undefined8 GripFilter_IsHeavyCornerTouched(undefined1 param_1);
 
-// GripFilter_IsHeavyRegionTouched @ 0x6baea6e5 (Rejection\GripFilter.c)
-bool GripFilter_IsHeavyRegionTouched(undefined1 param_1);
 
-// GripFilter_IsHigherPriorityTouch @ 0x6baeaf03 (Rejection\GripFilter.c)
-char GripFilter_IsHigherPriorityTouch(undefined1 param_1,undefined1 param_2);
 
-// GripFilter_IsHigherPriorityTouchNormal @ 0x6baead61 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsHigherPriorityTouchNormal(byte param_1,byte param_2);
 
-// GripFilter_IsHigherPriorityTouchPad @ 0x6baeabbe (Rejection\GripFilter.c)
-undefined8 GripFilter_IsHigherPriorityTouchPad(byte param_1,byte param_2);
 
-// GripFilter_IsInDynamicDeadZone @ 0x6bae59ae (Rejection\GripFilter.c)
-undefined8 GripFilter_IsInDynamicDeadZone(ushort param_1);
 
-// GripFilter_IsInExcludedRegion @ 0x6bae9f40 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsInExcludedRegion(byte param_1);
 
-// GripFilter_IsInMultiGripRegion @ 0x6bae977e (Rejection\GripFilter.c)
-undefined8 GripFilter_IsInMultiGripRegion(byte param_1);
 
-// GripFilter_IsInPalmRegion @ 0x6bae696e (Rejection\GripFilter.c)
-char GripFilter_IsInPalmRegion(undefined1 param_1);
 
-// GripFilter_IsLongPress @ 0x6bae675f (Rejection\GripFilter.c)
-undefined4 GripFilter_IsLongPress(void);
 
-// GripFilter_IsLongPressAllowed @ 0x6bae28e0 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsLongPressAllowed(void);
 
-// GripFilter_IsMergeHandlerEdgeEnabled @ 0x6bae1763 (Rejection\GripFilter.c)
-bool GripFilter_IsMergeHandlerEdgeEnabled(uint param_1);
 
-// GripFilter_IsMergeHandlerEnabled @ 0x6bae18c4 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsMergeHandlerEnabled(void);
 
-// GripFilter_IsMergeHandlerSensorEnabled @ 0x6bae1820 (Rejection\GripFilter.c)
-undefined1 GripFilter_IsMergeHandlerSensorEnabled(byte param_1,byte param_2);
 
-// GripFilter_IsMerged @ 0x6bae83a6 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsMerged(byte param_1,byte param_2);
 
-// GripFilter_IsNearbyCorner @ 0x6baea708 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsNearbyCorner(byte param_1);
 
-// GripFilter_IsNegSigTouch @ 0x6bae38c7 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsNegSigTouch(void);
 
-// GripFilter_IsNegSigTouchBypass @ 0x6bae3f02 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsNegSigTouchBypass(void);
 
-// GripFilter_IsOKToEnterIDLE @ 0x6bae1bcc (Rejection\GripFilter.c)
-undefined1 GripFilter_IsOKToEnterIDLE(void);
 
-// GripFilter_IsOnDim1 @ 0x6baec770 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsOnDim1(void);
 
-// GripFilter_IsOnDim2 @ 0x6baec7e8 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsOnDim2(void);
 
-// GripFilter_IsOnOppositeSide @ 0x6bae717f (Rejection\GripFilter.c)
-undefined8 GripFilter_IsOnOppositeSide(int param_1,int param_2);
 
-// GripFilter_IsOnSameShortSide @ 0x6baeaac1 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsOnSameShortSide(byte param_1,byte param_2);
 
-// GripFilter_IsOnSameSide @ 0x6baea8bc (Rejection\GripFilter.c)
-undefined8 GripFilter_IsOnSameSide(byte param_1,byte param_2,int param_3);
 
-// GripFilter_IsPad @ 0x6bae1e1c (Rejection\GripFilter.c)
-bool GripFilter_IsPad(void);
 
-// GripFilter_IsPeakAbsGrip @ 0x6baea0be (Rejection\GripFilter.c)
-bool GripFilter_IsPeakAbsGrip(byte param_1);
 
-// GripFilter_IsPeakAbsNotGrip @ 0x6baea103 (Rejection\GripFilter.c)
-bool GripFilter_IsPeakAbsNotGrip(byte param_1);
 
-// GripFilter_IsRatioOK @ 0x6baecdc6 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsRatioOK(undefined4 param_1);
 
-// GripFilter_IsSafeTouch @ 0x6bae42a9 (Rejection\GripFilter.c)
-char GripFilter_IsSafeTouch(void);
 
-// GripFilter_IsScreenRotatedMultiGripEnabled @ 0x6bae7ae6 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsScreenRotatedMultiGripEnabled(void);
 
-// GripFilter_IsScreenRotatedStateLongPressAllowed @ 0x6bae280c (Rejection\GripFilter.c)
-undefined8 GripFilter_IsScreenRotatedStateLongPressAllowed(void);
 
-// GripFilter_IsSensorInCornerRegion @ 0x6baea1f4 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsSensorInCornerRegion(byte param_1,byte param_2);
 
-// GripFilter_IsSeparated @ 0x6bae864d (Rejection\GripFilter.c)
-undefined8 GripFilter_IsSeparated(byte param_1,byte param_2);
 
-// GripFilter_IsSideTouch @ 0x6bae5d8e (Rejection\GripFilter.c)
-undefined8 GripFilter_IsSideTouch(void);
 
-// GripFilter_IsSignalOK @ 0x6baed803 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsSignalOK(byte param_1,uint param_2,char param_3);
 
-// GripFilter_IsStuckSideTouch @ 0x6bae223a (Rejection\GripFilter.c)
-undefined8 GripFilter_IsStuckSideTouch(void);
 
-// GripFilter_IsSuppressedByCoreTouch @ 0x6bae2fb7 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsSuppressedByCoreTouch(void);
 
-// GripFilter_IsSuppressedByHandGesture @ 0x6bae2dd7 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsSuppressedByHandGesture(void);
 
-// GripFilter_IsSuppressedGlobally @ 0x6bae3211 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsSuppressedGlobally(void);
 
-// GripFilter_IsSuppressedGlobally2 @ 0x6bae2a9d (Rejection\GripFilter.c)
-undefined8 GripFilter_IsSuppressedGlobally2(void);
 
-// GripFilter_IsToApplyDelay @ 0x6bae4695 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsToApplyDelay(void);
 
-// GripFilter_IsToApplyMaxDelay @ 0x6bae4536 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsToApplyMaxDelay(void);
 
-// GripFilter_IsToApplyMaxDelayOnHeavyCorner @ 0x6bae440b (Rejection\GripFilter.c)
-undefined8 GripFilter_IsToApplyMaxDelayOnHeavyCorner(void);
 
-// GripFilter_IsToBypassDelay @ 0x6bae4740 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsToBypassDelay(void);
 
-// GripFilter_IsToCancelIDMapping @ 0x6bae8858 (Rejection\GripFilter.c)
-bool GripFilter_IsToCancelIDMapping(byte param_1,byte param_2);
 
-// GripFilter_IsToCheckAbnormal @ 0x6bae3513 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsToCheckAbnormal(void);
 
-// GripFilter_IsToCheckStuckSideTouch @ 0x6bae2113 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsToCheckStuckSideTouch(void);
 
-// GripFilter_IsTouchInCornerRegion @ 0x6baea327 (Rejection\GripFilter.c)
-char GripFilter_IsTouchInCornerRegion(byte param_1);
 
-// GripFilter_IsTouchInHeavyRegion @ 0x6baea454 (Rejection\GripFilter.c)
-bool GripFilter_IsTouchInHeavyRegion(byte param_1);
 
-// GripFilter_IsTouchIntervalInTime @ 0x6bae6536 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsTouchIntervalInTime(undefined1 param_1,undefined1 param_2,char param_3,int param_4);
 
-// GripFilter_IsTouchPosInCornerRegion @ 0x6baea2b0 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsTouchPosInCornerRegion(byte param_1);
 
-// GripFilter_IsVideoMode @ 0x6bae1e9c (Rejection\GripFilter.c)
-undefined8 GripFilter_IsVideoMode(void);
 
-// GripFilter_IsVideoModeLongPressAllowed @ 0x6bae2720 (Rejection\GripFilter.c)
-undefined8 GripFilter_IsVideoModeLongPressAllowed(void);
 
-// GripFilter_MultiGripDetect @ 0x6bae7d43 (Rejection\GripFilter.c)
-void GripFilter_MultiGripDetect(void);
 
-// GripFilter_NewTouchDetect @ 0x6bae8ab3 (Rejection\GripFilter.c)
-void GripFilter_NewTouchDetect(void);
 
-// GripFilter_Process @ 0x6bae1d3c (Rejection\GripFilter.c)
-void GripFilter_Process(void);
 
-// GripFilter_RegionInit @ 0x6bae9f0d (Rejection\GripFilter.c)
-void GripFilter_RegionInit(void);
 
-// GripFilter_RegionProcess @ 0x6baec71c (Rejection\GripFilter.c)
-void GripFilter_RegionProcess(void);
 
-// GripFilter_RegionReset @ 0x6bae9e90 (Rejection\GripFilter.c)
-void GripFilter_RegionReset(void);
 
-// GripFilter_RegionSet @ 0x6baebad8 (Rejection\GripFilter.c)
-void GripFilter_RegionSet(uint param_1,undefined4 param_2,byte param_3);
 
-// GripFilter_RegionSetBottomLeftCorner @ 0x6baeb21d (Rejection\GripFilter.c)
-void GripFilter_RegionSetBottomLeftCorner(byte param_1);
 
-// GripFilter_RegionSetBottomRightCorner @ 0x6baeb391 (Rejection\GripFilter.c)
-void GripFilter_RegionSetBottomRightCorner(byte param_1);
 
-// GripFilter_RegionSetByHandGesture @ 0x6baec611 (Rejection\GripFilter.c)
-void GripFilter_RegionSetByHandGesture(void);
 
-// GripFilter_RegionSetByScreenRotation @ 0x6baebde9 (Rejection\GripFilter.c)
-void GripFilter_RegionSetByScreenRotation(void);
 
-// GripFilter_RegionSetByScreenRotationFold @ 0x6baec3e4 (Rejection\GripFilter.c)
-void GripFilter_RegionSetByScreenRotationFold(void);
 
-// GripFilter_RegionSetByScreenRotationPad @ 0x6baec121 (Rejection\GripFilter.c)
-void GripFilter_RegionSetByScreenRotationPad(void);
 
-// GripFilter_RegionSetPalm @ 0x6baeb512 (Rejection\GripFilter.c)
-void GripFilter_RegionSetPalm(uint param_1,byte param_2,byte param_3);
 
-// GripFilter_RegionSetTopLeftCorner @ 0x6baeaf42 (Rejection\GripFilter.c)
-void GripFilter_RegionSetTopLeftCorner(byte param_1);
 
-// GripFilter_RegionSetTopRightCorner @ 0x6baeb0a9 (Rejection\GripFilter.c)
-void GripFilter_RegionSetTopRightCorner(byte param_1);
 
-// GripFilter_Report @ 0x6bae1a5b (Rejection\GripFilter.c)
-void GripFilter_Report(void);
 
-// GripFilter_SafeTouchDetect @ 0x6bae891d (Rejection\GripFilter.c)
-void GripFilter_SafeTouchDetect(void);
 
-// GripFilter_SetDeadZoneFlag @ 0x6bae5021 (Rejection\GripFilter.c)
-void GripFilter_SetDeadZoneFlag(void);
 
-// GripFilter_StageOnQuality @ 0x6bae48e1 (Rejection\GripFilter.c)
-undefined8 GripFilter_StageOnQuality(void);
 
-// GripFilter_UpdateDeadzone @ 0x6bae5981 (Rejection\GripFilter.c)
-void GripFilter_UpdateDeadzone(void);
 
-// GripFilter_WeakenCornerClickSupress @ 0x6baeca55 (Rejection\GripFilter.c)
-void GripFilter_WeakenCornerClickSupress(char *param_1);
 
 
 
@@ -805,8 +505,6 @@ void GripFilter_WeakenCornerClickSupress(char *param_1);
 
 
 
-// HandGesture_Is2HandDetected @ 0x6baee0ce (Rejection\HandGesture.c)
-bool HandGesture_Is2HandDetected(void);
 
 
 
@@ -1063,14 +761,10 @@ void PosnSpecial_Put(ushort param_1);
 void PrevPeak_Process(void);
 
 
-// PrevTouch_GetIdxBasedOnCurIdx @ 0x6ba6dcc4 (Tracking\PrevTouch.c)
-undefined1 PrevTouch_GetIdxBasedOnCurIdx(byte param_1);
 
 // PrevTouch_GetIdxBasedOnID @ 0x6ba6db56 (Tracking\PrevTouch.c)
 byte PrevTouch_GetIdxBasedOnID(char param_1);
 
-// PrevTouch_HistoryBufferClean @ 0x6ba6e9b0 (Tracking\PrevTouch.c)
-void PrevTouch_HistoryBufferClean(byte param_1);
 
 // PrevTouch_HistoryBufferGet @ 0x6ba6ee1d (Tracking\PrevTouch.c)
 undefined8 PrevTouch_HistoryBufferGet(byte param_1,byte param_2,undefined8 *param_3);
@@ -1406,8 +1100,6 @@ bool TSAStatic_IsHWReset(void);
 // TSAStatic_IsSafeBaselineApplied @ 0x6baa30f3 (Core\TSAStatic.c)
 undefined8 TSAStatic_IsSafeBaselineApplied(void);
 
-// TSAStatic_IsScreenRotated @ 0x6baa2e39 (Core\TSAStatic.c)
-undefined8 TSAStatic_IsScreenRotated(void);
 
 // TSAStatic_IsSignalReverted @ 0x6baa2c81 (Core\TSAStatic.c)
 uchar TSAStatic_IsSignalReverted(void);
@@ -1505,8 +1197,6 @@ undefined8 TSA_IsGameScenario(void);
 
 
 
-// TSA_IsJustEnterTypingScenario @ 0x6ba8fe53 (Core\TSA.c)
-undefined8 TSA_IsJustEnterTypingScenario(void);
 
 
 // TSA_IsOKToEnterIDLEMode @ 0x6ba9e755 (Core\TSA.c)
@@ -1524,13 +1214,9 @@ undefined1 TSA_IsReCalibNeeded(void);
 
 
 
-// TSA_IsTypingScenario @ 0x6ba8fe17 (Core\TSA.c)
-bool TSA_IsTypingScenario(void);
 
 
 
-// TSA_IsVideoScenario @ 0x6ba8fdf7 (Core\TSA.c)
-bool TSA_IsVideoScenario(void);
 
 // TSA_IsWindowsPadFeatureEnabled @ 0x6ba9ef4b (Core\TSA.c)
 undefined4 TSA_IsWindowsPadFeatureEnabled(void);
@@ -1955,8 +1641,6 @@ short Touch_GetFormattedTimeInterval(short param_1);
 
 
 
-// Touch_GetSQDistMMInBetween @ 0x6ba73515 (Tracking\Touch.c)
-ushort Touch_GetSQDistMMInBetween(byte param_1,byte param_2);
 
 // Touch_GetSQDistPixel @ 0x6ba73447 (Tracking\Touch.c)
 uint Touch_GetSQDistPixel(ushort param_1,ushort param_2,ushort param_3,ushort param_4);

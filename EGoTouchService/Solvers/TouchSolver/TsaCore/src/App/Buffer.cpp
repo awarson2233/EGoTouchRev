@@ -24,6 +24,7 @@
 #include "WorkAround/BadChannel/BadChannel.h"
 #include "WorkAround/RfNoise/RfNoise.h"
 #include "WorkAround/ToeSynaBl/ToeSynaBl.h"
+#include "Rejection/GripFilter/GripFilter.h"
 
 namespace Solvers::Tsa::Core::Buffer {
 
@@ -117,7 +118,7 @@ void TimeRptProcess() {
 
 // TSABuffer_GripTimeProcess @ 0x6ba8eea1：Dif 超过握持跟踪门限的格累计时间
 void GripTimeProcess() {
-    const auto thold = static_cast<int16_t>(GripFilter_GetTrackingThold());
+    const auto thold = GripFilter::GetTrackingThold();
     TsaBufferTable& b = Buffers();
     for (uint16_t i = 0; i < SensorNum(); ++i) {
         b.gripTime[i] = thold < b.dif[i] ? std::max<int16_t>(0, GetNextTime(b.gripTime[i])) : int16_t{0};

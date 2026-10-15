@@ -110,6 +110,18 @@ static_assert(sizeof(ErEdgePrmt) == 0x006);
 static_assert(offsetof(ErEdgePrmt, minDist) == 0x000);
 static_assert(offsetof(ErEdgePrmt, maxDist) == 0x002);
 
+/// GripFilter 按触点所在边取的一组参数（上、下、左、右）。
+struct GripEdgePrmt {
+    int32_t mode;  // 为 1 时竖屏贴上 / 下边的触点不判点击握持
+    uint8_t ratioThold[3];  // 边缘比例门限：点击、长按、握持（等级 0..2）
+    uint8_t reserved007[0x1];
+    uint32_t flags;  // bit1：握持合并处理
+};
+static_assert(sizeof(GripEdgePrmt) == 0x00C);
+static_assert(offsetof(GripEdgePrmt, mode) == 0x000);
+static_assert(offsetof(GripEdgePrmt, ratioThold) == 0x004);
+static_assert(offsetof(GripEdgePrmt, flags) == 0x008);
+
 struct FlashPrmt {
     uint8_t reserved000[0x18];
     uint8_t displayXAxis;  // 与 dim1Axis 相等时 Dim1 是显示的 X 方向
@@ -234,11 +246,18 @@ struct FlashPrmt {
     uint8_t rxLineMaxDist;  // RxLineFilter：两峰的扫描线位置相差小于它才算同一线
     uint8_t reserved8A6[0xE];
     uint8_t sigSumReserveTouch;  // SigSumFilter 保留的触点数
-    uint8_t reserved8B5[0x4];
+    uint8_t reserved8B5[0x3];
+    uint8_t gripFlickDistMm;  // GripFilter：轻扫距离门限（与 3/4 长轴取大）
     uint8_t gripPeakEdgeDist;  // 峰到边缘的距离超过它不算握持峰；也是握持合并峰的搜索半径
     uint16_t gripTimeInterval;  // 握持格与非握持格的按下时间差超过它才拆分区域
     uint16_t maxNotGripTime;  // 非握持峰的握持时间不超过它才看椭圆度
-    uint8_t reserved8BE[0x3A];
+    uint16_t gripCoreTouchChangeMs;  // GripFilter：屏内触点按下 / 抬起后这段时间内的边缘触点按被抑制处理
+    uint8_t gripDeadzoneEdges;  // GripFilter：开启死区的边（bit0 上、1 下、2 左、3 右）
+    uint8_t gripWeakenCornerClick;  // GripFilter：减弱角落点击抑制
+    uint8_t gripIdleEnabled;  // GripFilter：全部绝对握持一段时间后允许进 IDLE
+    uint8_t reserved8C3[0x1];
+    int32_t gripDevice;  // GripFilter：机型（4 平板、5 折叠屏，其余手机）
+    GripEdgePrmt gripEdge[4];
     uint8_t gridIirWeight;  // GridIIR：全频点噪声时 Dif 的 IIR 权重（/256）
     uint8_t defaultSizeMm;  // 尚无尺寸的触点的默认尺寸（mm）；DynPrmt 初值
     uint8_t reserved8FA[0x2];
@@ -502,9 +521,16 @@ static_assert(offsetof(FlashPrmt, noCurvePredict) == 0x8A3);
 static_assert(offsetof(FlashPrmt, rxLineZ8Ratio) == 0x8A4);
 static_assert(offsetof(FlashPrmt, rxLineMaxDist) == 0x8A5);
 static_assert(offsetof(FlashPrmt, sigSumReserveTouch) == 0x8B4);
+static_assert(offsetof(FlashPrmt, gripFlickDistMm) == 0x8B8);
 static_assert(offsetof(FlashPrmt, gripPeakEdgeDist) == 0x8B9);
 static_assert(offsetof(FlashPrmt, gripTimeInterval) == 0x8BA);
 static_assert(offsetof(FlashPrmt, maxNotGripTime) == 0x8BC);
+static_assert(offsetof(FlashPrmt, gripCoreTouchChangeMs) == 0x8BE);
+static_assert(offsetof(FlashPrmt, gripDeadzoneEdges) == 0x8C0);
+static_assert(offsetof(FlashPrmt, gripWeakenCornerClick) == 0x8C1);
+static_assert(offsetof(FlashPrmt, gripIdleEnabled) == 0x8C2);
+static_assert(offsetof(FlashPrmt, gripDevice) == 0x8C4);
+static_assert(offsetof(FlashPrmt, gripEdge) == 0x8C8);
 static_assert(offsetof(FlashPrmt, gridIirWeight) == 0x8F8);
 static_assert(offsetof(FlashPrmt, defaultSizeMm) == 0x8F9);
 static_assert(offsetof(FlashPrmt, defaultTouchAction) == 0x8FC);

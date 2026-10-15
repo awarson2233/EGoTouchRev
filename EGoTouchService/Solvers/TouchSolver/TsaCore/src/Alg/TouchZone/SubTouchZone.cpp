@@ -16,6 +16,7 @@
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 #include "Tool/PosnList/PosnSpecial.h"
+#include "Rejection/GripFilter/GripFilter.h"
 
 namespace Solvers::Tsa::Core::SubTouchZone {
 
@@ -276,7 +277,7 @@ void Process(TouchZoneUnit& zone) {
         if ((zone.flags & kZoneGripSeparated) == 0) {
             GrowByPeak(zone, u, GrowThold(zone), peak.dim1, peak.dim2);
         } else {
-            GrowByGrip(zone, u, GripFilter_IsPeakAbsGrip(seed), peak.dim1, peak.dim2);
+            GrowByGrip(zone, u, GripFilter::IsPeakAbsGrip(seed), peak.dim1, peak.dim2);
         }
         if (u.cellCount == 0) continue;
         SubTzAccess().tag += kTagStep;

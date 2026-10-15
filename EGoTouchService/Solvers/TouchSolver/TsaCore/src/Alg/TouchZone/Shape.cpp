@@ -14,6 +14,7 @@
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
 #include "Tool/PosnList/PosnSpecial.h"
+#include "Rejection/GripFilter/GripFilter.h"
 
 namespace Solvers::Tsa::Core::TouchZone {
 
@@ -208,7 +209,7 @@ void MultiFatFingerCheck(TouchZoneUnit& z) {
     if (z.shape != kShapeMultiFinger) return;
     const uint8_t prevIdx = PrevTouch::GetIdxBasedOnId(z.mergedId);
     if ((z.flags & kZonePrevTouchFlag2) != 0 && prevIdx != kNoTouch &&
-        static_cast<uint8_t>(GripFilter_IsGrip(PrevTouches().unit[prevIdx].gripStage)) == 0) {
+        !GripFilter::IsGrip(PrevTouches().unit[prevIdx].gripStage)) {
         z.flags |= kZoneMultiFatFinger;
     }
     if (kMfMaxCellCount < SubTouchZone::Global().maxCellCount && 1 < SubTouchZone::GetNumAftFilter()) z.flags |= kZoneMultiFatFinger;

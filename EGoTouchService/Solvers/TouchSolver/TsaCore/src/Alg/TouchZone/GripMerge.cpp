@@ -20,6 +20,7 @@
 #include "App/TsaBuffer.h"
 #include "Legacy/RawApi.h"
 #include "Prmt/Prmt.h"
+#include "Rejection/GripFilter/GripFilter.h"
 
 namespace Solvers::Tsa::Core::TouchZone {
 
@@ -41,7 +42,7 @@ uint16_t MmToPixel(uint8_t mm) { return static_cast<uint16_t>(TouchSize::MmToPix
 // TZ_IsPeakInGrip @ 0x6ba843c8：Grid 峰表里同一下标的峰落在握持格上，且该格允许合并处理。
 bool IsPeakInGrip(uint8_t peak) {
     const PeakEntry& p = PeaksGrid().entry[peak];
-    return Buffers().gripStage[GridIndex(p.dim1, p.dim2)] == 1 && GripFilter_IsMergeHandlerSensorEnabled(p.dim1, p.dim2) != 0;
+    return Buffers().gripStage[GridIndex(p.dim1, p.dim2)] == 1 && GripFilter::IsMergeHandlerSensorEnabled(p.dim1, p.dim2);
 }
 
 // TZ_IsPeakNotInGrip @ 0x6ba8437e：不在外边缘的峰，手掌又已按下够久。
@@ -195,7 +196,7 @@ bool SearchMergePeak(const TouchZoneUnit& z, MergeCandidate& best) {
     const auto cd1 = static_cast<uint8_t>(z.centroidDim1 >> 8);
     const auto cd2 = static_cast<uint8_t>(z.centroidDim2 >> 8);
     const uint16_t center = GridIndex(cd1, cd2);
-    const auto thold = static_cast<int16_t>(GripFilter_GetTrackingThold());
+    const auto thold = GripFilter::GetTrackingThold();
     const int r = fl.gripPeakEdgeDist;
     int lo1 = -r, hi1 = r, lo2 = -r, hi2 = r;
     if (z.minDim1 < 2) {
@@ -307,7 +308,7 @@ void CheckToSeparateZone(TouchZoneUnit& z) {
 void SeparateZoneRegret(TouchZoneUnit& z, const SubTouchZone::Unit& u) {
     if ((z.flags & kZoneGripSeparated) == 0 || (z.flags & kZoneForceSeparate) != 0) return;
     if ((PrevAt(z.prevIdx).persistFlags & kPrevReported) != 0) return;
-    if (!GripFilter_IsPeakAbsNotGrip(u.peakIdx)) return;
+    if (!GripFilter::IsPeakAbsNotGrip(u.peakIdx)) return;
     if (IsAbnormalShape(z, u) || 1 < u.peakCount) {
         z.flags |= kZoneSeparateRegret;
         z.flags &= ~kZoneGripSeparated;

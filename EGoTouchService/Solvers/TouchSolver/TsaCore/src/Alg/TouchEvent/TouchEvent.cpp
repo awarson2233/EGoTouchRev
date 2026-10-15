@@ -176,7 +176,7 @@ void TouchDownProcess(uint8_t curIdx) {
     PrevTouch::UnitCopy(prevIdx, curIdx);
     PrevTouchUnit& prev = Prev(prevIdx);
     prev.startPos = cur.pos;
-    prev.field360 = cur.field084;
+    prev.field360 = cur.touchSide;
     prev.field3D4 = Point{cur.field068, cur.field06A};
     prev.smoothEllipseRate = cur.ellipseRate;
     prev.curIdx = curIdx;
