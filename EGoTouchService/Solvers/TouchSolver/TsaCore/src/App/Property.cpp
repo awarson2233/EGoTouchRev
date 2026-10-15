@@ -68,6 +68,32 @@ void Accumulate(Blocks& blocks) {
     const int16_t* dif = Buffers().dif;
     const int cols = PrmtFlash().dim1Len;
     for (const Run& run : g_runs) {
+        if (run.end - run.begin <= 2) {
+            // 最外两列、次外两列的段只有一两格，逐格更新（原代码的做法）比向量化的固定开销小
+            BlockAcc& b = blocks[run.block];
+            for (int i = run.begin; i < run.end; ++i) {
+                const int16_t v = dif[i];
+                if (b.maxSig < v) {
+                    b.maxSig = v;
+                    b.maxDim1 = static_cast<uint8_t>(i - run.row * cols);
+                    b.maxDim2 = run.row;
+                }
+                if (v < b.minSig) {
+                    b.minSig = v;
+                    b.minDim1 = static_cast<uint8_t>(i - run.row * cols);
+                    b.minDim2 = run.row;
+                }
+                if (thold <= v) {
+                    b.posSum += v;
+                    ++b.posCount;
+                } else if (v <= -thold) {
+                    b.negSum += v;
+                    ++b.negCount;
+                }
+                if (kBigSig < v || v < -kBigSig) ++b.bigCount;
+            }
+            continue;
+        }
         int mx = INT16_MIN;
         int mn = INT16_MAX;
         int posSum = 0, negSum = 0, posCount = 0, negCount = 0, bigCount = 0;

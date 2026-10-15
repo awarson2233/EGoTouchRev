@@ -19,28 +19,24 @@ int StrongPos(int v) { return v >= kStrongPos ? v : 0; }
 int StrongNeg(int v) { return v < kStrongNeg ? v : 0; }
 int Abs(int v) { return v < 0 ? -v : v; }
 
+/// 一格的强信号（不小于 kStrongPos 或小于 kStrongNeg 的 Dif，否则 0）。
+int Strong(int v) { return StrongPos(v) + StrongNeg(v); }
+
 /// 各列的累计量：原代码逐列按步长 dim1Len 取格，这里逐行扫、同时累计全部列，访存连续且可向量化。
+/// 中间格（去掉首末两行）的强信号由全列的减去首末两行的得到，少两组逐行累计。
 struct ColumnStats {
     int sum[kMaxDimLen] = {};
-    int strongPos[kMaxDimLen] = {};
-    int strongNeg[kMaxDimLen] = {};
-    int innerStrongPos[kMaxDimLen] = {};
-    int innerStrongNeg[kMaxDimLen] = {};
+    int strong[kMaxDimLen] = {};     // 强信号之和
+    int strongAbs[kMaxDimLen] = {};  // 强信号绝对值之和
     int maxAbs[kMaxDimLen] = {};
 
-    void AddRow(const int16_t* row, int cols, bool inner) {
+    void AddRow(const int16_t* row, int cols) {
         for (int c = 0; c < cols; ++c) {
             const int v = row[c];
             sum[c] += v;
-            strongPos[c] += StrongPos(v);
-            strongNeg[c] += StrongNeg(v);
+            strong[c] += Strong(v);
+            strongAbs[c] += Abs(Strong(v));
             maxAbs[c] = std::max(maxAbs[c], Abs(v));
-        }
-        if (!inner) return;
-        for (int c = 0; c < cols; ++c) {
-            const int v = row[c];
-            innerStrongPos[c] += StrongPos(v);
-            innerStrongNeg[c] += StrongNeg(v);
         }
     }
 };
@@ -60,7 +56,7 @@ void Process() {
     ColumnStats colStats;
     for (int r = 0; r < rows; ++r) {
         const int16_t* row = dif + static_cast<uint16_t>(r * cols);
-        const bool inner = r != 0 && r != rows - 1;
+        colStats.AddRow(row, cols);
         int sum = 0;
         for (int c = 0; c < cols; ++c) sum += row[c];
         int innerPos = 0;
@@ -73,13 +69,16 @@ void Process() {
         s.sum[line] = sum;
         s.innerStrongSum[line] = innerPos + innerNeg;
         s.innerStrongAbsSum[line] = innerPos - innerNeg;
-        colStats.AddRow(row, cols, inner);
     }
+    const int16_t* first = dif;
+    const int16_t* last = dif + static_cast<uint16_t>((rows - 1) * cols);
     for (int c = 0; c < cols; ++c) {
+        // 只有一行时首末是同一行，中间格为空
+        const int edge = rows == 1 ? Strong(first[c]) : Strong(first[c]) + Strong(last[c]);
         s.sum[c] = colStats.sum[c];
-        s.strongSum[c] = colStats.strongPos[c] + colStats.strongNeg[c];
-        s.innerStrongSum[c] = colStats.innerStrongPos[c] + colStats.innerStrongNeg[c];
-        s.strongAbsSum[c] = colStats.strongPos[c] - colStats.strongNeg[c];
+        s.strongSum[c] = colStats.strong[c];
+        s.innerStrongSum[c] = colStats.strong[c] - edge;
+        s.strongAbsSum[c] = colStats.strongAbs[c];
         s.maxAbs[c] = static_cast<int16_t>(colStats.maxAbs[c]);
     }
 }

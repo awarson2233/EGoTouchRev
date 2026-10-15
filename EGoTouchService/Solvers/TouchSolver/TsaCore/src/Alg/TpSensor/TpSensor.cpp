@@ -47,7 +47,8 @@ bool IsCompensationNeeded() {
 // TPSensor_UpdateBrokenSensorTable @ 0x6ba6bb78
 void UpdateBrokenSensorTable() {
     uint8_t* flags = FlagBuf();
-    for (uint16_t i = 0; i < PrmtFlash().sensorNum; ++i) flags[i] &= static_cast<uint8_t>(~kFlagBrokenMask);
+    const int n = PrmtFlash().sensorNum;
+    for (int i = 0; i < n; ++i) flags[i] &= static_cast<uint8_t>(~kFlagBrokenMask);
     const BrokenSensorList& list = Broken();
     for (int k = 0; k < list.count; ++k) {
         const BrokenSensor& s = list.entry[k];

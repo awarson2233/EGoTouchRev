@@ -263,12 +263,19 @@ void ProcessStage() {
 
 // BLSM_ShbIsRawChanges @ 0x6ba4c382
 // 抓取的 raw 与当前 raw 有一格相差超过 finger 门限的一半。
+// 结果只看有没有，按 16 格一块无分支地判（可向量化），有一块命中就返回。
 bool ShbIsRawChanged() {
     const TsaBufferTable& buf = Buffers();
-    const uint16_t n = PrmtFlash().sensorNum;
+    const int n = PrmtFlash().sensorNum;
     const int limit = PrmtFlash().fingerThold / 2;
-    for (uint16_t i = 0; i < n; ++i) {
-        if (limit < std::abs(static_cast<int16_t>(buf.rawCapture[i] - buf.raw[i]))) return true;
+    const int16_t* capture = buf.rawCapture;
+    const int16_t* raw = buf.raw;
+    constexpr int kChunk = 16;
+    for (int base = 0; base < n; base += kChunk) {
+        const int end = std::min(base + kChunk, n);
+        bool hit = false;
+        for (int i = base; i < end; ++i) hit |= limit < std::abs(static_cast<int16_t>(capture[i] - raw[i]));
+        if (hit) return true;
     }
     return false;
 }

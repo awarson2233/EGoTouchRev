@@ -47,18 +47,16 @@ namespace {
 
 // BLIIR_DoUpdate @ 0x6ba47141
 // 每格 raw 与基线之差（按无符号值相减）达到 ±step 时，基线向 raw 走一步。
+// 写成无条件读写加选择（不动的格写回原值），循环才能向量化。
 void DoUpdate(int16_t step) {
     const TsaBufferTable& buf = Buffers();
     const auto* src = reinterpret_cast<const uint16_t*>(PrmtFlash().blUpdateFromPreCmfRaw == 0 ? buf.raw : buf.preCmfRaw);
     auto* bl = reinterpret_cast<uint16_t*>(buf.bl);
-    const uint16_t n = PrmtFlash().sensorNum;
-    for (uint16_t i = 0; i < n; ++i) {
-        const int d = src[i] - bl[i];
-        if (d >= step) {
-            bl[i] = static_cast<uint16_t>(bl[i] + step);
-        } else if (d <= -step) {
-            bl[i] = static_cast<uint16_t>(bl[i] - step);
-        }
+    const int n = PrmtFlash().sensorNum;
+    for (int i = 0; i < n; ++i) {
+        const uint16_t b = bl[i];
+        const int d = src[i] - b;
+        bl[i] = d >= step ? static_cast<uint16_t>(b + step) : d <= -step ? static_cast<uint16_t>(b - step) : b;
     }
     Static().blIirUpdated = 1;
 }

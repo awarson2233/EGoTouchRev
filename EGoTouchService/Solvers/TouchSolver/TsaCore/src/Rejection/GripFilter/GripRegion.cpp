@@ -203,9 +203,8 @@ void RegionSetByScreenRotationFold() {
 void RegionSetByHandGesture() {
     const int8_t* tzPrev = HandBufs().tzPrev;
     uint8_t* region = Buffers().gripRegion;
-    for (uint16_t i = 0; i < PrmtFlash().sensorNum; ++i) {
-        if (tzPrev[i] != 0) region[i] |= kHandGestureBit;
-    }
+    const int n = PrmtFlash().sensorNum;
+    for (int i = 0; i < n; ++i) region[i] = static_cast<uint8_t>(region[i] | (tzPrev[i] != 0 ? kHandGestureBit : 0));
 }
 
 // GripFilter_SetDeadZoneFlag @ 0x6bae5021：握持（或满足死区判据）的触点在边缘时，把它沿边覆盖的格记入死区

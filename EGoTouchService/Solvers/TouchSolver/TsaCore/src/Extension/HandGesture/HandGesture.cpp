@@ -123,8 +123,11 @@ void BaselineReset() { std::copy_n(Buffers().raw, PrmtFlash().sensorNum, HandBuf
 void TimeStep() {
     const int dt = Static().frameIntervalMs;
     int16_t* time = HandBufs().time;
-    for (uint16_t i = 0; i < PrmtFlash().sensorNum; ++i) {
-        if (time[i] != kTimeNone) time[i] = static_cast<int16_t>(std::clamp(dt + time[i], -0x8000, 0x7fff));
+    const int n = PrmtFlash().sensorNum;
+    for (int i = 0; i < n; ++i) {
+        const int16_t t = time[i];
+        const auto next = static_cast<int16_t>(std::clamp(dt + t, -0x8000, 0x7fff));
+        time[i] = t != kTimeNone ? next : t;  // 无条件写回（kTimeNone 写回原值），循环才能向量化
     }
 }
 
@@ -158,9 +161,8 @@ void SetHandArea(uint8_t prevIdx) {
     std::fill_n(area, GridBufSize(), int8_t{0});
     const uint8_t zone = Cur(Prev(prevIdx).curIdx).zoneIdx;
     const uint8_t* tzZone = Buffers().tzZone;
-    for (uint16_t i = 0; i < PrmtFlash().sensorNum; ++i) {
-        if (tzZone[i] == zone) area[i] = 1;
-    }
+    const int n = PrmtFlash().sensorNum;
+    for (int i = 0; i < n; ++i) area[i] = tzZone[i] == zone ? int8_t{1} : area[i];
 }
 
 // HandGesture_IsGripRelated @ 0x6baee25c

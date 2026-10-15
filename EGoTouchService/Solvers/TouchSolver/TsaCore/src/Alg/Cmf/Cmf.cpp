@@ -147,8 +147,27 @@ void NoiseCal(const int32_t* line, int n, int thold, int grad) {
     }
     NoiseState st;
     InitNoiseData(st, line);
-    for (int i = 1; i < n - 1; ++i) {
-        if ((flat[i] & flat[i + 1]) != 0) PushNoiseData(st, static_cast<uint16_t>(i), static_cast<int16_t>(grad));
+    // 进入聚类的格（i 与 i+1 都平坦）成段出现：段首按 PushNoiseData 找簇，段内其余格紧接上一个格，
+    // 原代码逐个并入同一簇，这里整段一次加上（个数按 uint8 回绕，与逐个加相同）。
+    const auto pushed = [&](int i) { return (flat[i] & flat[i + 1]) != 0; };
+    for (int i = 1; i < n - 1;) {
+        if (!pushed(i)) {
+            ++i;
+            continue;
+        }
+        PushNoiseData(st, static_cast<uint16_t>(i), static_cast<int16_t>(grad));
+        int k = i + 1;
+        int32_t sum = 0;
+        while (k < n - 1 && pushed(k)) sum += line[k++];
+        if (const int len = k - i - 1; len != 0) {
+            NoiseCluster& c = st.cluster[st.cur];
+            c.sum += sum;
+            c.count = static_cast<uint8_t>(c.count + len);
+            c.last = line[k - 1];
+            c.weightSum += len;
+            st.lastIdx = static_cast<uint16_t>(k - 1);
+        }
+        i = k;
     }
     NoiseStatistics(st);
     Noise() = st;

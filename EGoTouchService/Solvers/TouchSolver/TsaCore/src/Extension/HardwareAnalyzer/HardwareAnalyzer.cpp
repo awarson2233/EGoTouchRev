@@ -369,18 +369,22 @@ void GetRaw2RawPrpt() {
     struct LineAcc {
         int over, pos, neg, lti, hti, big;
     };
+    // 嵌套的门限条件（超噪声且超 finger 且超 ref …）都是 |v| 超过一串门限，合成递增的有效门限，每项只比一次。
+    const int tLti = std::max(noise, finger);
+    const int tHti = std::max(tLti, ref);
+    const int tBig = std::max<int>(tHti, bigNoise);
     const auto scan = [&]<uint32_t kStep>(const int16_t* p, uint32_t step) {
         int n = 0, pos = 0, neg = 0, lti = 0, hti = 0, big = 0;
         for (uint32_t k = 0; k < lineLen; ++k) {
             const int v = p[k * (kStep != 0 ? kStep : step)];
             const int a = std::abs(v);
-            const bool o = noise < a;
-            n += o ? 1 : 0;
-            pos += o && 0 < v ? v : 0;
-            neg += o && v < 1 ? v : 0;
-            lti += o && finger < a ? 1 : 0;
-            hti += o && finger < a && ref < a ? 1 : 0;
-            big += o && finger < a && ref < a && bigNoise < a ? 1 : 0;
+            const int s = noise < a ? v : 0;  // 超噪声的格的 v（正的计入 pos，非正的计入 neg）
+            n += noise < a ? 1 : 0;
+            pos += std::max(s, 0);
+            neg += std::min(s, 0);
+            lti += tLti < a ? 1 : 0;
+            hti += tHti < a ? 1 : 0;
+            big += tBig < a ? 1 : 0;
         }
         return LineAcc{n, pos, neg, lti, hti, big};
     };
