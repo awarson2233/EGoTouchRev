@@ -46,7 +46,7 @@ flowchart TB
 
 ### 1. 比对脚本 Compare-Reference.ps1
 
-[Compare-Reference.ps1](/Tools/TsaRawReplay/Compare-Reference.ps1) 构建当前树（默认 preset `arm64-Debug-TsaCore`），参考版本只在第一次用到某个提交时构建，其回放结果按录制与场景缓存。每段录制默认跑三个场景：`plain`（原样回放并执行 AFE 闭环）、`idle`（中途注入 IDLE 退出并保持静止）、`pen-write`（注入模拟笔，覆盖笔相关的手指侧逻辑）；`-Full` 再加 `charger`、`pen-hover` 和经 StylusPipeline 的真实笔 `stylus`。比较 [TsaRawReplay](/Tools/TsaRawReplay/main.cpp) 的两样输出：stdout 的逐帧触点 CSV、stderr 的闭环请求与笔诊断。
+[Compare-Reference.ps1](/Tools/TsaRawReplay/Compare-Reference.ps1) 构建当前树（默认 preset `arm64-Debug`），参考版本只在第一次用到某个提交时构建，其回放结果按录制与场景缓存。每段录制默认跑三个场景：`plain`（原样回放并执行 AFE 闭环）、`idle`（中途注入 IDLE 退出并保持静止）、`pen-write`（注入模拟笔，覆盖笔相关的手指侧逻辑）；`-Full` 再加 `charger`、`pen-hover` 和经 StylusPipeline 的真实笔 `stylus`。比较 [TsaRawReplay](/Tools/TsaRawReplay/main.cpp) 的两样输出：stdout 的逐帧触点 CSV、stderr 的闭环请求与笔诊断。
 
 只比输出、不比内部状态，所以状态布局可以随重构改变。`-State` 另外比较逐帧状态摘要：第一次不同的那一帧让两边各自 `--state-dump`，再用 `--state-diff` 按 [bss_symbols.txt](/EGoTouchService/Solvers/TouchSolver/raw/_metadata/bss_symbols.txt) 与 [image_macros.txt](/EGoTouchService/Solvers/TouchSolver/raw/_metadata/image_macros.txt) 把差异落到符号名和偏移上（如 `g_prevTouchesGrid+0x21d`），只在两边布局相同时有意义。`-Only` 按名字子串筛选运行项，`-Recordings` 接受多个文件或目录，`-Coverage` 改为统计覆盖率（写到 `build/tsa-coverage`）。
 
@@ -92,7 +92,7 @@ flowchart LR
 
 ### 5. 性能与计时
 
-服务安装的是 `arm64-Release-TsaCore`（-O3、ThinLTO）。在这个配置下纯回放每帧约 28 µs（5 段录制、2400 帧、钉在大核上取 5 轮最快）。
+服务安装的是 `arm64-Release`（-O3、ThinLTO）。在这个配置下纯回放每帧约 28 µs（5 段录制、2400 帧、钉在大核上取 5 轮最快）。
 
 ```mermaid
 flowchart LR
@@ -104,7 +104,7 @@ flowchart LR
 ```
 
 - **计时**：[Profile.h](/EGoTouchService/Solvers/TouchSolver/TsaCore/src/Common/Profile.h) 只在 `EGO_TSACORE_PROFILE=ON`（定义 `TSACORE_PROFILE`）时编入。`TSA_PROFILE_SCOPE` 计整帧；主流程的每个 `TSA_STEP(调用)` 以调用表达式为名累计耗时，宿主经 `TsaCore_ProfileEntries` 取走。每段计时自身约 30 ns，一帧约 70 段，合计会把整帧抬高约 5 µs，所以 `TsaCore_ProfileSteps(0)`（回放的 `--profile-frame`）可以关掉分步、只留整帧。默认构建里 `TSA_STEP` 就是原样调用。
-- **Benchmark**：[Compare-Reference.ps1](/Tools/TsaRawReplay/Compare-Reference.ps1) `-Benchmark` 用 `-BenchPreset`（默认 `arm64-Release-TsaCore`）构建到 `build/tsa-bench-release`，逐个串行回放。先跑 `-Rounds` 轮 `--profile-frame`，取最快一轮作为每帧耗时；再跑几轮 `--profile`，输出步骤表，前 `-Top` 项打到屏幕，全表写入 `profile.txt`，表里的数字含分步计时的开销。回放进程钉在 `-Affinity`（默认 0xF0，即 8cx Gen 3 的四个大核）上并以高优先级运行；即便如此仍有 5–10% 的噪声。bench 构建全局定义 `EGOTOUCH_DIAGNOSTICS`，因为发布配置的录制读取器不保留原始 SPI 帧，没有它 `--afe` 回放就没有输入；TsaCore 源码不读这个宏。
+- **Benchmark**：[Compare-Reference.ps1](/Tools/TsaRawReplay/Compare-Reference.ps1) `-Benchmark` 用 `-BenchPreset`（默认 `arm64-Release`）构建到 `build/tsa-bench-release`，逐个串行回放。先跑 `-Rounds` 轮 `--profile-frame`，取最快一轮作为每帧耗时；再跑几轮 `--profile`，输出步骤表，前 `-Top` 项打到屏幕，全表写入 `profile.txt`，表里的数字含分步计时的开销。回放进程钉在 `-Affinity`（默认 0xF0，即 8cx Gen 3 的四个大核）上并以高优先级运行；即便如此仍有 5–10% 的噪声。bench 构建全局定义 `EGOTOUCH_DIAGNOSTICS`，因为发布配置的录制读取器不保留原始 SPI 帧，没有它 `--afe` 回放就没有输入；TsaCore 源码不读这个宏。
 - **热点循环的写法**：
   - 逐格循环里不写 `c ? a[i] : x` 这种条件读：clang 会把条件加载向量化成逐 lane 的标量加载，比不向量化还慢。要先无条件读进局部变量，再做选择。条件写同理，改成无条件写回选择后的值。
   - 在 `-fno-strict-aliasing` 下，循环里每次调用 `PrmtFlash()` 之类的访问函数、每次读结构体里的上界，都会重新访存，循环也因此无法向量化。所以参数和循环上界要先取到局部变量里。

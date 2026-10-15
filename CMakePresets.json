@@ -58,16 +58,6 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
-    },
-    {
-      "name": "arm64-Debug-TsaCore",
-      "displayName": "arm64 Debug (same as arm64-Debug; build dir used by Compare-Reference)",
-      "inherits": "arm64-Debug"
-    },
-    {
-      "name": "arm64-Release-TsaCore",
-      "displayName": "arm64 Release (same as arm64-Release; build dir used by install_service.bat)",
-      "inherits": "arm64-Release"
     }
   ],
   "buildPresets": [
@@ -79,28 +69,6 @@
     {
       "name": "arm64-Release",
       "displayName": "arm64 Release Build",
-      "configurePreset": "arm64-Release"
-    },
-    {
-      "name": "arm64-Debug-TsaCore",
-      "displayName": "arm64 Debug Build (TSACore finger solver)",
-      "configurePreset": "arm64-Debug-TsaCore"
-    },
-    {
-      "name": "arm64-Release-TsaCore",
-      "displayName": "arm64 Release Build (TSACore finger solver)",
-      "configurePreset": "arm64-Release-TsaCore"
-    }
-  ],
-  "testPresets": [
-    {
-      "name": "arm64-Debug",
-      "displayName": "arm64 Debug Test",
-      "configurePreset": "arm64-Debug"
-    },
-    {
-      "name": "arm64-Release",
-      "displayName": "arm64 Release Test",
       "configurePreset": "arm64-Release"
     }
   ]
