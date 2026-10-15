@@ -20,7 +20,7 @@ bool TsaCoreSolver::Process(HeatmapFrame& frame, uint64_t timestampMs) {
 
     if (!m_shim.IsInitialized()) {
         if (m_initFailed) return false;
-        if (!m_shim.Initialize()) {
+        if (!m_shim.Initialize(m_projectId.c_str())) {
             m_initFailed = true;
             return false;
         }
@@ -57,6 +57,17 @@ bool TsaCoreSolver::Process(HeatmapFrame& frame, uint64_t timestampMs) {
 
     // 上一帧有点、本帧清空时也要走一次上报，让 VHF 发出全抬起
     return count > 0 || hadContacts;
+}
+
+bool TsaCoreSolver::SetPanelProjectId(std::string_view projectId) {
+    if (m_shim.IsInitialized()) return projectId == m_projectId;
+    m_projectId = projectId;
+    m_adapter.SetPanelGain(GainForProject(projectId));
+    return true;
+}
+
+const char* TsaCoreSolver::LoadedPrmtName() const noexcept {
+    return m_shim.IsInitialized() ? TSA_GetPrmtName() : "";
 }
 
 void TsaCoreSolver::OnBtPressure(uint16_t p0, uint16_t p1, uint16_t p2, uint16_t p3) noexcept {

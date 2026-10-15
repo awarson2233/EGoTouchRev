@@ -13,7 +13,7 @@ constexpr int kCells = Frame::kMatrixCells;
 constexpr int kRx = Frame::kRxCount;
 constexpr int kTx = Frame::kTxCount;
 
-// thp_afe_open_project 为 W273AS2700 写入的常量（两个频点取值相同）。
+// thp_afe_open_project 写入的常量（各面板、两个频点取值都相同）。
 constexpr int kNoDampPositiveThreshold = 300;  // g_MasterNoDampPositiveThreshold
 constexpr int kDampPositiveThreshold = 400;    // g_MasterDampPositiveThreshold
 constexpr int kDampScalePercent = 110;         // g_MasterDampScalePercent
@@ -36,6 +36,12 @@ void HimaxAfeAdapter::Reset() noexcept {
     m_checksumErrors = 0;
     m_suffix = {};
     std::memset(m_stylusGrid, 0, sizeof(m_stylusGrid));
+}
+
+void HimaxAfeAdapter::SetPanelGain(PanelGain gain) noexcept {
+    const bool boe = gain == PanelGain::Boe;
+    m_gainTable[0] = boe ? kBoePixelGainTable1 : kCsotPixelGainTable1;
+    m_gainTable[1] = boe ? kBoePixelGainTable2 : kCsotPixelGainTable2;
 }
 
 void HimaxAfeAdapter::SetChargerPlugged(bool plugged) noexcept {
@@ -113,7 +119,7 @@ void HimaxAfeAdapter::PreprocessRows(uint16_t* cells) noexcept {
 // thp_afe_get_frame 的增益 / 压缩循环。注意这里的零点取 0x8000，比死区阶段的 0x7ffe 高 2，
 // 所以死区归零的格子在这里是 -2，最终输出仍是 kZero。
 void HimaxAfeAdapter::ApplyGainAndCompress(const uint16_t* cells, bool slot1) noexcept {
-    const uint8_t* gainTable = slot1 ? kPixelGainTable2 : kPixelGainTable1;
+    const uint16_t* gainTable = m_gainTable[slot1 ? 1 : 0];
     const int positiveThreshold = m_dampingEnabled ? kDampPositiveThreshold : kNoDampPositiveThreshold;
     const int scalePercent = m_dampingEnabled ? kDampScalePercent : 100;
 

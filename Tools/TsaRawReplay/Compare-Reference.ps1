@@ -122,6 +122,11 @@ function Start-Queued {
 
 function Test-SameFile {
     param([string]$A, [string]$B)
+    if ($A.EndsWith('.err')) {
+        # 开头的 loaded 行描述输入（帧数、面板机型），不是算法输出
+        $body = { param($p) @([System.IO.File]::ReadAllLines($p) | Where-Object { -not $_.StartsWith('loaded ') }) -join "`n" }
+        return (& $body $A) -ceq (& $body $B)
+    }
     (Get-FileHash $A -Algorithm SHA256).Hash -eq (Get-FileHash $B -Algorithm SHA256).Hash
 }
 

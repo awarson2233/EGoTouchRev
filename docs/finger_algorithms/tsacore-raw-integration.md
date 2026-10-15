@@ -97,11 +97,11 @@ sequenceDiagram
 
 [TsaCore/src](/EGoTouchService/Solvers/TouchSolver/TsaCore/src) 编成 C++ 静态库 `TsaCore`，宿主只经 [TsaCoreApi.h](/EGoTouchService/Solvers/TouchSolver/TsaCore/TsaCoreApi.h) 里按原导出签名声明的 `TSA_*` 调用。状态布局、编译选项、与参考版本的比对方法见 [tsacore-cpp-rewrite.md](tsacore-cpp-rewrite.md)。
 
-原 DLL 里本机型不会执行的模块已裁掉，相应分支按常量传播删除。裁剪与真实行为等价，依赖 W273AS2700 参数表的这几个取值，换机型参数表时要重新核对：
+原 DLL 里本机型不会执行的模块已裁掉，相应分支按常量传播删除。裁剪与真实行为等价，依赖内置的四张参数表（第 6 节）在这几个参数上的取值；四张表除 DFLT000000 的 flash+0x54 为 0 之外完全一致，特性位是运行期判断的，置位更少的 0 不会打开被裁掉的模块。新增参数表时要重新核对：
 
 | 参数 | 取值 | 让哪些裁剪成立 |
 |------|------|-------------|
-| `dwFeatureFlagsBase1_or`（flash+0x54） | `0x01090020` | SafeBaseline、SideTouch、Proximity、AFT、SignalDisparity 后处理均未启用 |
+| `dwFeatureFlagsBase1_or`（flash+0x54） | `0x01090020`（DFLT：0） | SafeBaseline、SideTouch、Proximity、AFT、SignalDisparity 后处理均未启用 |
 | `dwPeakProcessingMode`（flash+0x34） | 3 | 走 FIException，HIException 不会被调用 |
 | 自容使能（flash+0x608） | 0 | 所有 `SS_*`；SignalDisparity 只在自容有效时计算 |
 | flash+0x6cd、+0x80e | 0 | `CMFRemap_IsNeedRemap()` 恒为 0 |
@@ -138,7 +138,7 @@ flowchart TD
 3. 偏移：`v ≥ 1 → v - (v < 51 ? 20 : 80)`；`v < 0 → (v + 50 < 0 ? v + 80 : 0)`。
 4. 写 `out[2399 - i] = v + 0x7ffe`（整帧倒序）。
 
-两张增益表各 2400 项、单位为百分比（表 1：76–156，表 2：52–171），下标是倒序之后的格子；W273AS2700 与 W273AS2710 共用，W273AS13x0（BOE）用另一组。表数据在 [HimaxPixelGainTables.inc](/EGoTouchService/Solvers/TouchSolver/TsaCore/HimaxPixelGainTables.inc)，由 DLL 数据段导出。
+两张增益表各 2400 项、单位为百分比，下标是倒序之后的格子。`thp_afe_open_project` 按面板选表：CSOT 面板（W273AS2700 / 2710）用 PixelGainTable1 / 2（表 1：76–156，表 2：52–171），BOE 面板（W273AS1300 / 1310）用另一组，BOE 的两张表内容相同、最大到 350，所以按 uint16 存。表数据在 [HimaxPixelGainTables.inc](/EGoTouchService/Solvers/TouchSolver/TsaCore/HimaxPixelGainTables.inc)，由 DLL 数据段导出；适配层的选表入口是 `HimaxAfeAdapter::SetPanelGain`（[HimaxAfeAdapter.cpp](/EGoTouchService/Solvers/TouchSolver/TsaCore/HimaxAfeAdapter.cpp#L41-L45)），默认 CSOT。阈值 `T` 与 `scale` 各面板相同。
 
 **status 与扫描参数。** 校验通过时基值为 `0x02`，再按 suffix 叠加：`word[0]==1 → |0x01`、跳频在途且当前频率等于目标且 `word[2]!=0 → |0x04`、`word[3]==0x00bb → |0x08`、`word[14]` 或 `word[16] > 1499 → |0x20`、`word[6]!=0 → |0x40`。`curScanFreq = {75,113}[word[10]]`，`curScanRate = 120`。测试录制里出现过的位是 `0x02 | 0x08 | 0x20`。
 
@@ -157,7 +157,7 @@ sequenceDiagram
     participant H as TsaHostShim
     participant T as TsaCore
     H->>H: 抢占进程级单例标志
-    H->>T: TSA_InitAFEProject_UI("W273AS2700", &afeStruct, &hwCaps)
+    H->>T: TSA_InitAFEProject_UI(面板 project id, &afeStruct, &hwCaps)
     Note over T: SetAFECaps → InitProject_UI(LoadProject, TSAMem_InitProject, Context_Init)<br/>→ SetAFECaps → AFT_Init → SetAFEInfo
     H->>T: TSA_SetXRes(2560) / TSA_SetYRes(1600) / TSA_SetResScale(10)
     H->>T: TSA_SetFeatures(TSA_GetFeatures() & 0xffffffc0)
@@ -174,7 +174,7 @@ ctrl flags 由 shim 每帧根据适配层 `status` 维护（TSACore 的消费点
 
 | 位 | 置位来源 | 生命周期 |
 |----|---------|---------|
-| 0, 1 | 初始化；AFE 重新启动（`TsaCoreSolver::OnAfeStarted`，宿主状态机进入取帧时调用，[DeviceRuntime.cpp](/EGoTouchService/Device/runtime/DeviceRuntime.cpp#L1268-L1286)） | 一次性 |
+| 0, 1 | 初始化；AFE 重新启动（`TsaCoreSolver::OnAfeStarted`，宿主状态机进入取帧时调用，[DeviceRuntime.cpp](/EGoTouchService/Device/runtime/DeviceRuntime.cpp#L1265-L1295)） | 一次性 |
 | 2 | IDLE 退出：`status&1` 由 1 变 0，或回放工具注入的退出（`OnAfeIdleExit`） | 一次性 |
 | 3 | `status & 0x08` 的**上升沿**，清除握手见第 8 节 | 一次性 |
 | 4 | `status & 0x04` 跳频完成 | 一次性 |
@@ -259,7 +259,28 @@ flowchart TD
 1. **唯一的手指解算器**：`TsaCoreSolver` 是服务里唯一的手指解算器，没有构建开关。IPC 的 parser-only 模式只解析帧、不调用 TSACore，这时由芯片自己按无输入帧计数进 IDLE。
 2. **单例**：TSACore 全部状态是进程级全局对象，一个进程只有第一个完成初始化的 `TsaHostShim` 可用，其余实例的 `Process` 直接返回 false。A/B 对比要分进程跑。实例析构后可以重新初始化，但 TSACore 在初始化时申请的堆缓冲没有释放路径。
 3. **线程**：只在 worker 线程、`m_pipelineMu` 内调用。宿主状态机的进入 / 离开动作通过 `OnAfeStarted`（芯片 Init 成功：适配层、闭环、输出记账归零，TSACore 按首帧重建基线）和 `OnAfeStopped`（停止取帧：输出记账归零，HID 侧由宿主统一抬起）通知解算器。
-4. **配置**：手指侧没有运行时配置项，TSACore 参数来自内置的 W273AS2700 参数表（[ProjectTables.cpp](/EGoTouchService/Solvers/TouchSolver/TsaCore/src/Prmt/ProjectTables.cpp)）。
+4. **面板配置**：手指侧没有运行时配置项，按面板机型自动选配置。机型是显示驱动 OTP 里烧的 project id，`Himax::Chip` 在第一次建链时按 `getProjectID_OTP` 的序列读出（之后缓存，面板不会变）。原厂拿它做两件事：`himax_thp_drv` 的 `thp_afe_open_project` 选增益表（第 3 节），ApDaemon 的 `ThpBase::InitTsaPrmt` 把它原样交给 `TSA_InitAFEProject_UI`，TSACore 经 TSAPrmt 的 `TSAFlashPrmt_LoadProject` 按名字装参数表（ApDaemon `BasicInit` 里写死的 "W273AS2700" 只是 afename / project 日志字段，不参与选表）。这里的接法：
+
+    ```mermaid
+    flowchart TD
+        OTP["Himax::Chip::GetPanelIdentity<br/>OTP project id"] --> R{"ResolvePanelProjectId<br/>是四个已知 id 之一?"}
+        R -- 否 / 没读出 --> DF["按 W273AS2700，记一条警告"]
+        R -- 是 --> S
+        DF --> S["TsaCoreSolver::SetPanelProjectId<br/>EnterStreaming 里、OnAfeStarted 之前"]
+        S --> G["HimaxAfeAdapter::SetPanelGain<br/>CSOT / BOE 增益表"]
+        S --> I["首帧 TsaHostShim::Initialize(id)<br/>TSA_InitAFEProject_UI → LoadProjectTables(id)"]
+    ```
+
+    | OTP id | 面板 | 增益表 | TSAPrmt 参数表 |
+    |--------|------|--------|---------------|
+    | W273AS2700 | CSOT | CSOT | GaokunHimaxCSOT |
+    | W273AS2710 | CSOT | CSOT | DFLT000000（TSAPrmt 没有专表，原厂同样落到缺省表；阵列尺寸由 `Prmt::LoadProject` 取自 AFE） |
+    | W273AS1300 | BOE | BOE | GaokunHimaxBOE |
+    | W273AS1310 | BOE | BOE | GaokunHimaxBOE_NewMapping（与 BOE 表只差表头的名字） |
+
+    四张参数表（FlashPrmt、CMF PCA、ASA）由 TSAPrmt.dll 实际调用 `TSAFlashPrmt_LoadProject` 导出，生成在 [ProjectTableData.inc](/EGoTouchService/Solvers/TouchSolver/TsaCore/src/Prmt/ProjectTableData.inc)；CMF PCA 四张相同，ASA 两张 BOE 表共用。[LoadProjectTables](/EGoTouchService/Solvers/TouchSolver/TsaCore/src/Prmt/ProjectTables.cpp#L38) 按表头名字逐一比较，找不到就用 DFLT000000，与 TSAPrmt 一致。TSACore 只在第一帧初始化一次，之后 `SetPanelProjectId` 只接受同一个 id。原厂在 OTP 读不出或读到未知 id 时打不开 AFE，这里改为按 W273AS2700 继续工作。
+
+    录制器把 OTP id 写进 DVR 的 runtime config（`Device.panel_project_id`，`RuntimeConfigSnapshot::WithPanelProjectId`），[TsaRawReplay](/Tools/TsaRawReplay/main.cpp) 默认按录制里的 id 选配置，`--panel ID` 可以覆盖；旧录制没有这一项，按 W273AS2700。现有录制都来自 CSOT 面板，换成 DFLT000000 回放时几乎不出点（缺省表的门限与特性位都不是为这块面板整定的），2710 / BOE 的真实行为还要在对应设备上录制核对。
 5. **与笔的关系**：笔的坐标仍由 `StylusPipeline` 解算，调用 `Process` 之前 `frame.stylus` 必须已经处理过；解算器把笔报告、笔帧状态和笔会话状态送进 TSACore，手指侧的笔相关逻辑按原版运行，见第 7 节。
 6. **充电器**：`TsaCoreSolver::SetChargerPlugged` 对应 `thp_afe_set_charger`，业务侧还没有充电状态事件接进来，默认按未插入处理。
 

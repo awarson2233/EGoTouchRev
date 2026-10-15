@@ -65,8 +65,8 @@ public:
     TsaHostShim(const TsaHostShim&) = delete;
     TsaHostShim& operator=(const TsaHostShim&) = delete;
 
-    /// TSA_InitAFEProject_UI + 分辨率 / feature。已有别的实例占用时返回 false。
-    bool Initialize();
+    /// TSA_InitAFEProject_UI(面板 project id) + 分辨率 / feature。已有别的实例占用时返回 false。
+    bool Initialize(const char* projectName);
     [[nodiscard]] bool IsInitialized() const noexcept { return m_initialized; }
 
     /// 喂一帧适配层输出。info.valid 为假或带 SOS 位的帧不应调用。

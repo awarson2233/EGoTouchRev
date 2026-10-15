@@ -34,18 +34,11 @@ void ReInit() {
 
 }  // namespace
 
-// TSAPrmt_Init @ 0x6bb3b90d
-// 原代码经 TSAPrmt_FlashPrmtLoadProject 装入机型参数，它总是返回成功。
-bool Init() {
-    LoadProjectTables();
-    ReInit();
-    return true;
-}
-
 // TSAPrmt_LoadProject @ 0x6bb3b93a
+// TSAPrmt_FlashPrmtLoadProject 对任何名字都装得出一套表（不认识的名字装 DFLT000000），总是成功。
 bool LoadProject(const char* name) {
     if (name == nullptr) return false;
-    LoadProjectTables();
+    LoadProjectTables(name);
     if (std::strcmp(GetProjectName(), "DFLT000000") == 0) {
         FlashPrmt& flash = PrmtFlash();
         flash.dim1Len = static_cast<uint8_t>(Afe::ColNum());

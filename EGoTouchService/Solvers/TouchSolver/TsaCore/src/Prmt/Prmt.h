@@ -57,7 +57,7 @@ static_assert(sizeof(CtdEdgePrmt) == 0x011);
 static_assert(offsetof(CtdEdgePrmt, segmentNum) == 0x000);
 static_assert(offsetof(CtdEdgePrmt, segment) == 0x001);
 
-/// g_tsaPrmtFlash：机型参数表（W273AS2700 由 Prmt::LoadProject 装入）。原厂按 0x840 字节分成三段，这里按整块的偏移排布。
+/// g_tsaPrmtFlash：机型参数表（Prmt::LoadProject 按机型名装入）。原厂按 0x840 字节分成三段，这里按整块的偏移排布。
 /// 调参表（TtPrmt）与运行时参数（RtPrmt）每帧把各自的当前值写回其中的对应字段，名字取自它们的键名与说明。
 /// 单个传感器中心相对格中心的偏移（1/128 格），TZ 求质心时加上。
 struct SensorOffset {

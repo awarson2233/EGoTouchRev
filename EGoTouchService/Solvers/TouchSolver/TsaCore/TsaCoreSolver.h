@@ -19,6 +19,7 @@
 #include <atomic>
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 #include "HimaxAfeAdapter.h"
 #include "SolverTypes.h"
@@ -36,6 +37,13 @@ public:
     bool Process(HeatmapFrame& frame, uint64_t timestampMs);
 
     std::string GetName() const { return "TsaCoreSolver"; }
+
+    /// 面板机型（显示驱动 OTP 的 project id）：选 AFE 的 PixelGain 表与 TSACore 的机型参数表。
+    /// TSACore 在第一帧初始化、之后不再换表，所以初始化之后只接受同一个机型，换机型返回 false。
+    bool SetPanelProjectId(std::string_view projectId);
+    [[nodiscard]] const std::string& PanelProjectId() const noexcept { return m_projectId; }
+    /// TSACore 实际装入的参数表名（没有专表的机型是 "DFLT000000"）。未初始化时为空。
+    [[nodiscard]] const char* LoadedPrmtName() const noexcept;
 
     // ── 宿主状态机的进入动作 ─────────────────────────────────────────
     /// AFE 重新启动（芯片 Init 成功）：适配层、闭环策略、输出记账回到初始状态，
@@ -90,6 +98,7 @@ private:
     void ApplyPenSession() noexcept;
     static StylusReport MakeStylusReport(const StylusFrameData& stylus) noexcept;
 
+    std::string      m_projectId{kDefaultPanelProjectId};
     HimaxAfeAdapter  m_adapter;
     TsaHostShim      m_shim;
     TsaAfeControl    m_control;

@@ -17,7 +17,6 @@ constinit AfeHostStruct g_host{};
 constinit std::atomic<bool> g_claimed{false};
 
 constexpr uint16_t kScanRateList[1] = {HimaxAfeAdapter::kScanRate};
-constexpr char kProjectName[] = "W273AS2700";
 constexpr char kAfeInfo[16] = "himax";
 
 }  // namespace
@@ -26,7 +25,7 @@ TsaHostShim::~TsaHostShim() {
     if (m_initialized) g_claimed.store(false, std::memory_order_release);
 }
 
-bool TsaHostShim::Initialize() {
+bool TsaHostShim::Initialize(const char* projectName) {
     if (m_initialized) return true;
     bool expected = false;
     if (!g_claimed.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
@@ -49,7 +48,7 @@ bool TsaHostShim::Initialize() {
     g_host.frame = &g_frame;
     std::strcpy(g_host.name, "himax_thp_drv");
 
-    if (TSA_InitAFEProject_UI(reinterpret_cast<int64_t>(kProjectName),
+    if (TSA_InitAFEProject_UI(reinterpret_cast<int64_t>(projectName),
                               reinterpret_cast<int64_t>(&g_host),
                               reinterpret_cast<int64_t>(&g_caps)) != 0) {
         g_claimed.store(false, std::memory_order_release);
