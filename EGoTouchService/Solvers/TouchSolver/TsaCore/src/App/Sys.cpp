@@ -1,3 +1,4 @@
+#include "App/Afe.h"
 #include "App/Sys.h"
 
 #include <algorithm>
@@ -31,15 +32,6 @@ uint8_t& HtiFirst() { return Image::At<uint8_t>(0x6bb4f2b9); }    // flagOnceOnl
 uint64_t& IdleTimeoutStamp() { return Image::At<uint64_t>(0x6bb81a10); }
 uint64_t& SideIdleTimeoutStamp() { return Image::At<uint64_t>(0x6bb81a18); }
 
-/// AFE 结构里本帧的状态位（AFE 模块尚未改写，按原布局取）。
-uint32_t AfeFrameStatus() {
-    const auto* afe = Image::At<uint8_t*>(0x6bbaa5c0);  // g_thpAFEStruct
-    const auto* frame = *reinterpret_cast<uint8_t* const*>(afe + 0x10);
-    uint32_t v;
-    std::memcpy(&v, frame + 0x34, sizeof(v));
-    return v;
-}
-
 /// t != -1 且 now ∈ [t, t + span)。
 bool Within(int64_t t, uint64_t now, uint64_t span) {
     return t != kNone && static_cast<uint64_t>(t) <= now && now < static_cast<uint64_t>(t) + span;
@@ -66,7 +58,7 @@ bool IsLargeDisplayNoise() {
     const bool noisy = (fl.peakFilterReferenceThreshold * 2 < prpt.preCmfMaxAbsDif && fl.sensorNum >> 2 < prpt.preCmfOverCount) ||
                        s.prevAllFreqNoisy != 0;
     if (!noisy) return false;
-    return (s.systemFlags & kSysChargerNoise) != 0 || AFE_IsAllFreqNoisy() != 0;
+    return (s.systemFlags & kSysChargerNoise) != 0 || Afe::IsAllFreqNoisy();
 }
 
 bool IsJustOkToEnterIdle() { return Static().idleReady != 0 && Static().prevIdleReady == 0; }
@@ -255,13 +247,13 @@ void PreProcess() {
     s.prevIdleReady = s.idleReady;
     s.prevAfeSideIdle = s.afeSideIdle;
     s.prevSideIdleReady = s.sideIdleReady;
-    s.afeIdle = AFE_IsInIDLEMode() ? 1 : 0;
-    s.afeSideIdle = static_cast<uint8_t>(AFE_IsInSideIDLEMode());
+    s.afeIdle = Afe::IsInIdle() ? 1 : 0;
+    s.afeSideIdle = Afe::IsInSideIdle();
     s.prevNoisyBlReset = s.noisyBlReset;
     s.specialControlFlags = 0;
     s.activeReason = 0;
     s.signalReverted = s.field3F1;
-    if (static_cast<uint8_t>(AFE_IsInProximityScreenOffState()) == 0) {
+    if (!Afe::IsProximityScreenOff()) {
         s.proxScreenOffTime = kNone;
     } else if (s.proxScreenOffTime == kNone) {
         s.proxScreenOffTime = static_cast<int64_t>(s.curTimeMs);
@@ -275,7 +267,7 @@ void PreProcess() {
         s.proximityOffTime = kNone;
     }
     s.frameIntervalMs = Touch::GetFormattedTimeInterval(static_cast<int16_t>(static_cast<int16_t>(s.curTimeMs) - static_cast<int16_t>(s.prevTimeMs)));
-    s.afeStatus = AfeFrameStatus();
+    s.afeStatus = Afe::FrameStatus();
 }
 
 // TSAStatic_PostProcess @ 0x6baa1f51
@@ -370,7 +362,7 @@ bool IsSignalReverted() { return Static().signalReverted != 0; }
 // TSAStatic_IsFreqShiftDone @ 0x6baa23cd
 bool IsFreqShiftDone() {
     const uint32_t flags = Static().systemFlags;
-    return AFE_IsFreqShiftDone() != 0 || (flags & kSysFreqShiftDone) != 0;
+    return Afe::IsFreqShiftDone() || (flags & kSysFreqShiftDone) != 0;
 }
 
 // TSAStatic_IsScreenRotated @ 0x6baa2e39：90° / 270°
@@ -401,7 +393,7 @@ bool IsAllFreqNoisy() {
         s.allFreqNoisy = IsLargeDisplayNoise() ? 1 : 0;
     } else {
         if ((s.systemFlags & kSysChargerNoise) != 0) s.allFreqNoisy = 1;
-        if (AFE_IsAllFreqNoisy() != 0) s.allFreqNoisy = 1;
+        if (Afe::IsAllFreqNoisy()) s.allFreqNoisy = 1;
     }
     return s.allFreqNoisy != 0;
 }
@@ -425,7 +417,7 @@ bool IsAfeJustExitSideIdle() { return Static().afeSideIdle == 0 && Static().prev
 bool IsAfeEnterIdleTimeout() {
     const TsaStatic& s = Static();
     if ((s.featureFlags & kFeatNoIdleTimeout) != 0) return false;
-    if (s.idleReadyTime != kNone && !AFE_IsInIDLEMode() &&
+    if (s.idleReadyTime != kNone && !Afe::IsInIdle() &&
         static_cast<uint64_t>(s.idleReadyTime) + PrmtFlash().idleEnterDelayMs + kIdleTimeoutMs < s.curTimeMs) {
         IdleTimeoutStamp() = s.curTimeMs;
     }
@@ -436,7 +428,7 @@ bool IsAfeEnterIdleTimeout() {
 bool IsAfeEnterSideIdleTimeout() {
     const TsaStatic& s = Static();
     if ((s.featureFlags & kFeatNoIdleTimeout) != 0) return false;
-    if (s.sideIdleReadyTime != kNone && static_cast<uint8_t>(AFE_IsInSideIDLEMode()) == 0 &&
+    if (s.sideIdleReadyTime != kNone && !Afe::IsInSideIdle() &&
         static_cast<uint64_t>(s.sideIdleReadyTime) + PrmtFlash().idleEnterDelayMs + kIdleTimeoutMs < s.curTimeMs) {
         SideIdleTimeoutStamp() = s.curTimeMs;
     }
@@ -481,7 +473,7 @@ uint32_t GetSigThold(int mode) {
 // raw 稳定、本帧没有报点、且曾确认过可信触点时 Dif 可信；否则看上一帧的异常形状触点多不多。
 void SafeDiffCheck() {
     TsaStatic& s = Static();
-    if (s.resetDiffRequested == 0 && static_cast<uint8_t>(AFE_IsRawUnstable()) == 0 && static_cast<uint8_t>(AFE_IsRawJump()) == 0) {
+    if (s.resetDiffRequested == 0 && !Afe::IsRawUnstable() && !Afe::IsRawJump()) {
         if (s.trustedTouchCount != 0 && Touches().reportedThisFrame == 0 && Prpt().field1C4 < 0x32) {
             s.safeDif = 1;
             s.unsafeDif = 0;

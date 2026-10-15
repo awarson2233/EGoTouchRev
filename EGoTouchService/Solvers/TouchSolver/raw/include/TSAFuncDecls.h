@@ -9,303 +9,6 @@
 extern "C" {
 #endif
 
-// AFE_AFTModeNormalAutoCheckUnit @ 0x6bb2aad8 (Core\AFE.c)
-void AFE_AFTModeNormalAutoCheckUnit(void);
-
-// AFE_AFTModeProximityAutoCheckUnit @ 0x6bb2acbd (Core\AFE.c)
-void AFE_AFTModeProximityAutoCheckUnit(void);
-
-// AFE_AutoCheckAFEStruct @ 0x6bb2c220 (Core\AFE.c)
-void AFE_AutoCheckAFEStruct(void);
-
-// AFE_AutoCheckDataPtr @ 0x6bb2c332 (Core\AFE.c)
-void AFE_AutoCheckDataPtr(void *param_1,ushort param_2);
-
-// AFE_AutoCheckDoneLog @ 0x6bb2bc9d (Core\AFE.c)
-void AFE_AutoCheckDoneLog(void);
-
-// AFE_AutoCheckFreqShift @ 0x6bb2b226 (Core\AFE.c)
-void AFE_AutoCheckFreqShift(undefined8 param_1,ulonglong param_2);
-
-// AFE_AutoCheckInit @ 0x6bb29d1a (Core\AFE.c)
-void AFE_AutoCheckInit(void);
-
-// AFE_AutoCheckProcessInternal @ 0x6bb2c45b (Core\AFE.c)
-void AFE_AutoCheckProcessInternal (undefined8 param_1,undefined2 param_2,undefined4 param_3,void *param_4);
-
-// AFE_AutoCheckRaw2RawAndFreqShiftLog @ 0x6bb2b303 (Core\AFE.c)
-void AFE_AutoCheckRaw2RawAndFreqShiftLog(void);
-
-// AFE_AutoCheckRaw2RawLevel @ 0x6bb2ae86 (Core\AFE.c)
-void AFE_AutoCheckRaw2RawLevel(undefined8 param_1);
-
-// AFE_AutoCheckToEnterIDLE @ 0x6bb29cee (Core\AFE.c)
-undefined1 AFE_AutoCheckToEnterIDLE(void);
-
-// AFE_ClearAutoCheckFlag @ 0x6bb29d0d (Core\AFE.c)
-void AFE_ClearAutoCheckFlag(void);
-
-// AFE_FreqShiftAutoCheck @ 0x6bb29fef (Core\AFE.c)
-undefined8 AFE_FreqShiftAutoCheck(void);
-
-// AFE_FreqShiftAutoCheckAbnornalLog @ 0x6bb29e99 (Core\AFE.c)
-void AFE_FreqShiftAutoCheckAbnornalLog(void);
-
-// AFE_FreqShiftCheckReset @ 0x6bb29b90 (Core\AFE.c)
-void AFE_FreqShiftCheckReset(void);
-
-// AFE_FreqShiftSetNextIndex @ 0x6bb29e17 (Core\AFE.c)
-undefined8 AFE_FreqShiftSetNextIndex(void);
-
-// AFE_FreqShiftStatusUpdate @ 0x6bb2c441 (Core\AFE.c)
-void AFE_FreqShiftStatusUpdate(void);
-
-// AFE_FreqShiftTraversedDoneInitFreqRate @ 0x6bb29d33 (Core\AFE.c)
-undefined8 AFE_FreqShiftTraversedDoneInitFreqRate(void);
-
-// AFE_GetColNum @ 0x6bb2d5c3 (Core\AFE.c)
-undefined2 AFE_GetColNum(void);
-
-// AFE_GetFrame @ 0x6bb2cd26 (Core\AFE.c)
-AFE_Frame * AFE_GetFrame(void);
-
-// AFE_GetNextScanFreqIndex @ 0x6bb2d650 (Core\AFE.c)
-undefined8 AFE_GetNextScanFreqIndex(byte *param_1);
-
-// AFE_GetNextScanRateIndex @ 0x6bb2d8a1 (Core\AFE.c)
-undefined8 AFE_GetNextScanRateIndex(byte *param_1,char *param_2);
-
-// AFE_GetRowNum @ 0x6bb2d597 (Core\AFE.c)
-undefined2 AFE_GetRowNum(void);
-
-// AFE_GetTargetScanRateIndex @ 0x6bb2d733 (Core\AFE.c)
-undefined8 AFE_GetTargetScanRateIndex(ushort param_1,byte *param_2);
-
-// AFE_GetVersionInfo @ 0x6bb2cd7e (Core\AFE.c)
-char * AFE_GetVersionInfo(void);
-
-// AFE_IDLEAutoCheck @ 0x6bb2a466 (Core\AFE.c)
-int AFE_IDLEAutoCheck(void);
-
-// AFE_IDLEAutoCheckUnit @ 0x6bb2a22b (Core\AFE.c)
-undefined8 AFE_IDLEAutoCheckUnit(void);
-
-// AFE_IDLECheckReset @ 0x6bb29c60 (Core\AFE.c)
-void AFE_IDLECheckReset(void);
-
-// AFE_IDLECheckResetUnit @ 0x6bb29c34 (Core\AFE.c)
-void AFE_IDLECheckResetUnit(void);
-
-// AFE_IDLEStableModeAutoCheck @ 0x6bb2b7cb (Core\AFE.c)
-void AFE_IDLEStableModeAutoCheck(ulonglong param_1);
-
-// AFE_IdleModeAutoCheckLog @ 0x6bb2b985 (Core\AFE.c)
-void AFE_IdleModeAutoCheckLog(void);
-
-// AFE_Init @ 0x6bb2ca4f (Core\AFE.c)
-void AFE_Init(void);
-
-// AFE_IsAllFreqNoisy @ 0x6bb2e281 (Core\AFE.c)
-byte AFE_IsAllFreqNoisy(void);
-
-// AFE_IsAlwaysNoisy @ 0x6bb2d087 (Core\AFE.c)
-bool AFE_IsAlwaysNoisy(void);
-
-// AFE_IsAutoCalibration @ 0x6bb2cd33 (Core\AFE.c)
-undefined4 AFE_IsAutoCalibration(void);
-
-// AFE_IsCoreTouchDetected @ 0x6bb2cdf2 (Core\AFE.c)
-undefined8 AFE_IsCoreTouchDetected(void);
-
-// AFE_IsFreqHopSupported @ 0x6bb2d61a (Core\AFE.c)
-undefined8 AFE_IsFreqHopSupported(void);
-
-// AFE_IsFreqShiftDone @ 0x6bb2cf6f (Core\AFE.c)
-char AFE_IsFreqShiftDone(void);
-
-// AFE_IsFreqValid @ 0x6bb2e1ca (Core\AFE.c)
-undefined8 AFE_IsFreqValid(byte param_1);
-
-// AFE_IsFrequentlyHopping @ 0x6bb2eede (Core\AFE.c)
-undefined1 AFE_IsFrequentlyHopping(void);
-
-// AFE_IsInAutoCheckProcess @ 0x6bb29ce1 (Core\AFE.c)
-undefined1 AFE_IsInAutoCheckProcess(void);
-
-// AFE_IsInIDLEMode @ 0x6bb2cdc7 (Core\AFE.c)
-bool AFE_IsInIDLEMode(void);
-
-// AFE_IsInProximityScreenOffState @ 0x6bb2cf42 (Core\AFE.c)
-undefined4 AFE_IsInProximityScreenOffState(void);
-
-// AFE_IsInSideIDLEMode @ 0x6bb2cf15 (Core\AFE.c)
-undefined4 AFE_IsInSideIDLEMode(void);
-
-// AFE_IsIndividualBaselineForEachFreq @ 0x6bb2d0e7 (Core\AFE.c)
-bool AFE_IsIndividualBaselineForEachFreq(void);
-
-// AFE_IsManualFreqHopping @ 0x6bb2cfaf (Core\AFE.c)
-undefined4 AFE_IsManualFreqHopping(void);
-
-// AFE_IsRawJump @ 0x6bb2cebb (Core\AFE.c)
-undefined4 AFE_IsRawJump(void);
-
-// AFE_IsRawUnifiedToTargetValue @ 0x6bb2d150 (Core\AFE.c)
-bool AFE_IsRawUnifiedToTargetValue(void);
-
-// AFE_IsRawUnstable @ 0x6bb2cee8 (Core\AFE.c)
-undefined4 AFE_IsRawUnstable(void);
-
-// AFE_IsRecalRequested @ 0x6bb2cf82 (Core\AFE.c)
-bool AFE_IsRecalRequested(void);
-
-// AFE_IsValid @ 0x6bb2cfec (Core\AFE.c)
-bool AFE_IsValid(void);
-
-// AFE_JustEnterIDLEModeAutoCheck @ 0x6bb2b49d (Core\AFE.c)
-void AFE_JustEnterIDLEModeAutoCheck(void);
-
-// AFE_JustExitIDLEModeAutoCheck @ 0x6bb2b5f9 (Core\AFE.c)
-void AFE_JustExitIDLEModeAutoCheck(void);
-
-// AFE_LogCaps @ 0x6bb2db8a (Core\AFE.c)
-void AFE_LogCaps(void);
-
-// AFE_Malloc @ 0x6bb2c9b5 (Core\AFE.c)
-undefined8 AFE_Malloc(void);
-
-// AFE_NextScanFreqIndexProcess @ 0x6bb2e67d (Core\AFE.c)
-void AFE_NextScanFreqIndexProcess(void);
-
-// AFE_NextScanRateIndexProcess @ 0x6bb2ec10 (Core\AFE.c)
-void AFE_NextScanRateIndexProcess(void);
-
-// AFE_PreProcess @ 0x6bb2cfd8 (Core\AFE.c)
-void AFE_PreProcess(void);
-
-// AFE_Process @ 0x6bb2d032 (Core\AFE.c)
-void AFE_Process(void);
-
-// AFE_ProximityAutoCheck @ 0x6bb2a9c8 (Core\AFE.c)
-undefined4 AFE_ProximityAutoCheck(void);
-
-// AFE_ProximityForceEnter @ 0x6bb2a5fb (Core\AFE.c)
-void AFE_ProximityForceEnter(void);
-
-// AFE_ProximityForceExit @ 0x6bb2a7d6 (Core\AFE.c)
-void AFE_ProximityForceExit(void);
-
-// AFE_ProximityKeepInEnter @ 0x6bb2a78c (Core\AFE.c)
-void AFE_ProximityKeepInEnter(void);
-
-// AFE_ProximityKeepInExit @ 0x6bb2a943 (Core\AFE.c)
-void AFE_ProximityKeepInExit(void);
-
-// AFE_ProximityWaitUntilAfterEnter @ 0x6bb2a6ee (Core\AFE.c)
-void AFE_ProximityWaitUntilAfterEnter(void);
-
-// AFE_ProximityWaitUntilEnter @ 0x6bb2a675 (Core\AFE.c)
-void AFE_ProximityWaitUntilEnter(void);
-
-// AFE_ProximityWaitUntilExit @ 0x6bb2a850 (Core\AFE.c)
-void AFE_ProximityWaitUntilExit(void);
-
-// AFE_ScanAutoCheck @ 0x6bb2c027 (Core\AFE.c)
-void AFE_ScanAutoCheck(void);
-
-// AFE_ScanFreqReset @ 0x6bb2d1e0 (Core\AFE.c)
-void AFE_ScanFreqReset(void);
-
-// AFE_ScanInit @ 0x6bb2d3e8 (Core\AFE.c)
-void AFE_ScanInit(void);
-
-// AFE_ScanIsFreqShiftDone @ 0x6bb2ee46 (Core\AFE.c)
-bool AFE_ScanIsFreqShiftDone(void);
-
-// AFE_ScanPreProcess @ 0x6bb2ee5e (Core\AFE.c)
-void AFE_ScanPreProcess(void);
-
-// AFE_ScanProcess @ 0x6bb2eec5 (Core\AFE.c)
-void AFE_ScanProcess(void);
-
-// AFE_ScanRateReset @ 0x6bb2d374 (Core\AFE.c)
-void AFE_ScanRateReset(void);
-
-// AFE_ScanRateResetUnit @ 0x6bb2d2ea (Core\AFE.c)
-void AFE_ScanRateResetUnit(byte param_1);
-
-// AFE_ScanReset @ 0x6bb2d3a3 (Core\AFE.c)
-void AFE_ScanReset(void);
-
-// AFE_SetCaps @ 0x6bb2cb53 (Core\AFE.c)
-void AFE_SetCaps(undefined8 param_1);
-
-// AFE_SetCapsByV0113 @ 0x6bb2f1e3 (Core\AFE.c)
-void AFE_SetCapsByV0113(undefined2 *param_1,undefined2 *param_2);
-
-// AFE_SetCapsByV100 @ 0x6bb2f54d (Core\AFE.c)
-void AFE_SetCapsByV100(undefined2 *param_1,undefined2 *param_2);
-
-// AFE_SetCapsByV130 @ 0x6bb2f720 (Core\AFE.c)
-void AFE_SetCapsByV130(undefined2 *param_1,undefined2 *param_2);
-
-// AFE_SetCapsByV190 @ 0x6bb2f9c2 (Core\AFE.c)
-void AFE_SetCapsByV190(undefined2 *param_1,undefined2 *param_2);
-
-// AFE_SetCapsNormal @ 0x6bb2eef0 (Core\AFE.c)
-void AFE_SetCapsNormal(undefined2 *param_1,undefined2 *param_2);
-
-// AFE_SetCapsTrans @ 0x6bb2fbb0 (Core\AFE.c)
-void AFE_SetCapsTrans(undefined8 param_1,undefined8 param_2,ulonglong param_3);
-
-// AFE_SetFrame @ 0x6bb2cb9d (Core\AFE.c)
-void AFE_SetFrame(undefined8 param_1);
-
-// AFE_SetFrameByV0113 @ 0x6bb2f3b6 (Core\AFE.c)
-void AFE_SetFrameByV0113(undefined8 *param_1,undefined8 *param_2);
-
-// AFE_SetFrameByV0130 @ 0x6bb2f47e (Core\AFE.c)
-void AFE_SetFrameByV0130(undefined8 *param_1,undefined8 *param_2);
-
-// AFE_SetFrameByV130 @ 0x6bb2f8f6 (Core\AFE.c)
-void AFE_SetFrameByV130(undefined8 *param_1,undefined8 *param_2);
-
-// AFE_SetFrameNormal @ 0x6bb2f0ef (Core\AFE.c)
-void AFE_SetFrameNormal(undefined8 *param_1,undefined8 *param_2,ulonglong param_3);
-
-// AFE_SetFrameTrans @ 0x6bb2fc4b (Core\AFE.c)
-void AFE_SetFrameTrans(undefined8 param_1,undefined8 param_2,ulonglong param_3);
-
-// AFE_SetInfo @ 0x6bb2cb3e (Core\AFE.c)
-void AFE_SetInfo(undefined8 param_1);
-
-// AFE_SetMaxScanRate @ 0x6bb2d3ca (Core\AFE.c)
-void AFE_SetMaxScanRate(undefined2 param_1);
-
-// AFE_Simulation @ 0x6bb2c8aa (Core\AFE.c)
-void AFE_Simulation(void);
-
-// AFE_SimulationForALPSProj @ 0x6bb2c660 (Core\AFE.c)
-void AFE_SimulationForALPSProj(void);
-
-// AFE_SimulationForDefaultProj @ 0x6bb2c7d5 (Core\AFE.c)
-void AFE_SimulationForDefaultProj(void);
-
-// AFE_SimulationForJHSNProj @ 0x6bb2c70d (Core\AFE.c)
-void AFE_SimulationForJHSNProj(void);
-
-// AFE_UpdateCurrScanFreqUnit @ 0x6bb2dee2 (Core\AFE.c)
-void AFE_UpdateCurrScanFreqUnit(void);
-
-// AFE_UpdateCurrScanRateUnit @ 0x6bb2e106 (Core\AFE.c)
-void AFE_UpdateCurrScanRateUnit(void);
-
-// AFE_UpdateScanFreq @ 0x6bb2e2f4 (Core\AFE.c)
-void AFE_UpdateScanFreq(void);
-
-// AFE_UpdateScanRate @ 0x6bb2e7c2 (Core\AFE.c)
-void AFE_UpdateScanRate(void);
-
 // AIIR_GetCoef @ 0x6ba60040 (Filter\AIIR.c)
 char AIIR_GetCoef(ushort param_1);
 
@@ -4571,6 +4274,29 @@ void BtPressureInit(void);
 void HardwareAnalyzer_ASA_Process(void);
 // 宿主桥：每帧在 TSA_ProcessingAFEFrame 之前送入 StylusSolver 解出的笔报告
 void TSAHost_SetStylusReport(uint dwStatusFlags,ushort wXPos,ushort wYPos,short nXTilt,short nYTilt,ushort wPressure);
+
+// 已改写成 C++（TsaCore/src），raw 仍在调用的入口
+// App/Afe.cpp
+void AFE_Init(void);
+void AFE_SetCaps(void *caps);
+void AFE_SetFrame(void *frame);
+void AFE_SetInfo(void *info);
+void AFE_SetMaxScanRate(ushort rate);
+AFE_Frame * AFE_GetFrame(void);
+void AFE_PreProcess(void);
+void AFE_Process(void);
+undefined8 AFE_GetNextScanFreqIndex(byte *index);
+undefined8 AFE_GetNextScanRateIndex(byte *index,char *doubleReport);
+void AFE_AutoCheckProcessInternal(void *data,ushort size,uint ctrl,void *timeMs);
+undefined1 AFE_IsInAutoCheckProcess(void);
+void AFE_ClearAutoCheckFlag(void);
+undefined1 AFE_AutoCheckToEnterIDLE(void);
+uint AFE_IsAutoCalibration(void);
+bool AFE_IsIndividualBaselineForEachFreq(void);
+// App/Property.cpp
+void TSA_GetPrpt(short *pRawGrid,short *pBaselineGrid);
+short TSA_GetMinSigPrpt(void);
+int TSA_GetMaxCMFNoiseValue(void);
 
 #ifdef __cplusplus
 }

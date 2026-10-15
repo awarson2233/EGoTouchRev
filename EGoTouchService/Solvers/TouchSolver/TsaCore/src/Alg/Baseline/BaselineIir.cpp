@@ -2,6 +2,7 @@
 
 #include "Alg/Baseline/Baseline.h"
 #include "Alg/Baseline/BaselineInternal.h"
+#include "App/Afe.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
@@ -87,7 +88,7 @@ void Update(bool force, int16_t thold, int16_t step) {
 // （接近检测被裁掉，判定恒为未检出）。
 void Reset() {
     const TsaBufferTable& buf = Buffers();
-    if (!AFE_IsRawUnifiedToTargetValue() || Prpt().blPropertyState == kBlStatePowerOn || AFE_IsAlwaysNoisy()) {
+    if (!Afe::IsRawUnifiedToTargetValue() || Prpt().blPropertyState == kBlStatePowerOn || Afe::IsAlwaysNoisy()) {
         CopyChecked(buf.bl, kBlBytes, buf.preCmfRaw, GridBytes());
     } else {
         const uint16_t n = PrmtFlash().sensorNum;

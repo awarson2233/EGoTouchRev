@@ -10,6 +10,7 @@
 #include "Alg/Sensor/Sensor.h"
 #include "Alg/Touch/PrevTouch.h"
 #include "Alg/TouchSize/TouchSize.h"
+#include "App/Afe.h"
 #include "App/Sys.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaOut.h"
@@ -393,7 +394,7 @@ void SetPersistFlag(uint8_t curIdx, uint8_t prevIdx) {
         PrmtFlash().fingerThold * 2 < cur.maxPeakSig || Touches().count > 1) {
         cur.persistFlags |= 0x80000;
     }
-    if (prev.age == 0 && ByteTrue(AFE_IsRawJump())) cur.gripFlags |= 0x10000000;
+    if (prev.age == 0 && Afe::IsRawJump()) cur.gripFlags |= 0x10000000;
 
     cur.persistFlags |= prev.persistFlags;
     cur.persistFlags2 |= prev.persistFlags2;

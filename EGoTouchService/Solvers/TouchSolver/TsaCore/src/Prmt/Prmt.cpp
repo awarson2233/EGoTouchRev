@@ -1,3 +1,4 @@
+#include "App/Afe.h"
 #include "Prmt/TsaPrmt.h"
 
 #include <cstring>
@@ -47,8 +48,8 @@ bool LoadProject(const char* name) {
     TSACoreRaw_LoadProjectTables();
     if (std::strcmp(GetProjectName(), "DFLT000000") == 0) {
         FlashPrmt& flash = PrmtFlash();
-        flash.dim1Len = static_cast<uint8_t>(AFE_GetColNum());
-        flash.dim2Len = static_cast<uint8_t>(AFE_GetRowNum());
+        flash.dim1Len = static_cast<uint8_t>(Afe::ColNum());
+        flash.dim2Len = static_cast<uint8_t>(Afe::RowNum());
         flash.sensorNum = static_cast<uint16_t>(flash.dim1Len * flash.dim2Len);
     }
     ReInit();

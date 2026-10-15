@@ -7,6 +7,7 @@
 #include "Alg/Exception/FiException.h"
 #include "Alg/Touch/TouchData.h"
 #include "Alg/TouchZone/TouchZoneData.h"
+#include "App/Afe.h"
 #include "App/Sys.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
@@ -173,7 +174,7 @@ void Process() {
     ExceptionState& st = State();
     PrevTouchTable& prev = PrevTouches();
     if (prev.exceptionFlags == kNoiseLevel2 &&
-        !(static_cast<uint8_t>(AFE_IsManualFreqHopping()) != 0 && !Sys::IsFreqShiftDone())) {
+        !(Afe::IsManualFreqHopping() && !Sys::IsFreqShiftDone())) {
         prev.exceptionFlags = 0;
     }
     if (prev.exceptionFlags == kUnderWater && st.detected == kUnderWaterReverted) prev.exceptionFlags = 0;

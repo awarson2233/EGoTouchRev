@@ -18,29 +18,12 @@ void TSACoreRaw_LoadProjectTables(void);
 int Misc_SqrtUint32(uint32_t value);
 double SinXDivX(double x);
 
-// Core/AFE.c
-uint64_t AFE_Malloc(void);
-uint8_t AFE_IsAllFreqNoisy(void);
-char AFE_IsFreqShiftDone(void);
-bool AFE_IsInIDLEMode(void);
-uint32_t AFE_IsInProximityScreenOffState(void);
-uint32_t AFE_IsInSideIDLEMode(void);
-uint32_t AFE_IsRawUnstable(void);
-uint32_t AFE_IsRawJump(void);
-uint16_t AFE_GetColNum(void);
-uint16_t AFE_GetRowNum(void);
-uint32_t AFE_IsManualFreqHopping(void);
-bool AFE_IsRawUnifiedToTargetValue(void);
-bool AFE_IsAlwaysNoisy(void);
-uint32_t AFE_IsAutoCalibration(void);
-bool AFE_IsRecalRequested(void);
-uint64_t AFE_IsCoreTouchDetected(void);
-uint8_t AFE_IsFrequentlyHopping(void);
-bool AFE_IsIndividualBaselineForEachFreq(void);
-
 // Rejection/HandGesture.c
 uint64_t HandGesture_Malloc(void);
 void HandGesture_Free(void);
+
+// Alg/Exception/Exception.cpp（被裁掉的充电噪声检测，恒为 0）
+uint64_t Exception_GetDetectedChargerNoise(void);
 
 // Core/TSA.c
 uint16_t TSA_GetXRes(void);
@@ -68,6 +51,7 @@ uint64_t TSA_InStylusMode(void);
 uint32_t TSA_IsPadFeatureEnabled(void);
 char TSA_IsGripOKToIDLE(void);
 uint8_t TSA_IsOKToEnterIDLEMode(void);
+void TSA_MSReset(void);
 bool TSA_UpdateIDLEModeInternally(void);
 bool TSA_UpdateSideIDLEModeInternally(void);
 int64_t TSA_GetSensorData(void);

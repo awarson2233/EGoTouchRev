@@ -9,6 +9,7 @@
 #include "Alg/SelfData/SelfData.h"
 #include "Alg/Touch/TouchData.h"
 #include "Alg/TouchThold/TouchThold.h"
+#include "App/Afe.h"
 #include "App/Sys.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
@@ -109,7 +110,7 @@ void GetProperty(bool resetReq, bool refreshReq) {
         if (ToeUseSpecialThold() && IsNextToEdge(prpt.dif.maxDim1)) NextEdgeSmallThold() = 1;
         const bool edge = NextEdgeSmallThold() != 0;
         flags = kPropTouched;
-        if (maxSig < dyn.noiseThold && static_cast<char>(AFE_IsCoreTouchDetected()) == 0 &&
+        if (maxSig < dyn.noiseThold && !Afe::IsCoreTouchDetected() &&
             (!edge || maxSig < dyn.sideNoiseThold)) {
             flags = (dyn.smallThold <= maxSig || (edge && dyn.sideSmallThold <= maxSig)) ? kPropSmallSig : 0;
         }

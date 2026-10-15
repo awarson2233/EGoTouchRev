@@ -16,7 +16,6 @@ namespace Solvers::Tsa::Core::Property {
 namespace {
 
 constexpr uint32_t kSysDifBufPath = 0x10000;     // TsaStatic::systemFlags
-constexpr uint32_t kFeatWideDim1Edge = 0x8000;   // TsaStatic::featureFlags：Dim1 两端各两列算边缘
 constexpr uint32_t kAfeRawUnstable = 0x40000;    // TsaStatic::afeStatus
 constexpr int16_t kBigSig = 100;
 
@@ -172,7 +171,7 @@ void GetDifPrpt() {
     Accumulate(blocks);
     TsaPrpt& p = Prpt();
     const TsaStatic& s = Static();
-    const bool wide = (s.featureFlags & kFeatWideDim1Edge) != 0;
+    const bool wide = (s.featureFlags & kFeatSideTouch) != 0;
     Combine(p.difCore, blocks, Mask({kInner, kSecondCols}));
     uint32_t all = 0x7f;
     if (wide) all = (s.afeStatus & kAfeRawUnstable) != 0 ? Mask({kInner, kSecondCols, kBottomCorners, kBottomRow}) : 0x7f & ~Mask({kOuterCols});
@@ -262,7 +261,7 @@ void GetDifPreCmf() {
 
 // TSA_GetMinSigPrpt @ 0x6baa1f03
 int16_t MinSig() {
-    return (Static().featureFlags & kFeatWideDim1Edge) != 0 ? Prpt().difInner.minSig : Prpt().dif.minSig;
+    return (Static().featureFlags & kFeatSideTouch) != 0 ? Prpt().difInner.minSig : Prpt().dif.minSig;
 }
 
 // TSA_GetMaxCMFNoiseValue @ 0x6baa16c0

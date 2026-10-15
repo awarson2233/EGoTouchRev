@@ -4,6 +4,7 @@
 
 #include "Alg/Baseline/Baseline.h"
 #include "Alg/Baseline/BaselineInternal.h"
+#include "App/Afe.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Legacy/RawApi.h"
@@ -23,7 +24,7 @@ constexpr uint32_t kCtrlCompensated = 0x100;
 constexpr int kCompensateMin = 5;           // 偏移超过 4 才补偿
 constexpr int16_t kCompensateStep = 5;
 
-bool AutoCalibration() { return static_cast<char>(AFE_IsAutoCalibration()) != 0; }
+bool AutoCalibration() { return Afe::IsAutoCalibration(); }
 
 // raw 的上下边界越出 [center - range/2, center + range/2]，或上下边界之差超过 range。
 bool BoundaryOut() {
@@ -70,7 +71,7 @@ void Process() {
         }
         stat.recalBoundaryHits = 0;
     }
-    if (AutoCalibration() && kAutoCalMinMs < stat.curTimeMs - stat.autoCalibrationStartTime && AFE_IsRecalRequested() &&
+    if (AutoCalibration() && kAutoCalMinMs < stat.curTimeMs - stat.autoCalibrationStartTime && Afe::IsRecalRequested() &&
         stat.blUpdatedThisFrame != 0 && 2 < static_cast<uint16_t>(prpt.blStageFrames)) {
         stat.justExitedSpecialCtrlMode = 1;
     }

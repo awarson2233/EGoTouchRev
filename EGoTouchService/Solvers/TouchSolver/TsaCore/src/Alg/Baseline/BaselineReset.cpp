@@ -16,6 +16,7 @@
 #include "Alg/SelfData/SelfData.h"
 #include "Alg/Touch/TouchData.h"
 #include "Alg/TpSensor/TpSensor.h"
+#include "App/Afe.h"
 #include "App/Sys.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
@@ -220,7 +221,7 @@ bool IsLongTimeRawJumpDetected() {
         if (limit < prpt.raw2Raw.overNoiseCount || limit < prpt.prevRaw2Raw.overNoiseCount) stat.rawJumpLatched = 1;
         if (0x5a < prpt.raw2Raw.maxOverNoisePercent || 0x5a < prpt.prevRaw2Raw.maxOverNoisePercent) stat.rawJumpLatched = 1;
     }
-    if (stat.rawJumpLatched == 0 || AFE_IsAlwaysNoisy()) {
+    if (stat.rawJumpLatched == 0 || Afe::IsAlwaysNoisy()) {
         stat.rawJumpTimer = 0;
         stat.rawJumpLatched = 0;
         stat.rawJumpDetected = 0;
@@ -350,9 +351,9 @@ bool IsAbnormalTouchDetected() {
 // BLReset_IsAllFreqsBaselineInitializedDuringTouchLiftOff @ 0x6ba48b01
 // 各频点独立基线时，复位位刚清掉、非常噪声且 raw 上边界高出目标值半个峰门限以上，最多 3 次。
 bool IsAllFreqsBaselineInitializedDuringTouchLiftOff() {
-    if (!AFE_IsIndividualBaselineForEachFreq()) return false;
+    if (!Afe::IsIndividualBaselineForEachFreq()) return false;
     TsaPrpt& prpt = Prpt();
-    if (Static().resetFlagsCleared == 0 || AFE_IsAlwaysNoisy() ||
+    if (Static().resetFlagsCleared == 0 || Afe::IsAlwaysNoisy() ||
         static_cast<int>(static_cast<uint32_t>(prpt.boundaryPositive) - static_cast<uint32_t>(PrmtFlash().field5FC)) <=
             PrmtDynamic().peakThold / 2 ||
         3 <= prpt.allFreqInitCount) {
@@ -704,7 +705,7 @@ bool IsTriggered2() {
     const bool rawJump = IsLongTimeRawJumpDetected();
     if (rawJump) Prpt().blPropertyState = kReasonRawJump;
     bool r = IsTriggered2BySs() || rawJump;
-    if (AFE_IsFrequentlyHopping() != 0 && stat.curTimeMs < stat.msInitTime + 15000) Trigger(kReasonFreqHopping, true);
+    if (Afe::IsFrequentlyHopping() && stat.curTimeMs < stat.msInitTime + 15000) Trigger(kReasonFreqHopping, true);
     if (IsTriggered2AfeWakeUp()) r = true;
     if (IsSmartCoverOff()) {
         r = true;
@@ -812,7 +813,7 @@ bool IsBaselineNoisy() {
     TsaStatic& stat = Static();
     TsaPrpt& prpt = Prpt();
     const uint32_t prev = prpt.prevBlPropertyState;
-    if (prev != kReasonNoisy && prev != 3 && prev != 0 && AFE_IsAlwaysNoisy()) stat.blNoisyTimer = Interval<uint64_t>();
+    if (prev != kReasonNoisy && prev != 3 && prev != 0 && Afe::IsAlwaysNoisy()) stat.blNoisyTimer = Interval<uint64_t>();
     if (stat.blNoisyTimer == 0) return false;
     if (prpt.raw2Raw.overNoiseCount < 6) {
         stat.blNoisyReset = 1;
@@ -908,7 +909,7 @@ void ClearRefreshRequest() { Static().blRefreshRequest = 0; }
 
 // BLReset_CheckAbnormalTouch @ 0x6ba48366
 bool CheckAbnormalTouch(uint8_t touchIdx) {
-    if (!AFE_IsRawUnifiedToTargetValue()) return false;
+    if (!Afe::IsRawUnifiedToTargetValue()) return false;
     const PeakEntry& pk = Peaks().entry[Touches().unit[touchIdx].peakIdx];
     const uint16_t i = GridIndex(pk.dim1, pk.dim2);
     const TsaBufferTable& buf = Buffers();

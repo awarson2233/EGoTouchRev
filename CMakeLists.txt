@@ -308,7 +308,7 @@ target_compile_options(TSACoreRaw PRIVATE
     -fwrapv
     -ffp-contract=off
     -ftrivial-auto-var-init=zero
-    $<$<COMPILE_LANGUAGE:C>:-Wno-int-conversion -Wno-incompatible-pointer-types -Wno-incompatible-function-pointer-types -Wno-everything>
+    $<$<COMPILE_LANGUAGE:C>:-Wno-int-conversion -Wno-incompatible-pointer-types -Wno-incompatible-function-pointer-types -Wno-everything -Werror=implicit-function-declaration>
 )
 # 比对与覆盖率用：给算法库单独追加编译选项（如 -O2、-fprofile-instr-generate -fcoverage-mapping），
 # 回放工具其余部分保持 Debug

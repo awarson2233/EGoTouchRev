@@ -269,7 +269,14 @@ struct FlashPrmt {
     uint8_t sensorTranslateNum;
     SensorTranslate sensorTranslate[20];
     uint8_t brokenSensorCompensation;  // TPSensor：用邻格外推补偿坏传感器的 Dif
-    uint8_t reservedA87[0xBC9];
+    uint8_t reservedA87[0x655];
+    uint16_t proximityExitScanRate;  // AFE 接近自检：强制退出接近时切到的扫描率（Hz）
+    uint16_t proximityEnterScanRate;  // 强制进入接近时切到的扫描率
+    uint8_t reserved10E0[0x1C];
+    uint8_t afeFreqHopMode;  // 模拟 AFE 能力的跳频方式（1 为手动跳频）
+    uint8_t reserved10FD[0x1];
+    uint16_t maxScanRate;  // 扫描率上限（Hz）
+    uint8_t reserved1100[0x550];
     uint16_t rawLowerLimit;  // 坏点：raw 的上下限与相邻格之差的限（ConstPrmt 再放宽一个余量）
     uint16_t rawUpperLimit;
     uint16_t rawDeltaLimit;
@@ -508,6 +515,10 @@ static_assert(offsetof(FlashPrmt, sensorOffset) == 0x94D);
 static_assert(offsetof(FlashPrmt, sensorTranslateNum) == 0xA0D);
 static_assert(offsetof(FlashPrmt, sensorTranslate) == 0xA0E);
 static_assert(offsetof(FlashPrmt, brokenSensorCompensation) == 0xA86);
+static_assert(offsetof(FlashPrmt, proximityExitScanRate) == 0x10DC);
+static_assert(offsetof(FlashPrmt, proximityEnterScanRate) == 0x10DE);
+static_assert(offsetof(FlashPrmt, afeFreqHopMode) == 0x10FC);
+static_assert(offsetof(FlashPrmt, maxScanRate) == 0x10FE);
 static_assert(offsetof(FlashPrmt, rawLowerLimit) == 0x1650);
 static_assert(offsetof(FlashPrmt, rawUpperLimit) == 0x1652);
 static_assert(offsetof(FlashPrmt, rawDeltaLimit) == 0x1654);
@@ -745,7 +756,8 @@ struct DynamicPrmt {
     uint16_t distToEnterGloveMode;
     uint8_t reserved08A[0x2];
     int16_t chargerNoiseTholdPercent;
-    uint8_t reserved08E[0x8];
+    uint16_t freqNoisyValidMs;  // 频点在启用后超过这么久才变噪时仍可再次选用
+    uint8_t reserved090[0x6];
     uint8_t skipZ8CheckOnInnerEdge;
     uint8_t reserved097[0x9];
 };
@@ -799,6 +811,7 @@ static_assert(offsetof(DynamicPrmt, touchModeFlags) == 0x081);
 static_assert(offsetof(DynamicPrmt, gloveFilterSides) == 0x084);
 static_assert(offsetof(DynamicPrmt, distToEnterGloveMode) == 0x088);
 static_assert(offsetof(DynamicPrmt, chargerNoiseTholdPercent) == 0x08C);
+static_assert(offsetof(DynamicPrmt, freqNoisyValidMs) == 0x08E);
 static_assert(offsetof(DynamicPrmt, skipZ8CheckOnInnerEdge) == 0x096);
 
 /// g_tsaPrmtRam：运行中由各模块按场景改写的参数。

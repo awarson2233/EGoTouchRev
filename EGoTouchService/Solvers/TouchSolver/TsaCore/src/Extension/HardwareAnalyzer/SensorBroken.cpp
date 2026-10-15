@@ -9,6 +9,7 @@
 
 #include "Alg/Touch/TouchData.h"
 #include "Alg/TpSensor/TpSensor.h"
+#include "App/Afe.h"
 #include "App/Sys.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
@@ -103,7 +104,7 @@ bool IsSensorBrokenByDifZ8(uint8_t dim1, uint8_t dim2) {
     }
     const uint32_t rawAvg = z.count == 0 ? 0 : z.rawSum / z.count;
     if (a <= z.difAbsSum * 10) return false;
-    if (!AFE_IsRawUnifiedToTargetValue()) return true;
+    if (!Afe::IsRawUnifiedToTargetValue()) return true;
     const uint32_t d = static_cast<uint16_t>(Buffers().raw[i]) - rawAvg;
     return a / 2 < std::abs(static_cast<int>(d));
 }
