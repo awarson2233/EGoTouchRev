@@ -21,6 +21,7 @@
 // 性能：
 //   --profile      结束时把 TSACore 各步骤的累计耗时打到 stderr（PROF 纳秒 次数 步骤），按耗时降序。
 //                  要求算法库以 EGO_TSACORE_PROFILE=ON 构建，否则没有数据（Compare-Reference -Benchmark 会这样构建）
+//   --profile-frame  同上但只计整帧：各步骤不计时，整帧耗时里没有分段计时自身的开销
 //
 // 录制里没有笔的时候，可以注入一支模拟笔来走通手指侧依赖笔状态的逻辑（只对 TsaCoreSolver 生效）：
 //   --pen X Y A B      第 A..B 帧（闭区间）笔尖落在 (X, Y)，单位与输出 CSV 相同（显示像素）。
@@ -227,7 +228,7 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "usage: TsaRawReplay <file.dvrbin> [--legacy] [--to N] [--dump N] [--charger] [--quiet] "
                              "[--afe] [--idle-exit N] [--hold N K] [--pen X Y A B] [--pen-hover] "
                              "[--pen-tilt TX TY] [--pen-word W] [--pen-interleave] [--stylus-solver] "
-                             "[--state-digest FILE] [--state-dump STEP FILE] [--profile]\n"
+                             "[--state-digest FILE] [--state-dump STEP FILE] [--profile | --profile-frame]\n"
                              "       TsaRawReplay --state-diff A B [SYMBOL]\n");
         return 2;
     }
@@ -265,6 +266,10 @@ int main(int argc, char** argv) {
         else if (std::strcmp(argv[i], "--charger") == 0) charger = true;
         else if (std::strcmp(argv[i], "--quiet") == 0) quiet = true;
         else if (std::strcmp(argv[i], "--profile") == 0) profile = true;
+        else if (std::strcmp(argv[i], "--profile-frame") == 0) {
+            profile = true;
+            TsaCore_ProfileSteps(0);
+        }
         else if (std::strcmp(argv[i], "--afe") == 0) afe = true;
         else if (std::strcmp(argv[i], "--pen") == 0 && i + 4 < argc) {
             pen = true;

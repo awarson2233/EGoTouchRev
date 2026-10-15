@@ -15,6 +15,8 @@ size_t g_count = 0;
 
 }  // namespace
 
+bool g_steps = true;
+
 // 名字是调用处的字符串字面量，同一处每次都是同一个指针，按指针查表。
 void Add(const char* name, uint64_t ns) noexcept {
     for (size_t i = 0; i < g_count; ++i) {
@@ -29,6 +31,14 @@ void Add(const char* name, uint64_t ns) noexcept {
 
 }  // namespace Solvers::Tsa::Core::Profile
 #endif
+
+extern "C" void TsaCore_ProfileSteps(int enable) {
+#if defined(TSACORE_PROFILE)
+    Solvers::Tsa::Core::Profile::g_steps = enable != 0;
+#else
+    (void)enable;
+#endif
+}
 
 extern "C" size_t TsaCore_ProfileEntries(TsaCore_ProfileEntry* out, size_t capacity) {
 #if defined(TSACORE_PROFILE)

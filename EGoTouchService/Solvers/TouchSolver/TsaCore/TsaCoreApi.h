@@ -28,6 +28,8 @@ typedef struct TsaCore_ProfileEntry {
     uint64_t count;
 } TsaCore_ProfileEntry;
 size_t TsaCore_ProfileEntries(TsaCore_ProfileEntry* out, size_t capacity);
+// 分步计时的开关（默认开）。关掉后只记整帧，没有各段计时自身的开销。
+void TsaCore_ProfileSteps(int enable);
 
 uint64_t TSA_InitAFEProject_UI(int64_t projectName, int64_t afeStruct, int64_t caps);
 int      TSA_ProcessingAFEFrame(void* frame, uint32_t ctrl, uint64_t timestampMs);

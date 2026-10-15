@@ -40,8 +40,9 @@
 
 .PARAMETER Benchmark
   不做比较，改为计时：以服务实际安装的配置 -BenchPreset（默认 arm64-Release-TsaCore）加 EGO_TSACORE_PROFILE
-  构建到 build/tsa-bench-release，逐个串行回放（纯回放场景），跑 -Rounds 轮取最快的一轮，打印每帧耗时与
-  耗时最多的 -Top 个步骤（步骤耗时含其子步骤）。回放钉在 -Affinity 指定的核上（默认 0xF0，Snapdragon
+  构建到 build/tsa-bench-release，逐个串行回放（纯回放场景），跑 -Rounds 轮取最快的一轮打印每帧耗时（只计
+  整帧，--profile-frame），再另跑几轮分步计时，打印耗时最多的 -Top 个步骤（步骤耗时含其子步骤，也含各段
+  计时自身的开销）。回放钉在 -Affinity 指定的核上（默认 0xF0，Snapdragon
   8cx Gen 3 的四个大核）并以高优先级运行。
 
 .EXAMPLE
@@ -204,29 +205,39 @@ if ($Benchmark) {
         $p.WaitForExit()
         $err
     }
-    # 逐个串行跑（并行会互相抢核心与缓存）；每轮把全部录制的耗时相加，各步骤取各轮中最小的一轮
-    $best = @{}
-    $frames = 0
-    for ($round = 0; $round -lt $Rounds; $round++) {
-        $sum = @{}
-        $roundFrames = 0
-        foreach ($recording in $recordings) {
-            $text = Invoke-Pinned $exe @("`"$recording`"", '--quiet', '--afe', '--profile')
-            foreach ($line in ($text -split "`r?`n")) {
-                if ("$line" -match '^PROF\s+(\d+)\s+(\d+)\s+(.+)$') { $sum[$Matches[3]] = [double]$sum[$Matches[3]] + [double]$Matches[1] }
-                elseif ("$line" -match '^fed (\d+) frames') { $roundFrames += [int]$Matches[1] }
+    # 逐个串行跑（并行会互相抢核心与缓存）；每轮把全部录制的耗时相加，各项取各轮中最小的一轮。
+    # 整帧耗时用 --profile-frame（不计各步骤，没有分段计时自身的开销）；步骤明细另跑 --profile。
+    function Measure-Rounds {
+        param([string]$Flag, [int]$Count)
+        $best = @{}
+        $frames = 0
+        for ($round = 0; $round -lt $Count; $round++) {
+            $sum = @{}
+            $roundFrames = 0
+            foreach ($recording in $recordings) {
+                $text = Invoke-Pinned $exe @("`"$recording`"", '--quiet', '--afe', $Flag)
+                foreach ($line in ($text -split "`r?`n")) {
+                    if ("$line" -match '^PROF\s+(\d+)\s+(\d+)\s+(.+)$') { $sum[$Matches[3]] = [double]$sum[$Matches[3]] + [double]$Matches[1] }
+                    elseif ("$line" -match '^fed (\d+) frames') { $roundFrames += [int]$Matches[1] }
+                }
             }
+            if (-not $sum.ContainsKey('TSA_ProcessingAFEFrame')) { throw 'no profile data from the benchmark build' }
+            $frames = $roundFrames
+            foreach ($k in $sum.Keys) { if (-not $best.ContainsKey($k) -or $sum[$k] -lt $best[$k]) { $best[$k] = $sum[$k] } }
         }
-        if (-not $sum.ContainsKey('TSA_ProcessingAFEFrame')) { throw 'no profile data from the benchmark build' }
-        $frames = $roundFrames
-        foreach ($k in $sum.Keys) { if (-not $best.ContainsKey($k) -or $sum[$k] -lt $best[$k]) { $best[$k] = $sum[$k] } }
+        [pscustomobject]@{ Best = $best; Frames = $frames }
     }
-    $total = $best['TSA_ProcessingAFEFrame']
-    $rows = $best.GetEnumerator() | Sort-Object Value -Descending | ForEach-Object {
+    $frameOnly = Measure-Rounds '--profile-frame' $Rounds
+    $stepped = Measure-Rounds '--profile' ([Math]::Max(2, [int]($Rounds / 2)))
+    $frames = $stepped.Frames
+    $total = $stepped.Best['TSA_ProcessingAFEFrame']
+    $rows = $stepped.Best.GetEnumerator() | Sort-Object Value -Descending | ForEach-Object {
         [pscustomobject]@{ Step = $_.Key; UsPerFrame = [Math]::Round($_.Value / $frames / 1000, 2); Percent = [Math]::Round(100 * $_.Value / $total, 1) }
     }
     $rows | Format-Table -AutoSize | Out-String -Width 200 | Set-Content (Join-Path $benchDir 'profile.txt')
-    Write-Host ("`n{0} recordings, {1} frames, best of {2} rounds: {3:F1} us/frame" -f $recordings.Count, $frames, $Rounds, ($total / $frames / 1000))
+    $frameUs = $frameOnly.Best['TSA_ProcessingAFEFrame'] / $frameOnly.Frames / 1000
+    Write-Host ("`n{0} recordings, {1} frames, best of {2} rounds: {3:F1} us/frame" -f $recordings.Count, $frameOnly.Frames, $Rounds, $frameUs)
+    Write-Host ("steps (instrumented run, {0:F1} us/frame including the per-step timers):" -f ($total / $frames / 1000))
     $rows | Select-Object -First $Top | Format-Table -AutoSize | Out-String -Width 200 | Write-Host
     Write-Host "full table: $(Join-Path $benchDir 'profile.txt')"
     exit 0
