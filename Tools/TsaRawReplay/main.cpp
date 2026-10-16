@@ -19,8 +19,9 @@
 //   --heap-skew N           自检用：先分配 N 个大小不一的堆块再建解算器，摘要不应因此改变
 //
 // 性能：
-//   --profile      结束时把 TSACore 各步骤的累计耗时打到 stderr（PROF 纳秒 次数 步骤），按耗时降序。
-//                  要求算法库以 EGO_TSACORE_PROFILE=ON 构建，否则没有数据（Compare-Reference -Benchmark 会这样构建）
+//   --profile      结束时把 TSACore 各步骤的累计耗时打到 stderr（PROF 纳秒 次数 步骤），按耗时降序；第一行是
+//                  TsaCoreSolver::Process 整体（含适配层与宿主）。各步骤要求算法库以 EGO_TSACORE_PROFILE=ON 构建，
+//                  否则没有数据（Compare-Reference -Benchmark 会这样构建）
 //   --profile-frame  同上但只计整帧：各步骤不计时，整帧耗时里没有分段计时自身的开销
 //
 // 录制里没有笔的时候，可以注入一支模拟笔来走通手指侧依赖笔状态的逻辑（只对 TsaCoreSolver 生效）：
@@ -49,6 +50,7 @@
 #include "TsaCore/TsaCoreSolver.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -200,7 +202,10 @@ bool SameRequests(const Solvers::Tsa::AfeRequests& a, const Solvers::Tsa::AfeReq
 
 } // namespace
 
-void PrintProfile() {
+// solverNs / solverCalls：TsaCoreSolver::Process 整体（适配层、宿主与 TSACore）的耗时，由回放自己计
+void PrintProfile(uint64_t solverNs, uint64_t solverCalls) {
+    std::fprintf(stderr, "PROF %12llu %8llu TsaCoreSolver::Process\n", static_cast<unsigned long long>(solverNs),
+                 static_cast<unsigned long long>(solverCalls));
     std::vector<TsaCore_ProfileEntry> entries(TsaCore_ProfileEntries(nullptr, 0));
     entries.resize(std::min(entries.size(), TsaCore_ProfileEntries(entries.data(), entries.size())));
     if (entries.empty()) {
@@ -359,6 +364,7 @@ int main(int argc, char** argv) {
     int fed = 0, withTouch = 0, dispatched = 0;
     int step = 0;   // 喂进解算器的帧序号，--hold 重复的帧也计数
     uint64_t holdShiftMs = 0;
+    uint64_t solverNs = 0, solverCalls = 0;
     size_t maxTouch = 0;
     unsigned statusSeen = 0;
     Solvers::Tsa::AfeRequests lastReq{};
@@ -424,7 +430,13 @@ int main(int argc, char** argv) {
             const uint64_t baseMs = f.receiveSystemEpochUs != 0
                 ? f.receiveSystemEpochUs / 1000
                 : static_cast<uint64_t>(fed) * 25 / 3;
+            const auto t0 = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
             dispatch = tsa->Process(f, baseMs + holdShiftMs);
+            if (profile) {
+                solverNs += static_cast<uint64_t>(
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count());
+                ++solverCalls;
+            }
             if (!traceState(step, fi)) return 1;
             statusSeen |= tsa->LastAfeStatus();
             if (stylusSolver) {
@@ -515,6 +527,6 @@ int main(int argc, char** argv) {
                  withTouch, maxTouch);
     std::fprintf(stderr, ", tsa available=%d, afe status bits seen 0x%02x", tsa->IsAvailable() ? 1 : 0, statusSeen);
     std::fputc('\n', stderr);
-    if (profile) PrintProfile();
+    if (profile) PrintProfile(solverNs, solverCalls);
     return 0;
 }

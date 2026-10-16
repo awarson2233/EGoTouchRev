@@ -241,7 +241,9 @@ if ($Benchmark) {
     }
     $rows | Format-Table -AutoSize | Out-String -Width 200 | Set-Content (Join-Path $benchDir 'profile.txt')
     $frameUs = $frameOnly.Best['TSA_ProcessingAFEFrame'] / $frameOnly.Frames / 1000
-    Write-Host ("`n{0} recordings, {1} frames, best of {2} rounds: {3:F1} us/frame" -f $recordings.Count, $frameOnly.Frames, $Rounds, $frameUs)
+    $solverUs = $frameOnly.Best['TsaCoreSolver::Process'] / $frameOnly.Frames / 1000
+    Write-Host ("`n{0} recordings, {1} frames, best of {2} rounds: {3:F1} us/frame in TSACore, {4:F1} us/frame in TsaCoreSolver::Process (adapter + host + TSACore)" -f
+        $recordings.Count, $frameOnly.Frames, $Rounds, $frameUs, $solverUs)
     Write-Host ("steps (instrumented run, {0:F1} us/frame including the per-step timers):" -f ($total / $frames / 1000))
     $rows | Select-Object -First $Top | Format-Table -AutoSize | Out-String -Width 200 | Write-Host
     Write-Host "full table: $(Join-Path $benchDir 'profile.txt')"
