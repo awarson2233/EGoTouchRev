@@ -37,6 +37,12 @@ void PenEventBridge::SetEventCallback(PenEventCallback cb) {
     m_eventCallback = std::move(callback);
 }
 
+void PenEventBridge::SetLinkUpCallback(PenLinkUpCallback cb) {
+    auto callback = cb ? std::make_shared<const PenLinkUpCallback>(std::move(cb)) : nullptr;
+    std::lock_guard<std::mutex> lk(m_cbMutex);
+    m_linkUpCallback = std::move(callback);
+}
+
 // ── 设备路径发现 ───────────────────────────────────────────────────────────
 std::optional<std::wstring> PenEventBridge::FindDevicePath() {
     HDEVINFO devInfo = SetupDiGetClassDevsW(
@@ -339,6 +345,15 @@ void PenEventBridge::OnConnected() {
         std::lock_guard<std::mutex> sessionLock(m_sessionMutex);
         m_handshakeDeadline = {};
     }
+    // 先让上层丢弃旧通道的连接结论，再发握手：MCU 对新通道的回包必须落在复位之后
+    std::shared_ptr<const PenLinkUpCallback> linkUp;
+    {
+        std::lock_guard<std::mutex> lk(m_cbMutex);
+        linkUp = m_linkUpCallback;
+    }
+    if (linkUp) {
+        (*linkUp)();
+    }
     RunHandshake();
     (void)SendQueryPenModule();
     (void)SendQuerySerialNumber();
@@ -349,8 +364,15 @@ void PenEventBridge::OnConnected() {
 void PenEventBridge::OnPacketReceived(std::span<const uint8_t> packet) {
     auto parsed = TryParsePenUsbEventFrame(packet);
     if (!parsed) {
+        static constexpr char kHex[] = "0123456789ABCDEF";
+        std::string hex;
+        hex.reserve(packet.size() * 2);
+        for (const uint8_t b : packet) {
+            hex.push_back(kHex[b >> 4]);
+            hex.push_back(kHex[b & 0x0F]);
+        }
         LOG_WARN("PenEvent", __func__, "MCU",
-                 "Dropping invalid RX packet: size={}B.", packet.size());
+                 "Dropping invalid RX packet: size={}B bytes={}.", packet.size(), hex);
         return;
     }
 

@@ -374,6 +374,13 @@ public:
     /// @return true 表示连接状态确实发生了变化。
     bool NotifyPenLinkDown();
 
+    /// 笔事件通道重新打开时调用：连接状态与笔身份回到服务冷启动时的"未知"。
+    /// NotifyPenLinkDown 写下的"已断开"只能由 MCU 的 PenConnStatus 解除，而 MCU
+    /// 只应答亮屏时的 0x7101；亮屏那一刻通道若正在重连，这次应答就丢了。新通道上
+    /// 的连接状态以 MCU 重新上报为准，在那之前按冷启动处理（笔管线按帧自动识别、
+    /// 芯片初始化后不重放 InitStylus）。不下发 AFE 命令。
+    void NotifyPenLinkReset();
+
 private:
     friend struct DeviceRuntimePenStateTestAccess;
     StartRequestResult StartStateMachine();

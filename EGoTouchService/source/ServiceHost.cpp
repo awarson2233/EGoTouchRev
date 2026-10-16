@@ -656,6 +656,12 @@ bool ServiceHost::StartPenSubsystem() {
                     m_deviceRuntime->IngestPenEvent(ev);
                 }
             });
+        eventBridge->SetLinkUpCallback(
+            [this]() {
+                if (m_deviceRuntime) {
+                    m_deviceRuntime->NotifyPenLinkReset();
+                }
+            });
         if (!eventBridge->Start()) {
             LOG_ERROR("Service", __func__, "MCU", "PenEventBridge failed to start.");
             return false;

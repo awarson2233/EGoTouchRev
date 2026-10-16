@@ -41,6 +41,9 @@ public:
 
     /// 设置 MCU 事件回调（线程安全）。回调从事件读取线程发起，不得长时间阻塞。
     void SetEventCallback(PenEventCallback cb);
+    /// 设置通道重开回调（线程安全）。新通道上的连接状态要等 MCU 重新上报，
+    /// 上层据此丢弃上一条通道留下的连接结论。
+    void SetLinkUpCallback(PenLinkUpCallback cb);
     /// 设置状态事件句柄（用于通知 App 侧刷新状态）
     void SetNotifyEvent(NativeEventHandle h) {
         m_notifyEvent.store(h, std::memory_order_release);
@@ -94,6 +97,7 @@ private:
     mutable std::mutex m_sessionMutex;
     mutable std::mutex m_txMutex;
     std::shared_ptr<const PenEventCallback> m_eventCallback;
+    std::shared_ptr<const PenLinkUpCallback> m_linkUpCallback;
     std::atomic<NativeEventHandle> m_notifyEvent{nullptr};
     std::atomic<bool> m_linkStale{false};
     PenUsbInitSession m_initSession;

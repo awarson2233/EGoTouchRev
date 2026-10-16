@@ -1483,6 +1483,35 @@ bool DeviceRuntime::NotifyPenLinkDown() {
   return connectionChanged;
 }
 
+void DeviceRuntime::NotifyPenLinkReset() {
+  std::lock_guard<std::mutex> penIngressLock(m_penIngressMu);
+
+  bool wasKnown = false;
+  bool wasConnected = false;
+  UpdatePenState([&](RuntimePenState &state, PenStateUpdateResult &res) {
+    wasKnown = state.hasConnection;
+    wasConnected = state.connected;
+
+    state.hasConnection = false;
+    state.connected = false;
+    if (wasKnown) {
+      ResetPenTransientState(state);
+    }
+
+    const bool pipelineIdentityChanged =
+        state.hasStylusId ||
+        state.protocolHint != Solvers::StylusProtocolHint::Auto;
+    res.stateChanged = ClearPenIdentityState(state) || wasKnown;
+    res.applyToPipeline = wasKnown || pipelineIdentityChanged;
+  });
+
+  if (wasKnown) {
+    LOG_NOTICE("Runtime", __func__, "MCU",
+               "Pen event channel reopened; connection state reset to unknown (was {}).",
+               wasConnected ? "connected" : "disconnected");
+  }
+}
+
 void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
   // Keep state mutation and any derived AFE submission on the same side of a
   // Stop/Start boundary. Stop still permits state updates after releasing this lock.
@@ -1704,6 +1733,10 @@ void DeviceRuntime::IngestPenEvent(const Himax::Pen::PenEvent &ev) {
       }
     });
 
+    if (connectionChanged) {
+      LOG_NOTICE("Runtime", __func__, "MCU", "PenConnStatus: {}.",
+                 connected ? "connected" : "disconnected");
+    }
     if (const auto cmd = BuildPenConnectionAfeCommand(
             connectionChanged, connected)) {
       SubmitPenAfeCommandLocked(
