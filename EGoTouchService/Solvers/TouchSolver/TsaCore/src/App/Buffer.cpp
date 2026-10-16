@@ -1,4 +1,3 @@
-#include "App/Afe.h"
 #include "App/Buffer.h"
 
 #include <algorithm>
@@ -333,7 +332,7 @@ bool InitProject() {
     MaxDimSize() = std::max(fl.dim1Len, fl.dim2Len);
     return RfNoise::Malloc() && HandGesture::Malloc() && ToeSynaBl::Malloc() && HardwareAnalyzer::Malloc() &&
            BadChannel::Malloc() && Property::Malloc() && Alloc(SideTz(), GridBufSize()) && Malloc() && TpSensor::Malloc() &&
-           Cmf::Malloc() && Exception::Malloc() && TouchZone::Malloc() && Afe::Malloc();
+           Cmf::Malloc() && Exception::Malloc() && TouchZone::Malloc();
 }
 
 }  // namespace Solvers::Tsa::Core::Buffer

@@ -6,11 +6,11 @@
 #include <bit>
 #include <climits>
 #include <cmath>
-#include <vector>
 
 #include "Alg/Peak/PeakData.h"
 #include "Alg/TouchZone/TouchZone.h"
 #include "Alg/TouchZone/TouchZoneInternal.h"
+#include "Common/Assert.h"
 #include "Common/Bss.h"
 #include "Common/TsaMath.h"
 #include "Prmt/Prmt.h"
@@ -65,22 +65,23 @@ void SetInterpolationRange(TouchZoneUnit& z) {
 /// 的双三次插值，超出区域的插值范围时为 0。插值先按行求出 4 条行的横向插值，再按纵向的核加权
 /// （TZ_BiCubicInter4x4 @ 0x6ba85c95，求和次序按原汇编：w3·v3 + ((w0·v0 + w1·v1) + w2·v2)，纵向从 0 起逐行累加）。
 /// 跟踪的相邻步会反复插值同一个点、同一条行，两者都按区域的插值范围备忘；插值只取决于坐标与区域信号
-/// （跟踪期间不变），浮点运算次序不变，结果与逐点现算相同。
+/// （跟踪期间不变），浮点运算次序不变，结果与逐点现算相同。备忘表按最大阵列定长，每次只清用到的前缀。
 class HighResCache {
 public:
     explicit HighResCache(const TouchZoneUnit& z)
         : sig_(ZoneSig()), dim1Len_(PrmtFlash().dim1Len), dim2Len_(PrmtFlash().dim2Len), x0_(z.hrMinDim1),
           y0_(z.hrMinDim2), w_(std::max(z.hrMaxDim1 - z.hrMinDim1 + 1, 0)), h_(std::max(z.hrMaxDim2 - z.hrMinDim2 + 1, 0)) {
-        PointMemo().assign(static_cast<size_t>(w_) * h_, kUnset);
+        TsaAssert(w_ <= kMaxHrLen && h_ <= kMaxHrLen);
+        std::fill_n(g_pointMemo.begin(), static_cast<size_t>(w_) * h_, kUnset);
         // 行备忘覆盖插值范围内各点可能取到的行：所在格行的上一行到下两行
         rowBase_ = y0_ / kHrScale - 1;
         rows_ = h_ == 0 ? 0 : (y0_ + h_ - 1) / kHrScale + 2 - rowBase_ + 1;
-        RowMemo().assign(static_cast<size_t>(w_) * std::max(rows_, 0), kRowUnset);
+        std::fill_n(g_rowMemo.begin(), static_cast<size_t>(w_) * std::max(rows_, 0), kRowUnset);
     }
 
     int operator()(int x, int y) const {
         if (x < x0_ || y < y0_ || x - x0_ >= w_ || y - y0_ >= h_) return 0;
-        int& v = PointMemo()[static_cast<size_t>(y - y0_) * w_ + (x - x0_)];
+        int& v = g_pointMemo[static_cast<size_t>(y - y0_) * w_ + (x - x0_)];
         if (v == kUnset) v = Compute(x, y);
         return v;
     }
@@ -88,6 +89,13 @@ public:
 private:
     static constexpr int kUnset = INT32_MIN;  // 插值结果是 int16 信号的加权和，不会取到它
     static constexpr uint32_t kRowUnset = 0x7fc00001;  // 一个 NaN 位型；有限整数的加权和不会是 NaN
+    static constexpr int kMaxDimLen = 0x50;  // TSA_MAX_DIM
+    /// 插值范围一边最多 (kMaxDimLen − 1) × 4 + 1 个点；行备忘最多覆盖 kMaxDimLen + 3 行。
+    static constexpr int kMaxHrLen = (kMaxDimLen - 1) * kHrScale + 1;
+    static constexpr int kMaxMemoRows = kMaxDimLen + 3;
+
+    static inline std::array<int, size_t{kMaxHrLen} * kMaxHrLen> g_pointMemo{};
+    static inline std::array<uint32_t, size_t{kMaxHrLen} * kMaxMemoRows> g_rowMemo{};
 
     int Compute(int x, int y) const {
         const int cellDim2 = y / kHrScale;
@@ -102,7 +110,7 @@ private:
         const int r = row - rowBase_;
         uint32_t* slot = nullptr;
         if (0 <= r && r < rows_) {
-            slot = &RowMemo()[static_cast<size_t>(r) * w_ + (x - x0_)];
+            slot = &g_rowMemo[static_cast<size_t>(r) * w_ + (x - x0_)];
             if (*slot != kRowUnset) return std::bit_cast<float>(*slot);
         }
         const int cellDim1 = x / kHrScale;
@@ -117,14 +125,6 @@ private:
         return value;
     }
 
-    static std::vector<int>& PointMemo() {
-        static std::vector<int> memo;
-        return memo;
-    }
-    static std::vector<uint32_t>& RowMemo() {
-        static std::vector<uint32_t> memo;
-        return memo;
-    }
     const int16_t* sig_;
     int dim1Len_, dim2Len_;
     int x0_, y0_, w_, h_;

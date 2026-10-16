@@ -1,7 +1,7 @@
 #pragma once
 // 主动笔（原 src/Rejection/ASA、ASAHostBridge）：笔模式状态机、蓝牙状态与本帧的笔报告。
 //
-// ASA 解算本体没有还原：笔的坐标 / 压力 / 倾角由业务侧的 StylusSolver 解出，经 TSAHost_SetStylusReport
+// ASA 解算本体没有还原：笔的坐标 / 压力 / 倾角由业务侧的 StylusSolver 解出，经 Core::SetStylusReport
 // 在每帧之前送进来，这里只保留手指管线要读的那一层（笔在场、HPP2 / HPP3 模式、笔来时清掉触点）。
 
 #include <cstdint>

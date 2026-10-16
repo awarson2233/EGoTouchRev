@@ -251,7 +251,7 @@ typedef struct _THP_AFE_INFO_STRUCT {
      - **Bit 4 (`0x10`, 手势事件)**：调用 `FUN_180098170` -> 通知 `algo_ctrl[0x38](0x10)`。
      - **Bit 2 (`0x04`, 跳频完成)**：调用 `FUN_1800981a0` -> 置 `dwCtrlFlags |= 0x00000010`。
      - **Bit 5 (`0x20`, 充电器/交流噪声)**：调用 `FUN_1800981d0` -> 同步置位或清除 `dwCtrlFlags` 的 `0x00020000`（Bit 17）。
-     - **Bit 0 (`0x01`, IDLE 状态)**：调用 `TsaFrame::UpdateStatusIdle` (`0x180098230`) -> 当 `status & 1` 时置 `dwCtrlFlags |= 0x00000020`（Bit 5）；当退出 IDLE（从 `1` 变 `0`）时，清除 `0x00000020` 并置一次性标志 `dwCtrlFlags |= 0x00000004`（Bit 2）。
+     - **Bit 0 (`0x01`, IDLE 状态)**：调用 `TsaFrame::UpdateStatusIdle` (`0x180098230`) -> 只在 IDLE 位变化时打印 `idle in` / `idle out.`，并把当前值存进 `field_0x129`，**不写 `dwCtrlFlags`**。TSACore 自己从帧状态读 IDLE。
 2. **调用 `TSA_ProcessingAFEFrame`（`TsaFrame_CallProcessingAFEFrame @ 0x180081900`）**：
    - 调用 `TSA_GetScenario()` (`tsa_func_table + 0x398`) 存入 `shared_state->scenario` (`+0x08`)。
    - 调用 `afe_driver->vtable[+0x78]()` (`ThpBase::GetTimeStamp @ 0x1800dad40`) 计算微秒时间戳 `timeStampUs = pFrame->timeStampSec * 1000000ULL + pFrame->timeStampUsec`，存入 `frame_ctx + 0x590`。
@@ -277,14 +277,14 @@ int __fastcall TSA_ProcessingAFEFrame(
 
 | 位索引 | 十六进制掩码 | 生命周期 | `ApDaemon.dll` 设置位置 | `TSACore.dll` 内部含义 |
 | :--- | :--- | :--- | :--- | :--- |
-| **Bit 0** | `0x00000001` | 一次性（帧后 `& 0xf0ffffe0` 清零） | `ThpBase::InitTsa` (`0x1800e6340`), `ThpBase::ScreenOn` (`0x1800f56b0`) | **首帧 / 算法重初始化标志**：开机首帧或亮屏首帧重置滤波器与跟踪状态。 |
-| **Bit 1** | `0x00000002` | 一次性（帧后 `& 0xf0ffffe0` 清零） | `ThpBase::InitTsa` (`0x1800e6340`), `ThpBase::ScreenOn` (`0x1800f56b0`) | **强制重置基线标志**：使用当前帧立即重建互容基线。 |
-| **Bit 2** | `0x00000004` | 一次性（帧后 `& 0xf0ffffe0` 清零） | `TsaFrame::UpdateStatusIdle` (`0x180098230`) 退出 IDLE 时 | **退出 IDLE 转换标志**：通知算法刚刚从 IDLE 唤醒至 ACTIVE 扫描。 |
+| **Bit 0** | `0x00000001` | 一次性（帧后 `& 0xf0ffffe0` 清零） | `ThpBase::InitTsa` (`0x1800e6340`)，只在 TSACore 初始化时；`ThpBase::ScreenOn` (`0x1800f56b0`) 不写 | **首帧 / 算法重初始化标志**：复位位之一（`0xd`），开机首帧重置滤波器与跟踪状态。 |
+| **Bit 1** | `0x00000002` | 一次性（帧后 `& 0xf0ffffe0` 清零） | `ThpBase::InitTsa` (`0x1800e6340`)，只在 TSACore 初始化时 | **强制重置基线标志**：使用当前帧立即重建互容基线。 |
+| **Bit 2** | `0x00000004` | 一次性（帧后 `& 0xf0ffffe0` 清零） | `DriverThp::DoSos` (`0x180063380`) 经 `ThpBase` vtable `+0x1d0`（`FUN_1800f1930`：`\|= 4` 并清 Bit 8）置位，随后调 `+0x1c8` `ThpBase::Reset`；全库只有这一处调用 | **SOS 复位标志**：复位位之一，AFE 异常重启后用当前帧重建基线。 |
 | **Bit 3** | `0x00000008` | 一次性（帧后 `& 0xf0ffffe0` 清零） | `TsaFrame::UpdateStatusCalibration` (`0x1800979e0`) 当 `frame->status & 0x08` | **AFE 硬件校准完成标志**：通知算法硬件自校准（`0x00bb`）已完成。 |
 | **Bit 4** | `0x00000010` | 一次性（帧后 `& 0xf0ffffe0` 清零） | `FUN_1800981a0` (`0x1800981a0`) 当 `frame->status & 0x04` | **跳频完成标志**：通知算法请求的扫描频率切换已在硬件生效。 |
-| **Bit 5** | `0x00000020` | 持续保持（IDLE 期间） | `TsaFrame::UpdateStatusIdle` (`0x180098230`) 当 `frame->status & 0x01` | **IDLE 模式激活标志**：指示当前帧采集于 IDLE 低功耗模式。 |
+| **Bit 5** | `0x00000020` | 持续保持（充电器在位期间） | `DriverThp::RegListeningCharger` 回调 (`FUN_180051ab0`)：插上 `\|= 0x20`、拔掉 `&= ~0x20`，并调驱动 `SetCharger`；`ThpBase::ScreenOn` 读它重新下发 | **充电器在位标志**：TSACore 的 `TSAStatic_IsChargerPlugged` 读取（带 2 s 去抖）。 |
 | **Bit 7** | `0x00000080` | 持续保持 | `FUN_180094e20` (`0x180094e20`) 当 `(posture & 0xfd) != 0` | **折叠/非平铺姿态标志**：设备处于折叠/帐篷等非展平状态时置 `1`，展平时清零。 |
-| **Bit 8** | `0x00000100` | 持续保持（灭屏期间） | `ThpBase::ScreenOff` (`0x1800f61b0`) 置位，`ScreenOn` 清零 | **灭屏状态标志 (`ScreenOff`)**。 |
+| **Bit 8** | `0x00000100` | 持续保持（灭屏期间） | `ThpBase::ScreenOff` (`0x1800f61b0`) 置位，只有 `FUN_1800f1930`（SOS 路径）清零，`ScreenOn` 不清 | **灭屏状态标志 (`ScreenOff`)**。 |
 | **Bit 17** | `0x00020000` | 持续保持（有噪声期间） | `FUN_1800981d0` (`0x1800981d0`) 当 `frame->status & 0x20` | **充电器 / 交流噪声标志**：当 Master 尾部 `word[14]` 或 `word[16] > 1499` 时置 `1`。 |
 | **Bit 18** | `0x00040000` | 持续保持 | `ThpBase::InitTsa` (`0x1800e6340`) | **TSA 算法使能常驻位**：正常运行时恒为 `1`。 |
 | **Bit 23** | `0x00800000` | 持续保持（锁屏期间） | `FUN_1800968e0` (`0x1800968e0`) 解析 `"state:locked"` / `"state:unlocked"` | **系统锁屏状态标志**：锁屏时为 `1`，解锁时为 `0`。 |

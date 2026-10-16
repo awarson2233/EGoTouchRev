@@ -1,17 +1,11 @@
 #include "App/Afe.h"
 
-#include <cstring>
-
-#include "Alg/Rawdata/Rawdata.h"
 #include "Alg/Touch/TouchData.h"
 #include "App/Sys.h"
 #include "App/Tsa.h"
-#include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
 #include "Common/Bss.h"
-#include "Common/Memory.h"
-#include "Extension/HardwareAnalyzer/HardwareAnalyzer.h"
 #include "Prmt/Prmt.h"
 #include "Prmt/TsaPrmt.h"
 
@@ -22,17 +16,11 @@ namespace {
 constexpr uint32_t kStatusIdle = 0x1;
 constexpr uint32_t kStatusRecal = 0x80;
 constexpr uint32_t kStatusProximityScreenOff = 0x400;
-constexpr uint32_t kStatusFreqShiftDone = 0x4;
 constexpr uint32_t kStatusSideIdle = 0x8000;
 constexpr uint32_t kStatusRawJump = 0x20000;
 constexpr uint32_t kStatusRawUnstable = 0x40000;
 constexpr uint32_t kStatusCoreTouch = 0x100000;
 
-constexpr uint32_t kSysDifBufPath = 0x10000;            // TsaStatic::systemFlags
-constexpr uint32_t kSysProximityAutoCheck = 0x400000;
-constexpr uint32_t kSysProximityEntered = 0x1000000;
-constexpr uint32_t kSysProximityExited = 0x2000000;
-constexpr uint32_t kExtProximity = 0x80;                // TouchTable::extFlags
 constexpr uint32_t kExceptionNoise = 0x100;             // TouchTable::exceptionFlags
 constexpr uint32_t kAftIdleScanRate = 0x4;              // TsaStatic::aftGateFlags
 
@@ -42,9 +30,9 @@ constexpr uint16_t kIdleScanRate = 60;
 constexpr uint64_t kFreqSwitchTimeoutMs = 2000;
 constexpr uint16_t kQuietFramesToRaise = 0xfa;
 
-/// TSACore 自己的 AFE 结构（g_thpAFEStruct，原布局：MISC 与 Sys 按偏移读 info 与 frame）。
+/// TSACore 自己的 AFE 结构（g_thpAFEStruct）。info 原是宿主的驱动信息，只有 ALPS 机型读其中的版本名，这里恒为空。
 struct Slots {
-    const uint8_t* info;
+    const void* info;
     Caps* caps;
     Frame* frame;
 };
@@ -78,40 +66,13 @@ struct Scan {
     RateEntry rate[kMaxScanNum];
 };
 
-/// 自检模式的状态。
-struct AutoCheck {
-    bool active;
-    bool toEnterIdle;          // 自检要求进 IDLE
-    uint64_t prevTime;
-    uint32_t frameStatus;
-    // 频点遍历：两两组合 (from, to) 来回切换
-    uint8_t freqLoop;
-    uint8_t fromFreq, fromRate, toFreq, toRate;
-    bool traversedDone;
-    // 每个频点 / 扫描率组合上的 IDLE 进出
-    uint8_t idleFreq, idleRate;
-    int idleLoop;
-    int idleCheckLoop;
-    // 接近自检
-    int proxState;
-    uint8_t proxEnterFrames, proxExitFrames, proxLoop;
-};
-
 struct State {
     Scan scan;
-    AutoCheck check;
     int32_t hopFrames;
     int32_t hopCount;
     bool frequentlyHopping;
-    uint16_t* gridData;
-    uint16_t* lineData;
     Frame internalFrame;
     Caps internalCaps;
-    uint8_t simuInfo[0x60];
-    Caps simuCaps;
-    Frame simuFrame;
-    uint16_t simuScanFreq[kMaxScanNum];
-    uint16_t simuScanRate[kMaxScanNum];
 };
 State g;
 
@@ -120,14 +81,7 @@ const Caps* CapsPtr() { return AfeSlots().caps; }
 bool FrameFlag(uint32_t bit) { return AfeSlots().frame != nullptr && (AfeSlots().frame->status & bit) != 0; }
 bool NoiseDetected() { return (Touches().exceptionFlags & kExceptionNoise) != 0; }
 
-bool IsAlpsProject() {
-    const char* name = Prmt::GetProjectName();
-    return std::strcmp(name, "ALPS491000") == 0 || std::strcmp(name, "ALPS491600") == 0;
-}
-
-const char* VersionInfo() { return AfeSlots().info == nullptr ? "UnKnown" : reinterpret_cast<const char*>(AfeSlots().info + 0x40); }
-
-bool IsValid() { return CapsPtr() != nullptr && AfeSlots().frame != nullptr && AfeSlots().info != nullptr; }
+bool IsValid() { return CapsPtr() != nullptr && AfeSlots().frame != nullptr; }
 
 // ── 扫描率 ──────────────────────────────────────────────────────────────
 
@@ -352,261 +306,14 @@ void ScanInit() {
     g.scan.maxRate = PrmtFlash().maxScanRate;
 }
 
-// AFE_Simulation @ 0x6bb2c8aa
-// 宿主送来能力与帧之前的模拟 AFE（按机型给一组频点 / 扫描率）。
-void Simulate() {
-    struct Profile {
-        int32_t hopMode;
-        uint8_t numFreq;
-        uint16_t freq[4];
-        uint8_t numRate;
-        uint16_t rate[6];
-        const char* name;
-    };
-    const char* project = Prmt::GetProjectName();
-    Profile p;
-    if (IsAlpsProject()) {
-        p = {2, 4, {0x62, 0xb9, 0x8e, 0x36}, 2, {0x78, 0x3c}, "Novatek"};
-    } else if (std::strncmp(project, "JHSN", 4) == 0) {
-        p = {2, 4, {0x60, 0x53, 0x52, 0x65}, 5, {0x78, 0x3c, 0x28, 0x1e, 0x0f}, "N"};
-    } else {
-        p = {PrmtFlash().afeFreqHopMode, 3, {0xc3, 0xc3, 0xb0}, 6, {0x78, 0xb4, 0x3c, 0x46, 0x41, 0x5a}, "S"};
-    }
-    Caps& c = g.simuCaps;
-    c.freqHopMode = p.hopMode;
-    c.numScanFreq = p.numFreq;
-    std::memcpy(g.simuScanFreq, p.freq, p.numFreq * sizeof(uint16_t));
-    c.scanFreq = g.simuScanFreq;
-    c.numScanRate = p.numRate;
-    std::memcpy(g.simuScanRate, p.rate, p.numRate * sizeof(uint16_t));
-    c.scanRate = g.simuScanRate;
-    c.calibrationMode = 1;
-    g.simuFrame.scanFreq = p.freq[0];
-    g.simuFrame.scanRate = p.rate[0];
-    std::strncpy(reinterpret_cast<char*>(g.simuInfo), p.name, 0x20);
-    AfeSlots() = {g.simuInfo, &g.simuCaps, &g.simuFrame};
-}
-
-// ── 自检 ────────────────────────────────────────────────────────────────
-
-// AFE_FreqShiftCheckReset @ 0x6bb29b90 / AFE_IDLECheckReset @ 0x6bb29c60
-void AutoCheckInit() {
-    AutoCheck& c = g.check;
-    c.freqLoop = 0;
-    c.fromFreq = c.fromRate = c.toFreq = c.toRate = kNone;
-    c.traversedDone = true;
-    c.active = false;
-    c.prevTime = 0;
-    c.toEnterIdle = false;
-    c.idleFreq = c.idleRate = 0;
-    c.idleCheckLoop = 0;
-    c.idleLoop = 0;
-}
-
-// AFE_FreqShiftTraversedDoneInitFreqRate @ 0x6bb29d33：换下一个起点组合；全部遍历一轮后计一圈
-bool NextFromIndex() {
-    AutoCheck& c = g.check;
-    const Caps& caps = *CapsPtr();
-    if (c.fromFreq == kNone) {
-        c.fromFreq = 0;
-        c.fromRate = 0;
-    } else if (caps.numScanFreq <= ++c.fromFreq) {
-        if (caps.numScanRate <= ++c.fromRate) {
-            ++c.freqLoop;
-            c.fromRate = c.fromFreq = kNone;
-            return false;
-        }
-        c.fromFreq = 0;
-    }
-    g.scan.nextFreq = c.fromFreq;
-    g.scan.nextRate = c.fromRate;
-    c.traversedDone = false;
-    c.toFreq = c.toRate = kNone;
-    return true;
-}
-
-// AFE_FreqShiftSetNextIndex @ 0x6bb29e17
-bool NextToIndex() {
-    AutoCheck& c = g.check;
-    const Caps& caps = *CapsPtr();
-    if (caps.numScanFreq <= ++c.toFreq) {
-        if (caps.numScanRate <= ++c.toRate) {
-            c.toRate = c.toFreq = kNone;
-            c.traversedDone = true;
-            return false;
-        }
-        c.toFreq = 0;
-    }
-    return true;
-}
-
-// AFE_FreqShiftAutoCheck @ 0x6bb29fef
-// 在每对 (from, to) 组合间来回切换 51 圈；返回 false 表示遍历结束。
-bool FreqShiftAutoCheck() {
-    AutoCheck& c = g.check;
-    Scan& sc = g.scan;
-    if (0x33 <= c.freqLoop) return false;
-    if (c.traversedDone) {
-        NextFromIndex();
-        return true;
-    }
-    if ((c.frameStatus & kStatusFreqShiftDone) == 0 && c.toFreq != kNone) return true;
-    if (sc.curFreq == c.fromFreq && sc.curRate == c.fromRate) {
-        if (c.toFreq == kNone) {
-            c.toFreq = 0;
-            c.toRate = 0;
-        } else if (!NextToIndex()) {
-            return true;
-        }
-        if (c.toRate == c.fromRate && c.toFreq == c.fromFreq && !NextToIndex()) return true;
-        sc.nextFreq = c.toFreq;
-        sc.nextRate = c.toRate;
-    } else if (sc.curFreq == c.toFreq && sc.curRate == c.toRate) {
-        sc.nextFreq = c.fromFreq;
-        sc.nextRate = c.fromRate;
-    }
-    return true;
-}
-
-// AFE_IDLEAutoCheckUnit @ 0x6bb2a22b：100 帧后要求进 IDLE，进入 5 帧后要求退出；重复 100 次后完成
-bool IdleAutoCheckUnit() {
-    AutoCheck& c = g.check;
-    if (100 < c.idleCheckLoop) {
-        c.toEnterIdle = false;
-        return true;
-    }
-    if (!c.toEnterIdle && !IsInIdle()) {
-        if (c.idleLoop < 100) {
-            ++c.idleLoop;
-        } else {
-            c.idleLoop = 0;
-            if (100 < ++c.idleCheckLoop) {
-                c.toEnterIdle = false;
-                return true;
-            }
-            c.toEnterIdle = true;
-        }
-    } else if (c.toEnterIdle && IsInIdle()) {
-        if (c.idleLoop < 5) {
-            ++c.idleLoop;
-        } else {
-            c.idleLoop = 0;
-            c.toEnterIdle = false;
-        }
-    }
-    return false;
-}
-
-// AFE_IDLEAutoCheck @ 0x6bb2a466：逐个频点 / 扫描率组合做 IDLE 进出检查；返回 true 表示全部完成
-bool IdleAutoCheck() {
-    AutoCheck& c = g.check;
-    Scan& sc = g.scan;
-    const Caps& caps = *CapsPtr();
-    if (caps.numScanRate <= c.idleRate) return true;
-    bool unitDone = false;
-    if (c.idleFreq < caps.numScanFreq) {
-        sc.nextFreq = c.idleFreq;
-        sc.nextRate = c.idleRate;
-        unitDone = sc.nextFreq == sc.curFreq && sc.nextRate == sc.curRate && IdleAutoCheckUnit();
-    }
-    if (unitDone) {
-        if (!IsInIdle()) {
-            c.toEnterIdle = false;
-            c.idleLoop = 0;
-            if (caps.numScanFreq <= ++c.idleFreq) {
-                if (caps.numScanRate <= ++c.idleRate) return true;
-                c.idleFreq = 0;
-            }
-            sc.nextFreq = c.idleFreq;
-            sc.nextRate = c.idleRate;
-        } else {
-            c.toEnterIdle = false;
-        }
-    }
-    return false;
-}
-
-// AFE_ProximityAutoCheck @ 0x6bb2a9c8
-// 强制进入接近（切到进入扫描率）→ 等系统进入 → 保持 10 帧 → 强制退出 → 等系统退出 → 保持 10 帧，循环 100 次。
-void ProximityAutoCheck() {
-    AutoCheck& c = g.check;
-    if (100 <= c.proxLoop) return;
-    uint32_t& ext = Touches().extFlags;
-    const uint32_t sys = Static().systemFlags;
-    switch (c.proxState) {
-    case 0:
-        ext |= kExtProximity;
-        (void)TargetRateIndex(PrmtFlash().callScanRateProxOn, &g.scan.nextRate);
-        c.proxState = 1;
-        c.proxEnterFrames = 0;
-        break;
-    case 1:
-        ext |= kExtProximity;
-        if ((sys & kSysProximityEntered) != 0) c.proxState = 2;
-        break;
-    case 2:
-        c.proxState = 3;
-        break;
-    case 3:
-        ext |= kExtProximity;
-        if (c.proxEnterFrames < 10) ++c.proxEnterFrames;
-        else c.proxState = 4;
-        break;
-    case 4:
-        ext &= ~kExtProximity;
-        (void)TargetRateIndex(PrmtFlash().callScanRateProxOff, &g.scan.nextRate);
-        c.proxState = 5;
-        c.proxExitFrames = 0;
-        break;
-    case 5:
-        ext &= ~kExtProximity;
-        if ((sys & kSysProximityExited) != 0) c.proxState = 6;
-        break;
-    case 6:
-        ext &= ~kExtProximity;
-        if (c.proxExitFrames < 10) {
-            ++c.proxExitFrames;
-        } else {
-            if (c.proxLoop < 100) ++c.proxLoop;
-            c.proxState = 0;
-        }
-        break;
-    default:
-        break;
-    }
-}
-
-// AFE_ScanAutoCheck @ 0x6bb2c027（只留驱动状态的部分，检查结果原本只写日志）
-void ScanAutoCheck() {
-    AutoCheck& c = g.check;
-    const uint64_t prev = c.prevTime;
-    c.prevTime = Now();
-    if (prev == 0) return;
-    if ((Static().systemFlags & kSysProximityAutoCheck) != 0) {
-        ProximityAutoCheck();
-    } else if (!FreqShiftAutoCheck() && !IdleAutoCheck()) {
-        (void)IdleAutoCheck();
-    }
-}
-
 }  // namespace
 
-// AFE_Malloc @ 0x6bb2c9b5
-bool Malloc() {
-    g.gridData = static_cast<uint16_t*>(Mem::Allocate(GridBufSize() * 2u));
-    if (g.gridData == nullptr) return false;
-    g.lineData = static_cast<uint16_t*>(Mem::Allocate(LineBufSize() * 2u));
-    return g.lineData != nullptr;
-}
-
-// AFE_Init @ 0x6bb2ca4f
+// AFE_Init @ 0x6bb2ca4f（原版随后用模拟 AFE 顶上，宿主的 SetCaps / SetFrame 会把它整个覆盖掉）
 void Init() {
     g.internalFrame = {};
     g.internalCaps = {};
     AfeSlots() = {nullptr, &g.internalCaps, &g.internalFrame};
-    Simulate();
     ScanInit();
-    AutoCheckInit();
 }
 
 // AFE_SetCaps @ 0x6bb2cb53
@@ -617,22 +324,12 @@ void SetCaps(const Caps* caps) {
     TsaAssert(caps->numScanRate <= kMaxScanNum);
 }
 
-// AFE_SetFrame @ 0x6bb2cb9d
+// AFE_SetFrame @ 0x6bb2cb9d：原版还把矩阵与自容数据拷进自己的缓冲，矩阵只在本帧处理中读一次，直接用宿主的
 void SetFrame(const Frame* frame) {
     if (AfeSlots().frame == nullptr) AfeSlots().frame = &g.internalFrame;
-    Frame& f = *AfeSlots().frame;
-    f = *frame;
-    if (f.rawData != nullptr) {
-        std::memcpy(g.gridData, f.rawData, GridBufSize() * 2u);
-        f.rawData = g.gridData;
-    }
-    if (f.lineData != nullptr) {
-        std::memcpy(g.lineData, f.lineData, LineBufSize() * 2u);
-        f.lineData = g.lineData;
-    }
+    *AfeSlots().frame = *frame;
 }
 
-void SetInfo(const void* info) { AfeSlots().info = static_cast<const uint8_t*>(info); }
 void SetMaxScanRate(uint16_t rate) { g.scan.maxRate = rate; }
 Frame* GetFrame() { return AfeSlots().frame; }
 const Caps* GetCaps() { return AfeSlots().caps; }
@@ -646,7 +343,7 @@ void PreProcess() {
 
 // AFE_Process @ 0x6bb2d032
 void Process() {
-    if (!IsValid() || g.check.active || Tsa::IsOkToEnterIdle()) return;
+    if (!IsValid() || Tsa::IsOkToEnterIdle()) return;
     NextScanFreqProcess();
     NextScanRateProcess();
 }
@@ -655,8 +352,7 @@ void Process() {
 bool GetNextScanFreqIndex(uint8_t* index) {
     const Caps* caps = CapsPtr();
     const Scan& sc = g.scan;
-    const bool hop = caps != nullptr && (caps->freqHopMode == 1 || g.check.active);
-    if (!hop || caps->numScanFreq <= sc.nextFreq) {
+    if (!IsManualFreqHopping()|| caps->numScanFreq <= sc.nextFreq) {
         *index = sc.curFreq;
         return true;
     }
@@ -665,8 +361,8 @@ bool GetNextScanFreqIndex(uint8_t* index) {
 }
 
 // AFE_GetNextScanRateIndex @ 0x6bb2d8a1
-// 自检时取自检的目标；全屏模式有大面积触摸、所有频点都噪、或侧边触摸可进 IDLE 时用 60 Hz；手动跳频时取
-// 调度的目标，否则取上限内最高的一档（接近与双倍报点在本移植里都被裁掉）。
+// 全屏模式有大面积触摸、所有频点都噪、或侧边触摸可进 IDLE 时用 60 Hz；手动跳频时取调度的目标，
+// 否则取上限内最高的一档（接近与双倍报点在本移植里都被裁掉）。
 bool GetNextScanRateIndex(uint8_t* index) {
     const Caps* caps = CapsPtr();
     Scan& sc = g.scan;
@@ -674,20 +370,16 @@ bool GetNextScanRateIndex(uint8_t* index) {
         *index = sc.curRate;
         return true;
     }
-    if (g.check.active) {
+    const TsaStatic& s = Static();
+    if (PrmtFlash().sensorArchitecture == 3 && Touches().liftOffCount != 0) {
+        (void)TargetRateIndex(kIdleScanRate, index);
+    } else if (Sys::IsAllFreqNoisy() ||
+               ((s.featureFlags & kFeatSideTouch) != 0 && Sys::IsOkToEnterIdle() && (s.aftGateFlags & kAftIdleScanRate) == 0)) {
+        (void)TargetRateIndex(kIdleScanRate, index);
+    } else if (caps->freqHopMode == 1) {
         *index = sc.nextRate;
     } else {
-        const TsaStatic& s = Static();
-        if (PrmtFlash().sensorArchitecture == 3 && Touches().liftOffCount != 0) {
-            (void)TargetRateIndex(kIdleScanRate, index);
-        } else if (Sys::IsAllFreqNoisy() ||
-                   ((s.featureFlags & kFeatSideTouch) != 0 && Sys::IsOkToEnterIdle() && (s.aftGateFlags & kAftIdleScanRate) == 0)) {
-            (void)TargetRateIndex(kIdleScanRate, index);
-        } else if (caps->freqHopMode == 1) {
-            *index = sc.nextRate;
-        } else {
-            (void)TargetRateIndex(sc.maxRate, index);
-        }
+        (void)TargetRateIndex(sc.maxRate, index);
     }
     if (caps->numScanRate <= *index || *index == sc.curRate) {
         *index = sc.curRate;
@@ -695,35 +387,6 @@ bool GetNextScanRateIndex(uint8_t* index) {
     }
     return false;
 }
-
-// AFE_AutoCheckProcessInternal @ 0x6bb2c45b
-void AutoCheckProcess(const uint16_t* data, uint16_t size, uint32_t ctrl, uint64_t timeMs) {
-    TsaStatic& s = Static();
-    if (!g.check.active) {
-        AutoCheckInit();
-        g.check.active = true;
-        s.frameCounter = 0;
-    }
-    Sys::UpdateCtrlFlags(ctrl);
-    s.curTimeMs = timeMs;
-    ++s.frameCounter;
-    if (Sys::IsHwReset()) Tsa::MsReset();
-    TsaBufferTable& b = Buffers();
-    const size_t bytes = PrmtFlash().sensorNum * 2u;
-    if (data != nullptr) CopyChecked((s.systemFlags & kSysDifBufPath) == 0 ? static_cast<void*>(b.raw) : b.dif, bytes, data, size);
-    Rawdata::Process();
-    g.check.frameStatus = AfeSlots().frame->status;
-    PreProcess();
-    if (100u < static_cast<uint32_t>(s.frameCounter)) {
-        HardwareAnalyzer::GetRaw2RawPrpt();
-        ScanAutoCheck();
-    }
-    CopyChecked(b.preHwRaw, GridBufSize() * 2u, b.raw, bytes);
-}
-
-bool IsInAutoCheck() { return g.check.active; }
-void ClearAutoCheckFlag() { g.check.active = false; }
-bool AutoCheckToEnterIdle() { return g.check.toEnterIdle; }
 
 uint16_t ColNum() { return CapsPtr() == nullptr ? 10 : CapsPtr()->numCol; }
 uint16_t RowNum() { return CapsPtr() == nullptr ? 10 : CapsPtr()->numRow; }
@@ -739,8 +402,5 @@ bool IsAutoCalibration() { return CapsPtr() != nullptr && CapsPtr()->calibration
 bool IsAllFreqNoisy() { return IsManualFreqHopping() && (g.scan.rate[g.scan.curRate].flags & 1) != 0; }
 bool IsFreqShiftDone() { return (g.scan.flags & kScanShiftDone) != 0; }
 bool IsFrequentlyHopping() { return g.frequentlyHopping; }
-bool IsAlwaysNoisy() { return IsAlpsProject() && Static().maxRfNoiseFrames != 0; }
-bool IsRawUnifiedToTargetValue() { return IsAlpsProject() && std::strcmp(VersionInfo(), "ALPS491600_P5007_T91") != 0; }
-bool IsIndividualBaselineForEachFreq() { return IsRawUnifiedToTargetValue(); }
 
 }  // namespace Solvers::Tsa::Core::Afe

@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include <cstdlib>
-#include <cstring>
 
 #include "Alg/Touch/PrevTouch.h"
 #include "Alg/Touch/TouchData.h"
@@ -253,11 +252,8 @@ void ProcessUnit(uint8_t idx) {
 
 // TSA_ASAAFEStatus @ 0x6ba9c607：AFE 帧里笔的状态，没有笔帧时为 -10
 uint32_t AfeStylusStatus() {
-    const auto* stylus = static_cast<const uint8_t*>(Afe::GetFrame()->stylusData);
-    if (stylus == nullptr) return static_cast<uint32_t>(-10);
-    uint32_t v;
-    std::memcpy(&v, stylus + 0x1c, sizeof(v));
-    return v;
+    const StylusFrame* stylus = Afe::GetFrame()->stylus;
+    return stylus == nullptr ? static_cast<uint32_t>(-10) : stylus->status;
 }
 
 }  // namespace

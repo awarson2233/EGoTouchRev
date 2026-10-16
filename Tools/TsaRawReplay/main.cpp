@@ -2,14 +2,14 @@
 // 逐帧打印 frame.touch.output.contacts（TSACore 是进程级单例，A/B 只能分进程跑）。
 //
 //   TsaRawReplay.exe <file.dvrbin> [--panel ID] [--to N] [--dump N] [--charger] [--quiet]
-//                    [--afe] [--idle-exit N] [--hold N K]
+//                    [--afe] [--sos N] [--hold N K]
 //                    [--pen X Y A B] [--pen-hover] [--pen-tilt TX TY] [--pen-word W] [--pen-interleave]
 //                    [--stylus-solver] [--state-digest FILE] [--state-dump STEP FILE] [--profile]
 //   TsaRawReplay.exe --state-diff A B [SYMBOL]
 //
 //   --panel ID     面板机型（W273AS2700 / 2710 / 1300 / 1310），默认取录制里记的；旧录制没记就是 W273AS2700
 //   --afe          把 TSACore 的闭环请求与要下发的 AFE 动作打到 stderr（请求只在变化时打印）
-//   --idle-exit N  在第 N 帧之前注入一次「宿主观察到 IDLE 退出」
+//   --sos N        在第 N 帧之前注入一次 AFE SOS 之后的复位（宿主重启芯片）
 //   --hold N K     把第 N 帧额外重复喂 K 次（模拟长时间静止）
 //
 // 判断两份实现是否等价（重构前后各跑一遍，见 Compare-Reference.ps1）：
@@ -19,8 +19,9 @@
 //   --heap-skew N           自检用：先分配 N 个大小不一的堆块再建解算器，摘要不应因此改变
 //
 // 性能：
-//   --profile      结束时把 TSACore 各步骤的累计耗时打到 stderr（PROF 纳秒 次数 步骤），按耗时降序。
-//                  要求算法库以 EGO_TSACORE_PROFILE=ON 构建，否则没有数据（Compare-Reference -Benchmark 会这样构建）
+//   --profile      结束时把 TSACore 各步骤的累计耗时打到 stderr（PROF 纳秒 次数 步骤），按耗时降序；第一行是
+//                  TsaCoreSolver::Process 整体（含适配层与宿主）。各步骤要求算法库以 EGO_TSACORE_PROFILE=ON 构建，
+//                  否则没有数据（Compare-Reference -Benchmark 会这样构建）
 //   --profile-frame  同上但只计整帧：各步骤不计时，整帧耗时里没有分段计时自身的开销
 //
 // 录制里没有笔的时候，可以注入一支模拟笔来走通手指侧依赖笔状态的逻辑（只对 TsaCoreSolver 生效）：
@@ -45,10 +46,11 @@
 #include "SolverTypes.h"
 #include "StateTrace.h"
 #include "StylusSolver/StylusPipeline.h"
-#include "TsaCore/TsaCoreApi.h"
+#include "TsaCore/TsaCore.h"
 #include "TsaCore/TsaCoreSolver.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -200,9 +202,12 @@ bool SameRequests(const Solvers::Tsa::AfeRequests& a, const Solvers::Tsa::AfeReq
 
 } // namespace
 
-void PrintProfile() {
-    std::vector<TsaCore_ProfileEntry> entries(TsaCore_ProfileEntries(nullptr, 0));
-    entries.resize(std::min(entries.size(), TsaCore_ProfileEntries(entries.data(), entries.size())));
+// solverNs / solverCalls：TsaCoreSolver::Process 整体（适配层、宿主与 TSACore）的耗时，由回放自己计
+void PrintProfile(uint64_t solverNs, uint64_t solverCalls) {
+    std::fprintf(stderr, "PROF %12llu %8llu TsaCoreSolver::Process\n", static_cast<unsigned long long>(solverNs),
+                 static_cast<unsigned long long>(solverCalls));
+    std::vector<Solvers::Tsa::Core::ProfileEntry> entries(Solvers::Tsa::Core::ProfileEntries(nullptr, 0));
+    entries.resize(std::min(entries.size(), Solvers::Tsa::Core::ProfileEntries(entries.data(), entries.size())));
     if (entries.empty()) {
         std::fprintf(stderr, "no profile data: build with -DEGO_TSACORE_PROFILE=ON\n");
         return;
@@ -225,7 +230,7 @@ int main(int argc, char** argv) {
     }
     if (argc < 2) {
         std::fprintf(stderr, "usage: TsaRawReplay <file.dvrbin> [--panel ID] [--to N] [--dump N] [--charger] [--quiet] "
-                             "[--afe] [--idle-exit N] [--hold N K] [--pen X Y A B] [--pen-hover] "
+                             "[--afe] [--sos N] [--hold N K] [--pen X Y A B] [--pen-hover] "
                              "[--pen-tilt TX TY] [--pen-word W] [--pen-interleave] [--stylus-solver] "
                              "[--state-digest FILE] [--state-dump STEP FILE] [--profile | --profile-frame]\n"
                              "       TsaRawReplay --state-diff A B [SYMBOL]\n");
@@ -233,7 +238,7 @@ int main(int argc, char** argv) {
     }
     int to = -1;
     int dump = -1;   // 该帧处理后把 TSACore 的 diff 网格（40 行 x 60 列）打到 stderr
-    int idleExit = -1;
+    int sosFrame = -1;
     int holdFrame = -1;
     int holdCount = 0;
     bool charger = false;
@@ -257,7 +262,7 @@ int main(int argc, char** argv) {
         if (std::strcmp(argv[i], "--to") == 0 && i + 1 < argc) to = std::atoi(argv[++i]);
         else if (std::strcmp(argv[i], "--panel") == 0 && i + 1 < argc) panelArg = argv[++i];
         else if (std::strcmp(argv[i], "--dump") == 0 && i + 1 < argc) dump = std::atoi(argv[++i]);
-        else if (std::strcmp(argv[i], "--idle-exit") == 0 && i + 1 < argc) idleExit = std::atoi(argv[++i]);
+        else if (std::strcmp(argv[i], "--sos") == 0 && i + 1 < argc) sosFrame = std::atoi(argv[++i]);
         else if (std::strcmp(argv[i], "--hold") == 0 && i + 2 < argc) {
             holdFrame = std::atoi(argv[++i]);
             holdCount = std::atoi(argv[++i]);
@@ -267,7 +272,7 @@ int main(int argc, char** argv) {
         else if (std::strcmp(argv[i], "--profile") == 0) profile = true;
         else if (std::strcmp(argv[i], "--profile-frame") == 0) {
             profile = true;
-            TsaCore_ProfileSteps(0);
+            Solvers::Tsa::Core::ProfileSteps(false);
         }
         else if (std::strcmp(argv[i], "--afe") == 0) afe = true;
         else if (std::strcmp(argv[i], "--pen") == 0 && i + 4 < argc) {
@@ -359,6 +364,7 @@ int main(int argc, char** argv) {
     int fed = 0, withTouch = 0, dispatched = 0;
     int step = 0;   // 喂进解算器的帧序号，--hold 重复的帧也计数
     uint64_t holdShiftMs = 0;
+    uint64_t solverNs = 0, solverCalls = 0;
     size_t maxTouch = 0;
     unsigned statusSeen = 0;
     Solvers::Tsa::AfeRequests lastReq{};
@@ -398,7 +404,7 @@ int main(int argc, char** argv) {
             out.point.y = dim2;
             out.point.tiltX = static_cast<int16_t>(penTiltX);
             out.point.tiltY = static_cast<int16_t>(penTiltY);
-            if (!penHover) tsa->OnBtPressure(0, 0, 0, 1024);
+            if (!penHover) tsa->OnBtPressure();
             if (penInterleave && (fi & 1) != 0) f.masterWasRead = false;
         }
         decltype(f.stylus.input.btSample) recordedBt{};
@@ -409,7 +415,7 @@ int main(int argc, char** argv) {
             if (bt.hasSample && bt.seq != btSeqSeen) {
                 btSeqSeen = bt.seq;
                 stylus->SetBtMcuPressurePacket(bt.pressure, bt.rawPressure, bt.freq1, bt.freq2);
-                tsa->OnBtPressure(bt.pressure[0], bt.pressure[1], bt.pressure[2], bt.pressure[3]);
+                tsa->OnBtPressure();
             }
             stylus->Process(f);
         }
@@ -417,14 +423,20 @@ int main(int argc, char** argv) {
         const int repeats = (fi == holdFrame) ? holdCount + 1 : 1;
         bool dispatch = false;
         for (int rp = 0; rp < repeats; ++rp, ++step) {
-            if (fi == idleExit && rp == 0) tsa->OnAfeIdleExit();
+            if (fi == sosFrame && rp == 0) tsa->OnAfeSos();
             // 时间戳取录制里的接收时间（没有时按 120 Hz 合成），回放结果只取决于输入；
             // --hold 多喂的帧每帧顺延 8 ms
             if (rp != 0) holdShiftMs += 8;
             const uint64_t baseMs = f.receiveSystemEpochUs != 0
                 ? f.receiveSystemEpochUs / 1000
                 : static_cast<uint64_t>(fed) * 25 / 3;
+            const auto t0 = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
             dispatch = tsa->Process(f, baseMs + holdShiftMs);
+            if (profile) {
+                solverNs += static_cast<uint64_t>(
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count());
+                ++solverCalls;
+            }
             if (!traceState(step, fi)) return 1;
             statusSeen |= tsa->LastAfeStatus();
             if (stylusSolver) {
@@ -432,9 +444,11 @@ int main(int argc, char** argv) {
                 const auto& report = tsa->LastStylusReport();
                 StylusPeak peak;
                 const bool hasPeak = FindStylusPeak(info.tx1, peak);
-                if (hasPeak || report.inRange || f.stylus.output.valid) {
+                const bool reportInRange = report.status != 0;
+                const bool reportTipDown = (report.status & Solvers::Tsa::StylusReportFlag::kTipDown) != 0;
+                if (hasPeak || reportInRange || f.stylus.output.valid) {
                     std::fprintf(stderr, "STY frame=%d master=%d status=0x%02x report(inRange=%d tip=%d x=%u y=%u tilt=%d,%d p=%u)",
-                                 fi, f.masterWasRead ? 1 : 0, info.status, report.inRange ? 1 : 0, report.tipDown ? 1 : 0,
+                                 fi, f.masterWasRead ? 1 : 0, info.status, reportInRange ? 1 : 0, reportTipDown ? 1 : 0,
                                  report.x, report.y, report.tiltX, report.tiltY, report.pressure);
                     if (hasPeak) {
                         // 重心换成像素，格子中心记在半格处
@@ -515,6 +529,6 @@ int main(int argc, char** argv) {
                  withTouch, maxTouch);
     std::fprintf(stderr, ", tsa available=%d, afe status bits seen 0x%02x", tsa->IsAvailable() ? 1 : 0, statusSeen);
     std::fputc('\n', stderr);
-    if (profile) PrintProfile();
+    if (profile) PrintProfile(solverNs, solverCalls);
     return 0;
 }

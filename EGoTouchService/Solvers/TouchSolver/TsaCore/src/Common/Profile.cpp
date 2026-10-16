@@ -2,7 +2,7 @@
 
 #include <cstddef>
 
-#include "../TsaCoreApi.h"
+#include "../TsaCore.h"
 
 #if defined(TSACORE_PROFILE)
 namespace Solvers::Tsa::Core::Profile {
@@ -10,7 +10,7 @@ namespace Solvers::Tsa::Core::Profile {
 namespace {
 
 constexpr size_t kMaxEntries = 256;
-TsaCore_ProfileEntry g_entries[kMaxEntries];
+ProfileEntry g_entries[kMaxEntries];
 size_t g_count = 0;
 
 }  // namespace
@@ -32,24 +32,27 @@ void Add(const char* name, uint64_t ns) noexcept {
 }  // namespace Solvers::Tsa::Core::Profile
 #endif
 
-extern "C" void TsaCore_ProfileSteps(int enable) {
+namespace Solvers::Tsa::Core {
+
+void ProfileSteps(bool enable) {
 #if defined(TSACORE_PROFILE)
-    Solvers::Tsa::Core::Profile::g_steps = enable != 0;
+    Profile::g_steps = enable;
 #else
     (void)enable;
 #endif
 }
 
-extern "C" size_t TsaCore_ProfileEntries(TsaCore_ProfileEntry* out, size_t capacity) {
+size_t ProfileEntries(ProfileEntry* out, size_t capacity) {
 #if defined(TSACORE_PROFILE)
-    namespace P = Solvers::Tsa::Core::Profile;
     if (out != nullptr) {
-        for (size_t i = 0; i < P::g_count && i < capacity; ++i) out[i] = P::g_entries[i];
+        for (size_t i = 0; i < Profile::g_count && i < capacity; ++i) out[i] = Profile::g_entries[i];
     }
-    return P::g_count;
+    return Profile::g_count;
 #else
     (void)out;
     (void)capacity;
     return 0;
 #endif
 }
+
+}  // namespace Solvers::Tsa::Core

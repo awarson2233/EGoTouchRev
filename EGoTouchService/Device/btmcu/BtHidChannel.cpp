@@ -63,8 +63,8 @@ void BtHidChannel::WorkerFunc() {
                          "[Thread] Found device: {}", pathA);
                 auto res = m_transport->Open(*path);
                 if (res) {
-                    LOG_INFO(ChannelName(), "WorkerFunc", "MCU",
-                             "[Thread] Channel opened successfully.");
+                    LOG_NOTICE(ChannelName(), "WorkerFunc", "MCU",
+                               "[Thread] Channel opened successfully.");
                     opened = true;
                     break;
                 }

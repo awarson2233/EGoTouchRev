@@ -385,5 +385,7 @@ struct PenEvent {
 };
 
 using PenEventCallback = std::function<void(const PenEvent&)>;
+/// 事件通道每次重新打开（含首次）时、握手发出之前调用。
+using PenLinkUpCallback = std::function<void()>;
 
 } // namespace Himax::Pen

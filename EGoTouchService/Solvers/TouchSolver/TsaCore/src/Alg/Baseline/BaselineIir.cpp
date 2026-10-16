@@ -2,7 +2,6 @@
 
 #include "Alg/Baseline/Baseline.h"
 #include "Alg/Baseline/BaselineInternal.h"
-#include "App/Afe.h"
 #include "App/TsaBuffer.h"
 #include "App/TsaStatic.h"
 #include "Common/Assert.h"
@@ -13,9 +12,6 @@ namespace Solvers::Tsa::Core::Baseline {
 namespace {
 
 constexpr size_t kBlBytes = 0x2648;  // 基线缓冲的容量（TSA_MAX_DIM²）
-
-/// 基线状态 3（复位原因：上电）
-constexpr uint32_t kBlStatePowerOn = 3;
 
 size_t GridBytes() { return PrmtFlash().sensorNum * size_t{2}; }
 
@@ -81,16 +77,11 @@ void Update(bool force, int16_t thold, int16_t step) {
 }
 
 // BLIIR_Reset @ 0x6ba4721f
-// raw 未归一到目标值、上电或常噪声时基线取 CMF 前的 raw，否则整屏取目标值；再同步到接近检测的基线
+// 基线取 CMF 前的 raw（原版在 raw 已归一到目标值的 ALPS 机型上整屏取目标值）；再同步到接近检测的基线
 // （接近检测被裁掉，判定恒为未检出）。
 void Reset() {
     const TsaBufferTable& buf = Buffers();
-    if (!Afe::IsRawUnifiedToTargetValue() || Prpt().blPropertyState == kBlStatePowerOn || Afe::IsAlwaysNoisy()) {
-        CopyChecked(buf.bl, kBlBytes, buf.preCmfRaw, GridBytes());
-    } else {
-        const uint16_t n = PrmtFlash().sensorNum;
-        for (uint16_t i = 0; i < n; ++i) buf.bl[i] = static_cast<int16_t>(PrmtFlash().rawZero);
-    }
+    CopyChecked(buf.bl, kBlBytes, buf.preCmfRaw, GridBytes());
     if (ProxBl() != nullptr) CopyChecked(ProxBl(), kBlBytes, buf.bl, GridBytes());
 }
 

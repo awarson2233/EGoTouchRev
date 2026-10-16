@@ -41,7 +41,7 @@
 .PARAMETER Benchmark
   不做比较，改为计时：以服务实际安装的配置 -BenchPreset（默认 arm64-Release）加 EGO_TSACORE_PROFILE
   构建到 build/tsa-bench-release，逐个串行回放（纯回放场景），跑 -Rounds 轮取最快的一轮打印每帧耗时（只计
-  整帧，--profile-frame），再另跑几轮分步计时，打印耗时最多的 -Top 个步骤（步骤耗时含其子步骤，也含各段
+  整帧，--profile-frame：TSACore 本体与含适配层、宿主的 TsaCoreSolver::Process 各一个数），再另跑几轮分步计时，打印耗时最多的 -Top 个步骤（步骤耗时含其子步骤，也含各段
   计时自身的开销）。回放钉在 -Affinity 指定的核上（默认 0xF0，Snapdragon
   8cx Gen 3 的四个大核）并以高优先级运行。
 
@@ -168,14 +168,14 @@ function Get-Scenarios {
     $list = @(
         @{ Name = 'plain';     Args = @('--afe') }
         @{ Name = 'charger';   Args = @('--afe', '--charger') }
-        @{ Name = 'idle';      Args = @('--afe', '--idle-exit', $half, '--hold', $quarter, 600) }
+        @{ Name = 'hold-sos';  Args = @('--afe', '--sos', $half, '--hold', $quarter, 600) }
         @{ Name = 'pen-write'; Args = @('--afe', '--pen', 1280, 800, $quarter, $threeQuarters, '--pen-word', '0102', '--pen-tilt', 25, -15) }
         @{ Name = 'pen-hover'; Args = @('--afe', '--pen', 640, 1200, $quarter, $threeQuarters, '--pen-hover', '--pen-interleave') }
         # 真实笔数据走 StylusPipeline；没有笔的录制也跑，走的是「笔已连接但不在场」
         @{ Name = 'stylus';    Args = @('--afe', '--stylus-solver') }
     )
-    # 默认只跑覆盖面互不重叠的三个：纯回放、静止后退出 idle、模拟笔书写
-    $Full ? $list : @($list | Where-Object { $_.Name -in 'plain', 'idle', 'pen-write' })
+    # 默认只跑覆盖面互不重叠的三个：纯回放、长时间静止后 SOS 复位、模拟笔书写
+    $Full ? $list : @($list | Where-Object { $_.Name -in 'plain', 'hold-sos', 'pen-write' })
 }
 
 # ── 计时 ────────────────────────────────────────────────────────────────
@@ -241,7 +241,9 @@ if ($Benchmark) {
     }
     $rows | Format-Table -AutoSize | Out-String -Width 200 | Set-Content (Join-Path $benchDir 'profile.txt')
     $frameUs = $frameOnly.Best['TSA_ProcessingAFEFrame'] / $frameOnly.Frames / 1000
-    Write-Host ("`n{0} recordings, {1} frames, best of {2} rounds: {3:F1} us/frame" -f $recordings.Count, $frameOnly.Frames, $Rounds, $frameUs)
+    $solverUs = $frameOnly.Best['TsaCoreSolver::Process'] / $frameOnly.Frames / 1000
+    Write-Host ("`n{0} recordings, {1} frames, best of {2} rounds: {3:F1} us/frame in TSACore, {4:F1} us/frame in TsaCoreSolver::Process (adapter + host + TSACore)" -f
+        $recordings.Count, $frameOnly.Frames, $Rounds, $frameUs, $solverUs)
     Write-Host ("steps (instrumented run, {0:F1} us/frame including the per-step timers):" -f ($total / $frames / 1000))
     $rows | Select-Object -First $Top | Format-Table -AutoSize | Out-String -Width 200 | Write-Host
     Write-Host "full table: $(Join-Path $benchDir 'profile.txt')"

@@ -72,41 +72,26 @@ bool IsSensorBrokenByRawRange(uint8_t dim1, uint8_t dim2) {
     return IsSensorOverRawLimit(dim1, dim2) && IsSensorOverRawDeltaLimit(dim1, dim2);
 }
 
-/// HardwareAnalyzer_Z8InfoUpdate 的累加量。
-struct Z8Info {
-    uint8_t count = 0;
-    uint32_t rawSum = 0;
-    int difAbsSum = 0;
-};
-
-// HardwareAnalyzer_Z8InfoUpdate @ 0x6baf24b2
-void Z8InfoUpdate(uint8_t dim1, uint8_t dim2, Z8Info& z) {
+// HardwareAnalyzer_Z8InfoUpdate @ 0x6baf24b2：周围一格的 |Dif| 累加（原版还累加 raw，只有 ALPS 机型用到）
+void Z8InfoUpdate(uint8_t dim1, uint8_t dim2, int& difAbsSum) {
     const FlashPrmt& fl = PrmtFlash();
     if (dim1 >= fl.dim1Len || dim2 >= fl.dim2Len) return;
-    const uint16_t i = Cell(dim1, dim2);
-    ++z.count;
-    z.rawSum += static_cast<uint16_t>(Buffers().raw[i]);
-    z.difAbsSum += std::abs(Buffers().dif[i]);
+    difAbsSum += std::abs(Buffers().dif[Cell(dim1, dim2)]);
 }
 
 // HardwareAnalyzer_IsSensorBrokenByDifZ8 @ 0x6baf258e
-// |Dif| 超过 peakFilterReferenceThreshold 且超过周围 8 格 |Dif| 之和的 10 倍；raw 已统一到目标值时，
-// 还要求 raw 偏离周围 raw 均值超过 |Dif| 的一半。
+// |Dif| 超过 peakFilterReferenceThreshold 且超过周围 8 格 |Dif| 之和的 10 倍（原版在 raw 已统一到目标值的
+// ALPS 机型上还要求 raw 偏离周围 raw 均值超过 |Dif| 的一半）。
 bool IsSensorBrokenByDifZ8(uint8_t dim1, uint8_t dim2) {
-    const uint16_t i = Cell(dim1, dim2);
-    const int a = std::abs(Buffers().dif[i]);
+    const int a = std::abs(Buffers().dif[Cell(dim1, dim2)]);
     if (a <= PrmtFlash().peakFilterReferenceThreshold) return false;
-    Z8Info z;
+    int difAbsSum = 0;
     for (const int d1 : {-1, 0, 1}) {
         for (const int d2 : {-1, 0, 1}) {
-            if (d1 != 0 || d2 != 0) Z8InfoUpdate(static_cast<uint8_t>(dim1 + d1), static_cast<uint8_t>(dim2 + d2), z);
+            if (d1 != 0 || d2 != 0) Z8InfoUpdate(static_cast<uint8_t>(dim1 + d1), static_cast<uint8_t>(dim2 + d2), difAbsSum);
         }
     }
-    const uint32_t rawAvg = z.count == 0 ? 0 : z.rawSum / z.count;
-    if (a <= z.difAbsSum * 10) return false;
-    if (!Afe::IsRawUnifiedToTargetValue()) return true;
-    const uint32_t d = static_cast<uint16_t>(Buffers().raw[i]) - rawAvg;
-    return a / 2 < std::abs(static_cast<int>(d));
+    return a > difAbsSum * 10;
 }
 
 // HardwareAnalyzer_DebounceBrokenSensorByDifZ8 @ 0x6baf2804
@@ -314,10 +299,11 @@ void SensorBrokenDifProcess() {
     if (thold < peak) thold = peak;
     // 两遍都只有少数格（有信号的格）要细判：先按 kChunk 格一块无分支地粗筛（可向量化），块里有候选再逐格判。
     constexpr int kChunk = 16;
+    // 判定写成比较结果（0 / 0xffff）的按位或才向量化，写成 bool 的 |= 时不会
     const auto any = [&](int begin, int end, auto pred) {
-        bool hit = false;
-        for (int i = begin; i < end; ++i) hit |= pred(static_cast<int>(dif[i]));
-        return hit;
+        uint16_t hit = 0;
+        for (int i = begin; i < end; ++i) hit |= pred(static_cast<int>(dif[i])) ? 0xffff : 0;
+        return hit != 0;
     };
     if (-ref <= prpt.dif.minSig * 8) {
         for (int base = 0; base < n; base += kChunk) {

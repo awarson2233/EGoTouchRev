@@ -8,11 +8,10 @@
 
 namespace Solvers::Tsa::Core::Tsa {
 
-/// 宿主初始化：先装入 AFE 能力，再按机型名初始化全部模块，最后记下宿主的 AFE 结构。
-/// 返回 0 成功，1 失败（参数为空或机型装入失败）。
-[[nodiscard]] int InitAfeProject(const char* project, const void* afeInfo, const Afe::Caps* caps);
-/// 宿主送来一帧：拷下 AFE 帧后处理。frame 为空时返回 1。
-int ProcessAfeFrame(const Afe::Frame* frame, uint32_t ctrl, uint64_t timeMs);
+/// 宿主初始化：先装入 AFE 能力，再按机型名初始化全部模块。参数为空或机型装入失败时返回 false。
+[[nodiscard]] bool InitAfeProject(const char* project, const Afe::Caps& caps);
+/// 宿主送来一帧：拷下 AFE 帧后处理。
+void ProcessAfeFrame(const Afe::Frame& frame, uint32_t ctrl);
 /// 互容主流程复位：重新初始化各模块，保留跨复位的统计（视系统复位位而定）。
 void MsReset();
 

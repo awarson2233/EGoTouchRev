@@ -1,5 +1,7 @@
 #include "App/Report.h"
 
+#include "../TsaCore.h"
+
 #include "Alg/Touch/TouchData.h"
 #include "App/Tsa.h"
 #include "App/TsaBuffer.h"
@@ -182,27 +184,30 @@ bool IsWindowsPadFeatureEnabled() { return (Static().featureFlags & kFeatWindows
 
 }  // namespace Solvers::Tsa::Core::Report
 
-// 宿主 API
-extern "C" {
-namespace R = Solvers::Tsa::Core::Report;
-uint32_t TSA_RptTouchNum(void) { return R::TouchNum(); }
-int TSA_RptTouchID(uint8_t idx) { return R::TouchId(idx); }
-uint64_t TSA_RptTouchXPos(uint8_t idx) { return R::TouchXPos(idx); }
-uint64_t TSA_RptTouchYPos(uint8_t idx) { return R::TouchYPos(idx); }
-uint32_t TSA_RptTouchPressure(uint8_t idx) { return R::TouchPressure(idx); }
-uint32_t TSA_RptIsTouchDown(uint8_t idx) { return R::IsTouchDown(idx); }
-uint32_t TSA_RptIsLiftOff(uint8_t idx) { return R::IsLiftOff(idx); }
-uint64_t TSA_RptDiffPtr(void) { return reinterpret_cast<uint64_t>(Solvers::Tsa::Core::Buffers().dif); }
-void TSA_SetXRes(uint16_t res) { R::SetXRes(res); }
-void TSA_SetYRes(uint16_t res) { R::SetYRes(res); }
-uint64_t TSA_SetResScale(uint16_t scale) {
-    R::SetResScale(scale);
-    return 0;
+// 宿主接口（TsaCore.h）
+namespace Solvers::Tsa::Core {
+
+uint8_t TouchCount() { return Report::TouchNum(); }
+
+ReportedTouch TouchAt(uint8_t index) {
+    ReportedTouch t;
+    t.id = Report::TouchId(index);
+    t.down = Report::IsTouchDown(index) != 0;
+    t.liftOff = Report::IsLiftOff(index) != 0;
+    t.x = Report::TouchXPos(index);
+    t.y = Report::TouchYPos(index);
+    t.pressure = Report::TouchPressure(index);
+    return t;
 }
-uint16_t TSA_GetYLength(void) { return R::YLength(); }
-const char* TSA_GetPrmtName(void) { return Solvers::Tsa::Core::ProjectName(); }
-uint32_t TSA_GetSide(uint16_t dim1, uint16_t dim2) { return R::GetSide(dim1, dim2); }
-uint32_t TSA_GetTouchSide(uint8_t idx) { return R::GetTouchSide(idx); }
-uint64_t TSA_SideToEdge(uint32_t side) { return R::SideToEdge(side); }
-uint32_t TSA_IsWindowsPadFeatureEnabled(void) { return R::IsWindowsPadFeatureEnabled() ? 1 : 0; }
-}  // extern "C"
+
+const int16_t* DiffGrid() { return Buffers().dif; }
+const char* PrmtName() { return ProjectName(); }
+
+// TSA_SetXRes / TSA_SetYRes / TSA_SetResScale
+void SetResolution(uint16_t xRes, uint16_t yRes, uint16_t resScale) {
+    Report::SetXRes(xRes);
+    Report::SetYRes(yRes);
+    Report::SetResScale(resScale);
+}
+
+}  // namespace Solvers::Tsa::Core

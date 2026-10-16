@@ -102,8 +102,6 @@ void GetProperty(bool resetReq, bool refreshReq) {
         flags = kPropRefresh;
     } else if (Reset::Process(false)) {
         flags = kPropReset;
-    } else if (Reset::IsBaselineNoisy()) {
-        flags = kPropNoisy;
     } else if (ResetInDebounce()) {
         flags = kPropDebounce;
     } else {
@@ -128,10 +126,6 @@ void UpdateStage() {
     prpt.prevBlStage = prpt.blStage;
     if ((flags & kPropReset) != 0) {
         prpt.blStage = kStageReset;
-        return;
-    }
-    if ((flags & kPropNoisy) != 0) {
-        prpt.blStage = kStageNoisyReset;
         return;
     }
     if ((flags & kPropDebounce) != 0) {
@@ -273,9 +267,9 @@ bool ShbIsRawChanged() {
     constexpr int kChunk = 16;
     for (int base = 0; base < n; base += kChunk) {
         const int end = std::min(base + kChunk, n);
-        bool hit = false;
-        for (int i = base; i < end; ++i) hit |= limit < std::abs(static_cast<int16_t>(capture[i] - raw[i]));
-        if (hit) return true;
+        uint16_t hit = 0;  // 比较结果（0 / 0xffff）的按位或才向量化，bool 的 |= 不会
+        for (int i = base; i < end; ++i) hit |= limit < std::abs(static_cast<int16_t>(capture[i] - raw[i])) ? 0xffff : 0;
+        if (hit != 0) return true;
     }
     return false;
 }

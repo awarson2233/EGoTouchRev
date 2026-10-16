@@ -1,6 +1,6 @@
 #pragma once
 // ══════════════════════════════════════════════════════════════════════
-// TsaOutputMapper — 把 TSA_Rpt* 逐点翻成业务侧的 TouchContact。
+// TsaOutputMapper — 把 TSACore 的报点逐点翻成业务侧的 TouchContact。
 //
 // 在场 / 抬起的判定照搬 ApDaemon 的 TsaFrame::ObInput：TSA_RptIsTouchDown 非零
 // 即在场，否则 TSA_RptIsLiftOff 非零即抬起，两者都为零的点不上报。TSACore 只给
@@ -16,10 +16,14 @@
 #include <cstdint>
 
 #include "SolverTypes.h"
-#include "TsaCoreApi.h"
-#include "TsaHostShim.h"
+#include "TsaCore.h"
 
 namespace Solvers::Tsa {
+
+/// 交给 TSACore 的显示分辨率。报点坐标的量程是「显示像素 × kResScale」，与 HID 逻辑量程 25600 × 16000 一致。
+inline constexpr uint16_t kXRes = 2560;
+inline constexpr uint16_t kYRes = 1600;
+inline constexpr uint16_t kResScale = 10;
 
 class TsaOutputMapper {
 public:
@@ -32,31 +36,29 @@ public:
         uint32_t activeIds = 0;
         uint32_t liftedIds = 0;
         int written = 0;
-        const uint32_t count = TSA_RptTouchNum();
+        const uint32_t count = Core::TouchCount();
         for (uint32_t i = 0; i < count && i < kMaxContacts; ++i) {
-            const auto index = static_cast<uint8_t>(i);
-            const bool present = TSA_RptIsTouchDown(index) != 0;
-            if (!present && TSA_RptIsLiftOff(index) == 0) continue;
+            const Core::ReportedTouch t = Core::TouchAt(static_cast<uint8_t>(i));
+            if (!t.down && !t.liftOff) continue;
 
-            const int tsaId = TSA_RptTouchID(index);
-            if (tsaId < 0 || tsaId >= kMaxIds) continue;
-            const uint32_t idBit = 1u << tsaId;
+            if (t.id < 0 || t.id >= kMaxIds) continue;
+            const uint32_t idBit = 1u << t.id;
             const bool wasActive = (m_activeIds & idBit) != 0;
             // 从未按下过的点（按下防抖期间就离开）也会带抬起事件，HID 侧不需要
-            if (!present && !wasActive) continue;
+            if (!t.down && !wasActive) continue;
 
             TouchContact contact{};
             // VHF 只上报 id > 0 的点，TSACore 的 ID 从 0 起
-            contact.id = tsaId + 1;
-            contact.x = Unrotate(TSA_RptTouchXPos(index), TsaHostShim::kXRes);
-            contact.y = Unrotate(TSA_RptTouchYPos(index), TsaHostShim::kYRes);
-            contact.signalSum = static_cast<int>(TSA_RptTouchPressure(index));
+            contact.id = t.id + 1;
+            contact.x = Unrotate(t.x, kXRes);
+            contact.y = Unrotate(t.y, kYRes);
+            contact.signalSum = t.pressure;
             contact.isReported = true;
-            if (present) {
+            if (t.down) {
                 contact.reportEvent = wasActive ? TouchReportMove : TouchReportDown;
                 contact.state = wasActive ? TouchStateMove : TouchStateDown;
                 activeIds |= idBit;
-                m_last[static_cast<size_t>(tsaId)] = {contact.x, contact.y};
+                m_last[static_cast<size_t>(t.id)] = {contact.x, contact.y};
             } else {
                 contact.reportEvent = TouchReportUp;
                 contact.state = TouchStateUp;
@@ -93,10 +95,10 @@ private:
         float y = 0.0f;
     };
 
-    static float Unrotate(uint64_t scaled, uint16_t res) noexcept {
-        const int span = static_cast<int>(res) * TsaHostShim::kResScale;
-        const int v = span - 1 - static_cast<int>(scaled & 0xffffu);
-        return static_cast<float>(v < 0 ? 0 : v) / static_cast<float>(TsaHostShim::kResScale);
+    static float Unrotate(uint16_t scaled, uint16_t res) noexcept {
+        const int span = static_cast<int>(res) * kResScale;
+        const int v = span - 1 - static_cast<int>(scaled);
+        return static_cast<float>(v < 0 ? 0 : v) / static_cast<float>(kResScale);
     }
 
     uint32_t m_activeIds = 0;

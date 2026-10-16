@@ -3,7 +3,7 @@
 #include <array>
 #include <cstdlib>
 
-#include "../TsaCoreApi.h"
+#include "../TsaCore.h"
 #include "Common/Bss.h"
 
 namespace Solvers::Tsa::Core::Mem {
@@ -59,19 +59,18 @@ void Free(void* p) {
 
 }  // namespace Solvers::Tsa::Core::Mem
 
-extern "C" {
+namespace Solvers::Tsa::Core {
 
 // 宿主（回放）：.bss 在前，堆缓冲按分配次序。
-size_t TsaCore_StateBlocks(TsaCore_StateBlock* out, size_t capacity) {
-    namespace M = Solvers::Tsa::Core::Mem;
-    namespace C = Solvers::Tsa::Core;
-    if (M::g_overflowed) return static_cast<size_t>(-1);
-    const size_t count = M::g_blockCount + 1;
+size_t StateBlocks(StateBlock* out, size_t capacity) {
+    if (Mem::g_overflowed) return static_cast<size_t>(-1);
+    const size_t count = Mem::g_blockCount + 1;
     if (out == nullptr || capacity < count) return count;
-    out[0] = {reinterpret_cast<const uint8_t*>(&C::g_bss), sizeof(C::g_bss), C::kBssVa};
-    for (size_t i = 0; i < M::g_blockCount; ++i) {
-        out[i + 1] = {static_cast<const uint8_t*>(M::g_blocks[i].ptr), M::g_blocks[i].size, 0};
+    out[0] = {reinterpret_cast<const uint8_t*>(&g_bss), sizeof(g_bss), kBssVa};
+    for (size_t i = 0; i < Mem::g_blockCount; ++i) {
+        out[i + 1] = {static_cast<const uint8_t*>(Mem::g_blocks[i].ptr), Mem::g_blocks[i].size, 0};
     }
     return count;
 }
-}  // extern "C"
+
+}  // namespace Solvers::Tsa::Core

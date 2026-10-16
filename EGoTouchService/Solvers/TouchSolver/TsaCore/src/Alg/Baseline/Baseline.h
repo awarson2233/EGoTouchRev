@@ -33,8 +33,6 @@ void UpdateForRawUnstable();
 /// 本帧是否触发了基线复位（原样返回字节，调用方按 == 1 判断）。
 [[nodiscard]] uint8_t ResetStatus();
 void ClearRefreshRequest();
-/// 触点所在峰的 raw 偏离基线比偏离 raw 参考值更远。
-[[nodiscard]] bool CheckAbnormalTouch(uint8_t touchIdx);
 
 // ── Baseline ────────────────────────────────────────────────────────────
 /// 整屏偏移补偿：上下边界偏移超过 4 时整体平移基线 5。

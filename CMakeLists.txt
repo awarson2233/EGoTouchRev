@@ -238,9 +238,8 @@ target_link_libraries(Device PUBLIC Common Host Solvers setupapi hid)
 # --- Solvers Module (Touch Algorithm) ---
 set(SOLVERS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/EGoTouchService/Solvers")
 set(SOLVERS_SOURCES
-    # TSACore 宿主侧：AFE 适配层、ctrl flags / 初始化、输出映射与外观类
+    # TSACore 宿主侧：AFE 适配层与外观类（初始化、ctrl flags、闭环与输出映射）
     EGoTouchService/Solvers/TouchSolver/TsaCore/HimaxAfeAdapter.cpp
-    EGoTouchService/Solvers/TouchSolver/TsaCore/TsaHostShim.cpp
     EGoTouchService/Solvers/TouchSolver/TsaCore/TsaCoreSolver.cpp
     # StylusSolver (official ASA pipeline — modules are header-only .hpp)
     EGoTouchService/Solvers/StylusSolver/StylusPipeline.cpp
@@ -266,8 +265,8 @@ endfunction()
 add_library(Solvers STATIC ${SOLVERS_SOURCES})
 ego_configure_solvers_target(Solvers)
 
-# TSACore 手指管线：由 Ghidra 反编译的 TSACore.dll 改写成的 C++（TsaCore/src/）。全局状态在
-# g_tsaMemoryImage 里（按原 DLL 地址排布），进程内单例。raw/ 只留分析文档与符号元数据。
+# TSACore 手指管线：由 Ghidra 反编译的 TSACore.dll 改写成的 C++（TsaCore/src/），对宿主的接口是
+# TsaCore/TsaCore.h。全局状态在 g_bss 里（按原 DLL 的 .bss 排布），进程内单例。raw/ 只留分析文档与符号元数据。
 # 原代码依赖类型双关与有符号回绕，必须关掉严格别名并启用 -fwrapv；改写后的代码沿用同样的语义。
 # -ffp-contract=off：原 DLL 是 x64，没有乘加融合；ARM64 上默认融合会让浮点中间量差出末位。
 # -ftrivial-auto-var-init=zero：原代码有把未赋值的局部量（结构体尾部的填充）拷进状态的地方，
@@ -436,4 +435,20 @@ if (EGO_BUILD_TOOLS AND CMAKE_BUILD_TYPE STREQUAL "Debug")
     if (WIN32)
         target_link_options(EGoTouchRecorder PRIVATE "LINKER:/MANIFESTUAC:level='requireAdministrator'")
     endif()
+endif()
+
+# --- ChipHidProbe：运行时把 master 接口模式字改成 1，读片上 HID 报告（实验用）---
+if (EGO_BUILD_TOOLS)
+    add_executable(ChipHidProbe Tools/ChipHidProbe/main.cpp)
+    target_link_libraries(ChipHidProbe PRIVATE Device Common advapi32 winmm)
+    if (WIN32)
+        target_link_options(ChipHidProbe PRIVATE "LINKER:/MANIFESTUAC:level='requireAdministrator'")
+    endif()
+endif()
+
+# --- ChipHidProbeB：方案 B 验证，if_mode 保持 0，运行时热补丁 P1–P5，解析帧尾 HID 报告 ---
+# 不要求管理员（asInvoker）：服务由外部先停好，SPB 设备直接开，便于非提权连跑。
+if (EGO_BUILD_TOOLS)
+    add_executable(ChipHidProbeB Tools/ChipHidProbeB/main.cpp)
+    target_link_libraries(ChipHidProbeB PRIVATE Device Common advapi32 winmm)
 endif()

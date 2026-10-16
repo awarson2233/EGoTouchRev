@@ -105,7 +105,7 @@ public:
 private:
     static bool ValidateMasterChecksum(const uint8_t* rawPtr) noexcept;
     static bool ValidateSlaveChecksum(const uint8_t* slave) noexcept;
-    static void UnpackStylusBlock(const uint8_t* block, uint16_t* matrix) noexcept;
+    static bool UnpackStylusBlock(const uint8_t* block, uint16_t* matrix) noexcept;
     void DampRepeatedFrame(uint16_t* cells) noexcept;
     static void PreprocessRows(uint16_t* cells) noexcept;
     void ApplyGainAndCompress(const uint16_t* cells, bool slot1) noexcept;
@@ -123,6 +123,7 @@ private:
     const uint16_t* m_gainTable[2];            // g_PixelGainTable1Ptr / g_PixelGainTable2Ptr，按扫描频点
     Frame::MasterSuffixView m_suffix{};        // g_MasterSuffixDebugCache：最近一次有效 master 的 suffix
     uint16_t m_stylusGrid[Frame::kMatrixCells * 2];  // g_StylusUnpackedMatrixBuffer：TX1 在前，TX2 在后
+    bool     m_stylusGridDirty = false;              // 矩阵里还有上一次展开写进的格子
 };
 
 }  // namespace Solvers::Tsa

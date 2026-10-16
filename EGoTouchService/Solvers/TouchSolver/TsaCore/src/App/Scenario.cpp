@@ -1,5 +1,6 @@
 #include "App/Scenario.h"
 
+#include "../TsaCore.h"
 #include "Alg/Touch/PrevTouch.h"
 #include "Alg/Touch/TouchData.h"
 #include "App/Afe.h"
@@ -243,12 +244,11 @@ void SetScreenRotateState(int state) {
 
 }  // namespace Solvers::Tsa::Core::Scenario
 
-// 宿主 API
-extern "C" {
-namespace Sc = Solvers::Tsa::Core::Scenario;
-uint32_t TSA_SetFeatures(uint32_t features) { return Sc::SetFeatures(features); }
-uint32_t TSA_GetFeatures(void) { return Sc::GetFeatures(); }
-void TSA_EnableScenario(uint32_t mask) { Sc::Enable(mask); }
-void TSA_DisableScenario(uint32_t mask) { Sc::Disable(mask); }
-void TSA_SetScreenRotateState(int state) { Sc::SetScreenRotateState(state); }
-}  // extern "C"
+// 宿主接口（TsaCore.h）
+namespace Solvers::Tsa::Core {
+uint32_t SetFeatures(uint32_t features) { return Scenario::SetFeatures(features); }
+uint32_t GetFeatures() { return Scenario::GetFeatures(); }
+void EnableScenario(uint32_t mask) { Scenario::Enable(mask); }
+void DisableScenario(uint32_t mask) { Scenario::Disable(mask); }
+void SetScreenRotateState(int state) { Scenario::SetScreenRotateState(state); }
+}  // namespace Solvers::Tsa::Core

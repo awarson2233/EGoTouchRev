@@ -3,6 +3,7 @@
 #include <array>
 #include <cstring>
 
+#include "../TsaCore.h"
 #include "Alg/Baseline/Baseline.h"
 #include "Alg/CTD/Ctd.h"
 #include "Alg/Cmf/Cmf.h"
@@ -56,8 +57,6 @@ namespace Solvers::Tsa::Core::Tsa {
 
 namespace {
 
-constexpr uint32_t kCtrlAfeAutoCheck = 0x100000;       // 宿主控制位：AFE 自检
-
 constexpr uint32_t kSysSkipMs = 0x200;                 // TsaStatic::systemFlags
 constexpr uint32_t kSysDifBufPath = 0x10000;
 constexpr uint32_t kSysProcessingActive = 0x40000000;
@@ -77,7 +76,8 @@ constexpr int64_t kNoTime = -1;
 constexpr uint16_t kRptScale = 0x100;            // 报点坐标是 Q8.8 的格坐标
 constexpr uint64_t kStylusIdleDelayMs = 2999;
 
-/// TSA_ProcessingAFEFrame 交给主流程的 raw 副本（g_rawDataBuf）。
+/// TSA_ProcessingAFEFrame 交给主流程的 raw 副本（g_rawDataBuf）。AFE 帧不比传感器网格小时不需要它，
+/// 见 ProcessAfeFrame。
 std::array<uint16_t, 0x2648 / 2> g_rawFrame{};
 
 /// 笔离开后 3 s 内不进 IDLE（g_flagOKtoDelay3sToIdle / g_lastStylusTimeStamp）。
@@ -300,13 +300,6 @@ void Processing(const int16_t* raw, uint32_t ctrl, uint64_t timeMs) {
     TSA_STEP(Sys::UpdateCtrlFlags(ctrl));
     TSA_STEP(Sys::PreProcess());
     TSA_STEP(Baseline::PreProcess());
-    if ((ctrl & kCtrlAfeAutoCheck) != 0) {
-        Afe::AutoCheckProcess(reinterpret_cast<const uint16_t*>(raw), static_cast<uint16_t>(PrmtFlash().sensorNum * 2),
-                              ctrl, timeMs);
-        TSA_STEP(Sys::PostProcess());
-        return;
-    }
-    if (Afe::IsInAutoCheck()) TSA_STEP(Afe::ClearAutoCheckFlag());
     if ((s.systemFlags & kSysSuspended) != 0) {
         TSA_STEP(Sys::PostProcess());
         return;
@@ -363,29 +356,33 @@ bool DelayIdleAfterStylus() {
 }  // namespace
 
 // TSA_InitAFEProject_UI @ 0x6ba99dc7
-int InitAfeProject(const char* project, const void* afeInfo, const Afe::Caps* caps) {
-    if (project == nullptr || afeInfo == nullptr || caps == nullptr) return 1;
-    Afe::SetCaps(caps);
-    if (!InitProject(project)) return 1;
-    Afe::SetCaps(caps);
-    InitAsa(caps);
-    Afe::SetInfo(afeInfo);
-    return 0;
+bool InitAfeProject(const char* project, const Afe::Caps& caps) {
+    if (project == nullptr) return false;
+    Afe::SetCaps(&caps);
+    if (!InitProject(project)) return false;
+    Afe::SetCaps(&caps);
+    InitAsa(&caps);
+    return true;
 }
 
 // TSA_ProcessingAFEFrame @ 0x6ba9a7a7
-int ProcessAfeFrame(const Afe::Frame* frame, uint32_t ctrl, uint64_t timeMs) {
-    if (frame == nullptr) return 1;
-    Afe::SetFrame(frame);
-    const Afe::Frame* f = Afe::GetFrame();
+// 原版把帧按参数表的 AFE 行列数拷进 g_rawFrame，主流程再按传感器格数从那里拷。AFE 帧覆盖整个网格时
+// 两次拷贝等于直接读宿主的帧；缺省表（DFLT000000）的 AFE 行列数是 16 × 32，只拷前 512 格，其余格
+// 一直是 g_rawFrame 里的 0，这时照原样走副本。
+void ProcessAfeFrame(const Afe::Frame& frame, uint32_t ctrl) {
+    Afe::SetFrame(&frame);
     const int16_t* raw = nullptr;
-    if (f->rawData != nullptr) {
+    if (frame.rawData != nullptr) {
         const FlashPrmt& fl = PrmtFlash();
-        CopyChecked(g_rawFrame.data(), sizeof(g_rawFrame), f->rawData, fl.afeDim1Len * fl.afeDim2Len * 2u);
-        raw = reinterpret_cast<const int16_t*>(g_rawFrame.data());
+        const size_t afeBytes = fl.afeDim1Len * fl.afeDim2Len * 2u;
+        if (fl.sensorNum * 2u <= afeBytes && afeBytes <= sizeof(g_rawFrame)) {
+            raw = reinterpret_cast<const int16_t*>(frame.rawData);
+        } else {
+            CopyChecked(g_rawFrame.data(), sizeof(g_rawFrame), frame.rawData, afeBytes);
+            raw = reinterpret_cast<const int16_t*>(g_rawFrame.data());
+        }
     }
-    Processing(raw, ctrl, timeMs);
-    return 0;
+    Processing(raw, ctrl, frame.timeMs);
 }
 
 // TSA_MSReset @ 0x6ba90b16
@@ -432,7 +429,6 @@ void MsReset() {
 // TSA_IsOKToEnterIDLEMode @ 0x6ba9e755
 bool IsOkToEnterIdle() {
     if (AsaEnabled() && InStylusMode()) return false;
-    if (Afe::IsInAutoCheck()) return Afe::AutoCheckToEnterIdle();
     return (Static().featureFlags & kFeatSideTouch) != 0 ? Sys::IsOkToEnterSideIdle() : Sys::IsOkToEnterIdle();
 }
 
@@ -479,7 +475,7 @@ bool GetAfeScanRateIndex(uint8_t* index) {
 }
 
 // TSA_IsReCalibNeeded @ 0x6ba9e32b
-// 第一次系统复位（AFE 不自己校准时）、检出需要校准、或各频点独立基线且基线复位完成时需要。
+// 第一次系统复位（AFE 不自己校准时）或检出需要校准时需要。原版另有各频点独立基线（只有 ALPS 机型）的一条。
 bool IsReCalibNeeded() {
     static bool firstReset = true;
     if (AsaEnabled() && Asa::IsHpp2()) return false;
@@ -489,28 +485,34 @@ bool IsReCalibNeeded() {
         firstReset = false;
     }
     if ((Touches().exceptionFlags & kTouchExcRecal) != 0) need = true;
-    if (Afe::IsIndividualBaselineForEachFreq() && Baseline::ResetStatus() == 1) need = true;
     return need;
 }
 
 }  // namespace Solvers::Tsa::Core::Tsa
 
-// 宿主 API
-extern "C" {
-namespace T = Solvers::Tsa::Core::Tsa;
-namespace A = Solvers::Tsa::Core::Afe;
-uint64_t TSA_InitAFEProject_UI(int64_t project, int64_t afeInfo, int64_t caps) {
-    return static_cast<uint64_t>(T::InitAfeProject(reinterpret_cast<const char*>(project), reinterpret_cast<const void*>(afeInfo),
-                                                   reinterpret_cast<const A::Caps*>(caps)));
-}
-int TSA_ProcessingAFEFrame(void* frame, uint32_t ctrl, uint64_t timeMs) {
+// 宿主接口（TsaCore.h）
+namespace Solvers::Tsa::Core {
+
+bool Init(const char* project, const AfeCaps& caps) { return Tsa::InitAfeProject(project, caps); }
+
+void ProcessFrame(const AfeFrame& frame, uint32_t ctrl) {
     TSA_PROFILE_SCOPE("TSA_ProcessingAFEFrame");
-    return T::ProcessAfeFrame(static_cast<const A::Frame*>(frame), ctrl, timeMs);
+    Tsa::ProcessAfeFrame(frame, ctrl);
 }
-void TSA_MSReset(void) { T::MsReset(); }
-uint8_t TSA_IsOKToEnterIDLEMode(void) { return T::IsOkToEnterIdle() ? 1 : 0; }
-uint64_t TSA_InStylusMode(void) { return T::InStylusMode() ? 1 : 0; }
-uint64_t TSA_GetAFEScanFreqIndex(int64_t index) { return T::GetAfeScanFreqIndex(reinterpret_cast<uint8_t*>(index)) ? 1 : 0; }
-uint64_t TSA_GetAFEScanRateIndex(int64_t index) { return T::GetAfeScanRateIndex(reinterpret_cast<uint8_t*>(index)) ? 1 : 0; }
-uint8_t TSA_IsReCalibNeeded(void) { return T::IsReCalibNeeded() ? 1 : 0; }
-}  // extern "C"
+
+// ApDaemon 帧后依次调用的 TSA_GetAFEScanFreqIndex / TSA_GetAFEScanRateIndex / TSA_IsOKToEnterIDLEMode /
+// TSA_IsReCalibNeeded。前两项返回 true 表示没有请求。
+Requests QueryRequests() {
+    Requests r;
+    uint8_t index = 0;
+    if (!Tsa::GetAfeScanFreqIndex(&index)) r.scanFreqIndex = index;
+    index = 0;
+    if (!Tsa::GetAfeScanRateIndex(&index)) r.scanRateIndex = index;
+    r.okToEnterIdle = Tsa::IsOkToEnterIdle();
+    r.reCalibNeeded = Tsa::IsReCalibNeeded();
+    return r;
+}
+
+bool InStylusMode() { return Tsa::InStylusMode(); }
+
+}  // namespace Solvers::Tsa::Core

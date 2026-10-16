@@ -13,16 +13,12 @@
 #include <cstdint>
 
 #include "HimaxAfeAdapter.h"
+#include "TsaCore.h"
 
 namespace Solvers::Tsa {
 
 /// TSACore 每帧处理后给出的请求（ApDaemon 里的 ctrl_buf）。
-struct AfeRequests {
-    int  scanFreqIndex = -1;    // TSA_GetAFEScanFreqIndex；-1 表示没有请求
-    int  scanRateIndex = -1;    // TSA_GetAFEScanRateIndex
-    bool okToEnterIdle = false; // TSA_IsOKToEnterIDLEMode
-    bool reCalibNeeded = false; // TSA_IsReCalibNeeded
-};
+using AfeRequests = Core::Requests;
 
 enum class AfeActionType : uint8_t {
     ClearStatus,       // param = 要清的状态位（AfeStatus::kCalibDone / kFreqShiftDone）
