@@ -2,14 +2,14 @@
 // 逐帧打印 frame.touch.output.contacts（TSACore 是进程级单例，A/B 只能分进程跑）。
 //
 //   TsaRawReplay.exe <file.dvrbin> [--panel ID] [--to N] [--dump N] [--charger] [--quiet]
-//                    [--afe] [--idle-exit N] [--hold N K]
+//                    [--afe] [--sos N] [--hold N K]
 //                    [--pen X Y A B] [--pen-hover] [--pen-tilt TX TY] [--pen-word W] [--pen-interleave]
 //                    [--stylus-solver] [--state-digest FILE] [--state-dump STEP FILE] [--profile]
 //   TsaRawReplay.exe --state-diff A B [SYMBOL]
 //
 //   --panel ID     面板机型（W273AS2700 / 2710 / 1300 / 1310），默认取录制里记的；旧录制没记就是 W273AS2700
 //   --afe          把 TSACore 的闭环请求与要下发的 AFE 动作打到 stderr（请求只在变化时打印）
-//   --idle-exit N  在第 N 帧之前注入一次「宿主观察到 IDLE 退出」
+//   --sos N        在第 N 帧之前注入一次 AFE SOS 之后的复位（宿主重启芯片）
 //   --hold N K     把第 N 帧额外重复喂 K 次（模拟长时间静止）
 //
 // 判断两份实现是否等价（重构前后各跑一遍，见 Compare-Reference.ps1）：
@@ -230,7 +230,7 @@ int main(int argc, char** argv) {
     }
     if (argc < 2) {
         std::fprintf(stderr, "usage: TsaRawReplay <file.dvrbin> [--panel ID] [--to N] [--dump N] [--charger] [--quiet] "
-                             "[--afe] [--idle-exit N] [--hold N K] [--pen X Y A B] [--pen-hover] "
+                             "[--afe] [--sos N] [--hold N K] [--pen X Y A B] [--pen-hover] "
                              "[--pen-tilt TX TY] [--pen-word W] [--pen-interleave] [--stylus-solver] "
                              "[--state-digest FILE] [--state-dump STEP FILE] [--profile | --profile-frame]\n"
                              "       TsaRawReplay --state-diff A B [SYMBOL]\n");
@@ -238,7 +238,7 @@ int main(int argc, char** argv) {
     }
     int to = -1;
     int dump = -1;   // 该帧处理后把 TSACore 的 diff 网格（40 行 x 60 列）打到 stderr
-    int idleExit = -1;
+    int sosFrame = -1;
     int holdFrame = -1;
     int holdCount = 0;
     bool charger = false;
@@ -262,7 +262,7 @@ int main(int argc, char** argv) {
         if (std::strcmp(argv[i], "--to") == 0 && i + 1 < argc) to = std::atoi(argv[++i]);
         else if (std::strcmp(argv[i], "--panel") == 0 && i + 1 < argc) panelArg = argv[++i];
         else if (std::strcmp(argv[i], "--dump") == 0 && i + 1 < argc) dump = std::atoi(argv[++i]);
-        else if (std::strcmp(argv[i], "--idle-exit") == 0 && i + 1 < argc) idleExit = std::atoi(argv[++i]);
+        else if (std::strcmp(argv[i], "--sos") == 0 && i + 1 < argc) sosFrame = std::atoi(argv[++i]);
         else if (std::strcmp(argv[i], "--hold") == 0 && i + 2 < argc) {
             holdFrame = std::atoi(argv[++i]);
             holdCount = std::atoi(argv[++i]);
@@ -423,7 +423,7 @@ int main(int argc, char** argv) {
         const int repeats = (fi == holdFrame) ? holdCount + 1 : 1;
         bool dispatch = false;
         for (int rp = 0; rp < repeats; ++rp, ++step) {
-            if (fi == idleExit && rp == 0) tsa->OnAfeIdleExit();
+            if (fi == sosFrame && rp == 0) tsa->OnAfeSos();
             // 时间戳取录制里的接收时间（没有时按 120 Hz 合成），回放结果只取决于输入；
             // --hold 多喂的帧每帧顺延 8 ms
             if (rp != 0) holdShiftMs += 8;

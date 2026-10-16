@@ -168,14 +168,14 @@ function Get-Scenarios {
     $list = @(
         @{ Name = 'plain';     Args = @('--afe') }
         @{ Name = 'charger';   Args = @('--afe', '--charger') }
-        @{ Name = 'idle';      Args = @('--afe', '--idle-exit', $half, '--hold', $quarter, 600) }
+        @{ Name = 'hold-sos';  Args = @('--afe', '--sos', $half, '--hold', $quarter, 600) }
         @{ Name = 'pen-write'; Args = @('--afe', '--pen', 1280, 800, $quarter, $threeQuarters, '--pen-word', '0102', '--pen-tilt', 25, -15) }
         @{ Name = 'pen-hover'; Args = @('--afe', '--pen', 640, 1200, $quarter, $threeQuarters, '--pen-hover', '--pen-interleave') }
         # 真实笔数据走 StylusPipeline；没有笔的录制也跑，走的是「笔已连接但不在场」
         @{ Name = 'stylus';    Args = @('--afe', '--stylus-solver') }
     )
-    # 默认只跑覆盖面互不重叠的三个：纯回放、静止后退出 idle、模拟笔书写
-    $Full ? $list : @($list | Where-Object { $_.Name -in 'plain', 'idle', 'pen-write' })
+    # 默认只跑覆盖面互不重叠的三个：纯回放、长时间静止后 SOS 复位、模拟笔书写
+    $Full ? $list : @($list | Where-Object { $_.Name -in 'plain', 'hold-sos', 'pen-write' })
 }
 
 # ── 计时 ────────────────────────────────────────────────────────────────

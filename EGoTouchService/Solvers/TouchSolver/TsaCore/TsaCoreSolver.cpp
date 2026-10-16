@@ -39,8 +39,8 @@ bool TsaCoreSolver::InitCore() {
     m_features = Core::GetFeatures() & 0xffffffc0u;
     Core::SetFeatures(m_features);
 
-    m_ctrl = CtrlFlag::kAlways | CtrlFlag::kFirstFrame | CtrlFlag::kResetBaseline;
-    m_prevIdle = false;
+    // InitTsa 置 0x40003；充电器位可能在初始化之前就已下发
+    m_ctrl = (m_ctrl & CtrlFlag::kCharger) | CtrlFlag::kAlways | CtrlFlag::kFirstFrame | CtrlFlag::kResetBaseline;
     m_prevCalibDone = false;
     m_requests = {};
     m_initialized = true;
@@ -118,13 +118,11 @@ bool TsaCoreSolver::Process(HeatmapFrame& frame, uint64_t timestampMs) {
     return count > 0 || hadContacts;
 }
 
-// 本帧 AFE 状态位落到控制字上。
+// 本帧 AFE 状态位落到控制字上（TsaFrame::Process）。IDLE 位不进控制字：TSACore 自己从帧状态读
+// （Afe::IsInIdle），ApDaemon 的 UpdateStatusIdle 只打日志。
 void TsaCoreSolver::UpdateCtrl(uint32_t status) noexcept {
-    const bool idle = (status & AfeStatus::kIdle) != 0;
-    m_ctrl &= ~(CtrlFlag::kIdle | CtrlFlag::kChargerNoise);
-    if (idle) m_ctrl |= CtrlFlag::kIdle;
+    m_ctrl &= ~CtrlFlag::kChargerNoise;
     if (status & AfeStatus::kChargerNoise) m_ctrl |= CtrlFlag::kChargerNoise;
-    if (m_prevIdle && !idle) m_ctrl |= CtrlFlag::kIdleExit;
     // 固件的校准完成标志（suffix word3 = 0xbb）要等宿主发 ClearStatus(8) 才会清掉，期间每帧都带着；
     // ctrl 低 4 位任一非零都会让 TSACore 停在硬件复位态（TSAStatic_IsHWReset），所以只在上升沿置位一次，
     // 清除握手由 TsaAfeControl 负责。
@@ -132,7 +130,15 @@ void TsaCoreSolver::UpdateCtrl(uint32_t status) noexcept {
     if (calibDone && !m_prevCalibDone) m_ctrl |= CtrlFlag::kCalibDone;
     m_prevCalibDone = calibDone;
     if (status & AfeStatus::kFreqShiftDone) m_ctrl |= CtrlFlag::kFreqShiftDone;
-    m_prevIdle = idle;
+}
+
+void TsaCoreSolver::SetChargerPlugged(bool plugged) noexcept {
+    if (plugged) {
+        m_ctrl |= CtrlFlag::kCharger;
+    } else {
+        m_ctrl &= ~CtrlFlag::kCharger;
+    }
+    m_adapter.SetChargerPlugged(plugged);
 }
 
 bool TsaCoreSolver::SetPanelProjectId(std::string_view projectId) {
@@ -222,9 +228,7 @@ void TsaCoreSolver::OnAfeStarted() noexcept {
     m_control.Reset();
     m_mapper.Reset();
     m_actions.clear();
-    m_ctrl |= CtrlFlag::kFirstFrame | CtrlFlag::kResetBaseline;
     // 重启后的状态位从头算起：校准完成位要重新走一次上升沿
-    m_prevIdle = false;
     m_prevCalibDone = false;
 }
 

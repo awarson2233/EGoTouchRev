@@ -33,12 +33,12 @@ namespace Solvers::Tsa {
 
 /// Core::ProcessFrame 第二参的各个位（ApDaemon ThpBase 维护的控制字）。
 namespace CtrlFlag {
-inline constexpr uint32_t kFirstFrame      = 1u << 0;   // 一次性：Init / 亮屏
-inline constexpr uint32_t kResetBaseline   = 1u << 1;   // 一次性：Init / 亮屏
-inline constexpr uint32_t kIdleExit        = 1u << 2;   // 一次性：退出 IDLE
+inline constexpr uint32_t kFirstFrame      = 1u << 0;   // 一次性：TSACore 初始化（InitTsa）
+inline constexpr uint32_t kResetBaseline   = 1u << 1;   // 一次性：TSACore 初始化（InitTsa）
+inline constexpr uint32_t kSosReset        = 1u << 2;   // 一次性：AFE SOS 之后的复位（DriverThp::DoSos）
 inline constexpr uint32_t kCalibDone       = 1u << 3;   // 一次性：status & 0x08 的上升沿
 inline constexpr uint32_t kFreqShiftDone   = 1u << 4;   // 一次性：status & 0x04
-inline constexpr uint32_t kIdle            = 1u << 5;   // 持续：status & 0x01
+inline constexpr uint32_t kCharger         = 1u << 5;   // 持续：充电器在位（RegListeningCharger）
 inline constexpr uint32_t kScreenOff       = 1u << 8;   // 持续：灭屏
 inline constexpr uint32_t kChargerNoise    = 1u << 17;  // 持续：status & 0x20
 inline constexpr uint32_t kAlways          = 1u << 18;  // 常驻
@@ -85,13 +85,13 @@ public:
     [[nodiscard]] const char* LoadedPrmtName() const noexcept;
 
     // ── 宿主状态机的进入动作 ─────────────────────────────────────────
-    /// AFE 重新启动（芯片 Init 成功）：适配层、闭环策略、输出记账回到初始状态，
-    /// TSACore 下一帧按首帧处理并重建基线。
+    /// AFE 重新启动（芯片 Init 成功）：适配层、闭环策略、输出记账回到初始状态。与 ThpBase::ScreenOn
+    /// 一样不给 TSACore 置复位位，基线由芯片重新校准后的「校准完成」状态位触发重建。
     void OnAfeStarted() noexcept;
     /// AFE 停止取帧（灭屏 / 掉线）。在场的触点由宿主负责向 HID 抬起。
     void OnAfeStopped() noexcept;
-    /// 宿主观察到 AFE 退出 IDLE（IDLE 期间没有帧喂进来）：下一帧带上退出标志。
-    void OnAfeIdleExit() noexcept { m_ctrl |= CtrlFlag::kIdleExit; }
+    /// AFE 报 SOS、宿主要重启芯片：下一帧带上复位位（DriverThp::DoSos 在 ThpBase::Reset 之前置 bit2）。
+    void OnAfeSos() noexcept { m_ctrl |= CtrlFlag::kSosReset; }
 
     // ── AFE 闭环 ────────────────────────────────────────────────────
     /// 最近一次 Process 之后要下发给 IC 的动作。没有进 TSACore 的帧不产生动作。
@@ -103,8 +103,8 @@ public:
     /// 最近一帧处理后 TSACore 给出的请求。
     [[nodiscard]] const AfeRequests& LastAfeRequests() const noexcept { return m_requests; }
 
-    /// thp_afe_set_charger：充电器插拔。
-    void SetChargerPlugged(bool plugged) noexcept { m_adapter.SetChargerPlugged(plugged); }
+    /// 充电器插拔：控制字 bit5 告诉 TSACore，同时 thp_afe_set_charger 给适配层（RegListeningCharger）。
+    void SetChargerPlugged(bool plugged) noexcept;
 
     // ── 笔会话 ──────────────────────────────────────────────────────
     // 这三个可以在任意线程调用，实际写入 TSACore 发生在下一次 Process 开头。
@@ -156,7 +156,6 @@ private:
     // ApDaemon 的控制字与 SetFeatures 的值
     uint32_t m_ctrl = 0;
     uint32_t m_features = 0;
-    bool     m_prevIdle = false;
     bool     m_prevCalibDone = false;
     // TSACore 保存帧的拷贝，帧里的笔帧指针在处理期间被读取，所以笔帧放在成员里
     Core::StylusFrame m_stylusFrame{};

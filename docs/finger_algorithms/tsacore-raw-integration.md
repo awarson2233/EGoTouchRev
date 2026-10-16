@@ -169,22 +169,22 @@ caps（`Core::AfeCaps`）只有 TSACore 读取的字段：`numCol=60, numRow=40,
 
 分辨率：参数表里 Dim1 / Dim2 分辨率已经是 2560 / 1600（flash+0x5a6 / +0x5a8），但 `ResScale`（flash+0x5a0）初值为 0，不调用 `TSA_SetResScale` 时 `TSA_RptTouchXPos/YPos` 恒为 0。`ResScale` 只作用在输出换算上，这里取 10，使输出量程等于业务侧 HID 的逻辑量程 25600 × 16000（[VhfReporterTouchPacketHelper.h](/EGoTouchService/Device/vhf/VhfReporterTouchPacketHelper.h#L20-L21)），保留十分之一像素的精度。
 
-ctrl flags 由解算器每帧根据适配层 `status` 维护（TSACore 的消费点是 `TSAStatic_UpdateCtrlFlags`，[Sys.cpp](/EGoTouchService/Solvers/TouchSolver/TsaCore/src/App/Sys.cpp)）：
+ctrl flags 由解算器维护，每帧的部分取自适配层 `status`（TSACore 的消费点是 `TSAStatic_UpdateCtrlFlags`，[Sys.cpp](/EGoTouchService/Solvers/TouchSolver/TsaCore/src/App/Sys.cpp)）。各位的来源逐个对过 ApDaemon 的写入点，见 [idle-exit-first-touch-loss.md](/docs/artifacts/idle-exit-first-touch-loss.md)：
 
 | 位 | 置位来源 | 生命周期 |
 |----|---------|---------|
-| 0, 1 | 初始化；AFE 重新启动（`TsaCoreSolver::OnAfeStarted`，宿主状态机进入取帧时调用，[DeviceRuntime.cpp](/EGoTouchService/Device/runtime/DeviceRuntime.cpp#L1265-L1295)） | 一次性 |
-| 2 | IDLE 退出：`status&1` 由 1 变 0，或回放工具注入的退出（`OnAfeIdleExit`） | 一次性 |
+| 0, 1 | TSACore 初始化（`InitTsa` 置 `0x40003`）。芯片重新 Init（亮屏、SOS 后重启）不置：原厂 `ScreenOn` 不写复位位，基线由芯片校准完成的 bit 3 触发重建 | 一次性 |
+| 2 | AFE SOS：读帧报 SOS 时 `OnAfeSos`，重启后的第一帧带上（`DriverThp::DoSos`），回放工具用 `--sos N` 注入 | 一次性 |
 | 3 | `status & 0x08` 的**上升沿**，清除握手见第 8 节 | 一次性 |
 | 4 | `status & 0x04` 跳频完成 | 一次性 |
-| 5 | `status & 0x01` IDLE | 跟随电平 |
-| 8 | 灭屏。不维护：业务侧灭屏即停止取帧，TSACore 收不到帧 | — |
+| 5 | 充电器在位（`SetChargerPlugged`，原厂 `RegListeningCharger`）。业务侧还没有接入充电器事件，恒为 0 | 持续 |
+| 8 | 灭屏。不维护：业务侧灭屏即停止取帧，TSACore 也没有读取点 | — |
 | 17 | `status & 0x20` 充电噪声 | 跟随电平 |
 | 18 | 常驻 | 持续 |
 
-每帧调用 `Core::ProcessFrame`（原 `TSA_ProcessingAFEFrame`）后执行 `ctrl &= 0xf0ffffe0` 与 `Core::SetFeatures(features)`，再查询闭环请求（[TsaCoreSolver.cpp](/EGoTouchService/Solvers/TouchSolver/TsaCore/TsaCoreSolver.cpp#L106-L111)）。校验失败或 `status & 0x40` 的帧不进 TSACore，也不产生闭环动作。
+IDLE（`status & 0x01`）不进 ctrl：TSACore 每帧自己从帧状态读（`Afe::IsInIdle`），ApDaemon 的 `TsaFrame::UpdateStatusIdle` 只打印 `idle in` / `idle out.`。每帧调用 `Core::ProcessFrame`（原 `TSA_ProcessingAFEFrame`）后执行 `ctrl &= 0xf0ffffe0` 与 `Core::SetFeatures(features)`，再查询闭环请求（[TsaCoreSolver.cpp](/EGoTouchService/Solvers/TouchSolver/TsaCore/TsaCoreSolver.cpp#L107-L111)）。校验失败或 `status & 0x40` 的帧不进 TSACore，也不产生闭环动作。
 
-bit 3 与 ApDaemon 的做法不同：ApDaemon 的 `TsaFrame::UpdateStatusCalibration` 是「status 带 0x08 就置位」并立刻 `ClearStatus(8)`，固件下一帧就把标志清掉。TSACore 把 ctrl 低 4 位任一非零都视为硬件复位态（`TSAStatic_IsHWReset`），期间不出点。业务侧原先从不发 `ClearStatus`（命令是空桩），suffix `word[3]` 因此恒为 `0xbb`；现在清除握手由第 8 节的闭环完成，解算器仍只在上升沿置位一次（[TsaCoreSolver.cpp](/EGoTouchService/Solvers/TouchSolver/TsaCore/TsaCoreSolver.cpp#L128-L133)），因为重发间隔内标志还会多留几帧，按电平置位会把复位态拉长。ctrl 的 bit 28–29（屏幕旋转）在活跃代码里没有读取点，不维护。
+bit 3 与 ApDaemon 的做法不同：ApDaemon 的 `TsaFrame::UpdateStatusCalibration` 是「status 带 0x08 就置位」并立刻 `ClearStatus(8)`，固件下一帧就把标志清掉。TSACore 把 ctrl 低 4 位任一非零都视为硬件复位态（`TSAStatic_IsHWReset`），期间不出点。业务侧原先从不发 `ClearStatus`（命令是空桩），suffix `word[3]` 因此恒为 `0xbb`；现在清除握手由第 8 节的闭环完成，解算器仍只在上升沿置位一次（[TsaCoreSolver.cpp](/EGoTouchService/Solvers/TouchSolver/TsaCore/TsaCoreSolver.cpp#L129-L131)），因为重发间隔内标志还会多留几帧，按电平置位会把复位态拉长。ctrl 的 bit 28–29（屏幕旋转）在活跃代码里没有读取点，不维护。
 
 第三参数 `ts` 是毫秒：TSACore 把它存进 `TSAStatic`，各处的防抖窗口（如 `TSAStatic_IsChargerPlugged` 的 `+2000`）都按毫秒比较。运行时取单调时钟，回放时由调用方显式给定（录制里有逐帧系统时间就用它，否则按 120 Hz 合成），保证回放结果只取决于输入。原版 `AFE_Frame` 的 `+0x00 / +0x04`（秒、微秒）也由同一个时间戳派生，ASA 再把它们拼回毫秒，所以 `Core::AfeFrame` 直接带毫秒时间戳。
 
@@ -410,19 +410,20 @@ sequenceDiagram
 
 1. **重发间隔**：业务侧的命令是同步的寄存器写（16 字节命令包写进 5 个槽位之一），每帧重发会挤占取帧时间，所以条件持续时按 12 帧（约 100 ms）重发。ApDaemon 用 `event_mgr` 的几个开关（2、5、7、9 号）门控 IDLE 与扫描模式，取值未知，业务侧默认全开，每个环节可以用 `SetAfeLoopEnabled(AfeLoop::k*)` 单独关掉。
 2. **跳频握手**：`ForceToFreqPoint` 执行成功后，`OnAfeActionExecuted` 让适配层进入「跳频进行中」并记下目标频率（对应驱动里的 `freqShiftStatus = 1` 与 `g_AfeCurrentFreqCommand`）；帧里的扫描频率等于目标时，适配层给出 `status & 0x04`，闭环随即发 `ClearStatus(4)`，成功后握手结束。
-3. **IDLE 的归属**：IDLE 是 IC 报告的状态，不是宿主的模式（[afe-frame-read-and-idle.md](/docs/artifacts/afe-frame-read-and-idle.md) 第 4 节）。进入只由宿主请求：TSACore 判定可进 IDLE 后闭环每 5 帧发一次 `EnterIdle`，直到帧尾 `word0` 报告 IDLE（解算时宿主关掉芯片层「600 帧无输入」的自动请求，`SetAutoIdleEnabled(false)`）。IC 在 IDLE 里照样出帧，只是慢（master 约 3 s 一帧），这些帧与普通帧一样喂给解算器，适配层给出 `AfeStatus::kIdle`，宿主层据此持续带 ctrl bit 5，与 ApDaemon 相同。退出由 IC 自己完成，宿主不发命令：手指落下后帧尾变回 0，宿主层在这个 1 → 0 的帧上带一次 ctrl bit 2。`OnAfeIdleExit` 只剩回放工具用来注入退出。
+3. **IDLE 的归属**：IDLE 是 IC 报告的状态，不是宿主的模式（[afe-frame-read-and-idle.md](/docs/artifacts/afe-frame-read-and-idle.md) 第 4 节）。进入只由宿主请求：TSACore 判定可进 IDLE 后闭环每 5 帧发一次 `EnterIdle`，直到帧尾 `word0` 报告 IDLE（解算时宿主关掉芯片层「600 帧无输入」的自动请求，`SetAutoIdleEnabled(false)`）。IC 在 IDLE 里照样出帧，只是慢（master 约 3 s 一帧），这些帧与普通帧一样喂给解算器，适配层给出 `AfeStatus::kIdle`，TSACore 从帧状态里读到 IDLE，宿主不在 ctrl 上做任何标记，与 ApDaemon 相同。退出由 IC 自己完成，宿主不发命令：手指落下后帧尾变回 0，这一帧照常处理，不复位、不重建基线。
 4. **命令实现**：`ClearStatus`（[HimaxAfe.cpp](/EGoTouchService/Device/himax/HimaxAfe.cpp#L98-L104)）和新增的 `ForceToFreqPoint`（[HimaxAfe.cpp](/EGoTouchService/Device/himax/HimaxAfe.cpp#L106-L115)）按 `himax_thp_drv` 的真实 ID 发送。
 
-**回放实验**（[TsaRawReplay](/Tools/TsaRawReplay/main.cpp) 的 `--afe`、`--hold N K`、`--idle-exit N`，回放里命令一律按成功回报）：
+**回放实验**（[TsaRawReplay](/Tools/TsaRawReplay/main.cpp) 的 `--afe`、`--hold N K`、`--sos N`，回放里命令一律按成功回报）：
 
 | 实验 | 结果 |
 |------|------|
 | 测试录制原样回放 | 只有首帧的一次性校准请求（被 240 帧的抑制期吸收）和每 12 帧一次的 `ClearStatus(8)`（录制时业务侧还不发清除，`word[3]` 一直是 `0xbb`）；没有跳频和扫描率请求（`freqHopMode` 为 0，扫描率只有一档）；触点输出与 P2 逐字节一致 |
 | 无触摸帧重复 6000 次 | 静止 906 帧（120 Hz 下约 7.5 s）后 `TSA_IsOKToEnterIDLEMode` 变真，此后每 5 帧一个 `EnterIdle`（回放里 AFE 不会真的进 IDLE） |
-| 在第 208 帧（第一根手指落下）注入 IDLE 退出 | 该点的上报推迟到第 214 帧 |
-| 在第 255 帧（4 根手指在场）注入 IDLE 退出 | 4 个点同一帧全部抬起，第 264 帧以新 ID 重新按下；Down / Up 仍然成对 |
+| 在第 208 帧（第一根手指落下）注入 SOS 复位 | 该点的上报推迟到第 214 帧 |
+| 在第 255 帧（4 根手指在场）注入 SOS 复位 | 4 个点同一帧全部抬起，第 264 帧以新 ID 重新按下；Down / Up 仍然成对 |
+| 真机 IDLE 唤醒录制（三指长按 / 双击 / 拖动） | 每次唤醒的第一帧就出齐全部手指，见 [idle-exit-first-touch-loss.md](/docs/artifacts/idle-exit-first-touch-loss.md) |
 
-IDLE 退出会让 TSACore 重新建立基线，期间不出点。真实流程里退出总是由第一根手指触发，代价是首次触摸约 6 帧（50 ms）的延迟，与 ApDaemon 一致。真机上要确认的是：命令历史里出现 `TSACore->ForceToFreqPoint` 且帧里的扫描频率随之改变，`ClearStatus(8)` 之后 `word[3]` 不再是 `0xbb`，长时间运行没有基线漂移。
+复位位会让 TSACore 用当前帧重新建立基线，期间不出点，压在屏上的手指会被吃进基线，所以它只该出现在原厂置位的地方（初始化与 SOS）。真机上要确认的是：命令历史里出现 `TSACore->ForceToFreqPoint` 且帧里的扫描频率随之改变，`ClearStatus(8)` 之后 `word[3]` 不再是 `0xbb`，长时间运行没有基线漂移。
 
 ### 9. P4：改写为标准 C++
 

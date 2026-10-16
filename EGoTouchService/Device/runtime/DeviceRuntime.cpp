@@ -1265,7 +1265,7 @@ void DeviceRuntime::BeginBringUp(const char *reason, workerState phase) {
 void DeviceRuntime::EnterStreaming(const PowerInputs &in) {
   ReplayPenStateAfterChipInit();
   {
-    // 芯片刚重新初始化：TSACore 下一帧按首帧处理并重建基线，闭环与输出记账归零
+    // 芯片刚重新初始化：闭环与输出记账归零（TSACore 的基线由芯片校准完成位触发重建）
     std::lock_guard<std::mutex> lk(m_pipelineMu);
     // 面板机型在第一次建链时从 OTP 读出；读不出或不认识时按缺省机型（原厂此时打不开 AFE）
     const auto panel = m_chip.GetPanelIdentity();
@@ -1310,7 +1310,7 @@ void DeviceRuntime::OnStreaming() {
   m_chip.SetAutoIdleEnabled(m_masterParserOnly.load(std::memory_order_relaxed));
 
   // 取帧不分 Normal / IDLE：IC 在 IDLE 里慢慢出帧，这一步就跟着慢；IDLE 帧照常进解算器，
-  // 帧尾的 IDLE 位由 TSACore 的宿主层翻成控制标志（与 ApDaemon 一致）。
+  // TSACore 从帧尾状态位自己判断 IDLE（与 ApDaemon 一致，控制字里没有 IDLE 位）。
   const auto readStart = std::chrono::steady_clock::now();
   const auto read = m_chip.GetFrame();
   const auto readMs = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -1325,6 +1325,11 @@ void DeviceRuntime::OnStreaming() {
     ++m_hb.sos;
     LOG_NOTICE("PowerSM", __func__, "streaming", "AFE SOS after {} ms: {}; restarting the link.", readMs,
                m_chip.LastSosReason());
+    {
+      // DriverThp::DoSos：重启前给 TSACore 置复位位，重启后的第一帧带上
+      std::lock_guard<std::mutex> lk(m_pipelineMu);
+      m_tsaCoreSolver.OnAfeSos();
+    }
     BeginBringUp("AFE SOS", workerState::recover);
     return;
   }
