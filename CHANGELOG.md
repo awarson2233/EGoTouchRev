@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.4.0](https://github.com/awarson2233/EGoTouchRev/compare/v1.3.0...v1.4.0) (2026-10-16)
+
+
+### ✨ 新功能
+
+* **tools:** 新增片上解算验证工具 ChipHidProbe / ChipHidProbeB，ghidra-mcp 配置跟随新路径 ([489552c](https://github.com/awarson2233/EGoTouchRev/commit/489552c4c640a6a9ca699d581d98e48f2d33dcb9))
+
+
+### 🐛 修复
+
+* IDLE 唤醒后首次触摸被吞与唤醒后手写笔失效，合入 TSACore 向量化优化 ([c61f64d](https://github.com/awarson2233/EGoTouchRev/commit/c61f64d7b3cc91800023178937acd3fdd423e32f))
+* **pen:** 笔事件通道重开时把连接状态复位成未知，避免唤醒查询丢失后笔整段失效 ([f36ee02](https://github.com/awarson2233/EGoTouchRev/commit/f36ee02de1202c0b776f3a768aa8b6eeacdc0b75))
+* **tsacore:** ctrl 控制字的复位位与充电器位对齐 ApDaemon，修复 IDLE 唤醒后首次触摸被吞 ([7ed7de3](https://github.com/awarson2233/EGoTouchRev/commit/7ed7de388b756a1b0221cd2e935caef9a3ab7a55))
+
+
+### ⚡ 性能
+
+* **tsacore:** 基线复位、SHB、坏点、CMF 与 Property 的逐格判定改成可向量化的写法 ([8e2984c](https://github.com/awarson2233/EGoTouchRev/commit/8e2984cd40937a6a17979721e167bcf96c14376d))
+* **tsacore:** 轮廓插值的备忘表改成定长静态数组 ([d9cf324](https://github.com/awarson2233/EGoTouchRev/commit/d9cf32487cdadf655739e8ffd95fa5a68beb2b0c))
+* **tsacore:** 适配层的死区与增益循环改成可向量化的写法 ([d22ecb3](https://github.com/awarson2233/EGoTouchRev/commit/d22ecb3aab20fdc028941109e0d2f4a91c3180ce))
+
+
+### ♻️ 重构
+
+* **tsacore:** 宿主接口改成类型化的 TsaCore.h，删掉 shim 与核里的死代码 ([8365e67](https://github.com/awarson2233/EGoTouchRev/commit/8365e671028a7d1593d40e0c5a33c5057b52d9e2))
+
 ## [1.3.0](https://github.com/awarson2233/EGoTouchRev/compare/v1.2.0...v1.3.0) (2026-10-15)
 
 
