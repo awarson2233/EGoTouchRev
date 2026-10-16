@@ -27,7 +27,7 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    HOST["TsaHostShim / TsaRawReplay"] -- "TSA_* 导出" --> MOD
+    HOST["TsaCoreSolver / TsaRawReplay"] -- "TsaCore.h<br/>Solvers::Tsa::Core::*" --> MOD
     subgraph LIB["静态库 TsaCore"]
         MOD["模块<br/>Solvers::Tsa::Core::模块"]
         ACC["访问函数<br/>Touches() / PrmtFlash() / Static() ..."]
@@ -39,7 +39,7 @@ flowchart TB
         ACC --> DATA
         ACC --> HEAP
     end
-    REPLAY["TsaCore_StateBlocks"] -. ".bss 按原 VA + 堆块" .-> BSS
+    REPLAY["Core::StateBlocks"] -. ".bss 按原 VA + 堆块" .-> BSS
 ```
 
 ## 分点解释
@@ -69,13 +69,13 @@ flowchart LR
 - **槽的大小**：槽的位置来自符号表，大小取「访问它的类型的 sizeof」与「到下一个符号的距离」的较大者；跨多个符号的模块状态结构体（`HardwareAnalyzer::Counters`、`PressureDrift`/`RfNoise`/`ToeSynaBl` 的 `State`、Afe 的 `Slots`、`HandBuffers`）占住整个结构体的范围。新增状态时从相邻的 `reserved` 区间里切出一个槽，放在它的原地址上。
 - **原 .data / .rdata**：带初值的对象改成所在模块的全局对象，初值写成 C++ 初始化器：当前数据集指针 `g_touches` / `g_prevTouches` / `g_peaks` / `g_prevPeaks`（[DataSwitch.cpp](/EGoTouchService/Solvers/TouchSolver/TsaCore/src/App/DataSwitch.cpp)，初值指向 Grid 套，`ToHand` / `ToGrid` 切换）、模式切换防抖表与优先级表（[TouchMode.cpp](/EGoTouchService/Solvers/TouchSolver/TsaCore/src/Alg/TouchMode/TouchMode.cpp)）、`g_thenarExternal`、Sys 的两个一次性标志；只读表改成 `constexpr`（CTD 的 `kLn`、HotZoneAdjust 的 `kAppList`）。它们与 .bss 的相对位置没有任何代码依赖。`Static()` 恒指向 `staticGrid`，原 DLL 里那个指针从不切换。
 - **机型参数表**：四个面板机型的 FlashPrmt、CMF PCA、ASA 表是 [ProjectTableData.inc](/EGoTouchService/Solvers/TouchSolver/TsaCore/src/Prmt/ProjectTableData.inc) 里的常量数组，`Prmt::LoadProject` 经 [LoadProjectTables](/EGoTouchService/Solvers/TouchSolver/TsaCore/src/Prmt/ProjectTables.cpp#L38) 按机型名拷进各自的 .bss 槽（原 DLL 同样是运行期装入 .bss）。机型怎么选见 [tsacore-raw-integration.md](tsacore-raw-integration.md) 第 6 节。
-- **单例与初始化**：整个进程只有一套状态，模块函数不传上下文参数。没有显式的状态初始化入口：.bss 零初始化、全局对象带初值，与原 DLL 加载时一致；宿主直接调用 `TSA_InitAFEProject_UI`。
+- **单例与初始化**：整个进程只有一套状态，模块函数不传上下文参数。没有显式的状态初始化入口：.bss 零初始化、全局对象带初值，与原 DLL 加载时一致；宿主直接调用 `Core::Init`（原 `TSA_InitAFEProject_UI`）。
 - **整对象清零**：用 `ZeroFill`（对应原代码的 `memset_s(&obj, sizeof obj, 0, sizeof obj)`），填充字节也是状态，`obj = {}` 不保证清零填充。
 - **字段命名**：结构体字段按读写它的代码定名；没有读者的字段删掉，字节并入相邻的 `reservedXXX`。触点表（[TouchData.h](/EGoTouchService/Solvers/TouchSolver/TsaCore/src/Alg/Touch/TouchData.h)）例外：历史下标为 `kNoTouch` 时，第 20 个历史单元落在 `g_touchesGrid` 上，当前表的表头与前几个单元会被当成历史单元的字段读写，所以只写的字段也保留写入；表头里只在两张表之间来回拷贝的 `field004` / `field00E` / `field00F` / `field138` 保留偏移名。
 
 ### 3. 状态摘要的规范化
 
-[StateTrace.cpp](/Tools/TsaRawReplay/StateTrace.cpp) 经 `TsaCore_StateBlocks`（[Memory.cpp](/EGoTouchService/Solvers/TouchSolver/TsaCore/src/Common/Memory.cpp)）取得 .bss（`va` 为 `0x6bb7f000`）与全部存活的堆缓冲，然后：
+[StateTrace.cpp](/Tools/TsaRawReplay/StateTrace.cpp) 经 `Core::StateBlocks`（[Memory.cpp](/EGoTouchService/Solvers/TouchSolver/TsaCore/src/Common/Memory.cpp)）取得 .bss（`va` 为 `0x6bb7f000`）与全部存活的堆缓冲，然后：
 
 - .bss 按原 VA 寻址；堆缓冲以「.bss 里第一个指向它的槽位」命名，与分配地址无关。
 - 指向 .bss 或堆的指针改写成规范地址；指向宿主模块代码与常量（包括原 .data / .rdata 对象）的指针只保留类别；确知存放栈地址的三个槽位（CMF 噪声数组的两个参数、`g_list` 表头）只保留类别。栈指针不按取值范围识别，因为两个相邻 32 位字段（标志字 0x80 加一个计数）拼起来正好落在主线程栈的地址区间里。
@@ -92,7 +92,7 @@ flowchart LR
 
 ### 5. 性能与计时
 
-服务安装的是 `arm64-Release`（-O3、ThinLTO）。在这个配置下纯回放每帧约 28 µs（5 段录制、2400 帧、钉在大核上取 5 轮最快）。
+服务安装的是 `arm64-Release`（-O3、ThinLTO）。在这个配置下纯回放每帧 TSACore 本体约 30 µs，连同 AFE 适配层与宿主的 `TsaCoreSolver::Process` 约 35 µs（4 段录制、1920 帧、钉在大核上取 5 轮最快）。适配层的死区与增益循环写成可向量化的形式（增益前先找第一个越界格，把跨格的「已越界」标志拆成前后两段；死区留在 uint16 域里比较），约 4 µs。
 
 ```mermaid
 flowchart LR
@@ -103,7 +103,7 @@ flowchart LR
     S --> OUT2["步骤表 profile.txt<br/>含计时自身开销"]
 ```
 
-- **计时**：[Profile.h](/EGoTouchService/Solvers/TouchSolver/TsaCore/src/Common/Profile.h) 只在 `EGO_TSACORE_PROFILE=ON`（定义 `TSACORE_PROFILE`）时编入。`TSA_PROFILE_SCOPE` 计整帧；主流程的每个 `TSA_STEP(调用)` 以调用表达式为名累计耗时，宿主经 `TsaCore_ProfileEntries` 取走。每段计时自身约 30 ns，一帧约 70 段，合计会把整帧抬高约 5 µs，所以 `TsaCore_ProfileSteps(0)`（回放的 `--profile-frame`）可以关掉分步、只留整帧。默认构建里 `TSA_STEP` 就是原样调用。
+- **计时**：[Profile.h](/EGoTouchService/Solvers/TouchSolver/TsaCore/src/Common/Profile.h) 只在 `EGO_TSACORE_PROFILE=ON`（定义 `TSACORE_PROFILE`）时编入。`TSA_PROFILE_SCOPE` 计整帧；主流程的每个 `TSA_STEP(调用)` 以调用表达式为名累计耗时，宿主经 `Core::ProfileEntries` 取走。每段计时自身约 30 ns，一帧约 70 段，合计会把整帧抬高约 5 µs，所以 `Core::ProfileSteps(false)`（回放的 `--profile-frame`）可以关掉分步、只留整帧。默认构建里 `TSA_STEP` 就是原样调用。
 - **Benchmark**：[Compare-Reference.ps1](/Tools/TsaRawReplay/Compare-Reference.ps1) `-Benchmark` 用 `-BenchPreset`（默认 `arm64-Release`）构建到 `build/tsa-bench-release`，逐个串行回放。先跑 `-Rounds` 轮 `--profile-frame`，取最快一轮作为每帧耗时；再跑几轮 `--profile`，输出步骤表，前 `-Top` 项打到屏幕，全表写入 `profile.txt`，表里的数字含分步计时的开销。回放进程钉在 `-Affinity`（默认 0xF0，即 8cx Gen 3 的四个大核）上并以高优先级运行；即便如此仍有 5–10% 的噪声。bench 构建全局定义 `EGOTOUCH_DIAGNOSTICS`，因为发布配置的录制读取器不保留原始 SPI 帧，没有它 `--afe` 回放就没有输入；TsaCore 源码不读这个宏。
 - **热点循环的写法**：
   - 逐格循环里不写 `c ? a[i] : x` 这种条件读：clang 会把条件加载向量化成逐 lane 的标量加载，比不向量化还慢。要先无条件读进局部变量，再做选择。条件写同理，改成无条件写回选择后的值。
@@ -111,13 +111,13 @@ flowchart LR
   - 稀疏命中的扫描先粗筛再逐格：峰检测先按行取最大值，坏点检测按 16 格一块，查表前按 64 格一块（`AnyNonZero`）。
   - 每帧重复的计算做备忘，前提是运算次序不变。例如轮廓插值按点、按行缓存（`HighResCache`），以 NaN 位型 0x7fc00001 作为未计算的哨兵。
   - 只计算有读者的统计量。Property 的极值与计数用 int16、和用 int32，分两遍累计；CMF 的平坦格判定写成无分支掩码，聚类按连续段一次累加。
-- **剩余分布**（带分步计时）：TrackAndReport 约 12.7 µs，TouchZone 与 CMF 各约 4.7，Property 约 3.6，Self 约 2.0，其余步骤都在 1.7 以下。
+- **剩余分布**（带分步计时）：TrackAndReport 约 14 µs，TouchZone 约 5.7，CMF 约 4.8，Property 约 3.9，Self 约 2.0，其余步骤都在 1.7 以下。
 
 ### 6. 目录与命名
 
 - 目录按原厂源码树组织（断言字符串里的 `../../src/Alg/...` 等路径）：`Alg/`（算法模块）、`App/`（主流程、Static、Buffer、DataSwitch）、`Common/`（Bss、Memory、Assert）、`Extension/`、`Prmt/`、`Rejection/`、`Tool/`、`WorkAround/`。原厂文件名未知的按函数前缀归入对应模块；一个原厂源文件可以按职责拆成几个文件。
 - 命名空间根是 `Solvers::Tsa::Core`，原函数名前缀变成子命名空间（`IIR_Process` → `Iir::Process`）；只在本文件内调用的函数放进匿名命名空间。类型与函数 PascalCase，变量与字段 camelCase，常量 `kName`，注释中文。
-- 宿主接口只有 [TsaCoreApi.h](/EGoTouchService/Solvers/TouchSolver/TsaCore/TsaCoreApi.h) 里按原导出签名声明的 `TSA_*`，加回放用的 `TsaCore_StateBlocks` 与 `TsaCore_Profile*`。
+- 宿主接口只有 [TsaCore.h](/EGoTouchService/Solvers/TouchSolver/TsaCore/TsaCore.h)：与原 `TSA_*` 导出一一对应、但按 C++ 类型化的函数（结构体只留读取的字段，多次查询合成一次），加回放用的 `Core::StateBlocks` 与 `Core::Profile*`。各个实现放在对应模块的源文件末尾。
 
 ### 7. 改写规则（不动算法细节的边界）
 

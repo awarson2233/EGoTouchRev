@@ -41,7 +41,7 @@
 .PARAMETER Benchmark
   不做比较，改为计时：以服务实际安装的配置 -BenchPreset（默认 arm64-Release）加 EGO_TSACORE_PROFILE
   构建到 build/tsa-bench-release，逐个串行回放（纯回放场景），跑 -Rounds 轮取最快的一轮打印每帧耗时（只计
-  整帧，--profile-frame），再另跑几轮分步计时，打印耗时最多的 -Top 个步骤（步骤耗时含其子步骤，也含各段
+  整帧，--profile-frame：TSACore 本体与含适配层、宿主的 TsaCoreSolver::Process 各一个数），再另跑几轮分步计时，打印耗时最多的 -Top 个步骤（步骤耗时含其子步骤，也含各段
   计时自身的开销）。回放钉在 -Affinity 指定的核上（默认 0xF0，Snapdragon
   8cx Gen 3 的四个大核）并以高优先级运行。
 

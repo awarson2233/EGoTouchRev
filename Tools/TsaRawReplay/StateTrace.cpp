@@ -1,6 +1,6 @@
 #include "StateTrace.h"
 
-#include "TsaCore/TsaCoreApi.h"
+#include "TsaCore/TsaCore.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -154,10 +154,10 @@ bool StateSnapshot::Capture() {
     blocks.clear();
     orphanHeapBlocks = 0;
 
-    const size_t count = TsaCore_StateBlocks(nullptr, 0);
+    const size_t count = Solvers::Tsa::Core::StateBlocks(nullptr, 0);
     if (count == static_cast<size_t>(-1) || count == 0) return false;
-    std::vector<TsaCore_StateBlock> raw(count);
-    if (TsaCore_StateBlocks(raw.data(), raw.size()) != count) return false;
+    std::vector<Solvers::Tsa::Core::StateBlock> raw(count);
+    if (Solvers::Tsa::Core::StateBlocks(raw.data(), raw.size()) != count) return false;
 
     const uint8_t* const bss = raw[0].data;
     const uint64_t bssSize = raw[0].size;

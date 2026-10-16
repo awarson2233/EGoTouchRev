@@ -102,8 +102,6 @@ void GetProperty(bool resetReq, bool refreshReq) {
         flags = kPropRefresh;
     } else if (Reset::Process(false)) {
         flags = kPropReset;
-    } else if (Reset::IsBaselineNoisy()) {
-        flags = kPropNoisy;
     } else if (ResetInDebounce()) {
         flags = kPropDebounce;
     } else {
@@ -128,10 +126,6 @@ void UpdateStage() {
     prpt.prevBlStage = prpt.blStage;
     if ((flags & kPropReset) != 0) {
         prpt.blStage = kStageReset;
-        return;
-    }
-    if ((flags & kPropNoisy) != 0) {
-        prpt.blStage = kStageNoisyReset;
         return;
     }
     if ((flags & kPropDebounce) != 0) {

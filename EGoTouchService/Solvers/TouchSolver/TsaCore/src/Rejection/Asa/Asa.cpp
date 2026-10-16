@@ -14,19 +14,7 @@ namespace Solvers::Tsa::Core::Asa {
 
 namespace {
 
-/// AFE 帧 +0x40 指向的笔帧（himax_thp_drv 的 g_StylusOut）。
-struct StylusFrame {
-    const uint16_t* tx1LineData;
-    const uint16_t* tx2LineData;
-    uint16_t mainFreq;
-    uint16_t auxFreq;
-    uint16_t pressure;
-    uint16_t pad16;
-    uint32_t buttons;
-    uint32_t aux;  // kAux*
-};
-static_assert(sizeof(StylusFrame) == 0x20);
-
+// StylusFrame::status 的各位
 constexpr uint32_t kAuxHpp2 = 0x1;
 constexpr uint32_t kAuxHpp3 = 0x2;
 constexpr uint32_t kAuxNoData = 0x4;     // 本帧没有笔数据（网格模式）
@@ -77,18 +65,11 @@ struct State {
     uint32_t hpp3Features;
 };
 
-struct Host {
-    uint32_t status;
-    uint16_t x, y;
-    int16_t tiltX, tiltY;
-    uint16_t pressure;
-};
-
 const FlashPrmt* g_flash = nullptr;
 uint16_t g_dim1Res = 0, g_dim2Res = 0;
 State g_state{};
 Report g_cur{}, g_prev{};
-Host g_host{};
+StylusReport g_host{};  // 宿主送来的本帧报告
 uint64_t g_realtimeMs = 0;
 uint64_t g_lastBtCmdMs = 0;
 bool g_prevInRange = false;
@@ -110,12 +91,12 @@ void BtStatusProcess() {
 
 // ValidJudgment @ 0x6bac4efc：只能选一种协议；模式位不能全空或全有；HPP2 非网格模式时要有 TX1 线数据
 bool IsFrameValid(const StylusFrame& f) {
-    const bool hpp2 = (f.aux & kAuxHpp2) != 0;
-    const bool hpp3 = (f.aux & kAuxHpp3) != 0;
+    const bool hpp2 = (f.status & kAuxHpp2) != 0;
+    const bool hpp3 = (f.status & kAuxHpp3) != 0;
     if (hpp2 == hpp3) return false;
-    const uint32_t mode = f.aux & kAuxModeMask;
+    const uint32_t mode = f.status & kAuxModeMask;
     if (mode == 0 || mode == kAuxModeMask) return false;
-    return f.tx1LineData != nullptr || (f.aux & kAuxNoData) != 0;
+    return f.tx1 != nullptr || (f.status & kAuxNoData) != 0;
 }
 
 // EnterActiveStylusMode @ 0x6bac858b / ExitActiveStylusMode @ 0x6bac87b1
@@ -147,11 +128,12 @@ bool ReleaseReport() {
     return released;
 }
 
-// ASA_MainProcess @ 0x6bac6b5f 的宿主版：本帧报告取自宿主（TSAHost_SetStylusReport），控制流与原函数一致。
+// ASA_MainProcess @ 0x6bac6b5f 的宿主版：本帧报告取自宿主（Core::SetStylusReport），控制流与原函数一致。
+// 原版的实时时间由帧的秒 / 微秒拼成毫秒，就是帧时间戳。
 void MainProcess(const Afe::Frame& frame, const StylusFrame& f) {
-    g_realtimeMs = static_cast<uint64_t>(frame.timestampSec) * 1000 + frame.timestampUsec / 1000;
-    g_state.aux = f.aux;
-    if ((f.aux & kAuxHpp3) != 0) BtStatusProcess();
+    g_realtimeMs = frame.timeMs;
+    g_state.aux = f.status;
+    if ((f.status & kAuxHpp3) != 0) BtStatusProcess();
     if (!IsFrameValid(f)) {
         Reset();
         return;
@@ -160,9 +142,9 @@ void MainProcess(const Afe::Frame& frame, const StylusFrame& f) {
         if (ReleaseReport()) g_state.prevAux = g_state.aux;
         return;
     }
-    UpdateActiveMode(f.aux);
+    UpdateActiveMode(f.status);
     g_state.prevAux = g_state.aux;
-    if ((f.aux & kAuxNoData) != 0) return;
+    if ((f.status & kAuxNoData) != 0) return;
     g_cur = {};
     g_state.status = g_host.status;
     if ((g_host.status & kRptInRangeMask) != 0) {
@@ -224,14 +206,14 @@ void InitAfeProject(const void* caps, const uint8_t* flash) {
 // 原函数在解算之后还有 StylusRecheck 的门；宿主送来的报告已经是复核后的结果，这里只留复核通过的那一支。
 void Process(uint32_t ctrl) {
     const Afe::Frame& frame = *Afe::GetFrame();
-    const auto* f = static_cast<const StylusFrame*>(frame.stylusData);
-    if (f == nullptr || f->aux == 0) {
+    const StylusFrame* f = frame.stylus;
+    if (f == nullptr || f->status == 0) {
         Reset();
     } else {
         const uint32_t feat = Static().featureFlags;
         if ((feat & kFeatAltEvents) == 0 && (feat & kFeatStylusAft) != 0) g_prevInRange = RptInRange();
         MainProcess(frame, *f);
-        if (IsTouchNull(f->aux)) g_disableTouchFrames = kDisableTouchFrames;
+        if (IsTouchNull(f->status)) g_disableTouchFrames = kDisableTouchFrames;
         if (g_disableTouchFrames != 0) {
             --g_disableTouchFrames;
             DisableTouches();
@@ -262,35 +244,32 @@ bool IsHpp3() { return (g_state.aux & kAuxHpp3) != 0 && g_state.activeFrames != 
 
 }  // namespace Solvers::Tsa::Core::Asa
 
-// 宿主 API
-extern "C" {
-namespace As = Solvers::Tsa::Core::Asa;
+// 宿主接口（TsaCore.h）
+namespace Solvers::Tsa::Core {
 
-// TSAHost_SetStylusReport：宿主送来的本帧笔报告（ASA 解算本体的替代）
-void TSAHost_SetStylusReport(uint32_t status, uint16_t x, uint16_t y, int16_t tiltX, int16_t tiltY, uint16_t pressure) {
-    As::g_host = {status, x, y, tiltX, tiltY, pressure};
-}
+// 宿主送来的本帧笔报告（ASA 解算本体的替代）
+void SetStylusReport(const StylusReport& report) { Asa::g_host = report; }
 
 // TSA_SetASABluetoothConnectStatus @ 0x6ba9cd02（ASA_SetBluetoothStatus）
-void TSA_SetASABluetoothConnectStatus(uint32_t status) {
-    if (!As::AsaEnabled()) return;
-    As::g_lastBtCmdMs = As::g_realtimeMs;
-    As::g_btConnect = (status & 1) != 0 ? 1 : 0;
+void SetBtConnectStatus(uint32_t status) {
+    if (!Asa::AsaEnabled()) return;
+    Asa::g_lastBtCmdMs = Asa::g_realtimeMs;
+    Asa::g_btConnect = (status & 1) != 0 ? 1 : 0;
 }
 
 // TSA_SetASABluetoothPenStatus @ 0x6ba9cc2d
-void TSA_SetASABluetoothPenStatus(uint8_t status) {
-    if (As::AsaEnabled()) As::g_btPenStatus = status;
+void SetBtPenStatus(uint8_t status) {
+    if (Asa::AsaEnabled()) Asa::g_btPenStatus = status;
 }
 
 // TSA_SetASABluetoothPressure @ 0x6ba9cc65：压力包只给 ASA 解算本体用，这里只记下蓝牙在线
-void TSA_SetASABluetoothPressure(uint16_t, uint16_t, uint16_t, uint16_t) {
-    if (!As::AsaEnabled()) return;
-    As::g_lastBtCmdMs = As::g_realtimeMs;
-    As::g_btConnect = 1;
+void OnBtPressure() {
+    if (!Asa::AsaEnabled()) return;
+    Asa::g_lastBtCmdMs = Asa::g_realtimeMs;
+    Asa::g_btConnect = 1;
 }
 
 // TSA_RptASAInRange @ 0x6ba9c7e9
-uint64_t TSA_RptASAInRange(void) { return As::AsaEnabled() && As::RptInRange() ? 1 : 0; }
+bool StylusInRange() { return Asa::AsaEnabled() && Asa::RptInRange(); }
 
-}  // extern "C"
+}  // namespace Solvers::Tsa::Core

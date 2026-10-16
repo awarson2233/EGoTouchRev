@@ -326,10 +326,8 @@ void SetVolatileFlag(uint8_t curIdx, uint8_t prevIdx) {
     SetVolatileFlagStableTouch(curIdx);
     UpdateStableProperty(curIdx, prevIdx);
 
+    // 原版这里还对新触点查基线异常（BLReset_CheckAbnormalTouch，只有 raw 归一到目标值的 ALPS 机型成立），置 0x400000
     if (prev.age == 0 && (stat.systemFlags & 0x10) != 0) cur.volatileFlags |= 0x800000;
-    if ((prev.persistFlags & 0x4000) != 0 || (cur.volatileFlags & 0x800000) != 0) {
-        if (Baseline::CheckAbnormalTouch(curIdx)) cur.volatileFlags |= 0x400000;
-    }
     GetPeakSumPosSig(curIdx, prevIdx);
     UpdateHandEnum(curIdx, prevIdx);
 }

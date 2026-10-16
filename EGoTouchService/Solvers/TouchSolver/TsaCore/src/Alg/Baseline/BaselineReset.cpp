@@ -109,13 +109,6 @@ struct InnerPeak {
 
 bool SafeBaselineApplied() { return static_cast<char>(Sys::IsSafeBaselineApplied()) != 0; }
 
-// BLReset_CheckAbnormal @ 0x6ba481e9
-// 基线偏离基线参考值比 raw 偏离 raw 参考值更远。
-bool CheckAbnormal(uint16_t raw, uint16_t bl) {
-    const TsaPrpt& prpt = Prpt();
-    return std::abs(static_cast<int>(raw - prpt.rawAvg)) < std::abs(static_cast<int>(bl - prpt.blAvg));
-}
-
 // BLReset_IsBaselineClean @ 0x6ba47e09
 bool IsBaselineClean() {
     const bool r = Static().cleanState == kCleanDone;
@@ -222,7 +215,7 @@ bool IsLongTimeRawJumpDetected() {
         if (limit < prpt.raw2Raw.overNoiseCount || limit < prpt.prevRaw2Raw.overNoiseCount) stat.rawJumpLatched = 1;
         if (0x5a < prpt.raw2Raw.maxOverNoisePercent || 0x5a < prpt.prevRaw2Raw.maxOverNoisePercent) stat.rawJumpLatched = 1;
     }
-    if (stat.rawJumpLatched == 0 || Afe::IsAlwaysNoisy()) {
+    if (stat.rawJumpLatched == 0) {
         stat.rawJumpTimer = 0;
         stat.rawJumpLatched = 0;
         stat.rawJumpDetected = 0;
@@ -349,31 +342,12 @@ bool IsAbnormalTouchDetected() {
     return n >> 1 < prpt.msDif.bigCount || ConcurrentTouchDetect();
 }
 
-// BLReset_IsAllFreqsBaselineInitializedDuringTouchLiftOff @ 0x6ba48b01
-// 各频点独立基线时，复位位刚清掉、非常噪声且 raw 上边界高出目标值半个峰门限以上，最多 3 次。
-bool IsAllFreqsBaselineInitializedDuringTouchLiftOff() {
-    if (!Afe::IsIndividualBaselineForEachFreq()) return false;
-    TsaPrpt& prpt = Prpt();
-    if (Static().resetFlagsCleared == 0 || Afe::IsAlwaysNoisy() ||
-        static_cast<int>(static_cast<uint32_t>(prpt.boundaryPositive) - static_cast<uint32_t>(PrmtFlash().rawZero)) <=
-            PrmtDynamic().peakThold / 2 ||
-        3 <= prpt.allFreqInitCount) {
-        return false;
-    }
-    ++prpt.allFreqInitCount;
-    return true;
-}
-
 // BLReset_IsTriggered2AfeWakeUp @ 0x6ba4b9d4
 // 唤醒后检查（或基线异常检查关闭时的 Check）连续成立累计超过 0xa0 ms 即复位；不成立时防抖逐帧回退。
+// 原版开头还有各频点独立基线（只有 ALPS 机型）抬手后整体重建的一支（BLReset_IsAllFreqsBaselineInitializedDuringTouchLiftOff）。
 bool IsTriggered2AfeWakeUp() {
     TsaStatic& stat = Static();
     TsaPrpt& prpt = Prpt();
-    if (IsAllFreqsBaselineInitializedDuringTouchLiftOff()) {
-        stat.cleanBaselineValid = 0;
-        prpt.blPropertyState = kReasonAllFreqInit;
-        return true;
-    }
     if ((PrmtFlash().blAbnormalCheck == 0 && Check()) || IsAbnormalTouchDetected()) {
         ++stat.blResetDebounce;
         AddInterval(stat.blWakeUpTimer);
@@ -804,28 +778,6 @@ bool Process(bool reset) {
     return r;
 }
 
-// BLReset_IsBaselineNoisy @ 0x6ba4c0ba
-// 上一帧因噪声以外的原因复位、且常噪声时开始计时；超噪声格少于 6 时立即放行，否则在 0xa7 ms 内保持「噪声」。
-bool IsBaselineNoisy() {
-    TsaStatic& stat = Static();
-    TsaPrpt& prpt = Prpt();
-    const uint32_t prev = prpt.prevBlPropertyState;
-    if (prev != kReasonNoisy && prev != 3 && prev != 0 && Afe::IsAlwaysNoisy()) stat.blNoisyTimer = Interval<uint64_t>();
-    if (stat.blNoisyTimer == 0) return false;
-    if (prpt.raw2Raw.overNoiseCount < 6) {
-        stat.blNoisyReset = 1;
-        stat.blNoisyTimer = 0;
-        return true;
-    }
-    if (stat.blNoisyTimer < 0xa7) {
-        AddInterval(stat.blNoisyTimer);
-        prpt.blPropertyState = kReasonNoisy;
-        return true;
-    }
-    stat.blNoisyTimer = 0;
-    return false;
-}
-
 // BLReset_CheckNumOverNoise @ 0x6ba4850e
 // 超噪声的格少（Hybrid Incell 另看 overNoiseAfterCmf，Toe 机型另看 overLtiCount）。不成立时记调试位。
 bool CheckNumOverNoise() {
@@ -903,14 +855,5 @@ uint8_t ResetStatus() { return Static().blResetStatus; }
 
 // BLReset_FlagDisableBaselineUpdateInit @ 0x6ba47ae6
 void ClearRefreshRequest() { Static().blRefreshRequest = 0; }
-
-// BLReset_CheckAbnormalTouch @ 0x6ba48366
-bool CheckAbnormalTouch(uint8_t touchIdx) {
-    if (!Afe::IsRawUnifiedToTargetValue()) return false;
-    const PeakEntry& pk = Peaks().entry[Touches().unit[touchIdx].peakIdx];
-    const uint16_t i = GridIndex(pk.dim1, pk.dim2);
-    const TsaBufferTable& buf = Buffers();
-    return CheckAbnormal(static_cast<uint16_t>(buf.raw[i]), static_cast<uint16_t>(buf.bl[i]));
-}
 
 }  // namespace Solvers::Tsa::Core::Baseline

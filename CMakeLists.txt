@@ -238,9 +238,8 @@ target_link_libraries(Device PUBLIC Common Host Solvers setupapi hid)
 # --- Solvers Module (Touch Algorithm) ---
 set(SOLVERS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/EGoTouchService/Solvers")
 set(SOLVERS_SOURCES
-    # TSACore 宿主侧：AFE 适配层、ctrl flags / 初始化、输出映射与外观类
+    # TSACore 宿主侧：AFE 适配层与外观类（初始化、ctrl flags、闭环与输出映射）
     EGoTouchService/Solvers/TouchSolver/TsaCore/HimaxAfeAdapter.cpp
-    EGoTouchService/Solvers/TouchSolver/TsaCore/TsaHostShim.cpp
     EGoTouchService/Solvers/TouchSolver/TsaCore/TsaCoreSolver.cpp
     # StylusSolver (official ASA pipeline — modules are header-only .hpp)
     EGoTouchService/Solvers/StylusSolver/StylusPipeline.cpp
@@ -266,8 +265,8 @@ endfunction()
 add_library(Solvers STATIC ${SOLVERS_SOURCES})
 ego_configure_solvers_target(Solvers)
 
-# TSACore 手指管线：由 Ghidra 反编译的 TSACore.dll 改写成的 C++（TsaCore/src/）。全局状态在
-# g_tsaMemoryImage 里（按原 DLL 地址排布），进程内单例。raw/ 只留分析文档与符号元数据。
+# TSACore 手指管线：由 Ghidra 反编译的 TSACore.dll 改写成的 C++（TsaCore/src/），对宿主的接口是
+# TsaCore/TsaCore.h。全局状态在 g_bss 里（按原 DLL 的 .bss 排布），进程内单例。raw/ 只留分析文档与符号元数据。
 # 原代码依赖类型双关与有符号回绕，必须关掉严格别名并启用 -fwrapv；改写后的代码沿用同样的语义。
 # -ffp-contract=off：原 DLL 是 x64，没有乘加融合；ARM64 上默认融合会让浮点中间量差出末位。
 # -ftrivial-auto-var-init=zero：原代码有把未赋值的局部量（结构体尾部的填充）拷进状态的地方，

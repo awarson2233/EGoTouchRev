@@ -46,7 +46,7 @@
 #include "SolverTypes.h"
 #include "StateTrace.h"
 #include "StylusSolver/StylusPipeline.h"
-#include "TsaCore/TsaCoreApi.h"
+#include "TsaCore/TsaCore.h"
 #include "TsaCore/TsaCoreSolver.h"
 
 #include <algorithm>
@@ -206,8 +206,8 @@ bool SameRequests(const Solvers::Tsa::AfeRequests& a, const Solvers::Tsa::AfeReq
 void PrintProfile(uint64_t solverNs, uint64_t solverCalls) {
     std::fprintf(stderr, "PROF %12llu %8llu TsaCoreSolver::Process\n", static_cast<unsigned long long>(solverNs),
                  static_cast<unsigned long long>(solverCalls));
-    std::vector<TsaCore_ProfileEntry> entries(TsaCore_ProfileEntries(nullptr, 0));
-    entries.resize(std::min(entries.size(), TsaCore_ProfileEntries(entries.data(), entries.size())));
+    std::vector<Solvers::Tsa::Core::ProfileEntry> entries(Solvers::Tsa::Core::ProfileEntries(nullptr, 0));
+    entries.resize(std::min(entries.size(), Solvers::Tsa::Core::ProfileEntries(entries.data(), entries.size())));
     if (entries.empty()) {
         std::fprintf(stderr, "no profile data: build with -DEGO_TSACORE_PROFILE=ON\n");
         return;
@@ -272,7 +272,7 @@ int main(int argc, char** argv) {
         else if (std::strcmp(argv[i], "--profile") == 0) profile = true;
         else if (std::strcmp(argv[i], "--profile-frame") == 0) {
             profile = true;
-            TsaCore_ProfileSteps(0);
+            Solvers::Tsa::Core::ProfileSteps(false);
         }
         else if (std::strcmp(argv[i], "--afe") == 0) afe = true;
         else if (std::strcmp(argv[i], "--pen") == 0 && i + 4 < argc) {
@@ -404,7 +404,7 @@ int main(int argc, char** argv) {
             out.point.y = dim2;
             out.point.tiltX = static_cast<int16_t>(penTiltX);
             out.point.tiltY = static_cast<int16_t>(penTiltY);
-            if (!penHover) tsa->OnBtPressure(0, 0, 0, 1024);
+            if (!penHover) tsa->OnBtPressure();
             if (penInterleave && (fi & 1) != 0) f.masterWasRead = false;
         }
         decltype(f.stylus.input.btSample) recordedBt{};
@@ -415,7 +415,7 @@ int main(int argc, char** argv) {
             if (bt.hasSample && bt.seq != btSeqSeen) {
                 btSeqSeen = bt.seq;
                 stylus->SetBtMcuPressurePacket(bt.pressure, bt.rawPressure, bt.freq1, bt.freq2);
-                tsa->OnBtPressure(bt.pressure[0], bt.pressure[1], bt.pressure[2], bt.pressure[3]);
+                tsa->OnBtPressure();
             }
             stylus->Process(f);
         }
@@ -444,9 +444,11 @@ int main(int argc, char** argv) {
                 const auto& report = tsa->LastStylusReport();
                 StylusPeak peak;
                 const bool hasPeak = FindStylusPeak(info.tx1, peak);
-                if (hasPeak || report.inRange || f.stylus.output.valid) {
+                const bool reportInRange = report.status != 0;
+                const bool reportTipDown = (report.status & Solvers::Tsa::StylusReportFlag::kTipDown) != 0;
+                if (hasPeak || reportInRange || f.stylus.output.valid) {
                     std::fprintf(stderr, "STY frame=%d master=%d status=0x%02x report(inRange=%d tip=%d x=%u y=%u tilt=%d,%d p=%u)",
-                                 fi, f.masterWasRead ? 1 : 0, info.status, report.inRange ? 1 : 0, report.tipDown ? 1 : 0,
+                                 fi, f.masterWasRead ? 1 : 0, info.status, reportInRange ? 1 : 0, reportTipDown ? 1 : 0,
                                  report.x, report.y, report.tiltX, report.tiltY, report.pressure);
                     if (hasPeak) {
                         // 重心换成像素，格子中心记在半格处

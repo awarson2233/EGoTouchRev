@@ -538,7 +538,7 @@ void DeviceRuntime::SetMasterParserOnlyMode(bool enabled) {
 void DeviceRuntime::IngestBtMcuPressure(uint16_t p) {
   std::lock_guard<std::mutex> lk(m_pipelineMu);
   m_stylusPipeline.SetBtMcuPressure(p);
-  m_tsaCoreSolver.OnBtPressure(0, 0, 0, p);
+  m_tsaCoreSolver.OnBtPressure();
 }
 
 void DeviceRuntime::IngestBtMcuPressurePacket(
@@ -547,7 +547,7 @@ void DeviceRuntime::IngestBtMcuPressurePacket(
   std::lock_guard<std::mutex> lk(m_pipelineMu);
   m_stylusPipeline.SetBtMcuPressurePacket(pressure, rawPressure, freq1, freq2);
   // ApDaemon 收到压力包时同样通知 TSACore：它据此判断蓝牙笔是否还活着
-  m_tsaCoreSolver.OnBtPressure(pressure[0], pressure[1], pressure[2], pressure[3]);
+  m_tsaCoreSolver.OnBtPressure();
 }
 
 void DeviceRuntime::ApplyPenStateToStylusPipeline() {

@@ -6,6 +6,47 @@
 
 namespace Solvers::Tsa {
 
+namespace {
+
+// TSACore 的全部状态都是进程级的全局对象，整个进程只能有一个实例完成初始化。
+constinit std::atomic<bool> g_claimed{false};
+
+constexpr uint16_t kScanRateList[1] = {HimaxAfeAdapter::kScanRate};
+
+}  // namespace
+
+TsaCoreSolver::~TsaCoreSolver() {
+    if (m_initialized) g_claimed.store(false, std::memory_order_release);
+}
+
+// TSA_InitAFEProject_UI(面板 project id) + 分辨率 / feature（ApDaemon 的 TsaFrame 初始化序列）。
+bool TsaCoreSolver::InitCore() {
+    bool expected = false;
+    if (!g_claimed.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) return false;
+
+    Core::AfeCaps caps;
+    caps.numCol = Frame::kRxCount;
+    caps.numRow = Frame::kTxCount;
+    caps.numScanFreq = 2;
+    caps.scanFreq = HimaxAfeAdapter::kScanFreqTable;
+    caps.numScanRate = 1;
+    caps.scanRate = kScanRateList;
+    if (!Core::Init(m_projectId.c_str(), caps)) {
+        g_claimed.store(false, std::memory_order_release);
+        return false;
+    }
+    Core::SetResolution(kXRes, kYRes, kResScale);
+    m_features = Core::GetFeatures() & 0xffffffc0u;
+    Core::SetFeatures(m_features);
+
+    m_ctrl = CtrlFlag::kAlways | CtrlFlag::kFirstFrame | CtrlFlag::kResetBaseline;
+    m_prevIdle = false;
+    m_prevCalibDone = false;
+    m_requests = {};
+    m_initialized = true;
+    return true;
+}
+
 bool TsaCoreSolver::Process(HeatmapFrame& frame) {
     // TSACore 只拿时间戳做差（各种防抖窗口），用单调时钟，不受系统对时影响
     const auto now = std::chrono::steady_clock::now().time_since_epoch();
@@ -18,13 +59,14 @@ bool TsaCoreSolver::Process(HeatmapFrame& frame, uint64_t timestampMs) {
     frame.touch.output.touchPackets = {};
     m_actions.clear();
 
-    if (!m_shim.IsInitialized()) {
+    if (!m_initialized) {
         if (m_initFailed) return false;
-        if (!m_shim.Initialize(m_projectId.c_str())) {
+        if (!InitCore()) {
             m_initFailed = true;
             return false;
         }
         m_mapper.Reset();
+        m_appliedPenStatusWord = 0;
         m_penStatusApplied = false;
     }
     ApplyPenSession();
@@ -47,11 +89,28 @@ bool TsaCoreSolver::Process(HeatmapFrame& frame, uint64_t timestampMs) {
     if (!info.valid || (info.status & AfeStatus::kSos) != 0) return false;
 
     const bool hadContacts = m_mapper.HasActiveContacts();
-    m_lastCtrl = m_shim.CtrlFlags();
+    m_lastCtrl = m_ctrl;
     m_lastReport = MakeStylusReport(frame.stylus);
-    m_shim.ProcessFrame(frame.masterWasRead ? m_adapter.RawData() : nullptr, info, stylus, m_lastReport,
-                        timestampMs);
-    m_actions = m_control.Step(info, m_shim.Requests());
+    UpdateCtrl(info.status);
+
+    // 驱动每帧都给笔帧（没有笔时 status = 6、矩阵为空）。频率 / 压力 / 按键字段只有 ASA 的
+    // 解算本体读取，报告改由 SetStylusReport 送入。
+    m_stylusFrame = {stylus.tx1, stylus.tx2, stylus.status};
+    Core::AfeFrame afe;
+    afe.timeMs = timestampMs;
+    afe.rawData = frame.masterWasRead ? m_adapter.RawData() : nullptr;
+    afe.scanFreq = info.scanFreq;
+    afe.scanRate = info.scanRate;
+    afe.status = info.status;
+    afe.stylus = &m_stylusFrame;
+    Core::SetStylusReport(m_lastReport);
+    Core::ProcessFrame(afe, m_ctrl);
+    // ApDaemon 每帧之后清掉一次性的控制位，并重设 feature
+    m_ctrl &= CtrlFlag::kPersistMask;
+    Core::SetFeatures(m_features);
+    m_requests = Core::QueryRequests();
+
+    m_actions = m_control.Step(info, m_requests);
     const int count = m_mapper.Collect(frame.touch.output.contacts);
     m_cachedContactCount.store(count, std::memory_order_relaxed);
 
@@ -59,22 +118,32 @@ bool TsaCoreSolver::Process(HeatmapFrame& frame, uint64_t timestampMs) {
     return count > 0 || hadContacts;
 }
 
+// 本帧 AFE 状态位落到控制字上。
+void TsaCoreSolver::UpdateCtrl(uint32_t status) noexcept {
+    const bool idle = (status & AfeStatus::kIdle) != 0;
+    m_ctrl &= ~(CtrlFlag::kIdle | CtrlFlag::kChargerNoise);
+    if (idle) m_ctrl |= CtrlFlag::kIdle;
+    if (status & AfeStatus::kChargerNoise) m_ctrl |= CtrlFlag::kChargerNoise;
+    if (m_prevIdle && !idle) m_ctrl |= CtrlFlag::kIdleExit;
+    // 固件的校准完成标志（suffix word3 = 0xbb）要等宿主发 ClearStatus(8) 才会清掉，期间每帧都带着；
+    // ctrl 低 4 位任一非零都会让 TSACore 停在硬件复位态（TSAStatic_IsHWReset），所以只在上升沿置位一次，
+    // 清除握手由 TsaAfeControl 负责。
+    const bool calibDone = (status & AfeStatus::kCalibDone) != 0;
+    if (calibDone && !m_prevCalibDone) m_ctrl |= CtrlFlag::kCalibDone;
+    m_prevCalibDone = calibDone;
+    if (status & AfeStatus::kFreqShiftDone) m_ctrl |= CtrlFlag::kFreqShiftDone;
+    m_prevIdle = idle;
+}
+
 bool TsaCoreSolver::SetPanelProjectId(std::string_view projectId) {
-    if (m_shim.IsInitialized()) return projectId == m_projectId;
+    if (m_initialized) return projectId == m_projectId;
     m_projectId = projectId;
     m_adapter.SetPanelGain(GainForProject(projectId));
     return true;
 }
 
 const char* TsaCoreSolver::LoadedPrmtName() const noexcept {
-    return m_shim.IsInitialized() ? TSA_GetPrmtName() : "";
-}
-
-void TsaCoreSolver::OnBtPressure(uint16_t p0, uint16_t p1, uint16_t p2, uint16_t p3) noexcept {
-    m_btPressure.store(static_cast<uint64_t>(p0) | (static_cast<uint64_t>(p1) << 16) |
-                           (static_cast<uint64_t>(p2) << 32) | (static_cast<uint64_t>(p3) << 48),
-                       std::memory_order_relaxed);
-    m_btPressureSeq.fetch_add(1, std::memory_order_release);
+    return m_initialized ? Core::PrmtName() : "";
 }
 
 // TSACore 的全局状态只能在处理帧的线程上动：笔事件线程只留下最新值，这里统一落下去。
@@ -83,7 +152,7 @@ void TsaCoreSolver::ApplyPenSession() noexcept {
 
     const uint16_t word = m_penStatusWord.load(std::memory_order_relaxed);
     if (!m_penStatusApplied || word != m_appliedPenStatusWord) {
-        m_shim.SetPenStatusWord(word);
+        ApplyPenStatusWord(word);
         m_appliedPenStatusWord = word;
         m_penStatusApplied = true;
     }
@@ -91,9 +160,33 @@ void TsaCoreSolver::ApplyPenSession() noexcept {
     const uint32_t seq = m_btPressureSeq.load(std::memory_order_acquire);
     if (seq != m_btPressureSeen) {
         m_btPressureSeen = seq;
-        const uint64_t packed = m_btPressure.load(std::memory_order_relaxed);
-        m_shim.OnBtPressure(static_cast<uint16_t>(packed), static_cast<uint16_t>(packed >> 16),
-                            static_cast<uint16_t>(packed >> 32), static_cast<uint16_t>(packed >> 48));
+        Core::OnBtPressure();
+    }
+}
+
+// 与 ApDaemon 一样，每次都下发旋转角与笔状态，连接位与防误触位只在变化时处理（m_appliedPenStatusWord
+// 是上一次下发的状态字，初始化后从 0 算起）。
+void TsaCoreSolver::ApplyPenStatusWord(uint16_t word) noexcept {
+    const uint16_t changed = static_cast<uint16_t>(word ^ m_appliedPenStatusWord);
+
+    // DriverThp::GetStatus：旋转角，然后连着下发两次笔状态（先休眠位、再吸附位）。
+    // 第二次会盖掉第一次，原版就是这样，笔状态最终只留下吸附位。
+    const unsigned curStatus = static_cast<unsigned>(word >> PenStatusWord::kCurStatusShift);
+    Core::SetScreenRotateState(static_cast<int>((word >> PenStatusWord::kRotateShift) & 0x3u));
+    Core::SetBtPenStatus(static_cast<uint8_t>(curStatus & 1u));
+    Core::SetBtPenStatus(static_cast<uint8_t>(curStatus & 2u));
+
+    // "stylus3" 监听：笔连上时通知一次；断开时原版不调 TSACore，靠 60 s 没有蓝牙包来降级。
+    if ((changed & PenStatusWord::kConnected) != 0 && (word & PenStatusWord::kConnected) != 0) {
+        Core::SetBtConnectStatus(1);
+    }
+    // "stylusaft" 监听：防误触模式位的变化翻成场景 32 的开关。
+    if ((changed & PenStatusWord::kTouchMode) != 0) {
+        if ((word & PenStatusWord::kTouchMode) != 0) {
+            Core::EnableScenario(kScenarioStylusAft);
+        } else {
+            Core::DisableScenario(kScenarioStylusAft);
+        }
     }
 }
 
@@ -101,8 +194,8 @@ void TsaCoreSolver::ApplyPenSession() noexcept {
 // 量程是显示像素（ASA 的 FitToLcdScreen：像素 = 分辨率 × 坐标 / 节点数 / 1024，夹在 [0, 分辨率 − 1]）。
 // 两个轴都倒过来。倾角不用取反：ASA 的 TiltProcess 在倒序坐标系里按 TX2 − TX1 的坐标差算倾角，
 // StylusSolver 在原始坐标系里按 TX1 − TX2 算，翻转与相减次序正好抵消，两者数值相同。
-StylusReport TsaCoreSolver::MakeStylusReport(const StylusFrameData& stylus) noexcept {
-    StylusReport report;
+Core::StylusReport TsaCoreSolver::MakeStylusReport(const StylusFrameData& stylus) noexcept {
+    Core::StylusReport report;
     const auto& out = stylus.output;
     if (!out.valid || !out.inRange) return report;
 
@@ -111,30 +204,28 @@ StylusReport TsaCoreSolver::MakeStylusReport(const StylusFrameData& stylus) noex
         const long pixel = std::lround((span - coor) * static_cast<float>(res) / span);
         return static_cast<uint16_t>(std::clamp<long>(pixel, 0, res - 1));
     };
-    report.inRange = true;
-    report.tipDown = out.tipDown;
-    report.x = toPixel(out.point.x, Frame::kRxCount, TsaHostShim::kXRes);
-    report.y = toPixel(out.point.y, Frame::kTxCount, TsaHostShim::kYRes);
+    report.status = out.tipDown ? StylusReportFlag::kTipDown : StylusReportFlag::kInRange;
+    report.x = toPixel(out.point.x, Frame::kRxCount, kXRes);
+    report.y = toPixel(out.point.y, Frame::kTxCount, kYRes);
     report.tiltX = out.point.tiltX;
     report.tiltY = out.point.tiltY;
     report.pressure = out.tipDown ? out.pressure : 0;
     return report;
 }
 
-bool TsaCoreSolver::InStylusMode() const noexcept {
-    return m_shim.IsInitialized() && TSA_InStylusMode() != 0;
-}
+bool TsaCoreSolver::InStylusMode() const noexcept { return m_initialized && Core::InStylusMode(); }
 
-bool TsaCoreSolver::StylusInRange() const noexcept {
-    return m_shim.IsInitialized() && (TSA_RptASAInRange() & 0xffu) != 0;
-}
+bool TsaCoreSolver::StylusInRange() const noexcept { return m_initialized && Core::StylusInRange(); }
 
 void TsaCoreSolver::OnAfeStarted() noexcept {
     m_adapter.Reset();
     m_control.Reset();
     m_mapper.Reset();
     m_actions.clear();
-    m_shim.NotifyAfeStarted();
+    m_ctrl |= CtrlFlag::kFirstFrame | CtrlFlag::kResetBaseline;
+    // 重启后的状态位从头算起：校准完成位要重新走一次上升沿
+    m_prevIdle = false;
+    m_prevCalibDone = false;
 }
 
 void TsaCoreSolver::OnAfeStopped() noexcept {
@@ -160,9 +251,6 @@ void TsaCoreSolver::OnAfeActionExecuted(const AfeAction& action, bool ok) noexce
     }
 }
 
-const int16_t* TsaCoreSolver::DiffGrid() const noexcept {
-    if (!m_shim.IsInitialized()) return nullptr;
-    return reinterpret_cast<const int16_t*>(TSA_RptDiffPtr());
-}
+const int16_t* TsaCoreSolver::DiffGrid() const noexcept { return m_initialized ? Core::DiffGrid() : nullptr; }
 
 }  // namespace Solvers::Tsa

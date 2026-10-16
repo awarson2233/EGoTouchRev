@@ -1,7 +1,7 @@
 #pragma once
 // 分段计时：构建时打开 EGO_TSACORE_PROFILE（定义 TSACORE_PROFILE）后，主流程的每个步骤记累计耗时与次数，
-// 宿主经 TsaCore_ProfileEntries 取走（回放 --profile 打印）。默认不编入，TSA_STEP 只是原样调用。
-// 每段计时本身有几十 ns 的开销，一帧几十段叠加起来会抬高整帧耗时：宿主可经 TsaCore_ProfileSteps 关掉分步，
+// 宿主经 Core::ProfileEntries 取走（回放 --profile 打印）。默认不编入，TSA_STEP 只是原样调用。
+// 每段计时本身有几十 ns 的开销，一帧几十段叠加起来会抬高整帧耗时：宿主可经 Core::ProfileSteps 关掉分步，
 // 只留 TSA_PROFILE_SCOPE 的整帧计时。
 
 #include <cstdint>

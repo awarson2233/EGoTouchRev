@@ -11,7 +11,7 @@ namespace Solvers::Tsa::Core::Baseline {
 enum Stage : uint32_t {
     kStageNoTouch = 0,     // 无触摸：按小步长跟踪
     kStageReset = 1,       // 复位（硬件复位或 BLReset 触发）
-    kStageNoisyReset = 2,  // 噪声期间复位
+    kStageNoisyReset = 2,  // 噪声期间复位（只有常噪声的 ALPS 机型会进入）
     kStageHold = 3,        // 保持：回到上一阶段
     kStageSmallSig = 4,    // 小信号：等超时回到无触摸
     kStageTouched = 5,     // 有触摸：不更新
@@ -28,7 +28,6 @@ inline constexpr uint32_t kPropReset = 0x010;
 inline constexpr uint32_t kPropRefresh = 0x040;
 inline constexpr uint32_t kPropNegative = 0x080;
 inline constexpr uint32_t kPropDebounce = 0x100;
-inline constexpr uint32_t kPropNoisy = 0x200;
 
 /// 计时器累加：0 起算为 1，此后每帧加帧间隔。
 template <class T>
@@ -68,7 +67,6 @@ void Process();
 namespace Reset {
 void Init(bool clearLatch);
 bool Process(bool reset);
-bool IsBaselineNoisy();
 bool CheckNumOverNoise();
 bool IsTouchToBeProtected2(bool needTwo);
 /// 与 stored 里存的 CMF 前 raw 比较：store 时只存下当前值。
