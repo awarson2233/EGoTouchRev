@@ -436,3 +436,19 @@ if (EGO_BUILD_TOOLS AND CMAKE_BUILD_TYPE STREQUAL "Debug")
         target_link_options(EGoTouchRecorder PRIVATE "LINKER:/MANIFESTUAC:level='requireAdministrator'")
     endif()
 endif()
+
+# --- ChipHidProbe：运行时把 master 接口模式字改成 1，读片上 HID 报告（实验用）---
+if (EGO_BUILD_TOOLS)
+    add_executable(ChipHidProbe Tools/ChipHidProbe/main.cpp)
+    target_link_libraries(ChipHidProbe PRIVATE Device Common advapi32 winmm)
+    if (WIN32)
+        target_link_options(ChipHidProbe PRIVATE "LINKER:/MANIFESTUAC:level='requireAdministrator'")
+    endif()
+endif()
+
+# --- ChipHidProbeB：方案 B 验证，if_mode 保持 0，运行时热补丁 P1–P5，解析帧尾 HID 报告 ---
+# 不要求管理员（asInvoker）：服务由外部先停好，SPB 设备直接开，便于非提权连跑。
+if (EGO_BUILD_TOOLS)
+    add_executable(ChipHidProbeB Tools/ChipHidProbeB/main.cpp)
+    target_link_libraries(ChipHidProbeB PRIVATE Device Common advapi32 winmm)
+endif()
