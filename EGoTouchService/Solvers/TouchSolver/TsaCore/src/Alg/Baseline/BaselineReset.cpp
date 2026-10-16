@@ -706,15 +706,6 @@ bool IsTriggered2() {
     return r;
 }
 
-// BLReset_GetRawChangedThold @ 0x6ba4901e
-// 按噪声门限；扫描线两端的格放宽到 4/3。
-int16_t RawChangedThold(uint16_t k, uint16_t line) {
-    const int16_t t = Prpt().noiseThold;
-    const FlashConstPrmt& c = PrmtFlashConst();
-    const bool edge = PrmtFlash().dim1Axis == 1 ? (k == 0 || k == c.lineLen - 1) : (line == 0 || line == c.lineNum - 1);
-    return edge ? static_cast<int16_t>(t * 4 / 3) : t;
-}
-
 }  // namespace
 
 namespace Reset {
@@ -820,7 +811,9 @@ bool IsTouchToBeProtected2(bool needTwo) {
 }
 
 // BLReset_IsRawChanged @ 0x6ba490f5（调用方都比 CMF 前的 raw，且不做 CMF）
-// 按扫描线逐格比较，变化超过 RawChangedThold 的非坏点格达到 4 个即判为变化。
+// 按扫描线逐格比较，变化超过门限的非坏点格达到 4 个即判为变化。门限（BLReset_GetRawChangedThold @ 0x6ba4901e）
+// 是噪声门限，扫描线两端的格放宽到 4/3。结果只看够不够 4 个：逐线无分支地计数（线内连续时可向量化），
+// 一条线做完已够就返回。
 bool IsRawChanged(int16_t* stored, bool store) {
     const TsaBufferTable& buf = Buffers();
     const auto* cur = reinterpret_cast<const uint16_t*>(buf.preCmfRaw);
@@ -834,15 +827,27 @@ bool IsRawChanged(int16_t* stored, bool store) {
     const uint8_t* sensorFlags = TpSensor::Flags();
     const uint16_t first = SideTouch() ? 1 : 0;
     const uint16_t lines = static_cast<uint16_t>(c.lineNum - first);
-    uint16_t changed = 0;
+    const auto* old = reinterpret_cast<const uint16_t*>(stored);
+    const int lineLen = c.lineLen;
+    const int cols = fl.dim1Len;
+    const int thold = Prpt().noiseThold;
+    const int edgeThold = static_cast<int16_t>(thold * 4 / 3);
+    const auto over = [&](int idx, int t) {
+        return t < std::abs(old[idx] - cur[idx]) && (sensorFlags[idx] & TpSensor::kFlagNotch) == 0 ? 1 : 0;
+    };
+    int changed = 0;
     for (uint16_t line = first; line < lines; ++line) {
-        for (uint16_t k = 0; k < c.lineLen; ++k) {
-            const auto idx = static_cast<uint16_t>(fl.dim1Axis == 1 ? k + fl.dim1Len * line : line + fl.dim1Len * k);
-            const int d = reinterpret_cast<const uint16_t*>(stored)[idx] - cur[idx];
-            if (RawChangedThold(k, line) < std::abs(d) && (sensorFlags[idx] & TpSensor::kFlagNotch) == 0) ++changed;
+        if (fl.dim1Axis == 1) {
+            // 线沿 dim1，两端的格放宽
+            const int base = cols * line;
+            for (int k = 0; k < lineLen; ++k) changed += over(base + k, k == 0 || k == lineLen - 1 ? edgeThold : thold);
+        } else {
+            const int t = line == 0 || line == c.lineNum - 1 ? edgeThold : thold;
+            for (int k = 0; k < lineLen; ++k) changed += over(line + cols * k, t);
         }
+        if (4 <= changed) return true;
     }
-    return 4 <= changed;
+    return false;
 }
 
 }  // namespace Reset

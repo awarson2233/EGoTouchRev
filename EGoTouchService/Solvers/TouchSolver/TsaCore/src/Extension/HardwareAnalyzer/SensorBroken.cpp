@@ -299,10 +299,11 @@ void SensorBrokenDifProcess() {
     if (thold < peak) thold = peak;
     // 两遍都只有少数格（有信号的格）要细判：先按 kChunk 格一块无分支地粗筛（可向量化），块里有候选再逐格判。
     constexpr int kChunk = 16;
+    // 判定写成比较结果（0 / 0xffff）的按位或才向量化，写成 bool 的 |= 时不会
     const auto any = [&](int begin, int end, auto pred) {
-        bool hit = false;
-        for (int i = begin; i < end; ++i) hit |= pred(static_cast<int>(dif[i]));
-        return hit;
+        uint16_t hit = 0;
+        for (int i = begin; i < end; ++i) hit |= pred(static_cast<int>(dif[i])) ? 0xffff : 0;
+        return hit != 0;
     };
     if (-ref <= prpt.dif.minSig * 8) {
         for (int base = 0; base < n; base += kChunk) {
