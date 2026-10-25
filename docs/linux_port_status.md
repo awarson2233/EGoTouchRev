@@ -37,6 +37,12 @@
   AFE 闭环 → uhid，与 DeviceRuntime 的流式一帧相同。建链简化为：总线就绪才 Init，失败退避重试；SOS 或总线掉线时
   抬起所有触点、`OnAfeStopped`，回到等总线。选项 `--transpose`、`--master-only`。笔还没有上报。
   实测：120 fps，手指方向正确（GNOME 旋转后自动映射），按下 / 抬起成对，IC 进 IDLE 后稳定。
+- **开机自启** `scripts/linux/`：`install.sh [--now]` / `uninstall.sh`。装的东西：
+  `/usr/local/bin/egotouchd`；当前内核的 `updates/egotouch/{himax-thp,thp-slave-dt}.ko`（depmod 后 udev 按 compatible 自动加载
+  himax-thp）；`/etc/modprobe.d/egotouch.conf`（当前内核装了 himax-thp 就不加载 himax-spi，没装照常加载，升级内核后触摸退回原驱动）；
+  `/etc/modules-load.d/egotouch.conf`（thp_slave_dt、uhid）；`/etc/udev/rules.d/60-egotouch.rules` + `egotouchd.service`
+  （`/dev/himax_thp` 出现即拉起，`BindsTo` 设备）。日志在 `/var/log/egotouchd/`。不改 dtb、不改 initrd（himax-spi 不在 initrd 里）。
+  `thp-bind.sh` 装过就用 modprobe，`off` 时用 `--ignore-install` 加载 himax-spi。
 - **复位脉冲**：`hx_hw_reset_ahb_intf` 在拉低和释放复位之间等 5 ms（同 himax-spi）。himax-thp 的 `SET_RESET` 只改电平，
   不等的话脉冲太短、IC 没有真正复位，同一进程里第二次 Init 必定在 FW reload 超时（SpbThpTool 的复位 IOCTL 自带时序，
   所以 Windows 上没暴露）。
@@ -167,8 +173,9 @@ Linux 上它照常枚举，三个接口：
 
 1. 熄屏亮屏、面板复位之后的行为：复位会触发 FW reload，只要 gpio174 还是低就没问题，但要实测。
 2. Slave 的帧校验：SPI 模式下已经通过（偶尔每轮开头 1–2 帧坏，原因待查）。
-3. 之后的工作：笔（等有笔再做：MCU 通道的 Linux 传输、笔状态 → AFE 的 InitStylus / SetStylusId、压力进 StylusPipeline、Report 8 的 uhid 上报，见 §3.5）、egotouchd 跟随亮灭屏（现在靠总线探测）、其余 Port（面板电源、输入、笔 USB、系统状态）、
-   打包（DKMS / systemd / udev）、TsaRawReplay 逐位验证（需要 Windows 录制的 .dvrbin）、Windows CI 验证 Port 改动。
+3. 开机自启要实际重启验证一次（服务切换、modprobe 规则已在运行中测过）。换内核要重新编、重新装模块（以后做 DKMS）。
+4. 之后的工作：笔（等有笔再做：MCU 通道的 Linux 传输、笔状态 → AFE 的 InitStylus / SetStylusId、压力进 StylusPipeline、Report 8 的 uhid 上报，见 §3.5）、egotouchd 跟随亮灭屏（现在靠总线探测）、其余 Port（面板电源、输入、笔 USB、系统状态）、
+   DKMS、TsaRawReplay 逐位验证（需要 Windows 录制的 .dvrbin）、Windows CI 验证 Port 改动。
 
 ## 7 环境注意事项
 

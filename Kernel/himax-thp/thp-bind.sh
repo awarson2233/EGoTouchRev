@@ -11,6 +11,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 KO="$HERE/himax-thp.ko"
 SLAVE_KO="$HERE/thp-slave-dt.ko"
 
+# 装过（scripts/linux/install.sh）就按名字加载，没装用编译目录里的
+load() { lsmod | grep -q "^$1 " || modprobe "$1" 2>/dev/null || insmod "$2"; }
 bound() { basename "$(readlink -f $SYS/devices/$1/driver 2>/dev/null)" 2>/dev/null || true; }
 # 按 compatible 找 spi 设备：总线号是动态分配的
 spi_dev() {
@@ -26,15 +28,13 @@ slave_dev() { spi_dev 'egotouch,hx83121a-thp-slave'; }
 
 case "${1:-show}" in
 on)
-    [ -f "$KO" ] || { echo "missing $KO, build it first"; exit 1; }
-    lsmod | grep -q '^himax_thp ' || insmod "$KO"
+    load himax_thp "$KO"
     DEV=$(master_dev)
     [ "$(bound $DEV)" = himax-spi ] && echo $DEV > $SYS/drivers/himax-spi/unbind
     echo himax-thp > $SYS/devices/$DEV/driver_override
     [ "$(bound $DEV)" = himax-thp ] || echo $DEV > $SYS/drivers/himax-thp/bind
     if [ "${2:-}" != --no-slave ]; then
-        [ -f "$SLAVE_KO" ] || { echo "missing $SLAVE_KO, build it first"; exit 1; }
-        lsmod | grep -q '^thp_slave_dt ' || insmod "$SLAVE_KO"
+        load thp_slave_dt "$SLAVE_KO"
     fi
     ;;
 off)
@@ -43,6 +43,8 @@ off)
     DEV=$(master_dev)
     [ "$(bound $DEV)" = himax-thp ] && echo $DEV > $SYS/drivers/himax-thp/unbind
     echo > $SYS/devices/$DEV/driver_override
+    # 装了 install.sh 之后 himax-spi 不会自动加载（egotouch-modprobe.conf），这里绕过那条规则
+    [ -d $SYS/drivers/himax-spi ] || modprobe --ignore-install himax_hx83121a_spi
     [ "$(bound $DEV)" = himax-spi ] || echo $DEV > $SYS/drivers/himax-spi/bind
     lsmod | grep -q '^himax_thp ' && rmmod himax_thp
     ;;

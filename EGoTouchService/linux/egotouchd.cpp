@@ -4,9 +4,10 @@
 // AFE 闭环、上报），建链与重建链简化成一个循环：总线就绪才 Init，失败退避重试；SOS 或总线掉线（灭屏）
 // 时抬起所有触点、停掉解算，回到等总线。笔还没有上报，只把笔连接状态交给 TSACore。
 //
-//   egotouchd [--dev PATH] [--transpose] [--master-only]
+//   egotouchd [--dev PATH] [--log-dir DIR] [--transpose] [--master-only]
 //
 //   --dev PATH      设备节点，默认 /dev/himax_thp
+//   --log-dir DIR   日志目录，默认 <临时目录>/egotouch-logs（systemd 服务里是 /var/log/egotouchd）
 //   --transpose     与 Windows 的 VHF transpose 开关相同：换一种坐标轴映射
 //   --master-only   不用 slave（笔）
 //
@@ -223,21 +224,23 @@ private:
 
 int main(int argc, char** argv) {
     std::string dev = "/dev/himax_thp";
+    std::filesystem::path logDir = std::filesystem::temp_directory_path() / "egotouch-logs";
     bool transpose = false;
     bool slave = true;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "--dev" && i + 1 < argc) dev = argv[++i];
+        else if (a == "--log-dir" && i + 1 < argc) logDir = argv[++i];
         else if (a == "--transpose") transpose = true;
         else if (a == "--master-only") slave = false;
         else {
-            std::fprintf(stderr, "usage: %s [--dev PATH] [--transpose] [--master-only]\n", argv[0]);
+            std::fprintf(stderr, "usage: %s [--dev PATH] [--log-dir DIR] [--transpose] [--master-only]\n", argv[0]);
             return 2;
         }
     }
 
     InstallSignals();
-    Common::Logger::Init("egotouchd", std::filesystem::temp_directory_path() / "egotouch-logs", nullptr);
+    Common::Logger::Init("egotouchd", logDir, nullptr);
 
     auto sink = Port::CreateTouchSink();
     if (!sink->IsValid()) {
