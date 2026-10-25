@@ -1,0 +1,12 @@
+# 树外模块的编译产物
+*.o
+*.ko
+*.mod
+*.mod.c
+.*.cmd
+Module.symvers
+modules.order
+.module-common.o
+*.dtbo
+*.dtbo.S
+*.tmp

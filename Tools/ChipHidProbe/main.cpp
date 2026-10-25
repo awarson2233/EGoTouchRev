@@ -493,7 +493,7 @@ int main(int argc, char** argv) {
                 uint8_t st[8]{};
                 if (!Rd(m, kReportState, st, 8)) {
                     ++readErrors;
-                    Out("[%7.3f] 状态读失败 lastErr=%lu\n", t, m->GetError());
+                    Out("[%7.3f] 状态读失败 lastErr=%lu\n", t, static_cast<unsigned long>(m->GetError()));
                     Sleep(5);
                     continue;
                 }
@@ -507,7 +507,7 @@ int main(int argc, char** argv) {
                         } else {
                             ++badReads;
                             Out("[%7.3f] 报告头异常（读毛刺）%02X %02X %02X %02X, lastErr=%lu\n", t, rep[0], rep[1], rep[2], rep[3],
-                                m->GetError());
+                                static_cast<unsigned long>(m->GetError()));
                             continue;  // 不确认，下一轮重读
                         }
                     }

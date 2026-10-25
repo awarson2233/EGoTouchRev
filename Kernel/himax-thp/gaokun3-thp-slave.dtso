@@ -1,0 +1,74 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * gaokun3 触摸 Slave（HX83121A 级联的第二颗）。主线 DT 没有描述它，取自本机 ACPI DSDT 的 \_SB.THPB：
+ *
+ *   SpiSerialBusV2 (CS 0, 12 MHz, "\\_SB.SP21")   SP21 = QUP 2 SE4 = DT 里的 spi20 (0x890000)
+ *   GpioInt (Edge, ActiveLow, ..., "\\_SB.GIO0") { 0x27 }   INT = gpio39
+ *
+ * 复位脚与 Master 共用（THPB 没有 GpioIo），由 Master 那一路（spi6 上的 touchscreen@0）管。
+ * SPI 引脚取 qup20 的 gpio87–90，电气参数照抄 spi6。INT 在 ACPI 里是下降沿；这里写低电平与 Master 一致，
+ * 实际触发方式由 himax-thp 的 slave_irq_trigger 参数在申请中断时决定（默认下降沿）。DT 里的类型一旦映射过，
+ * 本次开机内就不能再改（重新映射会报 type mismatch），所以不在 DT 里试。
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/interrupt-controller/irq.h>
+
+&tlmm {
+	thp_slave_spi_default: thp-slave-spi-default-state {
+		miso-pins {
+			pins = "gpio87";
+			function = "qup20";
+			drive-strength = <2>;
+			bias-pull-down;
+		};
+
+		mosi-pins {
+			pins = "gpio88";
+			function = "qup20";
+			drive-strength = <2>;
+			bias-pull-down;
+			output-high;
+		};
+
+		clk-pins {
+			pins = "gpio89";
+			function = "qup20";
+			drive-strength = <2>;
+			bias-pull-down;
+			output-high;
+		};
+
+		cs-pins {
+			pins = "gpio90";
+			function = "qup20";
+			drive-strength = <2>;
+			bias-pull-down;
+			output-high;
+		};
+	};
+
+	thp_slave_int_default: thp-slave-int-default-state {
+		pins = "gpio39";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+};
+
+&spi20 {
+	pinctrl-0 = <&thp_slave_spi_default>;
+	pinctrl-names = "default";
+	status = "okay";
+
+	touchscreen@0 {
+		compatible = "egotouch,hx83121a-thp-slave";
+		reg = <0>;
+		spi-max-frequency = <12000000>;
+		interrupts-extended = <&tlmm 39 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-0 = <&thp_slave_int_default>;
+		pinctrl-names = "default";
+	};
+};

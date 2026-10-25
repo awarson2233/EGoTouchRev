@@ -1199,8 +1199,8 @@ void DeviceRuntime::StepBringUp(const PowerInputs &in) {
       std::lock_guard<std::mutex> lk(m_mu);
       m_recoverCount = static_cast<uint8_t>(std::min(m_link.bringUpAttempts, 255));
     }
-    LOG_NOTICE("PowerSM", __func__, "ready", "Bring-up attempt {} failed at '{}' ({}, win32={}); retrying in {} ms.",
-               m_link.bringUpAttempts, failStep, ToString(res.error()), probe.win32Error, delay.count());
+    LOG_NOTICE("PowerSM", __func__, "ready", "Bring-up attempt {} failed at '{}' ({}, err={}); retrying in {} ms.",
+               m_link.bringUpAttempts, failStep, ToString(res.error()), probe.nativeError, delay.count());
     if (m_state.load(std::memory_order_acquire) != workerState::recover) {
       TransitionTo(workerState::recover, "bring-up failed; backing off");
     }
@@ -1859,9 +1859,9 @@ void DeviceRuntime::NoteLinkProbe(const Himax::Chip::BusProbe &probe,
   m_link.lastBusSlave = probe.slave;
   m_link.lastPanel = panelLevel;
   LOG_NOTICE("PowerSM", __func__, where,
-             "Link probe: bus {} (0x13 master=0x{:02X} slave=0x{:02X}, win32={}), panel ACPI bit0={}.",
+             "Link probe: bus {} (0x13 master=0x{:02X} slave=0x{:02X}, err={}), panel ACPI bit0={}.",
              !probe.ioOk ? "ioctl-failed" : (probe.Ready() ? "ready" : "not-ready"),
-             probe.master, probe.slave, probe.win32Error,
+             probe.master, probe.slave, probe.nativeError,
              panelLevel < 0 ? "unreadable" : (panelLevel ? "1" : "0"));
 }
 

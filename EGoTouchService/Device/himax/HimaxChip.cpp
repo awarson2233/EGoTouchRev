@@ -12,7 +12,7 @@
 
 namespace Himax {
 
-Chip::Chip(const std::wstring& master_path, const std::wstring& slave_path)
+Chip::Chip(const std::filesystem::path& master_path, const std::filesystem::path& slave_path)
     : pic_op(InitIcOperation()),
       pfw_op(InitFwOperation()),
       pflash_op(InitFlashOperation()),
@@ -23,8 +23,8 @@ Chip::Chip(const std::wstring& master_path, const std::wstring& slave_path)
       m_slavePath(slave_path),
       m_afe(*this)
 {
-    m_master = std::make_unique<HalDevice>(m_masterPath.c_str(), DeviceType::Master);
-    m_slave = std::make_unique<HalDevice>(m_slavePath.c_str(), DeviceType::Slave);
+    m_master = Port::CreateTouchBus(m_masterPath, DeviceType::Master);
+    m_slave = Port::CreateTouchBus(m_slavePath, DeviceType::Slave);
 
     m_inspection_mode = THP_INSPECTION_ENUM::HX_RAWDATA;
     current_slot = 0;
@@ -81,12 +81,15 @@ Chip::BusProbe Chip::ProbeBus() {
     }
     uint8_t slave[4]{};
     uint8_t master[4]{};
-    if (auto res = m_slave->ReadBus(0x13, slave, 1); !res) {
-        probe.win32Error = m_slave->GetError();
-        return probe;
+    probe.slaveRequired = m_slaveEnabled;
+    if (m_slaveEnabled) {
+        if (auto res = m_slave->ReadBus(0x13, slave, 1); !res) {
+            probe.nativeError = m_slave->GetError();
+            return probe;
+        }
     }
     if (auto res = m_master->ReadBus(0x13, master, 1); !res) {
-        probe.win32Error = m_master->GetError();
+        probe.nativeError = m_master->GetError();
         return probe;
     }
     probe.ioOk = true;
@@ -98,7 +101,7 @@ Chip::BusProbe Chip::ProbeBus() {
 ChipResult<> Chip::check_bus(void) {
     const BusProbe probe = ProbeBus();
     if (!probe.ioOk) {
-        LOG_WARN("HimaxChip", __func__, GetStateStr(), "Bus read failed (win32={}).", probe.win32Error);
+        LOG_WARN("HimaxChip", __func__, GetStateStr(), "Bus read failed (err={}).", probe.nativeError);
         return std::unexpected(ChipError::CommunicationError);
     }
     if (!probe.Ready()) {
@@ -121,8 +124,8 @@ bool Chip::ReopenDevices() {
     // 先全部关掉再开：SPB 测试驱动的设备对象不保证能被同一进程重复打开
     m_master.reset();
     m_slave.reset();
-    m_master = std::make_unique<HalDevice>(m_masterPath.c_str(), DeviceType::Master);
-    m_slave = std::make_unique<HalDevice>(m_slavePath.c_str(), DeviceType::Slave);
+    m_master = Port::CreateTouchBus(m_masterPath, DeviceType::Master);
+    m_slave = Port::CreateTouchBus(m_slavePath, DeviceType::Slave);
 
     const bool ok = m_master->IsValid() && m_slave->IsValid();
     if (ok) {
@@ -137,7 +140,7 @@ bool Chip::ReopenDevices() {
 std::optional<bool> Chip::ReadPanelPower() {
     if (!m_master || !m_master->IsValid()) return std::nullopt;
     uint8_t value[4]{};
-    if (auto res = m_master->ReadAcpi(value, sizeof(value)); !res) return std::nullopt;
+    if (auto res = m_master->ReadPanelStatus(value, sizeof(value)); !res) return std::nullopt;
     return (value[0] & 0x01) != 0;
 }
 

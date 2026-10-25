@@ -155,10 +155,10 @@ Chip::FrameRead Chip::GetFrame(void) {
             } while (m_idleRetry && attempts++ < kIdleRetryAttempts);
 
             const auto waited = std::chrono::duration_cast<std::chrono::milliseconds>(clock::now() - start);
-            const uint32_t win32 = dev->GetError();
+            const uint32_t err = dev->GetError();
             (void)dev->IntOpen();
-            LOG_NOTICE("HimaxChip", "GetFrame", GetStateStr(), "{} INT re-opened: no frame for {} ms (stall {}, IC {}, win32={}).",
-                       name, waited.count(), m_readStalls + 1, m_idleRetry ? "IDLE" : "active", win32);
+            LOG_NOTICE("HimaxChip", "GetFrame", GetStateStr(), "{} INT re-opened: no frame for {} ms (stall {}, IC {}, err={}).",
+                       name, waited.count(), m_readStalls + 1, m_idleRetry ? "IDLE" : "active", err);
             std::this_thread::sleep_for(kRearmDelay);
             if (m_readStalls++ > kReadStallLimit || waited > kReadBudget) {
                 m_sosReason = sosReason;
@@ -168,17 +168,23 @@ Chip::FrameRead Chip::GetFrame(void) {
     };
 
     // ── slave（笔）──
-    switch (readChannel(m_slave.get(), slaveBuf, kSlaveFrameBytes, "Slave", "no slave frame")) {
-    case Read::Cancelled: return FrameRead::NoData;
-    case Read::Sos:       return FrameRead::Sos;
-    case Read::Ok:        break;
+    // 只用 master 时不读 slave：与不读 master 的帧同理按「全零」参与收尾判定，笔数据标成无笔
+    FrameCheck slaveCheck = FrameCheck::AllZero;
+    if (m_slaveEnabled) {
+        switch (readChannel(m_slave.get(), slaveBuf, kSlaveFrameBytes, "Slave", "no slave frame")) {
+        case Read::Cancelled: return FrameRead::NoData;
+        case Read::Sos:       return FrameRead::Sos;
+        case Read::Ok:        break;
+        }
+        slaveCheck = CheckFrame(slaveBuf, kSlaveFrameBytes);
     }
-    const FrameCheck slaveCheck = CheckFrame(slaveBuf, kSlaveFrameBytes);
     const bool slaveValid = slaveCheck == FrameCheck::Valid;
     if (slaveValid) {
         m_penZeroFrames = 0;
         m_penChecksumErrors = 0;
         m_readStalls = 0;
+    } else if (!m_slaveEnabled) {
+        MarkNoStylus(slaveBuf);
     } else {
         MarkNoStylus(slaveBuf);
         m_idleRetry = false;
