@@ -173,8 +173,12 @@ Linux 上它照常枚举，三个接口：
 
 1. 熄屏亮屏、面板复位之后的行为：复位会触发 FW reload，只要 gpio174 还是低就没问题，但要实测。
 2. Slave 的帧校验：SPI 模式下已经通过（偶尔每轮开头 1–2 帧坏，原因待查）。
-3. 开机自启要实际重启验证一次（服务切换、modprobe 规则已在运行中测过）。换内核要重新编、重新装模块（以后做 DKMS）。
-4. 之后的工作：笔（等有笔再做：MCU 通道的 Linux 传输、笔状态 → AFE 的 InitStylus / SetStylusId、压力进 StylusPipeline、Report 8 的 uhid 上报，见 §3.5）、egotouchd 跟随亮灭屏（现在靠总线探测）、其余 Port（面板电源、输入、笔 USB、系统状态）、
+3. 开机自启已重启验证：himax-thp 自动绑定 Master + Slave，himax-spi 未加载，服务开机约 5 s 进入出帧。
+   换内核要重新编、重新装模块（以后做 DKMS）。
+4. 偶发的取帧停顿：Init 之后约 8 s（IC 还没进 IDLE）两路都不来帧约 1 s，判 SOS 后重建链恢复。开机后、
+   从手动进程切到服务时各见过一次，之后不再出现。期间触摸约 1 s 无响应。诱因未明（停顿前日志里没有别的记录，
+   AFE 命令只在失败时记日志）。IDLE 里静默 3.6 s 判 SOS 是原厂常态，不算在内。
+5. 之后的工作：笔（等有笔再做：MCU 通道的 Linux 传输、笔状态 → AFE 的 InitStylus / SetStylusId、压力进 StylusPipeline、Report 8 的 uhid 上报，见 §3.5）、egotouchd 跟随亮灭屏（现在靠总线探测）、其余 Port（面板电源、输入、笔 USB、系统状态）、
    DKMS、TsaRawReplay 逐位验证（需要 Windows 录制的 .dvrbin）、Windows CI 验证 Port 改动。
 
 ## 7 环境注意事项
