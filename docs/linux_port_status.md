@@ -67,7 +67,25 @@ iasl 反编译）：
 - 布局：3 字节总线头 + 4 字节数据头（`5A A5 xx xx`）+ 数据。Chip 的校验从第 5 字节起按 u16 求和，低 16 位为 0。
 - Slave 无笔时的帧是 `5A A5` 加全 0（Chip 的 AllZero → `MarkNoStylus`），属于正常帧。
 
-### 3.3 INT 与出帧（核心问题）
+### 3.3 INT 与出帧（已解决：gpio174 主机接口选择脚）
+
+**根因：** 芯片在 FW reload（gpio99 复位后自动触发）时采样 TLMM **gpio174**：低 = SPI 模式（THP 原始数据），
+高 = I2C-HID 模式（UEFI 用的，即 DSDT 里被 `_STA` 关掉的 `HIMX1234`）。UEFI 把它留在高电平（本机开机后是
+`out high 16mA pull up`），主线 DT 和 linux-gaokun 的 DT 都没配它，芯片就锁在 I2C-HID 模式：SPI 寄存器读写、
+FW reload 都正常，但两颗芯片都不按帧拉 INT，Slave 根本不扫描（Init 后只吐一帧）。下表与下面几条都是这个状态下测的。
+线索来自 [vahiru/gaokun-android](https://github.com/vahiru/gaokun-android) 的 `patches/0002-…-drive-ts-mode-gpio174-low`
+和 [aoripus/easy-for-gaokun](https://github.com/aoripus/easy-for-gaokun) 的 `patches/touch-spi-mode`，两边独立写下的症状和这里一致。
+
+**拉低 gpio174 再复位之后**（开机默认环境、非 DSC、geni FIFO 模式、驱动全默认）：两根 INT 都按帧来，
+`HimaxThpProbe --with-slave` **120.0 fps**，1200 帧里 Master 全部有效、Slave 1198–1199 帧有效（只有开头 1–2 帧坏），
+和 Windows 一致。只有原驱动 himax-spi 时，无触摸也是 INT175 每秒 120 次。
+
+现在 himax-thp 在 Master probe 时占住 gpio174 输出低（`ts_mode_gpio`，见 §5），解绑后 TLMM 保持低电平。
+单独调试原驱动时可用 `Kernel/himax-thp/ts-mode.py spi` 设好再重绑 himax-spi。长期应在 DT 的 `ts0_default` 里把它配成
+`output-low`（上面两个仓库的补丁就是这么做的）。
+
+以下是 I2C-HID 模式下（修复前）的记录：
+
 
 | 场景 | INT175（Master） | INT39（Slave） | 事件栈 |
 |---|---|---|---|
@@ -80,9 +98,10 @@ iasl 反编译）：
   （TLMM 边沿锁存）也只收到 1 次。所以不是短脉冲被漏掉，而是芯片确实不再拉 INT。
 - 已排除：读帧长度（`read_extra` 扫 0–2048 字节无影响）、SPI 模式（0/3）、Slave 状态残留（开机第一次就带 Slave
   初始化，结果一样）、显示时序（开机加 `panel_himax_hx83121a.enable_dsc=1` 跑 DSC 120Hz，结果一样）。
-- **Windows 上 INT 是按帧来的**（用户确认：`INT re-opened` 只在 IDLE 时出现）。原因至今未明。
+- **Windows 上 INT 是按帧来的**（用户确认：`INT re-opened` 只在 IDLE 时出现）。原因见本节开头：Windows 的驱动栈在 SPI 模式下工作。
+- 同样在 I2C-HID 模式下还排除过：片选建立时间（`cs_setup_us=0`）、geni GSI 模式（补丁 0025 + `qcom,force-gsi-mode`）、面板 `E2`（Windows 120 Hz 下也是 `E2 00`）。gaokun-android 的 Slave 驱动在本机这个状态下也是 0 次中断。
 
-### 3.4 事件栈的读法
+### 3.4 事件栈的读法（I2C-HID 模式下测的，SPI 模式下按 INT 读不再撕裂）
 
 - **事件栈的任何一次读都会把这一帧取走**：只读 7 字节帧头之后再从头读整帧，读到的是 0。
 - 读得太早：读到的是 0；读到一半芯片才开始吐帧：撕裂（`5A A5` 出现在帧中间的随机位置），这一帧也就丢了。
@@ -108,40 +127,27 @@ iasl 反编译）：
 - `FullDuplexInterval`：标准 2 段 SPB 全双工（写 + 读，`DelayInUs=0`），等价于 Linux 的一次全双工传输。
 - 同一安装包里的 `HxDisableTPINT_reg.x64.exe` 只是把两颗芯片都切进 safe mode，与 INT 机制无关。
 
-## 5 当前驱动状态（方案 B：轮询代替 INT）
+## 5 当前驱动状态
 
-INT 不可用，所以驱动默认用取帧线程轮询（`poll_us`，绑定时生效；0 = 用中断）。模块参数：
+驱动默认在各路的帧中断里读帧（`poll_us=0`）。模块参数：
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
-| `poll_us` | 1000 | 轮询周期（µs），0 = 用帧中断 |
-| `poll_peek` | 2 | 就绪判断：0 不判断、1 事件栈帧头（会取走帧）、2 AHB 首字是 `5A A5`、3 AHB 首字有变化 |
-| `poll_after_us` | 0 | 某一路读到 `5A A5` 帧之后至少等多久再读 |
-| `slave_irq_trigger` / `master_irq_trigger` | 2 / 0 | 申请中断时覆盖 DT 的触发类型（只在中断模式下有意义） |
-| `slave_spi_mode` / `master_spi_mode` | 3 / 3 | SPI 模式 |
-| `read_extra`、`debug_irq` | 0 / N | 实验与调试（`debug_irq` 也打印轮询读的帧头和间隔） |
+| `ts_mode_gpio` | 174 | Master probe 时占住这根 TLMM 脚并输出低（SPI 模式），解绑时释放；-1 = 不管（DT 已配好时） |
+| `poll_us` | 0 | 0 = 用帧中断；非 0 = 取帧线程按这个周期（µs）轮询，留作对照，绑定时生效 |
+| `poll_peek` / `poll_after_us` | 2 / 0 | 只在轮询时有意义：就绪判断方式、读到一帧后至少等多久 |
+| `slave_irq_trigger` / `master_irq_trigger` | 2 / 0 | 申请中断时覆盖 DT 的触发类型：Slave 下降沿，Master 按 DT 的低电平；两者都实测可用 |
+| `slave_spi_mode` / `master_spi_mode` | 3 / 3 | SPI 模式（0 也可以） |
+| `cs_setup_us` | 300 | 每次传输前的片选建立等待（绑定时生效）。geni 片选由硬件控制，这段等待落在片选拉低之前 |
+| `read_extra`、`debug_irq` | 0 / N | 实验与调试 |
 
-实测（`HimaxThpProbe --with-slave`，Master 帧在校验通过的部分 100% 有效）：
-
-| 设置 | 结果 |
-|---|---|
-| `poll_peek=1` | 0 帧（帧头读把帧取走了） |
-| `poll_peek=0`，`poll_after_us=0` | 约 24 fps |
-| `poll_peek=2`（**当前默认，实际不起作用**） | 约 35 fps |
-| `poll_peek=0`，`poll_after_us=5500` | **约 47 fps（目前最好）** |
-| `poll_peek=0`，`poll_after_us=6000 / 6500` | 约 43 / 39 fps |
-| `poll_peek=3` | 约 4.5 fps |
-
-**默认值还没改成目前最好的组合**，试用时手动设：
-`echo 0 > /sys/module/himax_thp/parameters/poll_peek; echo 5500 > /sys/module/himax_thp/parameters/poll_after_us`。
+修复 gpio174 之前用轮询凑出来的最好成绩是约 47 fps（`poll_peek=0 poll_after_us=5500`），现在中断模式下是 120 fps。
 
 ## 6 未解决的问题与下一步
 
-1. **（中断前正在做）"先读帧头、再接着读剩下的"拼帧读法。** 依据：事件栈像跨片选连续的流（撕裂帧里帧头出现在中间、
-   模式 1 读出全 0）。若成立，就能用很轻的 7 字节读探测就绪且不丢帧，有望接近 104–120 fps。**尚未实现。**
-2. INT 在 Linux 上不按帧来的根因。可选方向：在 Windows 下实测两根 INT 的波形（逻辑分析仪，或记录 GetFrame 时间戳）；
-   或在不改 Init 行为的前提下，在 Init 每一步后插入观测点（INT 电平、`0x10000000`）做二分。找到后把轮询换回中断，用户态不用改。
-3. Slave 的帧校验：Chip 目前把 Slave 帧判为 bad（看到过 `5A A5 00 00 FF 00 FF 00 …`），手指路径不受影响，做笔时再查。
+1. ~~把 gpio174 写进 DT~~：已完成（2026-10-25），见 §7。驱动的 `ts_mode_gpio` 仍默认 174，给没改 DT 的机器兜底。
+2. 熄屏亮屏、面板复位之后的行为：复位会触发 FW reload，只要 gpio174 还是低就没问题，但要实测。
+3. Slave 的帧校验：SPI 模式下 Slave 帧已经通过校验（每轮开头 1–2 帧坏，原因待查）。
 4. 之后的工作：uhid 输出（UhidReporter / IInputSink）、egotouchd 守护进程、其余 Port（面板电源、输入、笔 USB、系统状态）、
    打包（DKMS / systemd / udev）、TsaRawReplay 逐位验证（需要 Windows 录制的 .dvrbin）、Windows CI 验证 Port 改动。
 
@@ -155,4 +161,8 @@ INT 不可用，所以驱动默认用取帧线程轮询（`poll_us`，绑定时�
 - 用 GNOME 的 PowerSaveMode 关屏再开屏会触发 DPU `ctl reset failure / vblank timeout`，之后芯片 Init 在 FW reload 超时——
   **不要用关屏来复位 TDDI**。
 - `/tmp`（含会话 scratchpad）是 tmpfs，重启即清空；需要保留的提取件放在 `~/repos/kernel/ref/`。
+- **默认启动项用的是改过的 dtb** `sc8280xp-huawei-gaokun3-tsmode.dtb`（两个 ESP 上都有）：只在启动用的原 dtb 的
+  `ts0_default` 里加了 `mode-n-pins`（gpio174 `output-low`），反编译对比只多这一个节点；dts 在 `~/repos/kernel/dt-ts-mode/`。
+  实测开机后 gpio174 为低、归 spi0.0，只有 himax-spi 时 INT175 就是 120 次/秒。原 dtb 留着；`…-dsc.conf` 仍指向原 dtb。
+  **kernel-install / 升级内核会重写启动项和 dtb**，届时要重新加上这个节点（或把它补进内核树的 dts）。
 - `sudo dmesg` 里 overlay 的 `memory leak will occur if overlay removed` 警告是内核对 overlay 撤销的固定提示，可忽略。

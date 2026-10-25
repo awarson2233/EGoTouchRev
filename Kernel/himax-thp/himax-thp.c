@@ -14,8 +14,9 @@
  * 由 thp-slave-dt.ko 的 overlay 补上）。两者都由本驱动绑定，Slave 挂到 Master 的实例上作为第二路，
  * 对用户态仍是一个 /dev/himax_thp。复位脚与面板联动只在 Master 上。
  *
- * 帧由取帧线程按 poll_us 轮询读（本机 INT 不按帧来，见 poll_us），或在各路自己的中断线程里读：打开了读帧
- * 的那一路发 [功能码, 0x30, 0x00] 后连读整帧，原样（含 3 字节总线头）放进该路的帧槽，用户态 read 取走。
+ * 帧在各路自己的中断线程里读（芯片要在 SPI 模式下才按帧拉 INT，见 ts_mode_gpio），或由取帧线程按 poll_us
+ * 轮询读（对照实验）：打开了读帧的那一路发 [功能码, 0x30, 0x00] 后连读整帧，原样（含 3 字节总线头）放进该路的
+ * 帧槽，用户态 read 取走。
  *
  * ABI 见 himax_thp.h。
  */
@@ -24,6 +25,7 @@
 #include <linux/fs.h>
 #include <linux/gpio/consumer.h>
 #include <linux/gpio/driver.h>
+#include <linux/gpio/machine.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/kref.h>
@@ -61,8 +63,14 @@
 #define HIMAX_THP_MASTER_FRAME_LEN	5063
 #define HIMAX_THP_SLAVE_FRAME_LEN	339
 
-/* 片选建立时间，沿用 linux-gaokun 驱动已在本机验证过的设置 */
-#define HIMAX_THP_CS_SETUP_US		300
+/*
+ * 片选建立时间，沿用 linux-gaokun 驱动的设置。geni SPI 没有 set_cs、片选由硬件随传输拉低，所以 spi 核心是在
+ * 片选拉低之前空等这么久，芯片看到的时序不受影响，只是每次传输前多等。Windows 上（ACPI 厂商数据全 0）没有这段。
+ * 绑定时生效。
+ */
+static unsigned int cs_setup_us = 300;
+module_param(cs_setup_us, uint, 0644);
+MODULE_PARM_DESC(cs_setup_us, "Chip-select setup delay in microseconds, applied when a chip binds (default: 300)");
 
 /*
  * 帧中断按 DT 的低电平触发。芯片在帧准备好时拉低 INT，主机读完帧才放开，放开要一点时间：中断线程读完立即
@@ -116,14 +124,12 @@ module_param(master_irq_trigger, uint, 0644);
 MODULE_PARM_DESC(master_irq_trigger, "IRQ trigger type for the master INT, applied when it binds (0 = from DT)");
 
 /*
- * 取帧节拍。本机 Linux 上两颗芯片初始化之后都不按帧拉 INT（Windows 上会；原因未明，INT 实测见
- * Kernel/himax-thp 的提交记录），所以默认不用中断，改由取帧线程每隔 poll_us 微秒探一次各路的帧头，
- * 帧到了就读整帧——效果等同 SpbThpTool 在 INT 边沿 / INT_OPEN 时读的那一帧。0 = 用帧中断。
- * 在绑定时生效。
+ * 取帧节拍，0 = 用帧中断（默认）。芯片锁在 I2C-HID 模式时（见 ts_mode_gpio）两颗芯片都不按帧拉 INT，那时只能由
+ * 取帧线程每隔 poll_us 微秒去读；现在留作对照实验。在绑定时生效。
  */
-static unsigned int poll_us = 1000;
+static unsigned int poll_us;
 module_param(poll_us, uint, 0444);
-MODULE_PARM_DESC(poll_us, "Frame poll period in microseconds, 0 = use the frame interrupt (default: 1000)");
+MODULE_PARM_DESC(poll_us, "Frame poll period in microseconds, 0 = use the frame interrupt (default: 0)");
 
 /*
  * 轮询时怎么判断芯片备好了一帧，备好了才读整帧（事件栈的任何一次读，哪怕只读帧头，都会把这一帧取走）：
@@ -153,6 +159,16 @@ MODULE_PARM_DESC(poll_peek, "How to tell a frame is ready when polling: 0 none, 
 static unsigned int poll_after_us;
 module_param(poll_after_us, uint, 0644);
 MODULE_PARM_DESC(poll_after_us, "After reading a frame on a channel, wait this long before reading it again (experiment, default: 0)");
+
+/*
+ * 芯片的主机接口选择脚（TLMM 上的编号）：芯片在 FW reload（复位之后自动触发）时采样它，低 = SPI（本驱动要的），
+ * 高 = I2C-HID（UEFI 用的）。UEFI 把它留在高电平、主线 DT 又没配它，芯片就锁在 I2C-HID 模式：SPI 寄存器读写照常，
+ * FW reload 也报完成，但两颗芯片都不按帧拉 INT，Slave 根本不扫描。Master probe 时把它占住并输出低，直到解绑，
+ * 用户态 Init 的复位就会锁存成 SPI。-1 = 不管（DT 已经配好时）。见 vahiru/gaokun-android 0002、aoripus/easy-for-gaokun。
+ */
+static int ts_mode_gpio = 174;
+module_param(ts_mode_gpio, int, 0444);
+MODULE_PARM_DESC(ts_mode_gpio, "TLMM line selecting the chip's host interface, driven low (SPI) while bound; -1 = leave alone (default: 174)");
 
 /* rawdata 缓冲区：事件栈 0x30 读出来的就是它；用户态 Init 往这里写 A5 5A，芯片备好一帧时写 5A A5 */
 #define HIMAX_THP_AHB_RAWDATA		0x10000000
@@ -184,6 +200,7 @@ struct himax_thp_chan {
 struct himax_thp {
 	struct spi_device *spi;		/* Master 的 SPI 设备，复位脚、面板联动、misc 都挂在它上面 */
 	struct gpio_desc *reset;
+	struct gpio_desc *ts_mode;	/* ts_mode_gpio 那根脚，占着、输出低；没占到时为 NULL */
 	struct miscdevice misc;
 	struct drm_panel_follower follower;
 	bool has_follower;
@@ -884,6 +901,40 @@ static void himax_thp_put_int_gpio(struct himax_thp_chan *ch)
 	ch->int_gpio = NULL;
 }
 
+/*
+ * 把主机接口选择脚拉低（SPI 模式），见 ts_mode_gpio。它和 INT 在同一个 TLMM 上，借 Master INT 的 gpio_device。
+ * 占不到只告警：脚也可能已经由 DT 配成低电平。
+ */
+static void himax_thp_select_spi_mode(struct himax_thp *ts, struct device *dev)
+{
+	struct gpio_device *gdev = ts->ch[HIMAX_THP_CH_MASTER].int_gdev;
+	int line = READ_ONCE(ts_mode_gpio);
+	struct gpio_desc *desc;
+
+	if (line < 0)
+		return;
+	if (!gdev) {
+		dev_warn(dev, "no TLMM handle, cannot drive ts mode gpio%d low\n", line);
+		return;
+	}
+	desc = gpiochip_request_own_desc(gpio_device_get_chip(gdev), line, "himax-thp ts-mode",
+					 GPIO_LOOKUP_FLAGS_DEFAULT, GPIOD_OUT_LOW);
+	if (IS_ERR(desc)) {
+		dev_warn(dev, "cannot claim ts mode gpio%d (%ld), chip may stay in I2C-HID mode\n",
+			 line, PTR_ERR(desc));
+		return;
+	}
+	ts->ts_mode = desc;
+}
+
+/* 释放后 TLMM 保持输出低，交还给 himax-spi 时芯片仍是 SPI 模式 */
+static void himax_thp_release_spi_mode(struct himax_thp *ts)
+{
+	if (ts->ts_mode)
+		gpiochip_free_own_desc(ts->ts_mode);
+	ts->ts_mode = NULL;
+}
+
 static void himax_thp_init_chan(struct himax_thp *ts, struct himax_thp_chan *ch,
 				u8 op_write, u8 op_read, u32 frame_len)
 {
@@ -898,7 +949,7 @@ static int himax_thp_setup_spi(struct spi_device *spi, u32 mode)
 {
 	spi->mode = mode & SPI_MODE_X_MASK;
 	spi->bits_per_word = 8;
-	spi->cs_setup.value = HIMAX_THP_CS_SETUP_US;
+	spi->cs_setup.value = cs_setup_us;
 	spi->cs_setup.unit = SPI_DELAY_UNIT_USECS;
 	return spi_setup(spi);
 }
@@ -1072,11 +1123,12 @@ static int himax_thp_master_probe(struct spi_device *spi)
 	}
 
 	himax_thp_find_int_gpio(mch, dev);
+	himax_thp_select_spi_mode(ts, dev);
 
 	ret = himax_thp_request_irq(mch, READ_ONCE(master_irq_trigger), "himax-thp");
 	if (ret) {
 		dev_err_probe(dev, ret, "request irq %d\n", mch->irq);
-		goto err_put;
+		goto err_mode;
 	}
 
 	/* 要在用户态能打开设备（misc_register）之前起好：ts->poller 不为 NULL 时帧中断永远不打开 */
@@ -1140,6 +1192,8 @@ err_poller:
 		kthread_stop(ts->poller);
 err_irq:
 	himax_thp_free_irq(mch);
+err_mode:
+	himax_thp_release_spi_mode(ts);
 err_put:
 	kref_put(&ts->ref, himax_thp_release_ts);
 	return ret;
@@ -1176,6 +1230,7 @@ static void himax_thp_master_remove(struct spi_device *spi)
 	if (ts->has_follower)
 		drm_panel_remove_follower(&ts->follower);
 	himax_thp_free_irq(mch);
+	himax_thp_release_spi_mode(ts);
 
 	kref_put(&ts->ref, himax_thp_release_ts);
 }
