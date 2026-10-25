@@ -123,6 +123,23 @@ FW reload 都正常，但两颗芯片都不按帧拉 INT，Slave 根本不扫描
 - AHB 读 rawdata 缓冲区首字 `0x10000000`：帧备好时是 `5A A5 …`，但**帧被取走后不会清掉**，后两个字节也不是每帧都变，
   不能当"新帧"标志。
 
+### 3.5 笔的蓝牙 MCU（`12d1:10b8`，USB）
+
+笔的连接状态、型号、按键事件和压力都不经过触摸芯片，而是从这颗 MCU 来（Windows 上是 PenEventBridge / PenPressureReader）。
+Linux 上它照常枚举，三个接口：
+
+| 接口 | 类 | 端点 | Linux 驱动 | 用途 |
+|---|---|---|---|---|
+| 0 | HID | 中断 OUT 0x06 / IN 0x83，64 B | usbhid（hid-generic） | Report `0x55` = 压力（Windows `mi_00&col01`）；另有 `0x10` 厂商收发、`0x04` 鼠标、`0x0F` consumer |
+| 1 | 厂商类 0xFF | bulk OUT 0x02 / IN 0x85，64 B | 无 | **事件 / 控制通道**（Windows 上的自定义 GUID 设备）：发 `07 …`，收 `02 00 07 00 01 EVT 11 LEN …` |
+| 2 | HID | 中断 OUT 0x04 / IN 0x81 | hid-multitouch | 键盘 / 触摸板等，与笔无关 |
+
+- 当前内核和 AUR linux-gaokun3 的配置都**没有 `CONFIG_HIDRAW`**（也没有 hiddev），用户态读不到 hidraw。
+  接口 1 没有驱动，可以直接用 usbfs 认领；接口 0 的压力报告要么用 usbfs 把它从 usbhid 摘下来，要么开 HIDRAW。
+- 实测（usbfs 认领接口 1）：发 `0x7101`（查笔状态）回 `02 00 07 00 01 71 11 01 00`（没有笔连接），
+  发 `0x7701` 回 `… 77 11 01 01`。协议见 `EGoTouchService/Device/penevt/BTMCU_PROTOCOL.md`。
+- 没有笔时接口 0 被动监听 120 s 一包都没有。
+
 ## 4 SpbThpTool.sys 反汇编要点
 
 安装包 `Gaokun_THP_Software_1.0.1.39.exe` → `SPIMCUDriver.exe` 里带 `SpbThpTool.sys` 和 **PDB**（有全部函数名）。
@@ -150,7 +167,7 @@ FW reload 都正常，但两颗芯片都不按帧拉 INT，Slave 根本不扫描
 
 1. 熄屏亮屏、面板复位之后的行为：复位会触发 FW reload，只要 gpio174 还是低就没问题，但要实测。
 2. Slave 的帧校验：SPI 模式下已经通过（偶尔每轮开头 1–2 帧坏，原因待查）。
-3. 之后的工作：笔的 uhid 上报、egotouchd 跟随亮灭屏（现在靠总线探测）、其余 Port（面板电源、输入、笔 USB、系统状态）、
+3. 之后的工作：笔（等有笔再做：MCU 通道的 Linux 传输、笔状态 → AFE 的 InitStylus / SetStylusId、压力进 StylusPipeline、Report 8 的 uhid 上报，见 §3.5）、egotouchd 跟随亮灭屏（现在靠总线探测）、其余 Port（面板电源、输入、笔 USB、系统状态）、
    打包（DKMS / systemd / udev）、TsaRawReplay 逐位验证（需要 Windows 录制的 .dvrbin）、Windows CI 验证 Port 改动。
 
 ## 7 环境注意事项
