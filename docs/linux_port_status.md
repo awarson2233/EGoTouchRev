@@ -1,6 +1,6 @@
 # Linux 移植进展（gaokun3 / Huawei MateBook E Go）
 
-> 截至 2026-10-25。机器：sc8280xp，内核 7.1.0-rc3-gaokun3+（linux-gaokun 的 recommended 补丁集）。
+> 截至 2026-10-26。机器：sc8280xp，内核 7.2.12-gaokun3+（此前在 7.1.0-rc3-gaokun3+ 上开发）。
 > 本文记录 Linux 适配做到了哪一步、在实机上量出来的事实、走过的弯路，以及还没解决的问题。
 
 ## 1 目标与架构
@@ -25,6 +25,8 @@
 - **HimaxCore** 静态库：`Device/himax/Himax*.cpp` 改为经 Port 访问总线，Linux 上可编译。
   `Chip::SetSlaveEnabled(false)` 可只用 Master。
 - CMake：非 WIN32 只构建 Common / Port / HimaxCore / TsaCore / 工具；Windows 专属目标仍只在 WIN32 下构建。
+  构建用 preset（Ninja + clang，按宿主系统只显示对应的 preset）：
+  `cmake --preset linux-release && cmake --build --preset linux-release`（产物在 `build/linux-release`，Debug 用 `linux-debug`）。
 - `TsaCore/src/App/Property.cpp`：越界 memset 改为逐字段清零（编译过，**未用录制数据回放验证逐位一致**）。
 - **`Tools/HimaxThpProbe`**：跑 `Chip::Init` 后连续取帧、按 Chip 的规则校验两路、打印 heatmap 峰值。
   选项：`--with-slave`、`--raw`（两路最小寄存器读写对照）、`--poll`（绕开驱动读帧，直接轮询事件栈并打印寄存器）、
@@ -51,7 +53,16 @@
 
 - **`himax-thp.ko`**：spi_driver，匹配 `himax,hx83121a-ts`（Master）和 `egotouch,hx83121a-thp-slave`（Slave）。
   每一路各有自己的 spi 设备、中断、INT 脚；Slave 作为第二个 spi 设备挂到 Master 实例上，用户态仍只看到一个节点。
-  复位脚、面板联动（drm_panel_follower）只在 Master 上。ABI 见 `himax_thp.h`。
+  复位脚、面板联动（drm_panel_follower）只在 Master 上。ABI 见 `himax_thp.h`：
+  - 驱动只提供总线原语：`BUS_READ` 发 `[读功能码, cmd, 0]` 收 len 字节，`BUS_WRITE` 发 `[写功能码, cmd, 数据]`。
+    功能码与总线头由驱动按所绑通道填，用户态给不出任意字节（取代原来的全双工 `XFER`）。芯片的 Init、AFE 命令、
+    读帧策略和 SOS 判定都在用户态，与 Windows 共用 `Device/himax/`。
+  - `read()` 给「帧头 + 帧数据」：帧头有 CLOCK_MONOTONIC 中断时刻（硬中断里记）、序号、长度、累计丢帧数；
+    帧数据不含 3 字节总线头，`TouchBusLinux` 在前面补回 3 字节，帧在缓冲里的布局仍与 Windows 一致。
+  - 每一路一个深度 2 的帧队列，满了丢掉新读到的帧、计入 dropped，序号照样递增。这与 SpbThpTool 一致
+    （§4：完成回调在 `REACH THP_LIST_MAX_FRAMES` 时直接返回，不入队）。丢帧可以用
+    `echo 'module himax_thp +p' > /sys/kernel/debug/dynamic_debug/control` 看。
+  - 面板状态字：bit0 = prepared（上电），bit1 = enabled（点亮），四个 follower 回调都会更新。
   没有模块参数：中断触发方式、SPI 模式都按 DT，gpio174 由启动 DT 配好（§3.3），驱动不碰。
 - **`thp-slave-dt.ko`**：运行时 DT overlay（`gaokun3-thp-slave.dtso`），insmod 时启用 spi20 和其下的 Slave，
   rmmod 时撤销，不改启动用的 dtb。
@@ -99,7 +110,10 @@ FW reload 都正常，但两颗芯片都不按帧拉 INT，Slave 根本不扫描
 `gaokun3-ts-spi-mode` 分支，`dts/sc8280xp-huawei-gaokun3.dts`；启动用的 dtb 见 §7。
 
 **修好之后**（开机默认环境、非 DSC、geni FIFO 模式）：只有 himax-spi、不碰屏幕时 INT175 每秒 120 次；himax-thp
-`HimaxThpProbe --with-slave` **120.0 fps**，1200 帧两路全部有效，两根 INT 都每帧一次，和 Windows 一致。
+`HimaxThpProbe --with-slave` **120.0 fps**，1200 帧两路全部有效。Master 的 INT 每帧一次（120 次/秒）；
+**Slave 的 INT 约 190–210 次/秒**（2026-10-26 在 7.2.12 上测，新旧驱动都一样）：读出来的帧都通过校验、内容各不相同，
+相邻两帧间隔 3.04 / 5.29 ms 交替（相加正好一个 8.33 ms 周期），即 Slave 每个周期出两帧左右。用户态每周期只取一帧，
+多出来的那帧在队列满时被丢掉（约 86 帧/秒）。Windows 上 Slave 是不是也这样，还没有量过。
 两路都按 DT 的低电平触发、SPI mode 0（DT 默认，与 ACPI 一致）、不设片选等待。
 
 以下是 I2C-HID 模式下（修复前）的记录：
@@ -166,6 +180,7 @@ Linux 上它照常枚举，三个接口：
 
 - 每一路在自己的帧中断线程里读整帧；用户态 `INT_ENABLE(1)` 打开某一路时立刻读一帧（同 SpbThpTool 的 `INT_OPEN`）。
 - 读完一帧等 INT 回到高电平再返回（最多 2 ms），电平触发不会重复读。
+- 帧进每一路深度 2 的队列（满了丢新帧，同 SpbThpTool），read 带帧头（时间戳、序号、丢帧数）。
 - 没有模块参数。排查期间加过的轮询取帧、AHB 就绪探测、拼帧读法、触发方式 / SPI 模式覆盖、`read_extra`、
   `cs_setup_us`、gpio174 兜底、GSI 选项都已删掉（都是 I2C-HID 模式下的权宜之计或已排除的方向，见 §3.3）。
 

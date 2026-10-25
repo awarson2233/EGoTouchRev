@@ -2,20 +2,20 @@
 /*
  * himax-thp — Himax HX83121A 的 SPI 传输驱动（Linux 版的 SPBTESTTOOL）。
  *
- * 只做硬件相关的事：复位脚、帧中断、屏幕电源联动和 SPI 收发，不解算。芯片协议、初始化与触点解算
+ * 只做硬件相关的事：总线原语、帧中断、复位脚、屏幕电源联动，不解算。芯片协议、初始化时序、读帧策略与触点解算
  * 都在用户态（EGoTouchService 的 HimaxCore + TsaCore），用户态经 /dev/himax_thp 访问：
  *
- *   ioctl XFER       一次全双工传输（Master F2/F3、Slave F4/F5）
- *   read / poll      帧中断里读好的最新一帧
- *   ioctl 其余       通道绑定、帧长、读帧开关、复位脚、面板电源状态
+ *   ioctl BUS_READ / BUS_WRITE   所绑通道上的一次总线读写（功能码与总线头由驱动填）
+ *   read / poll                  帧中断里读好、排在队列里的帧（带时间戳与序号）
+ *   ioctl 其余                   通道绑定、读帧开关、复位脚、面板电源状态
  *
  * Master 与 Slave 是两颗芯片，各在一路 SPI 上、各有一根 INT（本机 ACPI 的 \_SB.THPA / THPB）：Master 是
  * spi6 上的 himax,hx83121a-ts，Slave 是 spi20 上的 egotouch,hx83121a-thp-slave（主线 DT 没有，
  * 由 thp-slave-dt.ko 的 overlay 补上）。两者都由本驱动绑定，Slave 挂到 Master 的实例上作为第二路，
  * 对用户态仍是一个 /dev/himax_thp。复位脚与面板联动只在 Master 上。
  *
- * 帧在各路自己的中断线程里读：打开了读帧的那一路发 [功能码, 0x30, 0x00] 后连读整帧，原样（含 3 字节总线头）
- * 放进该路的帧槽，用户态 read 取走。中断触发方式与 SPI 模式都按 DT。
+ * 帧在各路自己的中断线程里读：打开了读帧的那一路发 [读功能码, 0x30, 0x00] 后连读整帧，去掉 3 字节总线头后
+ * 放进该路的帧队列，用户态 read 取走。中断触发方式与 SPI 模式都按 DT。
  *
  * 芯片要在 SPI 模式下才按帧拉 INT：它在复位后的 FW reload 时采样 gpio174，低 = SPI、高 = I2C-HID。这根脚由
  * DT 配成低电平（Master 节点 ts0_default 里的 mode-n-pins），本驱动不管它。
@@ -30,6 +30,7 @@
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/kref.h>
+#include <linux/ktime.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -37,6 +38,7 @@
 #include <linux/poll.h>
 #include <linux/slab.h>
 #include <linux/spi/spi.h>
+#include <linux/string.h>
 #include <linux/uaccess.h>
 #include <linux/wait.h>
 
@@ -52,41 +54,55 @@
 #define HIMAX_THP_OP_WRITE_SLAVE	0xf4
 #define HIMAX_THP_OP_READ_SLAVE		0xf5
 
+/* 总线头：读是 [功能码, cmd, dummy]，写是 [功能码, cmd] */
+#define HIMAX_THP_READ_HDR		3
+#define HIMAX_THP_WRITE_HDR		2
+
 /*
  * 读帧的总线命令：事件栈寄存器。Windows 帧的 7 字节头 = 3 字节总线头 + 4 字节数据头，与 linux-gaokun
- * 驱动读事件栈时 heatmap 落在数据第 4 字节一致，据此推断 SPBTESTTOOL 的 GET_FRAME 也是读它
- * （待实机用用户态的帧校验确认）。
+ * 驱动读事件栈时 heatmap 落在数据第 4 字节一致。
  */
 #define HIMAX_THP_CMD_EVENT_STACK	0x30
 
-/* 默认帧长，与 Common/include/FrameLayout.h 的 kMasterFrameSize / kSlaveFrameSize 一致 */
-#define HIMAX_THP_MASTER_FRAME_LEN	5063
-#define HIMAX_THP_SLAVE_FRAME_LEN	339
+/* 每帧的数据长度（不含总线头），与 Common/include/FrameLayout.h 的 kMasterFrameSize / kSlaveFrameSize 减 3 一致 */
+#define HIMAX_THP_MASTER_FRAME_LEN	5060
+#define HIMAX_THP_SLAVE_FRAME_LEN	336
 
 /*
  * 芯片在帧准备好时拉低 INT，主机读完帧才放开，放开要一点时间。Master 的帧中断按 DT 是低电平触发：中断线程读完
  * 立即返回的话 INT 还低着，马上又触发一次，读到的要么是空的事件栈（全零），要么是芯片正在写的下一帧（错位）。
- * 所以读完帧后等 INT 回到高电平再返回，最多等这么久（帧间隔约 8 ms）。Slave 按 overlay 是下降沿触发，等一下也无妨。
+ * 所以读完帧后等 INT 回到高电平再返回，最多等这么久（帧间隔约 8 ms）。Slave 按 overlay 也是低电平触发。
  */
 #define HIMAX_THP_INT_RELEASE_US	2000
 #define HIMAX_THP_INT_POLL_US		50
 
 struct himax_thp;
 
+struct himax_thp_frame {
+	struct himax_thp_frame_hdr hdr;
+	u8 *data;			/* frame_len 字节，指向所属通道的 qbuf */
+};
+
 struct himax_thp_chan {
 	struct himax_thp *ts;
 	struct spi_device *spi;		/* 这一路的 SPI 设备；Slave 还没接上时为 NULL。改它要持两把锁 */
 	int irq;			/* 这一路的帧中断，spi 为 NULL 时无效 */
 	bool irq_enabled;
+	u64 irq_ns;			/* 硬中断里记下的中断时刻，中断线程读 */
 	struct gpio_desc *int_gpio;	/* 帧中断那根脚，只读电平；找不到时为 NULL */
 	struct gpio_device *int_gdev;	/* int_gpio 所在的 GPIO 控制器，持着引用 */
 	u8 op_write;
 	u8 op_read;
-	u32 frame_len;			/* 中断里每帧读多少字节 */
+	u32 frame_len;			/* 每帧的数据长度，不含总线头 */
 	bool int_enabled;		/* 用户态打开了这一路的读帧 */
-	u8 *frame;			/* 最新一帧 */
-	u32 frame_bytes;		/* frame 里有效的字节数 */
-	u64 seq;			/* 每读到一帧 +1 */
+
+	/* 帧队列：从 head 起的 count 帧，满了丢掉新读到的帧（同 SpbThpTool）。持 state_lock 访问 */
+	u8 *qbuf;
+	struct himax_thp_frame queue[HIMAX_THP_FRAME_QUEUE];
+	unsigned int head;
+	unsigned int count;
+	u32 seq;			/* 下一帧的序号 */
+	u32 dropped;			/* 累计丢掉的帧数 */
 };
 
 struct himax_thp {
@@ -102,21 +118,20 @@ struct himax_thp {
 	u8 *tx;
 	u8 *rx;
 
-	/* 状态：帧槽、序号、开关、面板电源 */
+	/* 状态：帧队列、开关、面板电源 */
 	struct mutex state_lock;
 	wait_queue_head_t wait;
 	struct himax_thp_chan ch[HIMAX_THP_NUM_CH];
-	bool panel_on;
-	u64 panel_seq;			/* 面板电源每变化一次 +1 */
+	u32 panel_state;		/* HIMAX_THP_PANEL_* */
+	u64 panel_seq;			/* 面板状态每变化一次 +1 */
 	bool gone;			/* 设备已解绑，所有文件操作返回 -ENODEV */
 };
 
 struct himax_thp_file {
 	struct himax_thp *ts;
 	u32 channel;
-	u64 seen_seq;			/* 本文件最后取走的帧序号 */
 	u64 seen_panel_seq;		/* 本文件最后读过的面板状态序号 */
-	u8 *bounce;			/* read 时帧槽到用户态的中转 */
+	u8 *bounce;			/* read 时帧队列到用户态的中转：帧头 + 帧数据 */
 };
 
 /*
@@ -133,7 +148,7 @@ static void himax_thp_release_ts(struct kref *ref)
 	int i;
 
 	for (i = 0; i < HIMAX_THP_NUM_CH; i++) {
-		kfree(ts->ch[i].frame);
+		kfree(ts->ch[i].qbuf);
 		if (ts->ch[i].int_gdev)
 			gpio_device_put(ts->ch[i].int_gdev);
 	}
@@ -143,6 +158,11 @@ static void himax_thp_release_ts(struct kref *ref)
 	kfree(ts);
 }
 
+static bool himax_thp_panel_on(struct himax_thp *ts)
+{
+	return ts->panel_state & HIMAX_THP_PANEL_ON;
+}
+
 /* 每一路的帧中断开关跟着「面板上电、这一路接上了且在读帧」走。持 state_lock 调用 */
 static void himax_thp_update_irq_locked(struct himax_thp *ts)
 {
@@ -150,7 +170,7 @@ static void himax_thp_update_irq_locked(struct himax_thp *ts)
 
 	for (i = 0; i < HIMAX_THP_NUM_CH; i++) {
 		struct himax_thp_chan *ch = &ts->ch[i];
-		bool want = ts->panel_on && !ts->gone && ch->spi && ch->int_enabled;
+		bool want = himax_thp_panel_on(ts) && !ts->gone && ch->spi && ch->int_enabled;
 
 		if (want == ch->irq_enabled)
 			continue;
@@ -163,47 +183,100 @@ static void himax_thp_update_irq_locked(struct himax_thp *ts)
 	}
 }
 
-/* 在某一路上做一次全双工传输。持 bus_lock 调用，ch->spi 不为 NULL */
-static int himax_thp_spi_xfer(struct himax_thp_chan *ch, const u8 *tx, u8 *rx, u32 len)
+/* -------------------------------------------------------------------------- */
+/* 总线原语 */
+
+/* 总线读：发 [读功能码, cmd, 0x00]，数据落在 ts->rx + HIMAX_THP_READ_HDR 起的 len 字节。持 bus_lock 调用 */
+static int himax_spi_read(struct himax_thp_chan *ch, u8 cmd, u32 len)
 {
+	struct himax_thp *ts = ch->ts;
 	struct spi_transfer xfer = {
-		.tx_buf = tx,
-		.rx_buf = rx,
-		.len = len,
+		.tx_buf = ts->tx,
+		.rx_buf = ts->rx,
+		.len = HIMAX_THP_READ_HDR + len,
 	};
 
+	memset(ts->tx, 0, xfer.len);
+	ts->tx[0] = ch->op_read;
+	ts->tx[1] = cmd;
 	return spi_sync_transfer(ch->spi, &xfer, 1);
+}
+
+/* 总线写：发 [写功能码, cmd, 数据]，数据要先放在 ts->tx + HIMAX_THP_WRITE_HDR 起的 len 字节。持 bus_lock 调用 */
+static int himax_spi_write(struct himax_thp_chan *ch, u8 cmd, u32 len)
+{
+	struct himax_thp *ts = ch->ts;
+	struct spi_transfer xfer = {
+		.tx_buf = ts->tx,
+		.len = HIMAX_THP_WRITE_HDR + len,
+	};
+
+	ts->tx[0] = ch->op_write;
+	ts->tx[1] = cmd;
+	return spi_sync_transfer(ch->spi, &xfer, 1);
+}
+
+/* -------------------------------------------------------------------------- */
+/* 帧队列 */
+
+/*
+ * 持 state_lock 调用。队列满时丢掉这一帧、留着排在前面的，与 SpbThpTool 的读完成回调一致（它在
+ * REACH THP_LIST_MAX_FRAMES 时直接返回，不入队）：用户态的读帧策略是照着这个行为写的。
+ */
+static void himax_thp_enqueue_locked(struct himax_thp_chan *ch, const u8 *data, u64 ns)
+{
+	struct himax_thp_frame *f;
+
+	if (ch->count == HIMAX_THP_FRAME_QUEUE) {
+		/* 丢掉的帧也占一个序号，用户态从序号的跳变就能看出丢帧 */
+		ch->seq++;
+		ch->dropped++;
+		dev_dbg_ratelimited(&ch->spi->dev, "frame queue full, dropped frame (%u so far)\n",
+				    ch->dropped);
+		return;
+	}
+	f = &ch->queue[(ch->head + ch->count) % HIMAX_THP_FRAME_QUEUE];
+	memcpy(f->data, data, ch->frame_len);
+	f->hdr = (struct himax_thp_frame_hdr) {
+		.timestamp_ns = ns,
+		.seq = ch->seq++,
+		.len = ch->frame_len,
+		.dropped = ch->dropped,
+	};
+	ch->count++;
+}
+
+/* 持 state_lock 调用 */
+static void himax_thp_flush_locked(struct himax_thp_chan *ch)
+{
+	ch->head = 0;
+	ch->count = 0;
 }
 
 /* -------------------------------------------------------------------------- */
 /* 帧中断 */
 
-static void himax_thp_read_frame(struct himax_thp_chan *ch)
+static void himax_thp_read_frame(struct himax_thp_chan *ch, u64 ns)
 {
 	struct himax_thp *ts = ch->ts;
-	u32 len;
+	bool want;
 	int ret;
 
 	/* 先拿 bus_lock：Slave 断开时两把锁都持着改 ch->spi，持着 bus_lock 时它不会变 */
 	mutex_lock(&ts->bus_lock);
 	mutex_lock(&ts->state_lock);
-	len = ch->spi && ch->int_enabled && ts->panel_on && !ts->gone ? ch->frame_len : 0;
+	want = ch->spi && ch->int_enabled && himax_thp_panel_on(ts) && !ts->gone;
 	mutex_unlock(&ts->state_lock);
-	if (!len)
+	if (!want)
 		goto out;
 
-	memset(ts->tx, 0, len);
-	ts->tx[0] = ch->op_read;
-	ts->tx[1] = HIMAX_THP_CMD_EVENT_STACK;
-	ret = himax_thp_spi_xfer(ch, ts->tx, ts->rx, len);
+	ret = himax_spi_read(ch, HIMAX_THP_CMD_EVENT_STACK, ch->frame_len);
 	if (ret) {
 		dev_err_ratelimited(&ch->spi->dev, "frame read (op %#x) failed: %d\n",
 				    ch->op_read, ret);
 	} else {
 		mutex_lock(&ts->state_lock);
-		memcpy(ch->frame, ts->rx, len);
-		ch->frame_bytes = len;
-		ch->seq++;
+		himax_thp_enqueue_locked(ch, ts->rx + HIMAX_THP_READ_HDR, ns);
 		mutex_unlock(&ts->state_lock);
 	}
 out:
@@ -224,12 +297,21 @@ static void himax_thp_wait_int_release(struct himax_thp_chan *ch)
 	}
 }
 
+/* 硬中断只记下时刻：线程被调度晚了也不影响帧的时间戳 */
+static irqreturn_t himax_thp_irq(int irq, void *data)
+{
+	struct himax_thp_chan *ch = data;
+
+	WRITE_ONCE(ch->irq_ns, ktime_get_ns());
+	return IRQ_WAKE_THREAD;
+}
+
 /* 每一路一个中断线程，只读自己那一路 */
 static irqreturn_t himax_thp_irq_thread(int irq, void *data)
 {
 	struct himax_thp_chan *ch = data;
 
-	himax_thp_read_frame(ch);
+	himax_thp_read_frame(ch, READ_ONCE(ch->irq_ns));
 	himax_thp_wait_int_release(ch);
 	wake_up_interruptible(&ch->ts->wait);
 
@@ -239,22 +321,26 @@ static irqreturn_t himax_thp_irq_thread(int irq, void *data)
 /* -------------------------------------------------------------------------- */
 /* 屏幕电源联动：触摸与显示是同一颗芯片（TDDI），面板没上电时芯片的触摸部分也不工作 */
 
-static void himax_thp_set_panel(struct himax_thp *ts, bool on)
+static void himax_thp_set_panel(struct himax_thp *ts, u32 set, u32 clear)
 {
+	bool off;
 	int i;
 
 	mutex_lock(&ts->state_lock);
-	ts->panel_on = on;
+	ts->panel_state = (ts->panel_state & ~clear) | set;
 	ts->panel_seq++;
-	if (!on) {
+	off = !himax_thp_panel_on(ts);
+	if (off) {
 		/* 断电后芯片状态全丢，上电后由用户态重新初始化、再打开读帧 */
-		for (i = 0; i < HIMAX_THP_NUM_CH; i++)
+		for (i = 0; i < HIMAX_THP_NUM_CH; i++) {
 			ts->ch[i].int_enabled = false;
+			himax_thp_flush_locked(&ts->ch[i]);
+		}
 	}
 	himax_thp_update_irq_locked(ts);
 	mutex_unlock(&ts->state_lock);
 
-	if (!on) {
+	if (off) {
 		/* Slave 的中断号在它断开前一直有效（断开要拿 pair_lock，follower 回调不拿，但 free_irq 自己会等） */
 		for (i = 0; i < HIMAX_THP_NUM_CH; i++)
 			if (READ_ONCE(ts->ch[i].irq) > 0)
@@ -267,7 +353,23 @@ static int himax_thp_panel_prepared(struct drm_panel_follower *follower)
 {
 	struct himax_thp *ts = container_of(follower, struct himax_thp, follower);
 
-	himax_thp_set_panel(ts, true);
+	himax_thp_set_panel(ts, HIMAX_THP_PANEL_ON, 0);
+	return 0;
+}
+
+static int himax_thp_panel_enabled(struct drm_panel_follower *follower)
+{
+	struct himax_thp *ts = container_of(follower, struct himax_thp, follower);
+
+	himax_thp_set_panel(ts, HIMAX_THP_PANEL_ENABLED, 0);
+	return 0;
+}
+
+static int himax_thp_panel_disabling(struct drm_panel_follower *follower)
+{
+	struct himax_thp *ts = container_of(follower, struct himax_thp, follower);
+
+	himax_thp_set_panel(ts, 0, HIMAX_THP_PANEL_ENABLED);
 	return 0;
 }
 
@@ -275,12 +377,14 @@ static int himax_thp_panel_unpreparing(struct drm_panel_follower *follower)
 {
 	struct himax_thp *ts = container_of(follower, struct himax_thp, follower);
 
-	himax_thp_set_panel(ts, false);
+	himax_thp_set_panel(ts, 0, HIMAX_THP_PANEL_ON | HIMAX_THP_PANEL_ENABLED);
 	return 0;
 }
 
 static const struct drm_panel_follower_funcs himax_thp_follower_funcs = {
 	.panel_prepared = himax_thp_panel_prepared,
+	.panel_enabled = himax_thp_panel_enabled,
+	.panel_disabling = himax_thp_panel_disabling,
 	.panel_unpreparing = himax_thp_panel_unpreparing,
 };
 
@@ -295,7 +399,7 @@ static int himax_thp_open(struct inode *inode, struct file *file)
 	f = kzalloc(sizeof(*f), GFP_KERNEL);
 	if (!f)
 		return -ENOMEM;
-	f->bounce = kmalloc(HIMAX_THP_MAX_XFER, GFP_KERNEL);
+	f->bounce = kmalloc(sizeof(struct himax_thp_frame_hdr) + HIMAX_THP_BUS_MAX, GFP_KERNEL);
 	if (!f->bounce) {
 		kfree(f);
 		return -ENOMEM;
@@ -312,7 +416,6 @@ static int himax_thp_open(struct inode *inode, struct file *file)
 	kref_get(&ts->ref);
 	f->ts = ts;
 	f->channel = HIMAX_THP_CH_MASTER;
-	f->seen_seq = ts->ch[HIMAX_THP_CH_MASTER].seq;
 	f->seen_panel_seq = ts->panel_seq;
 	mutex_unlock(&ts->state_lock);
 
@@ -334,8 +437,7 @@ static bool himax_thp_frame_ready(struct himax_thp_file *f)
 {
 	struct himax_thp *ts = f->ts;
 
-	return READ_ONCE(ts->gone) ||
-	       READ_ONCE(ts->ch[f->channel].seq) != f->seen_seq;
+	return READ_ONCE(ts->gone) || READ_ONCE(ts->ch[f->channel].count);
 }
 
 static ssize_t himax_thp_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
@@ -343,6 +445,7 @@ static ssize_t himax_thp_read(struct file *file, char __user *buf, size_t count,
 	struct himax_thp_file *f = file->private_data;
 	struct himax_thp *ts = f->ts;
 	struct himax_thp_chan *ch;
+	struct himax_thp_frame *fr;
 	size_t n;
 	int ret;
 
@@ -353,8 +456,12 @@ static ssize_t himax_thp_read(struct file *file, char __user *buf, size_t count,
 			return -ENODEV;
 		}
 		ch = &ts->ch[f->channel];
-		if (ch->seq != f->seen_seq)
-			break;		/* 持着 state_lock 往下拷 */
+		if (count < sizeof(fr->hdr) + ch->frame_len) {
+			mutex_unlock(&ts->state_lock);
+			return -EINVAL;
+		}
+		if (ch->count)
+			break;		/* 持着 state_lock 往下取 */
 		mutex_unlock(&ts->state_lock);
 
 		if (file->f_flags & O_NONBLOCK)
@@ -364,9 +471,12 @@ static ssize_t himax_thp_read(struct file *file, char __user *buf, size_t count,
 			return ret;
 	}
 
-	n = min_t(size_t, count, ch->frame_bytes);
-	memcpy(f->bounce, ch->frame, n);
-	f->seen_seq = ch->seq;
+	fr = &ch->queue[ch->head];
+	n = sizeof(fr->hdr) + fr->hdr.len;
+	memcpy(f->bounce, &fr->hdr, sizeof(fr->hdr));
+	memcpy(f->bounce + sizeof(fr->hdr), fr->data, fr->hdr.len);
+	ch->head = (ch->head + 1) % HIMAX_THP_FRAME_QUEUE;
+	ch->count--;
 	mutex_unlock(&ts->state_lock);
 
 	if (copy_to_user(buf, f->bounce, n))
@@ -385,7 +495,7 @@ static __poll_t himax_thp_poll(struct file *file, poll_table *wait)
 	mutex_lock(&ts->state_lock);
 	if (ts->gone)
 		mask |= EPOLLHUP | EPOLLERR;
-	if (ts->ch[f->channel].seq != f->seen_seq)
+	if (ts->ch[f->channel].count)
 		mask |= EPOLLIN | EPOLLRDNORM;
 	if (ts->panel_seq != f->seen_panel_seq)
 		mask |= EPOLLPRI;
@@ -394,19 +504,20 @@ static __poll_t himax_thp_poll(struct file *file, poll_table *wait)
 	return mask;
 }
 
-static long himax_thp_ioctl_xfer(struct himax_thp_file *f, void __user *argp)
+static long himax_thp_ioctl_bus(struct himax_thp_file *f, bool read, void __user *argp)
 {
 	struct himax_thp *ts = f->ts;
 	struct himax_thp_chan *ch = &ts->ch[f->channel];
-	struct himax_thp_xfer x;
-	void __user *rx_user;
+	struct himax_thp_bus b;
+	void __user *ubuf;
 	long ret;
 
-	if (copy_from_user(&x, argp, sizeof(x)))
+	if (copy_from_user(&b, argp, sizeof(b)))
 		return -EFAULT;
-	if (!x.len || x.len > HIMAX_THP_MAX_XFER || x.reserved)
+	if (b.len > HIMAX_THP_BUS_MAX || (read && !b.len) ||
+	    memchr_inv(b.reserved, 0, sizeof(b.reserved)))
 		return -EINVAL;
-	rx_user = u64_to_user_ptr(x.rx_buf);
+	ubuf = u64_to_user_ptr(b.buf);
 
 	mutex_lock(&ts->bus_lock);
 	/* Slave 没接上（overlay 没打、或还没 probe）时这一路没有总线 */
@@ -414,19 +525,16 @@ static long himax_thp_ioctl_xfer(struct himax_thp_file *f, void __user *argp)
 		ret = -ENODEV;
 		goto out;
 	}
-	if (copy_from_user(ts->tx, u64_to_user_ptr(x.tx_buf), x.len)) {
-		ret = -EFAULT;
-		goto out;
+	if (read) {
+		ret = himax_spi_read(ch, b.cmd, b.len);
+		if (!ret && copy_to_user(ubuf, ts->rx + HIMAX_THP_READ_HDR, b.len))
+			ret = -EFAULT;
+	} else {
+		if (copy_from_user(ts->tx + HIMAX_THP_WRITE_HDR, ubuf, b.len))
+			ret = -EFAULT;
+		else
+			ret = himax_spi_write(ch, b.cmd, b.len);
 	}
-	/* 只能用所绑通道的功能码，防止一个文件的读写串到另一路 */
-	if (ts->tx[0] != ch->op_write && ts->tx[0] != ch->op_read) {
-		ret = -EINVAL;
-		goto out;
-	}
-
-	ret = himax_thp_spi_xfer(ch, ts->tx, x.rx_buf ? ts->rx : NULL, x.len);
-	if (!ret && x.rx_buf && copy_to_user(rx_user, ts->rx, x.len))
-		ret = -EFAULT;
 out:
 	mutex_unlock(&ts->bus_lock);
 	return ret;
@@ -440,12 +548,12 @@ static long himax_thp_ioctl(struct file *file, unsigned int cmd, unsigned long a
 	u32 val;
 	long ret = 0;
 
-	if (cmd == HIMAX_THP_IOC_XFER)
-		return himax_thp_ioctl_xfer(f, argp);
+	if (cmd == HIMAX_THP_IOC_BUS_READ || cmd == HIMAX_THP_IOC_BUS_WRITE)
+		return himax_thp_ioctl_bus(f, cmd == HIMAX_THP_IOC_BUS_READ, argp);
 
 	if (cmd == HIMAX_THP_IOC_PANEL_STATE) {
 		mutex_lock(&ts->state_lock);
-		val = ts->panel_on ? HIMAX_THP_PANEL_ON : 0;
+		val = ts->panel_state;
 		f->seen_panel_seq = ts->panel_seq;
 		mutex_unlock(&ts->state_lock);
 		return put_user(val, (u32 __user *)argp);
@@ -460,22 +568,7 @@ static long himax_thp_ioctl(struct file *file, unsigned int cmd, unsigned long a
 	case HIMAX_THP_IOC_SET_CHANNEL:
 		if (val >= HIMAX_THP_NUM_CH)
 			return -EINVAL;
-		mutex_lock(&ts->state_lock);
 		f->channel = val;
-		f->seen_seq = ts->ch[val].seq;
-		mutex_unlock(&ts->state_lock);
-		break;
-
-	case HIMAX_THP_IOC_SET_FRAME_LEN:
-		/* 至少要盖住 3 字节总线头 */
-		if (val < 4 || val > HIMAX_THP_MAX_XFER)
-			return -EINVAL;
-		/* 拿 bus_lock：中断线程按 frame_len 往收发缓冲里读，不能读到一半改长度 */
-		mutex_lock(&ts->bus_lock);
-		mutex_lock(&ts->state_lock);
-		ts->ch[f->channel].frame_len = val;
-		mutex_unlock(&ts->state_lock);
-		mutex_unlock(&ts->bus_lock);
 		break;
 
 	case HIMAX_THP_IOC_INT_ENABLE:
@@ -484,6 +577,8 @@ static long himax_thp_ioctl(struct file *file, unsigned int cmd, unsigned long a
 			ret = -ENODEV;
 		} else {
 			ts->ch[f->channel].int_enabled = !!val;
+			if (!val)
+				himax_thp_flush_locked(&ts->ch[f->channel]);
 			himax_thp_update_irq_locked(ts);
 		}
 		mutex_unlock(&ts->state_lock);
@@ -493,7 +588,7 @@ static long himax_thp_ioctl(struct file *file, unsigned int cmd, unsigned long a
 		 * 靠的也是这一次读。
 		 */
 		if (!ret && val) {
-			himax_thp_read_frame(&ts->ch[f->channel]);
+			himax_thp_read_frame(&ts->ch[f->channel], ktime_get_ns());
 			wake_up_interruptible(&ts->wait);
 		}
 		break;
@@ -567,19 +662,27 @@ static void himax_thp_put_int_gpio(struct himax_thp_chan *ch)
 	ch->int_gpio = NULL;
 }
 
-static void himax_thp_init_chan(struct himax_thp *ts, struct himax_thp_chan *ch,
-				u8 op_write, u8 op_read, u32 frame_len)
+static int himax_thp_init_chan(struct himax_thp *ts, struct himax_thp_chan *ch,
+			       u8 op_write, u8 op_read, u32 frame_len)
 {
+	int i;
+
 	ch->ts = ts;
 	ch->op_write = op_write;
 	ch->op_read = op_read;
 	ch->frame_len = frame_len;
+	ch->qbuf = kmalloc_array(HIMAX_THP_FRAME_QUEUE, frame_len, GFP_KERNEL);
+	if (!ch->qbuf)
+		return -ENOMEM;
+	for (i = 0; i < HIMAX_THP_FRAME_QUEUE; i++)
+		ch->queue[i].data = ch->qbuf + i * frame_len;
+	return 0;
 }
 
 /* 申请某一路的帧中断，触发方式按 DT；先不打开，跟着读帧开关走（himax_thp_update_irq_locked） */
 static int himax_thp_request_irq(struct himax_thp_chan *ch, const char *name)
 {
-	return request_threaded_irq(ch->irq, NULL, himax_thp_irq_thread,
+	return request_threaded_irq(ch->irq, himax_thp_irq, himax_thp_irq_thread,
 				    IRQF_ONESHOT | IRQF_NO_AUTOEN, name, ch);
 }
 
@@ -622,11 +725,12 @@ static void himax_thp_detach_slave(struct himax_thp *ts)
 	struct himax_thp_chan *ch = &ts->ch[HIMAX_THP_CH_SLAVE];
 	struct spi_device *spi;
 
-	/* 两把锁都拿：没有进行中的传输，之后这一路的 XFER 与读帧都看到 spi == NULL */
+	/* 两把锁都拿：没有进行中的传输，之后这一路的总线读写与读帧都看到 spi == NULL */
 	mutex_lock(&ts->bus_lock);
 	mutex_lock(&ts->state_lock);
 	spi = ch->spi;
 	ch->spi = NULL;
+	himax_thp_flush_locked(ch);
 	himax_thp_update_irq_locked(ts);
 	mutex_unlock(&ts->state_lock);
 	mutex_unlock(&ts->bus_lock);
@@ -676,7 +780,7 @@ static int himax_thp_master_probe(struct spi_device *spi)
 	struct device *dev = &spi->dev;
 	struct himax_thp_chan *mch;
 	struct himax_thp *ts;
-	int i, ret;
+	int ret;
 
 	if (spi->irq <= 0)
 		return dev_err_probe(dev, -EINVAL, "no frame interrupt\n");
@@ -691,18 +795,19 @@ static int himax_thp_master_probe(struct spi_device *spi)
 	ts->spi = spi_dev_get(spi);
 
 	/* kmalloc 的内存可以直接做 DMA，栈上的不行 */
-	ts->tx = kmalloc(HIMAX_THP_MAX_XFER, GFP_KERNEL);
-	ts->rx = kmalloc(HIMAX_THP_MAX_XFER, GFP_KERNEL);
-	for (i = 0; i < HIMAX_THP_NUM_CH; i++)
-		ts->ch[i].frame = kmalloc(HIMAX_THP_MAX_XFER, GFP_KERNEL);
-	if (!ts->tx || !ts->rx || !ts->ch[0].frame || !ts->ch[1].frame) {
+	ts->tx = kmalloc(HIMAX_THP_READ_HDR + HIMAX_THP_BUS_MAX, GFP_KERNEL);
+	ts->rx = kmalloc(HIMAX_THP_READ_HDR + HIMAX_THP_BUS_MAX, GFP_KERNEL);
+	if (!ts->tx || !ts->rx) {
 		ret = -ENOMEM;
 		goto err_put;
 	}
-	himax_thp_init_chan(ts, &ts->ch[HIMAX_THP_CH_MASTER], HIMAX_THP_OP_WRITE_MASTER,
-			    HIMAX_THP_OP_READ_MASTER, HIMAX_THP_MASTER_FRAME_LEN);
-	himax_thp_init_chan(ts, &ts->ch[HIMAX_THP_CH_SLAVE], HIMAX_THP_OP_WRITE_SLAVE,
-			    HIMAX_THP_OP_READ_SLAVE, HIMAX_THP_SLAVE_FRAME_LEN);
+	ret = himax_thp_init_chan(ts, &ts->ch[HIMAX_THP_CH_MASTER], HIMAX_THP_OP_WRITE_MASTER,
+				  HIMAX_THP_OP_READ_MASTER, HIMAX_THP_MASTER_FRAME_LEN);
+	if (!ret)
+		ret = himax_thp_init_chan(ts, &ts->ch[HIMAX_THP_CH_SLAVE], HIMAX_THP_OP_WRITE_SLAVE,
+					  HIMAX_THP_OP_READ_SLAVE, HIMAX_THP_SLAVE_FRAME_LEN);
+	if (ret)
+		goto err_put;
 	mch = &ts->ch[HIMAX_THP_CH_MASTER];
 	/* Master 这一路的 spi 借用 ts->spi 的引用，不另外 get */
 	mch->spi = spi;
@@ -724,7 +829,7 @@ static int himax_thp_master_probe(struct spi_device *spi)
 	}
 
 	if (drm_is_panel_follower(dev)) {
-		/* 面板已经上电的话，这里会直接回调 panel_prepared */
+		/* 面板已经上电的话，这里会直接回调 panel_prepared（点亮了的话还有 panel_enabled） */
 		ts->follower.funcs = &himax_thp_follower_funcs;
 		ret = drm_panel_add_follower(dev, &ts->follower);
 		if (ret) {
@@ -734,7 +839,7 @@ static int himax_thp_master_probe(struct spi_device *spi)
 		ts->has_follower = true;
 	} else {
 		dev_warn(dev, "no panel phandle, assuming panel always powered\n");
-		ts->panel_on = true;
+		ts->panel_state = HIMAX_THP_PANEL_ON | HIMAX_THP_PANEL_ENABLED;
 	}
 
 	ts->misc.minor = MISC_DYNAMIC_MINOR;
@@ -748,9 +853,9 @@ static int himax_thp_master_probe(struct spi_device *spi)
 	}
 
 	spi_set_drvdata(spi, ts);
-	dev_info(dev, "ready: /dev/%s, irq %d trigger %#x (INT level %s), panel %s\n",
+	dev_info(dev, "ready: /dev/%s, irq %d trigger %#x (INT level %s), panel %#x\n",
 		 HIMAX_THP_DEVICE_NAME, mch->irq, irq_get_trigger_type(mch->irq),
-		 mch->int_gpio ? "readable" : "unknown", ts->panel_on ? "on" : "off");
+		 mch->int_gpio ? "readable" : "unknown", ts->panel_state);
 
 	mutex_lock(&himax_thp_pair_lock);
 	himax_thp_master = ts;

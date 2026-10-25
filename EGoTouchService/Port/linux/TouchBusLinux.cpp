@@ -1,9 +1,9 @@
 // TouchBusLinux.cpp — ITouchBus 的 Linux 实现：himax-thp 内核驱动的字符设备（/dev/himax_thp）。
 //
 // ABI 见 Kernel/himax-thp/himax_thp.h。与 Windows 实现的对应：
-//   Master / Slave  同一个设备节点各开一个文件，SET_CHANNEL 绑定通道；功能码（F2..F5）仍由这里填
-//   GetFrame        poll 等帧（超时 = SetTimeOut，非阻塞 = 0）后 read；驱动在帧中断里按帧长读好，
-//                   帧长取调用方给的 outLen，变了才下发 SET_FRAME_LEN
+//   Master / Slave  同一个设备节点各开一个文件，SET_CHANNEL 绑定通道；功能码（F2..F5）与总线头由驱动按通道填
+//   GetFrame        poll 等帧（超时 = SetTimeOut，非阻塞 = 0）后 read；驱动给的是帧头 + 去掉总线头的帧数据，
+//                   这里在前面补回 3 字节总线头的位置，帧在缓冲里的布局与 Windows 一致（FrameLayout.h）
 //   RequestCancel   eventfd 唤醒 poll。与 CancelIoEx 一样只打断进行中的读帧：每次 GetFrame 开始先清掉
 //                   之前残留的取消请求
 //   ReadBus         与 Windows 一样失败重试最多 10 次；WriteBus 不重试（Windows 的 WriteFile 也不重试）
@@ -23,12 +23,7 @@
 
 namespace {
 
-constexpr uint8_t OP_WRITE_MASTER = 0xF2;
-constexpr uint8_t OP_READ_MASTER  = 0xF3;
-constexpr uint8_t OP_WRITE_SLAVE  = 0xF4;
-constexpr uint8_t OP_READ_SLAVE   = 0xF5;
-
-constexpr size_t kBusHeader = 3;        // [功能码, cmd, dummy]
+constexpr size_t kBusHeader = 3;        // Windows 帧开头的 [功能码, cmd, dummy]，驱动的帧数据不含它
 constexpr int kReadBusRetries = 10;     // 与 Windows 侧 Ioctl 的重试次数一致
 
 class TouchBusLinux final : public Port::ITouchBus {
@@ -52,8 +47,7 @@ public:
     void RequestCancel() noexcept override;
 
 private:
-    /// 发 m_tx 的前 len 字节；wantRx 时收回到 m_rx
-    ChipResult<> Xfer(uint32_t len, bool wantRx);
+    ChipResult<> Bus(unsigned long request, uint8_t cmd, void* buf, uint32_t len);
     ChipResult<> IoctlU32(unsigned long request, uint32_t value);
     ChipResult<> SetInt(bool enable);
     ChipResult<> Fail(int err, ChipError kind = ChipError::CommunicationError) {
@@ -65,22 +59,17 @@ private:
     int m_fd = -1;
     int m_cancelFd = -1;
     int m_lastError = 0;
-    uint8_t m_readOp;
-    uint8_t m_writeOp;
-    uint32_t m_frameLen = 0;            // 已下发给驱动的帧长，0 = 还没下发
     uint32_t m_timeoutMs = 0;           // 0 = 一直等
     bool m_block = true;
 
-    std::vector<uint8_t> m_tx;
-    std::vector<uint8_t> m_rx;
+    std::vector<uint8_t> m_tx;          // WriteBus：地址 + 数据拼在一起
+    std::vector<uint8_t> m_frame;       // GetFrame：帧头 + 帧数据
 };
 
 TouchBusLinux::TouchBusLinux(const std::filesystem::path& path, Port::TouchChannel channel) {
     const bool slave = channel == Port::TouchChannel::Slave;
-    m_readOp = slave ? OP_READ_SLAVE : OP_READ_MASTER;
-    m_writeOp = slave ? OP_WRITE_SLAVE : OP_WRITE_MASTER;
-    m_tx.reserve(HIMAX_THP_MAX_XFER);
-    m_rx.reserve(HIMAX_THP_MAX_XFER);
+    m_tx.reserve(HIMAX_THP_BUS_MAX);
+    m_frame.resize(sizeof(himax_thp_frame_hdr) + HIMAX_THP_BUS_MAX);
 
     // 非阻塞打开：等帧统一在 poll 里做，read 只取已经到的帧
     m_fd = ::open(path.c_str(), O_RDWR | O_NONBLOCK | O_CLOEXEC);
@@ -108,44 +97,33 @@ TouchBusLinux::~TouchBusLinux() {
     if (m_fd >= 0) ::close(m_fd);
 }
 
-ChipResult<> TouchBusLinux::Xfer(uint32_t len, bool wantRx) {
+ChipResult<> TouchBusLinux::Bus(unsigned long request, uint8_t cmd, void* buf, uint32_t len) {
     if (!IsValid()) return Fail(EBADF);
-    if (len > HIMAX_THP_MAX_XFER) return Fail(EMSGSIZE, ChipError::InvalidOperation);
-    if (wantRx) m_rx.assign(len, 0);
+    if (len > HIMAX_THP_BUS_MAX) return Fail(EMSGSIZE, ChipError::InvalidOperation);
 
-    himax_thp_xfer x{};
-    x.tx_buf = reinterpret_cast<uintptr_t>(m_tx.data());
-    x.rx_buf = wantRx ? reinterpret_cast<uintptr_t>(m_rx.data()) : 0;
-    x.len = len;
-    if (::ioctl(m_fd, HIMAX_THP_IOC_XFER, &x) < 0) return Fail(errno);
+    himax_thp_bus b{};
+    b.buf = reinterpret_cast<uintptr_t>(buf);
+    b.len = len;
+    b.cmd = cmd;
+    if (::ioctl(m_fd, request, &b) < 0) return Fail(errno);
     m_lastError = 0;
     return {};
 }
 
 ChipResult<> TouchBusLinux::ReadBus(uint8_t cmd, uint8_t* data, uint32_t len) {
-    const uint32_t total = static_cast<uint32_t>(kBusHeader) + len;
-    m_tx.assign(total, 0);
-    m_tx[0] = m_readOp;
-    m_tx[1] = cmd;
-
     ChipResult<> res = std::unexpected(ChipError::InternalError);
     for (int i = 0; i < kReadBusRetries; ++i) {
-        res = Xfer(total, true);
+        res = Bus(HIMAX_THP_IOC_BUS_READ, cmd, data, len);
         if (res) break;
     }
-    if (!res) return res;
-
-    std::memcpy(data, m_rx.data() + kBusHeader, len);
-    return {};
+    return res;
 }
 
 ChipResult<> TouchBusLinux::WriteBus(uint8_t cmd, const uint8_t* addr, const uint8_t* data, uint32_t len) {
     m_tx.clear();
-    m_tx.push_back(m_writeOp);
-    m_tx.push_back(cmd);
     if (addr != nullptr) m_tx.insert(m_tx.end(), addr, addr + 4);
     if (data != nullptr) m_tx.insert(m_tx.end(), data, data + len);
-    return Xfer(static_cast<uint32_t>(m_tx.size()), false);
+    return Bus(HIMAX_THP_IOC_BUS_WRITE, cmd, m_tx.data(), static_cast<uint32_t>(m_tx.size()));
 }
 
 void TouchBusLinux::DrainCancel() noexcept {
@@ -156,10 +134,6 @@ void TouchBusLinux::DrainCancel() noexcept {
 
 ChipResult<> TouchBusLinux::GetFrame(void* buffer, uint32_t outLen, uint32_t* retLen) {
     if (!IsValid()) return Fail(EBADF);
-    if (outLen != m_frameLen) {
-        if (auto res = IoctlU32(HIMAX_THP_IOC_SET_FRAME_LEN, outLen); !res) return res;
-        m_frameLen = outLen;
-    }
     DrainCancel();
 
     pollfd fds[2] = {
@@ -179,13 +153,23 @@ ChipResult<> TouchBusLinux::GetFrame(void* buffer, uint32_t outLen, uint32_t* re
     }
     if (fds[0].revents & (POLLERR | POLLHUP | POLLNVAL)) return Fail(ENODEV);
 
-    const ssize_t got = ::read(m_fd, buffer, outLen);
+    const ssize_t got = ::read(m_fd, m_frame.data(), m_frame.size());
     if (got < 0) {
         // poll 报了可读、read 却没帧：被别的读者抢先取走，按超时处理
         if (errno == EAGAIN) return Fail(ETIMEDOUT, ChipError::Timeout);
         return Fail(errno);
     }
-    if (retLen) *retLen = static_cast<uint32_t>(got);
+    himax_thp_frame_hdr hdr;
+    if (static_cast<size_t>(got) < sizeof(hdr)) return Fail(EPROTO);
+    std::memcpy(&hdr, m_frame.data(), sizeof(hdr));
+    if (sizeof(hdr) + hdr.len != static_cast<size_t>(got)) return Fail(EPROTO);
+    // 调用方按 Windows 的帧长要（含总线头），驱动的帧长与它对不上就是两边的帧格式不一致
+    if (kBusHeader + hdr.len != outLen) return Fail(EMSGSIZE, ChipError::InvalidOperation);
+
+    auto* out = static_cast<uint8_t*>(buffer);
+    std::memset(out, 0, kBusHeader);
+    std::memcpy(out + kBusHeader, m_frame.data() + sizeof(hdr), hdr.len);
+    if (retLen) *retLen = outLen;
     m_lastError = 0;
     return {};
 }
