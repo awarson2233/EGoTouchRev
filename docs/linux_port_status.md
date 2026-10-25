@@ -76,7 +76,10 @@
 - **`thp-slave-dt.ko`**：运行时 DT overlay（`gaokun3-thp-slave.dtso`），内容就是将来 gaokun3 dts 补丁要加的：
   启用 spi20 和其下的 Slave，给 Master 节点加 `himax,cascade` 与 `mode-gpios`。insmod 时应用、rmmod 时撤销，
   不改启动用的 dtb。Master 只在 probe 时看 `himax,cascade`，所以 overlay 必须先于 himax_thp：
-  `egotouch-modprobe.conf` 里有 `softdep himax_thp pre: thp_slave_dt`（还没在安装后实测）。
+  `egotouch-modprobe.conf` 里有 `softdep himax_thp pre: thp_slave_dt`。装好后实测（7.2.12）：卸掉三个触摸模块、
+  对 spi0.0 重放 udev `add`（开机 coldplug 的路径），himax-spi 被挡住，thp_slave_dt 先于 himax_thp 加载，Master 带
+  Slave 绑定，egotouchd 被拉起并出帧。2026-10-26 重启验证：开机 4.9 s overlay、5.3 s Master 带 Slave 绑定、
+  6.1 s uhid 触摸屏出现，himax-spi 未加载；实机触摸正常。
 - **`thp-bind.sh on [--no-slave]|off|show`**：在原驱动 himax-spi 与 himax-thp 之间切换 Master。`on` 先加载 overlay
   再绑定 Master；`--no-slave` 不打 overlay。测完用 `off` 恢复系统触摸。
 - 构建：`make -C Kernel/himax-thp KDIR=~/repos/kernel/linux-7.1-rc3 KBUILD_MODPOST_WARN=1`
