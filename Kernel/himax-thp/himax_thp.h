@@ -9,8 +9,8 @@
  *   SET_RESET                        -> HIMAX_THP_IOC_SET_RESET
  *   READ_ACPI（面板电源）             -> HIMAX_THP_IOC_PANEL_STATE，变化时 poll 报 POLLPRI
  *
- * 每个打开的文件绑定一个通道（默认 Master）。Master 与 Slave 在同一根片选上，靠每次传输首字节的
- * 功能码区分：Master F2 写 / F3 读，Slave F4 写 / F5 读；XFER 的首字节必须是所绑通道的功能码。
+ * 每个打开的文件绑定一个通道（默认 Master）。Master 与 Slave 各在一路 SPI 上（spi6 / spi20），功能码也不同：
+ * Master F2 写 / F3 读，Slave F4 写 / F5 读；XFER 的首字节必须是所绑通道的功能码。
  */
 #ifndef _UAPI_HIMAX_THP_H
 #define _UAPI_HIMAX_THP_H

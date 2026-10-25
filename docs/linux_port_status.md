@@ -35,9 +35,10 @@
 - **`himax-thp.ko`**：spi_driver，匹配 `himax,hx83121a-ts`（Master）和 `egotouch,hx83121a-thp-slave`（Slave）。
   每一路各有自己的 spi 设备、中断、INT 脚；Slave 作为第二个 spi 设备挂到 Master 实例上，用户态仍只看到一个节点。
   复位脚、面板联动（drm_panel_follower）只在 Master 上。ABI 见 `himax_thp.h`。
+  没有模块参数：中断触发方式、SPI 模式都按 DT，gpio174 由启动 DT 配好（§3.3），驱动不碰。
 - **`thp-slave-dt.ko`**：运行时 DT overlay（`gaokun3-thp-slave.dtso`），insmod 时启用 spi20 和其下的 Slave，
   rmmod 时撤销，不改启动用的 dtb。
-- **`thp-bind.sh on|off|show`**：在原驱动 himax-spi 与 himax-thp 之间切换 spi0.0，并加载/撤销 overlay。
+- **`thp-bind.sh on [--no-slave]|off|show`**：在原驱动 himax-spi 与 himax-thp 之间切换 Master，并加载/撤销 overlay。
   测完用 `off` 恢复系统触摸。
 - 构建：`make -C Kernel/himax-thp KDIR=~/repos/kernel/linux-7.1-rc3 KBUILD_MODPOST_WARN=1`
   （源码树只做过 modules_prepare，没有 Module.symvers；整编内核会过热关机，见 §6）。
@@ -76,13 +77,13 @@ FW reload 都正常，但两颗芯片都不按帧拉 INT，Slave 根本不扫描
 线索来自 [vahiru/gaokun-android](https://github.com/vahiru/gaokun-android) 的 `patches/0002-…-drive-ts-mode-gpio174-low`
 和 [aoripus/easy-for-gaokun](https://github.com/aoripus/easy-for-gaokun) 的 `patches/touch-spi-mode`，两边独立写下的症状和这里一致。
 
-**拉低 gpio174 再复位之后**（开机默认环境、非 DSC、geni FIFO 模式、驱动全默认）：两根 INT 都按帧来，
-`HimaxThpProbe --with-slave` **120.0 fps**，1200 帧里 Master 全部有效、Slave 1198–1199 帧有效（只有开头 1–2 帧坏），
-和 Windows 一致。只有原驱动 himax-spi 时，无触摸也是 INT175 每秒 120 次。
+**修法：** 启动 DT 里 Master 的 `ts0_default` 加 `mode-n-pins`（gpio174 `output-low`）。himax-spi probe 时先应用这组
+引脚、再复位芯片，芯片开机就是 SPI 模式。源码在 linux-gaokun 本地克隆（`~/repos/kernel/ref/linux-gaokun`）的
+`gaokun3-ts-spi-mode` 分支，`dts/sc8280xp-huawei-gaokun3.dts`；启动用的 dtb 见 §7。
 
-现在 himax-thp 在 Master probe 时占住 gpio174 输出低（`ts_mode_gpio`，见 §5），解绑后 TLMM 保持低电平。
-单独调试原驱动时可用 `Kernel/himax-thp/ts-mode.py spi` 设好再重绑 himax-spi。长期应在 DT 的 `ts0_default` 里把它配成
-`output-low`（上面两个仓库的补丁就是这么做的）。
+**修好之后**（开机默认环境、非 DSC、geni FIFO 模式）：只有 himax-spi、不碰屏幕时 INT175 每秒 120 次；himax-thp
+`HimaxThpProbe --with-slave` **120.0 fps**，1200 帧两路全部有效，两根 INT 都每帧一次，和 Windows 一致。
+两路都按 DT 的低电平触发、SPI mode 0（DT 默认，与 ACPI 一致）、不设片选等待。
 
 以下是 I2C-HID 模式下（修复前）的记录：
 
@@ -129,26 +130,16 @@ FW reload 都正常，但两颗芯片都不按帧拉 INT，Slave 根本不扫描
 
 ## 5 当前驱动状态
 
-驱动默认在各路的帧中断里读帧（`poll_us=0`）。模块参数：
-
-| 参数 | 默认 | 说明 |
-|---|---|---|
-| `ts_mode_gpio` | 174 | Master probe 时占住这根 TLMM 脚并输出低（SPI 模式），解绑时释放；-1 = 不管（DT 已配好时） |
-| `poll_us` | 0 | 0 = 用帧中断；非 0 = 取帧线程按这个周期（µs）轮询，留作对照，绑定时生效 |
-| `poll_peek` / `poll_after_us` | 2 / 0 | 只在轮询时有意义：就绪判断方式、读到一帧后至少等多久 |
-| `slave_irq_trigger` / `master_irq_trigger` | 2 / 0 | 申请中断时覆盖 DT 的触发类型：Slave 下降沿，Master 按 DT 的低电平；两者都实测可用 |
-| `slave_spi_mode` / `master_spi_mode` | 3 / 3 | SPI 模式（0 也可以） |
-| `cs_setup_us` | 300 | 每次传输前的片选建立等待（绑定时生效）。geni 片选由硬件控制，这段等待落在片选拉低之前 |
-| `read_extra`、`debug_irq` | 0 / N | 实验与调试 |
-
-修复 gpio174 之前用轮询凑出来的最好成绩是约 47 fps（`poll_peek=0 poll_after_us=5500`），现在中断模式下是 120 fps。
+- 每一路在自己的帧中断线程里读整帧；用户态 `INT_ENABLE(1)` 打开某一路时立刻读一帧（同 SpbThpTool 的 `INT_OPEN`）。
+- 读完一帧等 INT 回到高电平再返回（最多 2 ms），电平触发不会重复读。
+- 没有模块参数。排查期间加过的轮询取帧、AHB 就绪探测、拼帧读法、触发方式 / SPI 模式覆盖、`read_extra`、
+  `cs_setup_us`、gpio174 兜底、GSI 选项都已删掉（都是 I2C-HID 模式下的权宜之计或已排除的方向，见 §3.3）。
 
 ## 6 未解决的问题与下一步
 
-1. ~~把 gpio174 写进 DT~~：已完成（2026-10-25），见 §7。驱动的 `ts_mode_gpio` 仍默认 174，给没改 DT 的机器兜底。
-2. 熄屏亮屏、面板复位之后的行为：复位会触发 FW reload，只要 gpio174 还是低就没问题，但要实测。
-3. Slave 的帧校验：SPI 模式下 Slave 帧已经通过校验（每轮开头 1–2 帧坏，原因待查）。
-4. 之后的工作：uhid 输出（UhidReporter / IInputSink）、egotouchd 守护进程、其余 Port（面板电源、输入、笔 USB、系统状态）、
+1. 熄屏亮屏、面板复位之后的行为：复位会触发 FW reload，只要 gpio174 还是低就没问题，但要实测。
+2. Slave 的帧校验：SPI 模式下已经通过（偶尔每轮开头 1–2 帧坏，原因待查）。
+3. 之后的工作：uhid 输出（UhidReporter / IInputSink）、egotouchd 守护进程、其余 Port（面板电源、输入、笔 USB、系统状态）、
    打包（DKMS / systemd / udev）、TsaRawReplay 逐位验证（需要 Windows 录制的 .dvrbin）、Windows CI 验证 Port 改动。
 
 ## 7 环境注意事项
@@ -164,5 +155,6 @@ FW reload 都正常，但两颗芯片都不按帧拉 INT，Slave 根本不扫描
 - **默认启动项用的是改过的 dtb** `sc8280xp-huawei-gaokun3-tsmode.dtb`（两个 ESP 上都有）：只在启动用的原 dtb 的
   `ts0_default` 里加了 `mode-n-pins`（gpio174 `output-low`），反编译对比只多这一个节点；dts 在 `~/repos/kernel/dt-ts-mode/`。
   实测开机后 gpio174 为低、归 spi0.0，只有 himax-spi 时 INT175 就是 120 次/秒。原 dtb 留着；`…-dsc.conf` 仍指向原 dtb。
-  **kernel-install / 升级内核会重写启动项和 dtb**，届时要重新加上这个节点（或把它补进内核树的 dts）。
+  **kernel-install / 升级内核会重写启动项和 dtb**：届时用 linux-gaokun 的 `gaokun3-ts-spi-mode` 分支（§3.3）重新编 dtb。
+  注意内核树 `~/repos/kernel/linux-7.1-rc3` 里的 gaokun3 dts 是主线版（触摸写成 I2C-HID），不是启动 dtb 的来源。
 - `sudo dmesg` 里 overlay 的 `memory leak will occur if overlay removed` 警告是内核对 overlay 撤销的固定提示，可忽略。

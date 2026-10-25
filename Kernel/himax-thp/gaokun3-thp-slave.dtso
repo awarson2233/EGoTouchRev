@@ -6,13 +6,10 @@
  *   GpioInt (Edge, ActiveLow, ..., "\\_SB.GIO0") { 0x27 }   INT = gpio39
  *
  * 复位脚与 Master 共用（THPB 没有 GpioIo），由 Master 那一路（spi6 上的 touchscreen@0）管。
- * SPI 引脚取 qup20 的 gpio87–90，电气参数照抄 spi6。INT 在 ACPI 里是下降沿；这里写低电平与 Master 一致，
- * 实际触发方式由 himax-thp 的 slave_irq_trigger 参数在申请中断时决定（默认下降沿）。DT 里的类型一旦映射过，
- * 本次开机内就不能再改（重新映射会报 type mismatch），所以不在 DT 里试。
+ * SPI 引脚取 qup20 的 gpio87–90，电气参数照抄 spi6。INT 在 ACPI 里是下降沿；这里与 Master 一样写低电平，
+ * himax-thp 读完一帧会等 INT 放开再返回，电平触发不会重复读。
  *
- * 两路 SPI 控制器都加 qcom,force-gsi-mode（linux-gaokun 补丁 0025，上游 DT 给 spi6 也加了）：本机 QUP 没有关
- * FIFO 接口，不加就跑 FIFO / SE DMA，Windows 上走的是 GSI。控制器在 probe 时读这个属性：spi20 由本 overlay
- * 启用，加了即生效；spi6 开机时已经 probe 过，要解绑重绑 998000.spi 才生效（thp-bind.sh on --gsi）。
+ * 芯片要在 SPI 模式下才出帧，这由启动 DT 里 Master 的 gpio174（ts0_default/mode-n-pins）保证，不在这里。
  */
 
 /dts-v1/;
@@ -62,13 +59,7 @@
 	};
 };
 
-&spi6 {
-	qcom,force-gsi-mode;
-};
-
 &spi20 {
-	qcom,force-gsi-mode;
-
 	pinctrl-0 = <&thp_slave_spi_default>;
 	pinctrl-names = "default";
 	status = "okay";
