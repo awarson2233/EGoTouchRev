@@ -496,8 +496,8 @@ if (EGO_BUILD_TOOLS AND WIN32)
     target_link_libraries(ChipHidProbeB PRIVATE Device Common advapi32 winmm)
 endif()
 
-# --- HimaxThpProbe：Linux 上验证 himax-thp 驱动与 TouchBusLinux（Chip::Init、取帧、按 Chip 的规则校验两路帧）---
-if (EGO_BUILD_TOOLS AND NOT WIN32)
+# --- HimaxThpProbe：验证两个平台的总线端口（Chip::Init、取帧、按 Chip 的规则校验两路帧）---
+if (EGO_BUILD_TOOLS)
     add_executable(HimaxThpProbe Tools/HimaxThpProbe/main.cpp)
     target_link_libraries(HimaxThpProbe PRIVATE HimaxCore Common)
 endif()

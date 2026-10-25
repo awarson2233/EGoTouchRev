@@ -1,10 +1,14 @@
-// HimaxThpProbe —— Linux 上验证 himax-thp 驱动与 TouchBusLinux：跑 Chip::Init，连续取帧，
-// 按 Chip 的帧校验规则分别检查 master / slave 两路，并打印 heatmap 峰值所在的格子（手指移动时应跟着走）。
+// HimaxThpProbe —— 验证总线端口（Linux 的 himax-thp + TouchBusLinux、Windows 的 SpbThpTool + TouchBusWin32）：
+// 跑 Chip::Init，连续取帧，按 Chip 的帧校验规则分别检查 master / slave 两路，并打印 heatmap 峰值所在的格子
+// （手指移动时应跟着走）。
 //
-//   HimaxThpProbe [--dev /dev/himax_thp] [--frames N] [--probe-only] [--raw] [--with-slave] [--dump FILE] [--poll]
+//   HimaxThpProbe [--dev PATH] [--frames N] [--probe-only] [--raw] [--with-slave] [--dump FILE] [--poll] [--late-arm]
 //
-//   --dev PATH     设备节点，默认 /dev/himax_thp
+//   --dev PATH     设备节点，默认 /dev/himax_thp；Windows 上固定用 SPBTESTTOOL_MASTER / _SLAVE，忽略此项
 //   --frames N     取 N 次帧后退出，默认 600；Ctrl+C 随时退出
+//   --late-arm     （Windows）Init 之前把两路的读帧关掉（SET_BLOCK 0），由 Init 的读策略重新打开：
+//                  SpbThpTool 默认从上电起每个 INT 边沿都读帧，Init 期间也不例外；关掉之后 Init 期间芯片吐的帧
+//                  没人取，与 Linux 驱动在 INT_ENABLE 之前不读帧的时序相同
 //   --probe-only   只读面板电源与总线探测，不初始化芯片
 //   --with-slave   同时初始化、读取 slave（笔）。默认只用 master：本机 spi0.0 上的 slave 功能码没有应答
 //   --dump FILE    每次取帧后把 master 帧原样追加到 FILE（每条记录：1 字节校验结果 + 5063 字节帧），
@@ -140,11 +144,11 @@ void ReadEventStack(const char* name, Port::ITouchBus& bus) {
     std::printf("\n");
 }
 
-int RunRaw(const std::string& dev) {
-    auto m = Port::CreateTouchBus(dev, Port::TouchChannel::Master);
-    auto s = Port::CreateTouchBus(dev, Port::TouchChannel::Slave);
+int RunRaw(const std::filesystem::path& masterPath, const std::filesystem::path& slavePath) {
+    auto m = Port::CreateTouchBus(masterPath, Port::TouchChannel::Master);
+    auto s = Port::CreateTouchBus(slavePath, Port::TouchChannel::Slave);
     if (!m->IsValid() || !s->IsValid()) {
-        std::fprintf(stderr, "cannot open %s (err %u / %u)\n", dev.c_str(), m->GetError(), s->GetError());
+        std::fprintf(stderr, "cannot open %s (err %u / %u)\n", masterPath.string().c_str(), m->GetError(), s->GetError());
         return 1;
     }
     for (int round = 0; round < 2; ++round) {
@@ -169,13 +173,15 @@ int RunRaw(const std::string& dev) {
 
 // ── --poll：Init 之后绕开 INT 直接轮询事件栈 ─────────────────────────────────
 
-int RunPoll(const std::string& dev, long rounds) {
-    auto m = Port::CreateTouchBus(dev, Port::TouchChannel::Master);
-    auto s = Port::CreateTouchBus(dev, Port::TouchChannel::Slave);
+int RunPoll(const std::filesystem::path& masterPath, const std::filesystem::path& slavePath, long rounds) {
+    auto m = Port::CreateTouchBus(masterPath, Port::TouchChannel::Master);
+    auto s = Port::CreateTouchBus(slavePath, Port::TouchChannel::Slave);
     if (!m->IsValid() || !s->IsValid()) return 1;
-    // 驱动里的读帧会和这里抢事件栈
+    // 驱动里的读帧会和这里抢事件栈。SpbThpTool 的 INT_CLOSE 什么也不做，要靠 SET_BLOCK 0 才能让它的 ISR 不读帧
     (void)m->IntClose();
     (void)s->IntClose();
+    (void)m->SetBlock(false);
+    (void)s->SetBlock(false);
 
     struct Seen {
         uint64_t total = 0, hdr = 0, zero = 0, other = 0, changed = 0;
@@ -241,6 +247,7 @@ int main(int argc, char** argv) {
     bool raw = false;
     bool withSlave = false;
     bool poll = false;
+    bool lateArm = false;
     std::string dumpPath;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -250,23 +257,40 @@ int main(int argc, char** argv) {
         else if (a == "--raw") raw = true;
         else if (a == "--with-slave") withSlave = true;
         else if (a == "--poll") poll = true;
+        else if (a == "--late-arm") lateArm = true;
         else if (a == "--dump" && i + 1 < argc) dumpPath = argv[++i];
         else {
-            std::fprintf(stderr, "usage: %s [--dev PATH] [--frames N] [--probe-only] [--raw] [--with-slave] [--dump FILE] [--poll]\n", argv[0]);
+            std::fprintf(stderr, "usage: %s [--dev PATH] [--frames N] [--probe-only] [--raw] [--with-slave] [--dump FILE] [--poll] [--late-arm]\n", argv[0]);
             return 2;
         }
     }
+#ifdef _WIN32
+    const std::filesystem::path masterPath = L"\\\\.\\Global\\SPBTESTTOOL_MASTER";
+    const std::filesystem::path slavePath = L"\\\\.\\Global\\SPBTESTTOOL_SLAVE";
+#else
+    const std::filesystem::path masterPath = dev;
+    const std::filesystem::path slavePath = dev;
+#endif
 
-    if (raw) return RunRaw(dev);
+    if (raw) return RunRaw(masterPath, slavePath);
 
     std::signal(SIGINT, OnSignal);
     std::signal(SIGTERM, OnSignal);
     Common::Logger::Init("HimaxThpProbe", std::filesystem::temp_directory_path() / "egotouch-logs", nullptr);
 
-    Himax::Chip chip(dev, dev);
+    if (lateArm) {
+        // SET_BLOCK 是驱动里整个设备的开关，另开的句柄关掉，Chip 自己的句柄同样生效
+        for (const auto& [path, ch] : {std::pair{masterPath, Port::TouchChannel::Master}, std::pair{slavePath, Port::TouchChannel::Slave}}) {
+            auto bus = Port::CreateTouchBus(path, ch);
+            const bool ok = bus->IsValid() && static_cast<bool>(bus->SetBlock(false));
+            std::printf("late-arm: %s SET_BLOCK 0 %s\n", ch == Port::TouchChannel::Master ? "master" : "slave", ok ? "ok" : "FAILED");
+        }
+    }
+
+    Himax::Chip chip(masterPath, slavePath);
     chip.SetSlaveEnabled(withSlave);
     if (!chip.IsReady(Himax::DeviceType::Master) || !chip.IsReady(Himax::DeviceType::Slave)) {
-        std::fprintf(stderr, "cannot open %s (need the himax-thp driver bound and root)\n", dev.c_str());
+        std::fprintf(stderr, "cannot open %s (need the bus driver bound, root / the service stopped)\n", masterPath.string().c_str());
         Common::Logger::Shutdown();
         return 1;
     }
@@ -290,7 +314,7 @@ int main(int argc, char** argv) {
     // 只看取帧，不让 Chip 自己在静止时把 IC 切进 IDLE
     chip.SetAutoIdleEnabled(false);
     if (poll) {
-        const int rc = RunPoll(dev, frames);
+        const int rc = RunPoll(masterPath, slavePath, frames);
         (void)chip.Deinit(true);
         Common::Logger::Shutdown();
         return rc;

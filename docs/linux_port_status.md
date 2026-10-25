@@ -55,8 +55,8 @@ iasl 反编译）：
 | Slave | `\_SB.THPB`（HIMX0002） | SP21 = DT **spi20**（0x890000，qup20：gpio87–90） | **gpio39**，Edge ActiveLow | 无（共用） |
 
 - 两者都是 12 MHz、ACPI 里写的 CPOL 0 / CPHA 0（mode 0）。实测 mode 3（linux-gaokun 的设置）和 mode 0 结果一样。
-- THPA 还有第三个中断 gpio8（Edge ActiveBoth）；Linux 上它被 DSI 用作 `mdp_vsync`。SpbThpTool 把它接到一个只唤醒
-  `WAIT_INT` 等待者的 ISR，用户态不用，和出帧无关。
+- THPA 还有第三个中断 gpio8（Edge ActiveBoth，ExclusiveAndWake）；Linux 上它被 DSI 用作 `mdp_vsync`。SpbThpTool 把它接到
+  一个只完成 `WAIT_INT` 的 ISR，Windows 用户态的面板电源线程（PanelPowerWatcher）挂的就是它；120 Hz 出帧期间它不翻转，和出帧无关。
 - **此前在 spi0.0 上用 F4/F5 读 Slave 全是 0，原因是 Slave 根本不在那条总线上。** 接上 spi20 后 Slave 应答正常
   （IC ID `0x83121A00`，寄存器读写、`RAW_OUT_SEL=0xF6` 都能写进去）。
 - Slave 的功能码仍是 F4/F5：Windows 用户态就是这么发给 SPBTESTTOOL_SLAVE 的（windbg trace 里有 `f4 00 ec 72 00 10 f6 …`）。
@@ -97,11 +97,14 @@ iasl 反编译）：
 安装包 `Gaokun_THP_Software_1.0.1.39.exe` → `SPIMCUDriver.exe` 里带 `SpbThpTool.sys` 和 **PDB**（有全部函数名）。
 提取件与反汇编放在 `~/repos/kernel/ref/spbthptool/`（`spb.asm`、`spb-syms.txt`）。
 
-- `OnInterruptIsrForThp`（INT 边沿）：没有读帧在进行时，直接发 `[F3/F5, 0x30, 0]` 读整帧。
+- `OnInterruptIsrForThp`（INT 边沿）：`FrameBlockFlag`（`SET_BLOCK` 写它，`D0Entry` 里置 1）非 0 且没有读帧在进行时，
+  直接发 `[F3/F5, 0x30, 0]` 读整帧。中断从 `PrepareHardware` 起一直连着，所以 Init 期间的边沿也会读帧；
+  Windows 上实测在 Init 前 `SET_BLOCK 0`、让 Init 期间不读帧，照样 120 fps（见 [windows-spi-channel-analysis.md](/docs/artifacts/windows-spi-channel-analysis.md)）。
 - 读完成回调：把帧拷进新缓冲、入队（最多 2 帧）、触发事件。**不写任何寄存器，不检查 INT 电平。**
 - `GET_FRAME`（0x4001C28）：队列里有帧就取；没有就等事件（超时由 SET_TIMEOUT 设）。
 - **`INT_OPEN`（0x4001C00）会立刻读一帧**，路径与 ISR 相同。Chip 遇到某一路超时会重开它，靠的就是这一次读。
   → Linux 驱动的 `INT_ENABLE(1)` 已照此实现（打开时立刻读一帧）。补上后 Master 帧 100% 有效（但仍靠超时重开驱动，约 2 fps）。
+  `INT_CLOSE`（0x4001C04）什么也不做，直接成功返回；要让驱动不读帧只能 `SET_BLOCK 0`。
 - `FullDuplexInterval`：标准 2 段 SPB 全双工（写 + 读，`DelayInUs=0`），等价于 Linux 的一次全双工传输。
 - 同一安装包里的 `HxDisableTPINT_reg.x64.exe` 只是把两颗芯片都切进 safe mode，与 INT 机制无关。
 
