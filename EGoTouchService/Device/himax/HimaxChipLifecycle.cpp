@@ -48,6 +48,9 @@ ChipResult<> Chip::hx_hw_reset_ahb_intf(DeviceType type) {
         LOG_ERROR("HimaxChip", __func__, GetStateStr(), "Physical SetReset(0) via Master failed, err: {}", static_cast<int>(m_master->GetError()));
         return res;
     }
+    // 复位要保持一段时间（himax-spi 的 himax_pin_reset 拉低 5 ms）。SpbThpTool 的复位 IOCTL 自带时序，
+    // Linux 的 himax-thp 只改电平：不等的话脉冲太短，IC 没有真正复位，后面的 FW reload 等不到
+    Port::SleepMs(5);
 
     if (auto res = m_master->SetReset(1); !res) {
         LOG_ERROR("HimaxChip", __func__, GetStateStr(), "Physical SetReset(1) via Master failed, err: {}", static_cast<int>(m_master->GetError()));
