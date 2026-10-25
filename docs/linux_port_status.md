@@ -51,9 +51,18 @@
 
 ### 2.2 内核
 
-- **`himax-thp.ko`**：spi_driver，匹配 `himax,hx83121a-ts`（Master）和 `egotouch,hx83121a-thp-slave`（Slave）。
-  每一路各有自己的 spi 设备、中断、INT 脚；Slave 作为第二个 spi 设备挂到 Master 实例上，用户态仍只看到一个节点。
-  复位脚、面板联动（drm_panel_follower）只在 Master 上。ABI 见 `himax_thp.h`：
+- **`himax-thp.ko`**：spi_driver，匹配 `himax,hx83121a-ts`（Master）和 `himax,hx83121a-ts-slave`（Slave）。
+  每一路各有自己的 spi 设备、中断、INT 脚，用户态只看到一个节点。DT 见 `bindings/himax,hx83121a-ts.yaml`：
+  - Master 的 `himax,cascade` 指向 Slave。Master probe 时 Slave 还没注册或没绑定就 `-EPROBE_DEFER`，等 Slave
+    绑定后驱动核心重试；接上后建 device link（Master 是 consumer），Slave 解绑前 Master 先被解绑。没有
+    `himax,cascade` 时只有 Master 一路，Slave 那一路的总线读写返回 `-ENODEV`。不再有全局变量。
+  - `mode-gpios`（gpio174）：probe 时拉低（SPI 模式），之后不碰；复位后的 FW reload 采样它。可选，旧 DT 靠 pinctrl。
+  - 复位脚、mode 脚、面板联动（drm_panel_follower）只在 Master 上。
+  - 实测（7.2.12）：两路 1200 帧全部有效；解绑 Slave → Master 跟着解绑；重载模块时 Master 先 probe、被推迟、
+    Slave 绑定后重试成功；不打 overlay 只有 Master 一路也正常。注意 sysfs 手动 `bind` 走 `device_driver_attach()`，
+    推迟了不会进延迟队列，测延迟 probe 要重载模块。
+
+  ABI 见 `himax_thp.h`：
   - 驱动只提供总线原语：`BUS_READ` 发 `[读功能码, cmd, 0]` 收 len 字节，`BUS_WRITE` 发 `[写功能码, cmd, 数据]`。
     功能码与总线头由驱动按所绑通道填，用户态给不出任意字节（取代原来的全双工 `XFER`）。芯片的 Init、AFE 命令、
     读帧策略和 SOS 判定都在用户态，与 Windows 共用 `Device/himax/`。
@@ -63,11 +72,13 @@
     （§4：完成回调在 `REACH THP_LIST_MAX_FRAMES` 时直接返回，不入队）。丢帧可以用
     `echo 'module himax_thp +p' > /sys/kernel/debug/dynamic_debug/control` 看。
   - 面板状态字：bit0 = prepared（上电），bit1 = enabled（点亮），四个 follower 回调都会更新。
-  没有模块参数：中断触发方式、SPI 模式都按 DT，gpio174 由启动 DT 配好（§3.3），驱动不碰。
-- **`thp-slave-dt.ko`**：运行时 DT overlay（`gaokun3-thp-slave.dtso`），insmod 时启用 spi20 和其下的 Slave，
-  rmmod 时撤销，不改启动用的 dtb。
-- **`thp-bind.sh on [--no-slave]|off|show`**：在原驱动 himax-spi 与 himax-thp 之间切换 Master，并加载/撤销 overlay。
-  测完用 `off` 恢复系统触摸。
+  没有模块参数：中断触发方式、SPI 模式都按 DT。
+- **`thp-slave-dt.ko`**：运行时 DT overlay（`gaokun3-thp-slave.dtso`），内容就是将来 gaokun3 dts 补丁要加的：
+  启用 spi20 和其下的 Slave，给 Master 节点加 `himax,cascade` 与 `mode-gpios`。insmod 时应用、rmmod 时撤销，
+  不改启动用的 dtb。Master 只在 probe 时看 `himax,cascade`，所以 overlay 必须先于 himax_thp：
+  `egotouch-modprobe.conf` 里有 `softdep himax_thp pre: thp_slave_dt`（还没在安装后实测）。
+- **`thp-bind.sh on [--no-slave]|off|show`**：在原驱动 himax-spi 与 himax-thp 之间切换 Master。`on` 先加载 overlay
+  再绑定 Master；`--no-slave` 不打 overlay。测完用 `off` 恢复系统触摸。
 - 构建：`make -C Kernel/himax-thp KDIR=~/repos/kernel/linux-7.1-rc3 KBUILD_MODPOST_WARN=1`
   （源码树只做过 modules_prepare，没有 Module.symvers；整编内核会过热关机，见 §6）。
 

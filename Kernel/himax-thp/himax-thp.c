@@ -10,15 +10,16 @@
  *   ioctl 其余                   通道绑定、读帧开关、复位脚、面板电源状态
  *
  * Master 与 Slave 是两颗芯片，各在一路 SPI 上、各有一根 INT（本机 ACPI 的 \_SB.THPA / THPB）：Master 是
- * spi6 上的 himax,hx83121a-ts，Slave 是 spi20 上的 egotouch,hx83121a-thp-slave（主线 DT 没有，
- * 由 thp-slave-dt.ko 的 overlay 补上）。两者都由本驱动绑定，Slave 挂到 Master 的实例上作为第二路，
- * 对用户态仍是一个 /dev/himax_thp。复位脚与面板联动只在 Master 上。
+ * spi6 上的 himax,hx83121a-ts，Slave 是 spi20 上的 himax,hx83121a-ts-slave，Master 的 himax,cascade
+ * 指向 Slave。两者都由本驱动绑定，Master probe 时把 Slave 接成第二路（device link 保证 Slave 解绑前 Master
+ * 先解绑），对用户态仍是一个 /dev/himax_thp。复位脚、mode 脚与面板联动只在 Master 上。DT 见
+ * bindings/himax,hx83121a-ts.yaml。
  *
  * 帧在各路自己的中断线程里读：打开了读帧的那一路发 [读功能码, 0x30, 0x00] 后连读整帧，去掉 3 字节总线头后
  * 放进该路的帧队列，用户态 read 取走。中断触发方式与 SPI 模式都按 DT。
  *
- * 芯片要在 SPI 模式下才按帧拉 INT：它在复位后的 FW reload 时采样 gpio174，低 = SPI、高 = I2C-HID。这根脚由
- * DT 配成低电平（Master 节点 ts0_default 里的 mode-n-pins），本驱动不管它。
+ * 芯片要在 SPI 模式下才按帧拉 INT：它在复位后的 FW reload 时采样 mode 脚（本机 gpio174），低 = SPI、
+ * 高 = I2C-HID。本驱动 probe 时把它拉低，之后的复位都由用户态做。
  *
  * ABI 见 himax_thp.h。
  */
@@ -85,7 +86,7 @@ struct himax_thp_frame {
 
 struct himax_thp_chan {
 	struct himax_thp *ts;
-	struct spi_device *spi;		/* 这一路的 SPI 设备；Slave 还没接上时为 NULL。改它要持两把锁 */
+	struct spi_device *spi;		/* 这一路的 SPI 设备；没有级联 Slave 时 Slave 这一路为 NULL，probe 后不变 */
 	int irq;			/* 这一路的帧中断，spi 为 NULL 时无效 */
 	bool irq_enabled;
 	u64 irq_ns;			/* 硬中断里记下的中断时刻，中断线程读 */
@@ -134,14 +135,6 @@ struct himax_thp_file {
 	u8 *bounce;			/* read 时帧队列到用户态的中转：帧头 + 帧数据 */
 };
 
-/*
- * Master 与 Slave 是两个 spi 设备，probe 先后不定：两边各自登记，后到的那个负责接上。
- * 本机只有一套触摸，用全局变量就够了。
- */
-static DEFINE_MUTEX(himax_thp_pair_lock);
-static struct himax_thp *himax_thp_master;	/* 已经 probe 好的 Master 实例 */
-static struct spi_device *himax_thp_slave_spi;	/* 已经绑定的 Slave 设备 */
-
 static void himax_thp_release_ts(struct kref *ref)
 {
 	struct himax_thp *ts = container_of(ref, struct himax_thp, ref);
@@ -152,6 +145,9 @@ static void himax_thp_release_ts(struct kref *ref)
 		if (ts->ch[i].int_gdev)
 			gpio_device_put(ts->ch[i].int_gdev);
 	}
+	/* Slave 这一路持着 himax_thp_get_slave 拿到的引用；Master 这一路借用 ts->spi 的 */
+	if (ts->ch[HIMAX_THP_CH_SLAVE].spi)
+		spi_dev_put(ts->ch[HIMAX_THP_CH_SLAVE].spi);
 	kfree(ts->tx);
 	kfree(ts->rx);
 	spi_dev_put(ts->spi);
@@ -262,7 +258,7 @@ static void himax_thp_read_frame(struct himax_thp_chan *ch, u64 ns)
 	bool want;
 	int ret;
 
-	/* 先拿 bus_lock：Slave 断开时两把锁都持着改 ch->spi，持着 bus_lock 时它不会变 */
+	/* 先拿 bus_lock：读帧是一次总线传输，与用户态的总线读写互斥 */
 	mutex_lock(&ts->bus_lock);
 	mutex_lock(&ts->state_lock);
 	want = ch->spi && ch->int_enabled && himax_thp_panel_on(ts) && !ts->gone;
@@ -341,9 +337,9 @@ static void himax_thp_set_panel(struct himax_thp *ts, u32 set, u32 clear)
 	mutex_unlock(&ts->state_lock);
 
 	if (off) {
-		/* Slave 的中断号在它断开前一直有效（断开要拿 pair_lock，follower 回调不拿，但 free_irq 自己会等） */
+		/* 两路的中断都在 remove 里先摘掉 follower 再释放，这里的中断号一直有效 */
 		for (i = 0; i < HIMAX_THP_NUM_CH; i++)
-			if (READ_ONCE(ts->ch[i].irq) > 0)
+			if (ts->ch[i].spi)
 				synchronize_irq(ts->ch[i].irq);
 	}
 	wake_up_interruptible(&ts->wait);
@@ -520,7 +516,7 @@ static long himax_thp_ioctl_bus(struct himax_thp_file *f, bool read, void __user
 	ubuf = u64_to_user_ptr(b.buf);
 
 	mutex_lock(&ts->bus_lock);
-	/* Slave 没接上（overlay 没打、或还没 probe）时这一路没有总线 */
+	/* 没有级联 Slave 时这一路没有总线 */
 	if (READ_ONCE(ts->gone) || !ch->spi) {
 		ret = -ENODEV;
 		goto out;
@@ -654,14 +650,6 @@ none:
 	dev_warn(dev, "cannot read the INT line, frames may be read twice per interrupt\n");
 }
 
-static void himax_thp_put_int_gpio(struct himax_thp_chan *ch)
-{
-	if (ch->int_gdev)
-		gpio_device_put(ch->int_gdev);
-	ch->int_gdev = NULL;
-	ch->int_gpio = NULL;
-}
-
 static int himax_thp_init_chan(struct himax_thp *ts, struct himax_thp_chan *ch,
 			       u8 op_write, u8 op_read, u32 frame_len)
 {
@@ -686,99 +674,58 @@ static int himax_thp_request_irq(struct himax_thp_chan *ch, const char *name)
 				    IRQF_ONESHOT | IRQF_NO_AUTOEN, name, ch);
 }
 
-/* 把 Slave 设备接到 Master 实例上，成为第二路。持 pair_lock 调用 */
-static int himax_thp_attach_slave(struct himax_thp *ts, struct spi_device *spi)
+/*
+ * 找到 himax,cascade 指向的 Slave，接成第二路。Slave 要先由本驱动绑定（它的 pinctrl 随绑定生效）；还没有的话
+ * 推迟 probe，等它绑定后驱动核心会重试。device link 让 Slave 解绑前先解绑 Master，所以 Master 在的时候这一路的
+ * spi 一直有效。没有 himax,cascade 时只有 Master 一路，用户态在 Slave 那一路拿到 -ENODEV。
+ */
+static int himax_thp_get_slave(struct himax_thp *ts)
 {
+	struct device *dev = &ts->spi->dev;
 	struct himax_thp_chan *ch = &ts->ch[HIMAX_THP_CH_SLAVE];
+	struct device_node *np;
+	struct device *sdev;
 	int ret;
 
-	if (spi->irq <= 0)
-		return dev_err_probe(&spi->dev, -EINVAL, "no frame interrupt\n");
-
-	himax_thp_find_int_gpio(ch, &spi->dev);
-	ch->irq = spi->irq;
-	ret = himax_thp_request_irq(ch, "himax-thp-slave");
-	if (ret) {
-		dev_err(&spi->dev, "request irq %d: %d\n", ch->irq, ret);
-		ch->irq = 0;
-		himax_thp_put_int_gpio(ch);
-		return ret;
+	np = of_parse_phandle(dev->of_node, "himax,cascade", 0);
+	if (!np)
+		return 0;
+	sdev = bus_find_device_by_of_node(&spi_bus_type, np);
+	of_node_put(np);
+	if (!sdev)
+		return dev_err_probe(dev, -EPROBE_DEFER, "cascaded slave not registered yet\n");
+	if (READ_ONCE(sdev->driver) != dev->driver) {
+		ret = dev_err_probe(dev, -EPROBE_DEFER, "cascaded slave not bound yet\n");
+		goto err_put;
+	}
+	if (!device_link_add(dev, sdev, DL_FLAG_AUTOREMOVE_CONSUMER)) {
+		ret = dev_err_probe(dev, -EINVAL, "cannot link to the cascaded slave\n");
+		goto err_put;
 	}
 
-	mutex_lock(&ts->bus_lock);
-	mutex_lock(&ts->state_lock);
-	ch->spi = spi_dev_get(spi);
-	ch->irq_enabled = false;
-	himax_thp_update_irq_locked(ts);
-	mutex_unlock(&ts->state_lock);
-	mutex_unlock(&ts->bus_lock);
-
-	dev_info(&spi->dev, "slave attached to %s, irq %d trigger %#x (INT level %s)\n",
-		 dev_name(&ts->spi->dev), ch->irq, irq_get_trigger_type(ch->irq),
-		 ch->int_gpio ? "readable" : "unknown");
+	ch->spi = to_spi_device(sdev);
+	ch->irq = ch->spi->irq;
+	himax_thp_find_int_gpio(ch, sdev);
 	return 0;
-}
 
-/* 断开 Slave。持 pair_lock 调用，Slave 必须已经接上 */
-static void himax_thp_detach_slave(struct himax_thp *ts)
-{
-	struct himax_thp_chan *ch = &ts->ch[HIMAX_THP_CH_SLAVE];
-	struct spi_device *spi;
-
-	/* 两把锁都拿：没有进行中的传输，之后这一路的总线读写与读帧都看到 spi == NULL */
-	mutex_lock(&ts->bus_lock);
-	mutex_lock(&ts->state_lock);
-	spi = ch->spi;
-	ch->spi = NULL;
-	himax_thp_flush_locked(ch);
-	himax_thp_update_irq_locked(ts);
-	mutex_unlock(&ts->state_lock);
-	mutex_unlock(&ts->bus_lock);
-	wake_up_interruptible(&ts->wait);
-
-	free_irq(ch->irq, ch);
-	WRITE_ONCE(ch->irq, 0);
-	himax_thp_put_int_gpio(ch);
-	dev_info(&spi->dev, "slave detached\n");
-	spi_dev_put(spi);
-}
-
-static int himax_thp_slave_probe(struct spi_device *spi)
-{
-	int ret = 0;
-
-	mutex_lock(&himax_thp_pair_lock);
-	if (himax_thp_slave_spi) {
-		ret = dev_err_probe(&spi->dev, -EBUSY, "a slave is already bound\n");
-		goto out;
-	}
-	/* Master 还没来的话先登记，等它 probe 时接上 */
-	if (himax_thp_master) {
-		ret = himax_thp_attach_slave(himax_thp_master, spi);
-		if (ret)
-			goto out;
-	} else {
-		dev_info(&spi->dev, "waiting for the master\n");
-	}
-	himax_thp_slave_spi = spi;
-out:
-	mutex_unlock(&himax_thp_pair_lock);
+err_put:
+	put_device(sdev);
 	return ret;
 }
 
-static void himax_thp_slave_remove(struct spi_device *spi)
+/* Slave 自己只检查一下帧中断：它的总线与中断都由 himax,cascade 指向它的 Master 接管 */
+static int himax_thp_slave_probe(struct spi_device *spi)
 {
-	mutex_lock(&himax_thp_pair_lock);
-	if (himax_thp_master && himax_thp_master->ch[HIMAX_THP_CH_SLAVE].spi == spi)
-		himax_thp_detach_slave(himax_thp_master);
-	himax_thp_slave_spi = NULL;
-	mutex_unlock(&himax_thp_pair_lock);
+	if (spi->irq <= 0)
+		return dev_err_probe(&spi->dev, -EINVAL, "no frame interrupt\n");
+	return 0;
 }
 
 static int himax_thp_master_probe(struct spi_device *spi)
 {
 	struct device *dev = &spi->dev;
-	struct himax_thp_chan *mch;
+	struct himax_thp_chan *mch, *sch;
+	struct gpio_desc *mode;
 	struct himax_thp *ts;
 	int ret;
 
@@ -809,14 +756,25 @@ static int himax_thp_master_probe(struct spi_device *spi)
 	if (ret)
 		goto err_put;
 	mch = &ts->ch[HIMAX_THP_CH_MASTER];
+	sch = &ts->ch[HIMAX_THP_CH_SLAVE];
 	/* Master 这一路的 spi 借用 ts->spi 的引用，不另外 get */
 	mch->spi = spi;
 	mch->irq = spi->irq;
+
+	ret = himax_thp_get_slave(ts);
+	if (ret)
+		goto err_put;
 
 	/* 逻辑低 = 不复位：接管时不打断正在运行的芯片，复位时序由用户态的 Init 决定 */
 	ts->reset = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_LOW);
 	if (IS_ERR(ts->reset)) {
 		ret = dev_err_probe(dev, PTR_ERR(ts->reset), "reset gpio\n");
+		goto err_put;
+	}
+	/* 拉低 = SPI 模式，下一次复位后的 FW reload 采样它；旧 DT 用 pinctrl 拉低、没有这个属性 */
+	mode = devm_gpiod_get_optional(dev, "mode", GPIOD_OUT_LOW);
+	if (IS_ERR(mode)) {
+		ret = dev_err_probe(dev, PTR_ERR(mode), "mode gpio\n");
 		goto err_put;
 	}
 
@@ -827,6 +785,13 @@ static int himax_thp_master_probe(struct spi_device *spi)
 		dev_err_probe(dev, ret, "request irq %d\n", mch->irq);
 		goto err_put;
 	}
+	if (sch->spi) {
+		ret = himax_thp_request_irq(sch, "himax-thp-slave");
+		if (ret) {
+			dev_err_probe(dev, ret, "request slave irq %d\n", sch->irq);
+			goto err_irq;
+		}
+	}
 
 	if (drm_is_panel_follower(dev)) {
 		/* 面板已经上电的话，这里会直接回调 panel_prepared（点亮了的话还有 panel_enabled） */
@@ -834,7 +799,7 @@ static int himax_thp_master_probe(struct spi_device *spi)
 		ret = drm_panel_add_follower(dev, &ts->follower);
 		if (ret) {
 			dev_err_probe(dev, ret, "panel follower\n");
-			goto err_irq;
+			goto err_slave_irq;
 		}
 		ts->has_follower = true;
 	} else {
@@ -856,18 +821,20 @@ static int himax_thp_master_probe(struct spi_device *spi)
 	dev_info(dev, "ready: /dev/%s, irq %d trigger %#x (INT level %s), panel %#x\n",
 		 HIMAX_THP_DEVICE_NAME, mch->irq, irq_get_trigger_type(mch->irq),
 		 mch->int_gpio ? "readable" : "unknown", ts->panel_state);
-
-	mutex_lock(&himax_thp_pair_lock);
-	himax_thp_master = ts;
-	/* Slave 接不上不影响 Master 单独工作，用户态在 Slave 那一路会拿到 -ENODEV */
-	if (himax_thp_slave_spi && himax_thp_attach_slave(ts, himax_thp_slave_spi))
-		dev_warn(dev, "slave present but could not be attached\n");
-	mutex_unlock(&himax_thp_pair_lock);
+	if (sch->spi)
+		dev_info(dev, "cascaded slave %s: irq %d trigger %#x (INT level %s)\n",
+			 dev_name(&sch->spi->dev), sch->irq, irq_get_trigger_type(sch->irq),
+			 sch->int_gpio ? "readable" : "unknown");
+	else
+		dev_info(dev, "no cascaded slave\n");
 	return 0;
 
 err_follower:
 	if (ts->has_follower)
 		drm_panel_remove_follower(&ts->follower);
+err_slave_irq:
+	if (sch->spi)
+		free_irq(sch->irq, sch);
 err_irq:
 	free_irq(mch->irq, mch);
 err_put:
@@ -879,16 +846,10 @@ static void himax_thp_master_remove(struct spi_device *spi)
 {
 	struct himax_thp *ts = spi_get_drvdata(spi);
 	struct himax_thp_chan *mch = &ts->ch[HIMAX_THP_CH_MASTER];
+	struct himax_thp_chan *sch = &ts->ch[HIMAX_THP_CH_SLAVE];
 
 	/* 不再接受新的打开；已经打开的文件各自持着引用，之后的操作都返回 -ENODEV */
 	misc_deregister(&ts->misc);
-
-	/* Slave 设备本身留着，下次 Master probe 时再接上 */
-	mutex_lock(&himax_thp_pair_lock);
-	if (ts->ch[HIMAX_THP_CH_SLAVE].spi)
-		himax_thp_detach_slave(ts);
-	himax_thp_master = NULL;
-	mutex_unlock(&himax_thp_pair_lock);
 
 	/* 两把锁都拿：保证没有进行中的传输，之后谁也不会再碰 SPI */
 	mutex_lock(&ts->bus_lock);
@@ -901,6 +862,8 @@ static void himax_thp_master_remove(struct spi_device *spi)
 
 	if (ts->has_follower)
 		drm_panel_remove_follower(&ts->follower);
+	if (sch->spi)
+		free_irq(sch->irq, sch);
 	free_irq(mch->irq, mch);
 
 	kref_put(&ts->ref, himax_thp_release_ts);
@@ -923,22 +886,21 @@ static int himax_thp_probe(struct spi_device *spi)
 
 static void himax_thp_remove(struct spi_device *spi)
 {
-	if (himax_thp_is_slave(spi))
-		himax_thp_slave_remove(spi);
-	else
+	/* Slave 没有自己的状态；device link 保证它解绑前 Master 已经解绑 */
+	if (!himax_thp_is_slave(spi))
 		himax_thp_master_remove(spi);
 }
 
 static const struct of_device_id himax_thp_of_match[] = {
 	{ .compatible = "himax,hx83121a-ts", .data = (void *)HIMAX_THP_ROLE_MASTER },
-	{ .compatible = "egotouch,hx83121a-thp-slave", .data = (void *)HIMAX_THP_ROLE_SLAVE },
+	{ .compatible = "himax,hx83121a-ts-slave", .data = (void *)HIMAX_THP_ROLE_SLAVE },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, himax_thp_of_match);
 
 static const struct spi_device_id himax_thp_spi_ids[] = {
 	{ "hx83121a-ts", HIMAX_THP_ROLE_MASTER },
-	{ "hx83121a-thp-slave", HIMAX_THP_ROLE_SLAVE },
+	{ "hx83121a-ts-slave", HIMAX_THP_ROLE_SLAVE },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, himax_thp_spi_ids);

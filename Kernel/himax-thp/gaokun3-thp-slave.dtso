@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * gaokun3 触摸 Slave（HX83121A 级联的第二颗）。主线 DT 没有描述它，取自本机 ACPI DSDT 的 \_SB.THPB：
+ * gaokun3 触摸的 DT 补充，按 bindings/himax,hx83121a-ts.yaml 写，内容就是将来 gaokun3 dts 补丁要加的东西；
+ * 在那个补丁进启动 dtb 之前，用 thp-slave-dt.ko 在运行时打上。
+ *
+ * Slave（HX83121A 级联的第二颗）：主线 DT 没有描述它，取自本机 ACPI DSDT 的 \_SB.THPB：
  *
  *   SpiSerialBusV2 (CS 0, 12 MHz, "\\_SB.SP21")   SP21 = QUP 2 SE4 = DT 里的 spi20 (0x890000)
  *   GpioInt (Edge, ActiveLow, ..., "\\_SB.GIO0") { 0x27 }   INT = gpio39
@@ -9,12 +12,14 @@
  * SPI 引脚取 qup20 的 gpio87–90，电气参数照抄 spi6。INT 在 ACPI 里是下降沿；这里与 Master 一样写低电平，
  * himax-thp 读完一帧会等 INT 放开再返回，电平触发不会重复读。
  *
- * 芯片要在 SPI 模式下才出帧，这由启动 DT 里 Master 的 gpio174（ts0_default/mode-n-pins）保证，不在这里。
+ * Master（spi6 上的 touchscreen@0，主线 DT 已有）：加 himax,cascade 指向 Slave，加 mode-gpios（gpio174，
+ * 低 = SPI 模式）。改过的启动 dtb 里 ts0_default 也用 pinctrl 把 gpio174 拉低，两者不冲突。
  */
 
 /dts-v1/;
 /plugin/;
 
+#include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/interrupt-controller/irq.h>
 
 &tlmm {
@@ -60,16 +65,23 @@
 };
 
 &spi20 {
+	#address-cells = <1>;
+	#size-cells = <0>;
 	pinctrl-0 = <&thp_slave_spi_default>;
 	pinctrl-names = "default";
 	status = "okay";
 
-	touchscreen@0 {
-		compatible = "egotouch,hx83121a-thp-slave";
+	thp_slave: touchscreen@0 {
+		compatible = "himax,hx83121a-ts-slave";
 		reg = <0>;
 		spi-max-frequency = <12000000>;
 		interrupts-extended = <&tlmm 39 IRQ_TYPE_LEVEL_LOW>;
 		pinctrl-0 = <&thp_slave_int_default>;
 		pinctrl-names = "default";
 	};
+};
+
+&{/soc@0/geniqup@9c0000/spi@998000/touchscreen@0} {
+	mode-gpios = <&tlmm 174 GPIO_ACTIVE_HIGH>;
+	himax,cascade = <&thp_slave>;
 };
