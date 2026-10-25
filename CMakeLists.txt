@@ -501,3 +501,11 @@ if (EGO_BUILD_TOOLS)
     add_executable(HimaxThpProbe Tools/HimaxThpProbe/main.cpp)
     target_link_libraries(HimaxThpProbe PRIVATE HimaxCore Common)
 endif()
+
+# --- egotouchd：Linux 触摸守护进程（himax-thp 取帧 → TSACore → uhid 触摸屏）---
+if (NOT WIN32)
+    add_executable(egotouchd EGoTouchService/linux/egotouchd.cpp)
+    target_include_directories(egotouchd PRIVATE "${DEVICE_ROOT}")
+    target_link_libraries(egotouchd PRIVATE HimaxCore Solvers Port Common)
+    install(TARGETS egotouchd RUNTIME DESTINATION bin COMPONENT Runtime)
+endif()

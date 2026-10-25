@@ -4,7 +4,7 @@
 // 芯片的协议层（HimaxProtocol / HimaxChip）只通过 ITouchBus 收发；每个平台在 Port/<平台>/ 下给出
 // CreateTouchBus 的实现：
 //   win32/  SPBTESTTOOL 驱动的设备对象（DeviceIoControl）
-//   linux/  内核传输驱动的字符设备（待定）
+//   linux/  himax-thp 内核驱动的字符设备（/dev/himax_thp）
 
 #include "common/DeviceError.h"
 
@@ -14,8 +14,8 @@
 
 namespace Port {
 
-/// 芯片的两路总线通道。Master 出手指侧的 heatmap 帧，Slave 出笔侧的帧；两路在同一根 SPI 片选上，
-/// 靠每次传输首字节的功能码区分（Master F2 写 / F3 读，Slave F4 写 / F5 读）。
+/// 芯片的两路总线通道。Master 出手指侧的 heatmap 帧，Slave 出笔侧的帧；两颗芯片各在一路 SPI 上，
+/// 功能码也不同（Master F2 写 / F3 读，Slave F4 写 / F5 读）。
 enum class TouchChannel : uint8_t { Master, Slave };
 
 class ITouchBus {

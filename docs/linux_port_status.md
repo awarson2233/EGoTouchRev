@@ -29,6 +29,17 @@
 - **`Tools/HimaxThpProbe`**：跑 `Chip::Init` 后连续取帧、按 Chip 的规则校验两路、打印 heatmap 峰值。
   选项：`--with-slave`、`--raw`（两路最小寄存器读写对照）、`--poll`（绕开驱动读帧，直接轮询事件栈并打印寄存器）、
   `--dump FILE`（配合 `analyze_dump.py` 离线分析）。
+- **触摸输出** `Port/TouchSink.h`（`ITouchSink`、`CreateTouchSink`）、`linux/TouchSinkLinux.cpp`：uhid 虚拟 HID 触摸屏，
+  报告沿用 VHF 的 32 字节触摸报告（`VhfTouchPacket::Build` 直接复用），描述符手写，hid-multitouch 接管成
+  `EGoTouch Touchscreen`。hid-multitouch 按默认类处理，不会自动抬起没出现的触点，所以 sink 记下按着的 ID，
+  `ReleaseAll` 逐个发抬起。Windows 仍走 VhfReporter，没有经这个接口。
+- **`egotouchd`**（`EGoTouchService/linux/egotouchd.cpp`，只在非 WIN32 下构建）：取帧 → StylusPipeline → TSACore →
+  AFE 闭环 → uhid，与 DeviceRuntime 的流式一帧相同。建链简化为：总线就绪才 Init，失败退避重试；SOS 或总线掉线时
+  抬起所有触点、`OnAfeStopped`，回到等总线。选项 `--transpose`、`--master-only`。笔还没有上报。
+  实测：120 fps，手指方向正确（GNOME 旋转后自动映射），按下 / 抬起成对，IC 进 IDLE 后稳定。
+- **复位脉冲**：`hx_hw_reset_ahb_intf` 在拉低和释放复位之间等 5 ms（同 himax-spi）。himax-thp 的 `SET_RESET` 只改电平，
+  不等的话脉冲太短、IC 没有真正复位，同一进程里第二次 Init 必定在 FW reload 超时（SpbThpTool 的复位 IOCTL 自带时序，
+  所以 Windows 上没暴露）。
 
 ### 2.2 内核
 
@@ -139,7 +150,7 @@ FW reload 都正常，但两颗芯片都不按帧拉 INT，Slave 根本不扫描
 
 1. 熄屏亮屏、面板复位之后的行为：复位会触发 FW reload，只要 gpio174 还是低就没问题，但要实测。
 2. Slave 的帧校验：SPI 模式下已经通过（偶尔每轮开头 1–2 帧坏，原因待查）。
-3. 之后的工作：uhid 输出（UhidReporter / IInputSink）、egotouchd 守护进程、其余 Port（面板电源、输入、笔 USB、系统状态）、
+3. 之后的工作：笔的 uhid 上报、egotouchd 跟随亮灭屏（现在靠总线探测）、其余 Port（面板电源、输入、笔 USB、系统状态）、
    打包（DKMS / systemd / udev）、TsaRawReplay 逐位验证（需要 Windows 录制的 .dvrbin）、Windows CI 验证 Port 改动。
 
 ## 7 环境注意事项
