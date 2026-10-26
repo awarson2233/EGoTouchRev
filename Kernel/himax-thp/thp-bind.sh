@@ -9,11 +9,11 @@
 set -eu
 
 SYS=/sys/bus/spi
-HERE="$(cd "$(dirname "$0")" && pwd)"
-KO="$HERE/himax-thp.ko"
-SLAVE_KO="$HERE/thp-slave-dt.ko"
+KO_DIR="$(cd "$(dirname "$0")/../.." && pwd)/build/kernel/$(uname -r)"
+KO="$KO_DIR/himax-thp.ko"
+SLAVE_KO="$KO_DIR/thp-slave-dt.ko"
 
-# 装过（scripts/linux/install.sh）就按名字加载，没装用编译目录里的
+# 装过（scripts/linux/install.sh）就按名字加载，没装用 build/kernel/<内核版本>/ 里的
 load() { lsmod | grep -q "^$1 " || modprobe "$1" 2>/dev/null || insmod "$2"; }
 bound() { basename "$(readlink -f $SYS/devices/$1/driver 2>/dev/null)" 2>/dev/null || true; }
 # 按 compatible 找 spi 设备：总线号是动态分配的

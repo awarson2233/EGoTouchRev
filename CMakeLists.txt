@@ -508,4 +508,11 @@ if (NOT WIN32)
     target_include_directories(egotouchd PRIVATE "${DEVICE_ROOT}")
     target_link_libraries(egotouchd PRIVATE HimaxCore Solvers Port Common)
     install(TARGETS egotouchd RUNTIME DESTINATION bin COMPONENT Runtime)
+
+    # himax-thp 内核模块：转给 Kernel/himax-thp/Makefile，产物在 build/kernel/<内核版本>/。不在 ALL 里，
+    # 没装内核头文件时不影响用户态构建
+    set(EGO_KDIR "/lib/modules/${CMAKE_HOST_SYSTEM_VERSION}/build" CACHE PATH "Kernel build tree for himax-thp")
+    add_custom_target(kmod
+        COMMAND make -C "${CMAKE_CURRENT_SOURCE_DIR}/Kernel/himax-thp" "KDIR=${EGO_KDIR}"
+        USES_TERMINAL VERBATIM)
 endif()

@@ -3,14 +3,16 @@
 #   install.sh             安装；重启后生效
 #   install.sh --now       安装后马上切换：停掉手动启动的 egotouchd，Master 交给 himax-thp，由服务接管
 #
-# 先编好：make -C Kernel/himax-thp ...（见 docs/linux_port_status.md §2.2）和 build/linux-release 的 egotouchd。
+# 先编好（见 docs/linux_port_status.md §2）：
+#   cmake --preset linux-Release && cmake --build --preset linux-Release && cmake --build --preset linux-kmod
+# 产物：build/linux-Release/egotouchd、build/kernel/<内核版本>/*.ko。
 # 模块装在当前内核的 updates/egotouch/ 下，换内核之后要重新编、重新装（之前触摸退回 himax-spi）。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 HERE="$ROOT/scripts/linux"
-KO_DIR="$ROOT/Kernel/himax-thp"
-BIN="$ROOT/build/linux-release/egotouchd"
+KO_DIR="$ROOT/build/kernel/$(uname -r)"
+BIN="$ROOT/build/linux-Release/egotouchd"
 MODDIR="/lib/modules/$(uname -r)/updates/egotouch"
 
 for f in "$KO_DIR/himax-thp.ko" "$KO_DIR/thp-slave-dt.ko" "$BIN"; do
@@ -31,7 +33,7 @@ echo "           /etc/udev/rules.d/60-egotouch.rules, /etc/systemd/system/egotou
 
 if [ "${1:-}" = --now ]; then
     pkill -x egotouchd && sleep 1 || true
-    "$KO_DIR/thp-bind.sh" on >/dev/null
+    "$ROOT/Kernel/himax-thp/thp-bind.sh" on >/dev/null
     udevadm trigger --action=add --name-match=/dev/himax_thp
     sleep 2
     systemctl --no-pager status egotouchd | head -5

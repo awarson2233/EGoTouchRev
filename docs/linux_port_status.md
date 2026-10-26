@@ -26,7 +26,9 @@
   `Chip::SetSlaveEnabled(false)` 可只用 Master。
 - CMake：非 WIN32 只构建 Common / Port / HimaxCore / TsaCore / 工具；Windows 专属目标仍只在 WIN32 下构建。
   构建用 preset（Ninja + clang，按宿主系统只显示对应的 preset）：
-  `cmake --preset linux-release && cmake --build --preset linux-release`（产物在 `build/linux-release`，Debug 用 `linux-debug`）。
+  `cmake --preset linux-Release && cmake --build --preset linux-Release`（产物在 `build/linux-Release`，Debug 用 `linux-Debug`）。
+  内核模块：`cmake --build --preset linux-kmod`（即 `make -C Kernel/himax-thp`，见 §2.2）。输出目录约定：用户态 `build/<preset>/`，
+  内核模块 `build/kernel/<内核版本>/`，install 前缀 `out/install/<preset>/`；源码目录不留编译产物。
 - `TsaCore/src/App/Property.cpp`：越界 memset 改为逐字段清零（编译过，**未用录制数据回放验证逐位一致**）。
 - **`Tools/HimaxThpProbe`**：跑 `Chip::Init` 后连续取帧、按 Chip 的规则校验两路、打印 heatmap 峰值。
   选项：`--with-slave`、`--raw`（两路最小寄存器读写对照）、`--poll`（绕开驱动读帧，直接轮询事件栈并打印寄存器）、
@@ -82,8 +84,11 @@
   6.1 s uhid 触摸屏出现，himax-spi 未加载；实机触摸正常。
 - **`thp-bind.sh on [--no-slave]|off|show`**：在原驱动 himax-spi 与 himax-thp 之间切换 Master。`on` 先加载 overlay
   再绑定 Master；`--no-slave` 不打 overlay。测完用 `off` 恢复系统触摸。
-- 构建：`make -C Kernel/himax-thp KDIR=~/repos/kernel/linux-7.1-rc3 KBUILD_MODPOST_WARN=1`
-  （源码树只做过 modules_prepare，没有 Module.symvers；整编内核会过热关机，见 §6）。
+- 构建：`make -C Kernel/himax-thp`，默认 `KDIR=/lib/modules/$(uname -r)/build`（7.2.12 起装了 linux-headers-gaokun3，自带 Module.symvers）。
+  经 Kbuild 的 `MO=` 把产物放到 `build/kernel/<KDIR 的内核版本>/`，`thp-bind.sh`、`install.sh` 都从那里取。
+  在 WSL 里交叉编：`make -C Kernel/himax-thp KDIR=~/gaokun/work/kernel-out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-`。
+  7.1-rc3 下只能对着只做过 modules_prepare 的源码树编：`KDIR=~/repos/kernel/linux-7.1-rc3 KBUILD_MODPOST_WARN=1`。
+  内核本身在 Windows 的 WSL 里编（gaokun3/linux merge stable + gaokun3/build 打 deb），不在实机 Linux 上整编（会过热关机，见 §7）。
 
 ## 3 硬件事实（实机测得）
 
@@ -215,6 +220,8 @@ Linux 上它照常枚举，三个接口：
 - **整编内核会过热关机**（CPU 热区只有 110 °C 的 critical trip，没有被动降频；EC 温度不进 Linux 热管理），已发生两次。
   只编树外模块。`~/repos/kernel/guarded-build.sh` 是带温控暂停的编译脚本，备用。
 - **实际启动用的 ESP 是 sda1（CPRA_A64FRE），不是挂在 `/boot/efi` 的 sda3**；两边 `loader/entries` 各有一份。
+  装内核包只会写 sda3，要把 `ubuntu/<版本>/` 和 `ubuntu-<版本>.conf` 手动复制到 sda1。sda1 的 `loader.conf` 默认项已改成 7.2.12，
+  原文件备份为 `loader.conf.bak-7.1`；7.1-rc3 的两个启动项仍在，作为退路（它的模块已从备份 `/root/kernel-backup-7.1.0-rc3-gaokun3+` 放回）。
   为 DSC 测试加的 `…-gaokun3+-dsc.conf` 在两边都有（oneshot 已用掉，默认项未改），不需要可删除。
 - 内核参数里有 `efi=noruntime`，但 `bootctl set-oneshot` 仍能写 EFI 变量。
 - 用 GNOME 的 PowerSaveMode 关屏再开屏会触发 DPU `ctl reset failure / vblank timeout`，之后芯片 Init 在 FW reload 超时——
