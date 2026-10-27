@@ -34,8 +34,9 @@ public:
     virtual ChipResult<> SetTimeOut(uint32_t millisecond) = 0;
     /// true：GetFrame 阻塞等帧；false：没有帧立即返回
     virtual ChipResult<> SetBlock(bool status) = 0;
-    /// 复位脚电平：true 拉高、false 拉低。只有 Master 通道支持
-    virtual ChipResult<> SetReset(bool state) = 0;
+    /// 复位一次：复位脚拉低 holdMs 后放开（两颗芯片共用这根脚）。只有 Master 通道支持。
+    /// Windows 按 SET_RESET 低 → 等 → 高 照做；Linux 交给驱动，脉宽不足 HIMAX_THP_RESET_MIN_MS 的按它算
+    virtual ChipResult<> ResetPulse(uint32_t holdMs) = 0;
     /// 打开 / 关闭帧中断通知
     virtual ChipResult<> IntOpen() = 0;
     virtual ChipResult<> IntClose() = 0;

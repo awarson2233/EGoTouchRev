@@ -241,8 +241,8 @@ target_include_directories(Port PUBLIC
     "${DEVICE_ROOT}"
 )
 if (NOT WIN32)
-    # himax-thp 驱动的用户态 ABI（himax_thp.h），内核模块与 TouchBusLinux 共用
-    target_include_directories(Port PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Kernel/himax-thp")
+    # himax-thp 驱动的用户态 ABI（<linux/himax_thp.h>），内核模块与 TouchBusLinux 共用
+    target_include_directories(Port PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Kernel/himax-thp/include/uapi")
 endif()
 
 # --- HimaxCore：芯片协议与生命周期（himax/Himax*.cpp），只经 Port 访问总线，各平台共用 ---

@@ -1,7 +1,9 @@
 // TouchBusLinux.cpp — ITouchBus 的 Linux 实现：himax-thp 内核驱动的字符设备（/dev/himax_thp）。
 //
-// ABI 见 Kernel/himax-thp/himax_thp.h。与 Windows 实现的对应：
-//   Master / Slave  同一个设备节点各开一个文件，SET_CHANNEL 绑定通道；功能码（F2..F5）与总线头由驱动按通道填
+// ABI 见 Kernel/himax-thp/include/uapi/linux/himax_thp.h。与 Windows 实现的对应：
+//   Master / Slave  同一个设备节点各开一个文件，SET_CHANNEL 绑定通道；功能码（F2..F5）与总线头由驱动按通道填。
+//                   一路同时只能被一个文件绑定（别人占着是 EBUSY），关掉文件这一路就停止读帧
+//   ResetPulse      RESET 一次完成，脉宽由驱动计时（Windows 是 SET_RESET 低 / 高两次）
 //   GetFrame        poll 等帧（超时 = SetTimeOut，非阻塞 = 0）后 read；驱动给的是帧头 + 去掉总线头的帧数据，
 //                   这里在前面补回 3 字节总线头的位置，帧在缓冲里的布局与 Windows 一致（FrameLayout.h）
 //   RequestCancel   eventfd 唤醒 poll。与 CancelIoEx 一样只打断进行中的读帧：每次 GetFrame 开始先清掉
@@ -9,7 +11,7 @@
 //   ReadBus         与 Windows 一样失败重试最多 10 次；WriteBus 不重试（Windows 的 WriteFile 也不重试）
 #include "Port/TouchBus.h"
 
-#include "himax_thp.h"
+#include <linux/himax_thp.h>
 
 #include <cerrno>
 #include <cstring>
@@ -37,7 +39,7 @@ public:
     ChipResult<> GetFrame(void* buffer, uint32_t outLen, uint32_t* retLen) override;
     ChipResult<> SetTimeOut(uint32_t millisecond) override;
     ChipResult<> SetBlock(bool status) override;
-    ChipResult<> SetReset(bool state) override;
+    ChipResult<> ResetPulse(uint32_t holdMs) override;
     ChipResult<> IntOpen() override { return SetInt(true); }
     ChipResult<> IntClose() override { return SetInt(false); }
     ChipResult<> ReadPanelStatus(uint8_t* data, uint32_t len) override;
@@ -191,8 +193,8 @@ ChipResult<> TouchBusLinux::IoctlU32(unsigned long request, uint32_t value) {
     return {};
 }
 
-ChipResult<> TouchBusLinux::SetReset(bool state) {
-    return IoctlU32(HIMAX_THP_IOC_SET_RESET, state ? 1u : 0u);
+ChipResult<> TouchBusLinux::ResetPulse(uint32_t holdMs) {
+    return IoctlU32(HIMAX_THP_IOC_RESET, holdMs);
 }
 
 ChipResult<> TouchBusLinux::SetInt(bool enable) {

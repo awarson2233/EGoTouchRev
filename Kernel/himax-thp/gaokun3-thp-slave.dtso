@@ -8,12 +8,18 @@
  *   SpiSerialBusV2 (CS 0, 12 MHz, "\\_SB.SP21")   SP21 = QUP 2 SE4 = DT 里的 spi20 (0x890000)
  *   GpioInt (Edge, ActiveLow, ..., "\\_SB.GIO0") { 0x27 }   INT = gpio39
  *
+ * 与 Master 是同一颗硅片，compatible 相同，靠 Master 的 himax,cascade 指向它来区分角色。himax-spi 也匹配这个
+ * compatible，打 overlay 时 himax-spi 不能处于加载状态，否则它会去抢 Slave（thp-bind.sh 先卸掉它）。
  * 复位脚与 Master 共用（THPB 没有 GpioIo），由 Master 那一路（spi6 上的 touchscreen@0）管。
- * SPI 引脚取 qup20 的 gpio87–90，电气参数照抄 spi6。INT 在 ACPI 里是下降沿；这里与 Master 一样写低电平，
- * himax-thp 读完一帧会等 INT 放开再返回，电平触发不会重复读。
+ * SPI 引脚取 qup20 的 gpio87–90，电气参数照抄 spi6。INT 照 ACPI 写下降沿（芯片拉低 INT 直到帧被读走，
+ * 每帧一个沿；原因见 himax-thp.c）。
  *
- * Master（spi6 上的 touchscreen@0，主线 DT 已有）：加 himax,cascade 指向 Slave，加 mode-gpios（gpio174，
- * 低 = SPI 模式）。改过的启动 dtb 里 ts0_default 也用 pinctrl 把 gpio174 拉低，两者不冲突。
+ * Master（spi6 上的 touchscreen@0，下游 DT 已有）：加 himax,cascade 指向 Slave，加 mode-gpios（gpio174，
+ * 低 = SPI 模式）；INT 由 DT 原来的低电平（hid-over-i2c 时代的写法）改成下降沿，同 ACPI 的 THPA。
+ * 改过的启动 dtb 里 ts0_default 也用 pinctrl 把 gpio174 拉低，两者不冲突。
+ *
+ * 中断的触发方式在第一次映射时定下，本次开机内改不了：原驱动 himax-spi 按启动 dtb 的低电平绑定过 Master 之后，
+ * 再打这个 overlay，Master 的中断就映射不上（反过来撤掉 overlay 后 himax-spi 也一样），要重启。
  */
 
 /dts-v1/;
@@ -72,16 +78,17 @@
 	status = "okay";
 
 	thp_slave: touchscreen@0 {
-		compatible = "himax,hx83121a-ts-slave";
+		compatible = "himax,hx83121a-ts";
 		reg = <0>;
 		spi-max-frequency = <12000000>;
-		interrupts-extended = <&tlmm 39 IRQ_TYPE_LEVEL_LOW>;
+		interrupts-extended = <&tlmm 39 IRQ_TYPE_EDGE_FALLING>;
 		pinctrl-0 = <&thp_slave_int_default>;
 		pinctrl-names = "default";
 	};
 };
 
 &{/soc@0/geniqup@9c0000/spi@998000/touchscreen@0} {
+	interrupts-extended = <&tlmm 175 IRQ_TYPE_EDGE_FALLING>;
 	mode-gpios = <&tlmm 174 GPIO_ACTIVE_HIGH>;
 	himax,cascade = <&thp_slave>;
 };

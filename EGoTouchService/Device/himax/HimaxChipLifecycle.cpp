@@ -44,16 +44,9 @@ ChipResult<> Chip::hx_hw_reset_ahb_intf(DeviceType type) {
 
     // 物理复位操作：经测试，Slave 句柄 (WinError 1168) 不支持复位控制，
     // 物理复位引脚仅绑定在 Master 句柄上，故统一由 m_master 执行。
-    if (auto res = m_master->SetReset(0); !res) {
-        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "Physical SetReset(0) via Master failed, err: {}", static_cast<int>(m_master->GetError()));
-        return res;
-    }
-    // 复位要保持一段时间（himax-spi 的 himax_pin_reset 拉低 5 ms）。SpbThpTool 的复位 IOCTL 自带时序，
-    // Linux 的 himax-thp 只改电平：不等的话脉冲太短，IC 没有真正复位，后面的 FW reload 等不到
-    Port::SleepMs(5);
-
-    if (auto res = m_master->SetReset(1); !res) {
-        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "Physical SetReset(1) via Master failed, err: {}", static_cast<int>(m_master->GetError()));
+    // 复位要保持一段时间（himax-spi 的 himax_pin_reset 拉低 5 ms），脉冲太短 IC 没有真正复位，后面的 FW reload 等不到
+    if (auto res = m_master->ResetPulse(5); !res) {
+        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "Physical reset via Master failed, err: {}", static_cast<int>(m_master->GetError()));
         return res;
     }
 
@@ -202,8 +195,8 @@ ChipResult<> Chip::hx_sense_on(bool FlashMode) {
     Port::SleepMs(11);
 
     if (!FlashMode) {
-        if (auto res = m_master->SetReset(false); !res) return res;
-        if (auto res = m_master->SetReset(true); !res) return res;
+        // 原厂这里两次 SET_RESET 之间不等；Linux 驱动按最短脉宽补足
+        if (auto res = m_master->ResetPulse(0); !res) return res;
     } else {
         tmp_data.fill(0);
         if (auto res = m_master->WriteBus(pic_op.adr_i2c_psw_lb, nullptr, tmp_data.data(), 2); !res) return res;
@@ -256,9 +249,7 @@ ChipResult<> Chip::hx_sense_off(bool check_en) {
             return {};
         }
 
-        if (auto res = m_master->SetReset(0); !res) return res;
-        Port::SleepMs(20);
-        if (auto res = m_master->SetReset(1); !res) return res;
+        if (auto res = m_master->ResetPulse(20); !res) return res;
         Port::SleepMs(50);
     } while (cnt++ < 15);
 

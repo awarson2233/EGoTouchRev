@@ -15,7 +15,8 @@
 //                  好帧坏帧都存，便于离线对比坏帧坏在哪里
 //   --raw          不经 Chip，直接对 master / slave 两路做同一组最基本的寄存器读写，对照两路的应答
 //   --poll         Init 之后不等 INT：关掉两路读帧，每 4 ms 直接读一次两路的事件栈，统计帧头，
-//                  看芯片到底有没有在出帧（与 INT 有没有来分开）
+//                  看芯片到底有没有在出帧（与 INT 有没有来分开）。只在 Windows 上可用：Linux 驱动
+//                  一路只给一个文件绑定
 //
 // 需要能读写设备节点（默认只有 root）。
 
@@ -154,9 +155,7 @@ int RunRaw(const std::filesystem::path& masterPath, const std::filesystem::path&
     for (int round = 0; round < 2; ++round) {
         if (round == 1) {
             std::printf("[hw reset via master, wait 100 ms]\n");
-            (void)m->SetReset(false);
-            Port::SleepMs(5);
-            (void)m->SetReset(true);
+            (void)m->ResetPulse(5);
             Port::SleepMs(100);
         }
         std::printf("[round %d]\n", round);
@@ -176,7 +175,11 @@ int RunRaw(const std::filesystem::path& masterPath, const std::filesystem::path&
 int RunPoll(const std::filesystem::path& masterPath, const std::filesystem::path& slavePath, long rounds) {
     auto m = Port::CreateTouchBus(masterPath, Port::TouchChannel::Master);
     auto s = Port::CreateTouchBus(slavePath, Port::TouchChannel::Slave);
-    if (!m->IsValid() || !s->IsValid()) return 1;
+    if (!m->IsValid() || !s->IsValid()) {
+        // Linux 的 himax-thp 一路只给一个文件绑定，Chip 已经占着两路（EBUSY）
+        std::fprintf(stderr, "poll: cannot open a second handle (err %u / %u)\n", m->GetError(), s->GetError());
+        return 1;
+    }
     // 驱动里的读帧会和这里抢事件栈。SpbThpTool 的 INT_CLOSE 什么也不做，要靠 SET_BLOCK 0 才能让它的 ISR 不读帧
     (void)m->IntClose();
     (void)s->IntClose();

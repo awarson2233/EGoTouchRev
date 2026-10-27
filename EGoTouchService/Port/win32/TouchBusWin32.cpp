@@ -3,6 +3,7 @@
 // Master / Slave 是两个设备对象（\\.\Global\SPBTESTTOOL_MASTER / _SLAVE），各开一个句柄；
 // 所有 I/O 都是 overlapped 发出、同步等完成，这样 RequestCancel 可以从别的线程用 CancelIoEx 打断。
 #include "Port/TouchBus.h"
+#include "Port/Time.h"
 
 #include <cstring>
 #include <vector>
@@ -93,7 +94,7 @@ public:
     ChipResult<> GetFrame(void* buffer, uint32_t outLen, uint32_t* retLen) override;
     ChipResult<> SetTimeOut(uint32_t millisecond) override;
     ChipResult<> SetBlock(bool status) override;
-    ChipResult<> SetReset(bool state) override;
+    ChipResult<> ResetPulse(uint32_t holdMs) override;
     ChipResult<> IntOpen() override;
     ChipResult<> IntClose() override;
     ChipResult<> ReadPanelStatus(uint8_t* data, uint32_t len) override;
@@ -322,12 +323,13 @@ ChipResult<> TouchBusWin32::SetBlock(bool state) {
 }
 
 /**
- * @brief 设置设备复位状态
- * @param state true 为拉高复位, false 为拉低复位
- * @return bool 是否成功
+ * @brief 复位一次：SET_RESET 拉低，等 holdMs，再拉高
  */
-ChipResult<> TouchBusWin32::SetReset(bool state) {
-    uint32_t val = state ? 1 : 0;
+ChipResult<> TouchBusWin32::ResetPulse(uint32_t holdMs) {
+    uint32_t val = 0;
+    if (auto res = Ioctl(SPI_IOCTL_SET_RESET, &val, sizeof(val), NULL, 0, NULL); !res) return res;
+    if (holdMs) Port::SleepMs(holdMs);
+    val = 1;
     return Ioctl(SPI_IOCTL_SET_RESET, &val, sizeof(val), NULL, 0, NULL);
 }
 

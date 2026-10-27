@@ -4,74 +4,70 @@
 $id: http://devicetree.org/schemas/input/touchscreen/himax,hx83121a-ts.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
-title: Himax HX83121A touchscreen controller in host processing mode
+title: Himax HX83121A touchscreen controller (SPI)
 
 maintainers:
-  - Detach2233 <101026605+awarson2233@users.noreply.github.com>
+  - Detach0-0 <detachovo@gmail.com>
 
 description: |
-  The HX83121A is a touch and display driver integrated (TDDI) controller. In
-  host processing mode it does not compute touch points itself: it streams raw
-  capacitance frames over SPI and the host does the touch processing. The touch
-  part is powered together with the display, so the controller follows the
-  panel it is integrated with.
+  The HX83121A is a touch and display driver integrated (TDDI) controller.
+  This binding describes its touch function on SPI, where the controller
+  streams capacitance frames and signals each frame on its interrupt line.
+  The touch part is powered together with the display panel it is integrated
+  with.
 
-  A large panel can use two cascaded controllers, each on its own SPI bus with
-  its own frame interrupt. The master carries the finger heatmap, owns the
-  shared reset line and the host interface select line, and points at the
-  slave, which carries the stylus data.
+  A large panel uses two cascaded controllers, each on its own SPI bus with
+  its own interrupt line. The primary controller owns the reset line, which
+  is shared by both controllers, and the host interface select line, and
+  refers to the secondary controller through himax,cascade. The secondary
+  node only describes its bus and interrupt.
 
 properties:
   compatible:
-    enum:
-      - himax,hx83121a-ts
-      - himax,hx83121a-ts-slave
+    const: himax,hx83121a-ts
 
   reg:
     maxItems: 1
 
   interrupts:
     maxItems: 1
-    description: Frame ready interrupt; the line is held asserted until the
-      frame has been read.
+    description: Frame ready interrupt, active low. The line is asserted when
+      a frame is ready and held until the frame has been read; the next frame
+      is not prepared before that, so each frame produces one falling edge.
 
   reset-gpios:
     maxItems: 1
+    description: Reset line, shared by the cascaded controllers.
 
   mode-gpios:
     maxItems: 1
     description: Host interface select, sampled by the controller when its
-      firmware reloads after a reset. Low selects SPI (host processing), high
-      selects I2C-HID. The driver keeps it low.
+      firmware reloads after a reset. Low selects SPI, high selects I2C-HID.
+
+  vdd-supply:
+    description: 3.3 V supply.
+
+  vddl-supply:
+    description: 1.8 V supply.
 
   panel: true
 
   himax,cascade:
     $ref: /schemas/types.yaml#/definitions/phandle
-    description: The slave controller cascaded with this one.
+    description: The secondary controller cascaded with this one. Only the
+      primary controller has this property.
 
 required:
   - compatible
   - reg
   - interrupts
 
+dependentRequired:
+  himax,cascade: [ reset-gpios ]
+
 allOf:
   - $ref: /schemas/spi/spi-peripheral-props.yaml#
   - $ref: touchscreen.yaml#
-  - if:
-      properties:
-        compatible:
-          contains:
-            const: himax,hx83121a-ts-slave
-    then:
-      properties:
-        reset-gpios: false
-        mode-gpios: false
-        panel: false
-        himax,cascade: false
-    else:
-      required:
-        - reset-gpios
 
 unevaluatedProperties: false
 
@@ -89,29 +85,35 @@ examples:
             reg = <0>;
             spi-max-frequency = <12000000>;
 
-            interrupts-extended = <&tlmm 175 IRQ_TYPE_LEVEL_LOW>;
+            interrupts-extended = <&tlmm 175 IRQ_TYPE_EDGE_FALLING>;
             reset-gpios = <&tlmm 99 GPIO_ACTIVE_LOW>;
             mode-gpios = <&tlmm 174 GPIO_ACTIVE_HIGH>;
 
-            panel = <&panel>;
-            himax,cascade = <&touchscreen_slave>;
+            vdd-supply = <&vreg_misc_3p3>;
+            vddl-supply = <&vreg_s10b>;
 
-            touchscreen-size-x = <25600>;
-            touchscreen-size-y = <16000>;
+            panel = <&panel>;
+            himax,cascade = <&touchscreen_secondary>;
+
+            touchscreen-size-x = <2560>;
+            touchscreen-size-y = <1600>;
             touchscreen-swapped-x-y;
             touchscreen-inverted-x;
         };
     };
 
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+
     spi {
         #address-cells = <1>;
         #size-cells = <0>;
 
-        touchscreen_slave: touchscreen@0 {
-            compatible = "himax,hx83121a-ts-slave";
+        touchscreen_secondary: touchscreen@0 {
+            compatible = "himax,hx83121a-ts";
             reg = <0>;
             spi-max-frequency = <12000000>;
 
-            interrupts-extended = <&tlmm 39 IRQ_TYPE_LEVEL_LOW>;
+            interrupts-extended = <&tlmm 39 IRQ_TYPE_EDGE_FALLING>;
         };
     };

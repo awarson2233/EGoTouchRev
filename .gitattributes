@@ -1,0 +1,3 @@
+# 内核模块源码与 Linux 脚本固定 LF：kbuild、checkpatch、bash 都不认 CRLF（Windows 上 core.autocrlf=true 会转）
+Kernel/** text eol=lf
+scripts/linux/** text eol=lf

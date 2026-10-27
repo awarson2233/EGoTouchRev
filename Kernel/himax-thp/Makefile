@@ -5,6 +5,8 @@
 
 ifneq ($(KERNELRELEASE),)
 obj-m := himax-thp.o thp-slave-dt.o
+# UAPI 头文件按内核树的位置放（include/uapi/linux/himax_thp.h），驱动写 <linux/himax_thp.h>
+ccflags-y += -I$(src)/include/uapi
 # Slave 的 DT overlay 编进 thp-slave-dt.ko，见 gaokun3-thp-slave.dtso
 thp-slave-dt-y := thp-slave-dt-main.o gaokun3-thp-slave.dtbo.o
 else

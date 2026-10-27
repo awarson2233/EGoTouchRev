@@ -31,8 +31,8 @@
   内核模块 `build/kernel/<内核版本>/`，install 前缀 `out/install/<preset>/`；源码目录不留编译产物。
 - `TsaCore/src/App/Property.cpp`：越界 memset 改为逐字段清零（编译过，**未用录制数据回放验证逐位一致**）。
 - **`Tools/HimaxThpProbe`**：跑 `Chip::Init` 后连续取帧、按 Chip 的规则校验两路、打印 heatmap 峰值。
-  选项：`--with-slave`、`--raw`（两路最小寄存器读写对照）、`--poll`（绕开驱动读帧，直接轮询事件栈并打印寄存器）、
-  `--dump FILE`（配合 `analyze_dump.py` 离线分析）。
+  选项：`--with-slave`、`--raw`（两路最小寄存器读写对照）、`--poll`（绕开驱动读帧，直接轮询事件栈并打印寄存器；
+  只在 Windows 上可用，Linux 驱动一路只给一个文件绑定）、`--dump FILE`（配合 `analyze_dump.py` 离线分析）。
 - **触摸输出** `Port/TouchSink.h`（`ITouchSink`、`CreateTouchSink`）、`linux/TouchSinkLinux.cpp`：uhid 虚拟 HID 触摸屏，
   报告沿用 VHF 的 32 字节触摸报告（`VhfTouchPacket::Build` 直接复用），描述符手写，hid-multitouch 接管成
   `EGoTouch Touchscreen`。hid-multitouch 按默认类处理，不会自动抬起没出现的触点，所以 sink 记下按着的 ID，
@@ -47,24 +47,27 @@
   `/etc/modules-load.d/egotouch.conf`（thp_slave_dt、uhid）；`/etc/udev/rules.d/60-egotouch.rules` + `egotouchd.service`
   （`/dev/himax_thp` 出现即拉起，`BindsTo` 设备）。日志在 `/var/log/egotouchd/`。不改 dtb、不改 initrd（himax-spi 不在 initrd 里）。
   `thp-bind.sh` 装过就用 modprobe，`off` 时用 `--ignore-install` 加载 himax-spi。
-- **复位脉冲**：`hx_hw_reset_ahb_intf` 在拉低和释放复位之间等 5 ms（同 himax-spi）。himax-thp 的 `SET_RESET` 只改电平，
-  不等的话脉冲太短、IC 没有真正复位，同一进程里第二次 Init 必定在 FW reload 超时（SpbThpTool 的复位 IOCTL 自带时序，
-  所以 Windows 上没暴露）。
+- **复位脉冲**：`ITouchBus::ResetPulse(holdMs)`。`hx_hw_reset_ahb_intf` 拉低 5 ms（同 himax-spi），安全模式重试 20 ms。
+  Linux 上是驱动的 `RESET` ioctl，由内核计时、不足 5 ms 按 5 ms；Windows 上是 SpbThpTool 的 SET_RESET 低、等、高。
+  脉冲太短 IC 没有真正复位，同一进程里第二次 Init 会在 FW reload 超时（早先 Linux 的 SET_RESET 只改电平时踩过）。
 
 ### 2.2 内核
 
-- **`himax-thp.ko`**：spi_driver，匹配 `himax,hx83121a-ts`（Master）和 `himax,hx83121a-ts-slave`（Slave）。
+- **`himax-thp.ko`**：spi_driver，匹配 `himax,hx83121a-ts`。Master 与 Slave 是同一颗硅片、同一个 compatible，被别的节点 `himax,cascade` 指向的是 Slave（**改成单一 compatible 后还没上实机复测**）。
+  himax-spi 也匹配这个 compatible，打 overlay 时它必须不在，否则会去抢 Slave；`thp-bind.sh on` 先卸掉它。
   每一路各有自己的 spi 设备、中断、INT 脚，用户态只看到一个节点。DT 见 `bindings/himax,hx83121a-ts.yaml`：
   - Master 的 `himax,cascade` 指向 Slave。Master probe 时 Slave 还没注册或没绑定就 `-EPROBE_DEFER`，等 Slave
     绑定后驱动核心重试；接上后建 device link（Master 是 consumer），Slave 解绑前 Master 先被解绑。没有
-    `himax,cascade` 时只有 Master 一路，Slave 那一路的总线读写返回 `-ENODEV`。不再有全局变量。
+    `himax,cascade` 时只有 Master 一路，绑定 Slave 那一路（`SET_CHANNEL(1)`）返回 `-ENODEV`。不再有全局变量。
   - `mode-gpios`（gpio174）：probe 时拉低（SPI 模式），之后不碰；复位后的 FW reload 采样它。可选，旧 DT 靠 pinctrl。
   - 复位脚、mode 脚、面板联动（drm_panel_follower）只在 Master 上。
   - 实测（7.2.12）：两路 1200 帧全部有效；解绑 Slave → Master 跟着解绑；重载模块时 Master 先 probe、被推迟、
     Slave 绑定后重试成功；不打 overlay 只有 Master 一路也正常。注意 sysfs 手动 `bind` 走 `device_driver_attach()`，
     推迟了不会进延迟队列，测延迟 probe 要重载模块。
 
-  ABI 见 `himax_thp.h`：
+  ABI 见 `include/uapi/linux/himax_thp.h`（与内核树同一相对路径，驱动和 TouchBusLinux 都写 `<linux/himax_thp.h>`；
+  ioctl 号段 0xB9，说明文档在 PR 分支的 Documentation/misc-devices/himax-thp.rst）：
+  - 一路只给一个文件绑定：打开后先 `SET_CHANNEL`，别的文件占着返回 `-EBUSY`；关掉文件，这一路停止读帧、清队列。
   - 驱动只提供总线原语：`BUS_READ` 发 `[读功能码, cmd, 0]` 收 len 字节，`BUS_WRITE` 发 `[写功能码, cmd, 数据]`。
     功能码与总线头由驱动按所绑通道填，用户态给不出任意字节（取代原来的全双工 `XFER`）。芯片的 Init、AFE 命令、
     读帧策略和 SOS 判定都在用户态，与 Windows 共用 `Device/himax/`。
@@ -75,7 +78,10 @@
     `echo 'module himax_thp +p' > /sys/kernel/debug/dynamic_debug/control` 看。
   - 面板状态字：bit0 = prepared（上电），bit1 = enabled（点亮），四个 follower 回调都会更新。
   没有模块参数：中断触发方式、SPI 模式都按 DT。
-- **`thp-slave-dt.ko`**：运行时 DT overlay（`gaokun3-thp-slave.dtso`），内容就是将来 gaokun3 dts 补丁要加的：
+- **进 gaokun3/linux 的 PR**（分支 gaokun3-touch-spi，WSL 的 ~/gaokun/linux-touch-pr，已推到 awarson2233/linux，上游 PR 未开）：binding、dts（默认恢复主线的 i2c-hid，
+  两路 SPI 写全但默认关，sc8280xp-huawei-gaokun3-touch-spi.dtb 打开 SPI）、himax-thp 进 drivers/misc、删掉 himax-spi。
+  详见 [himax-thp-upstream-review.md](/docs/artifacts/himax-thp-upstream-review.md) §2、§5。PR 的内核装上之前，本机继续用下面的过渡方案。
+- **`thp-slave-dt.ko`**（过渡）：运行时 DT overlay（`gaokun3-thp-slave.dtso`），内容与 PR 分支 dts 里的 SPI 描述相同：
   启用 spi20 和其下的 Slave，给 Master 节点加 `himax,cascade` 与 `mode-gpios`。insmod 时应用、rmmod 时撤销，
   不改启动用的 dtb。Master 只在 probe 时看 `himax,cascade`，所以 overlay 必须先于 himax_thp：
   `egotouch-modprobe.conf` 里有 `softdep himax_thp pre: thp_slave_dt`。装好后实测（7.2.12）：卸掉三个触摸模块、
@@ -130,10 +136,7 @@ FW reload 都正常，但两颗芯片都不按帧拉 INT，Slave 根本不扫描
 
 **修好之后**（开机默认环境、非 DSC、geni FIFO 模式）：只有 himax-spi、不碰屏幕时 INT175 每秒 120 次；himax-thp
 `HimaxThpProbe --with-slave` **120.0 fps**，1200 帧两路全部有效。Master 的 INT 每帧一次（120 次/秒）；
-**Slave 的 INT 约 190–210 次/秒**（2026-10-26 在 7.2.12 上测，新旧驱动都一样）：读出来的帧都通过校验、内容各不相同，
-相邻两帧间隔 3.04 / 5.29 ms 交替（相加正好一个 8.33 ms 周期），即 Slave 每个周期出两帧左右。用户态每周期只取一帧，
-多出来的那帧在队列满时被丢掉（约 86 帧/秒）。Windows 上 Slave 是不是也这样，还没有量过。
-两路都按 DT 的低电平触发、SPI mode 0（DT 默认，与 ACPI 一致）、不设片选等待。
+**Slave 每个 8.33 ms 周期出两帧**：读出来的帧都通过校验、内容各不相同，相邻两帧间隔 3.04 / 5.29 ms 交替（相加正好一个周期）。两路按下降沿触发（与 ACPI 一致，原因见 [himax-thp-upstream-review.md](/docs/artifacts/himax-thp-upstream-review.md) §3.1）时 Slave 的 INT 正好 240 次/秒、Master 120 次/秒（2026-10-27，PR 分支内核）；早先按低电平触发时 Slave 只有 190–210 次/秒，推测是电平方式下线程返回、解除屏蔽的时机与 INT 放开赛跑，有的帧被并进了上一次触发里。驱动把每一帧都读进队列，用户态（egotouchd、HimaxThpProbe）每个 Master 周期只取一帧 Slave，另一帧在队列满时被丢掉、计进 `dropped`，和 SPBTESTTOOL 的做法一致。两帧各装什么（笔的两个时隙？）还没对过，Windows 上 Slave 是不是也每周期两帧也还没量。SPI mode 0（DT 默认，与 ACPI 一致）、不设片选等待。
 
 以下是 I2C-HID 模式下（修复前）的记录：
 
@@ -198,7 +201,7 @@ Linux 上它照常枚举，三个接口：
 ## 5 当前驱动状态
 
 - 每一路在自己的帧中断线程里读整帧；用户态 `INT_ENABLE(1)` 打开某一路时立刻读一帧（同 SpbThpTool 的 `INT_OPEN`）。
-- 读完一帧等 INT 回到高电平再返回（最多 2 ms），电平触发不会重复读。
+- 两路 INT 按下降沿触发（DT），每帧一个沿、读一次，不读 INT 电平。读帧失败时那一路停住，用户态超时后重开恢复。DT 仍是低电平时 probe 会告警。中断的触发方式在本次开机第一次映射时定下：这次开机 himax-spi 按启动 dtb 的低电平绑定过 Master 之后，打上 overlay 的 himax-thp 映射不上 Master 的中断，要重启（`thp-bind.sh on`、`install.sh --now` 都受影响）。
 - 帧进每一路深度 2 的队列（满了丢新帧，同 SpbThpTool），read 带帧头（时间戳、序号、丢帧数）。
 - 没有模块参数。排查期间加过的轮询取帧、AHB 就绪探测、拼帧读法、触发方式 / SPI 模式覆盖、`read_extra`、
   `cs_setup_us`、gpio174 兜底、GSI 选项都已删掉（都是 I2C-HID 模式下的权宜之计或已排除的方向，见 §3.3）。
