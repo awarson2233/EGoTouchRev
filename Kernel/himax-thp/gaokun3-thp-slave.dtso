@@ -1,0 +1,94 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * gaokun3 触摸的 DT 补充，按 bindings/himax,hx83121a-ts.yaml 写，内容就是将来 gaokun3 dts 补丁要加的东西；
+ * 在那个补丁进启动 dtb 之前，用 thp-slave-dt.ko 在运行时打上。
+ *
+ * Slave（HX83121A 级联的第二颗）：主线 DT 没有描述它，取自本机 ACPI DSDT 的 \_SB.THPB：
+ *
+ *   SpiSerialBusV2 (CS 0, 12 MHz, "\\_SB.SP21")   SP21 = QUP 2 SE4 = DT 里的 spi20 (0x890000)
+ *   GpioInt (Edge, ActiveLow, ..., "\\_SB.GIO0") { 0x27 }   INT = gpio39
+ *
+ * 与 Master 是同一颗硅片，compatible 相同，靠 Master 的 himax,cascade 指向它来区分角色。himax-spi 也匹配这个
+ * compatible，打 overlay 时 himax-spi 不能处于加载状态，否则它会去抢 Slave（thp-bind.sh 先卸掉它）。
+ * 复位脚与 Master 共用（THPB 没有 GpioIo），由 Master 那一路（spi6 上的 touchscreen@0）管。
+ * SPI 引脚取 qup20 的 gpio87–90，电气参数照抄 spi6。INT 照 ACPI 写下降沿（芯片拉低 INT 直到帧被读走，
+ * 每帧一个沿；原因见 himax-thp.c）。
+ *
+ * Master（spi6 上的 touchscreen@0，下游 DT 已有）：加 himax,cascade 指向 Slave，加 mode-gpios（gpio174，
+ * 低 = SPI 模式）；INT 由 DT 原来的低电平（hid-over-i2c 时代的写法）改成下降沿，同 ACPI 的 THPA。
+ * 改过的启动 dtb 里 ts0_default 也用 pinctrl 把 gpio174 拉低，两者不冲突。
+ *
+ * 中断的触发方式在第一次映射时定下，本次开机内改不了：原驱动 himax-spi 按启动 dtb 的低电平绑定过 Master 之后，
+ * 再打这个 overlay，Master 的中断就映射不上（反过来撤掉 overlay 后 himax-spi 也一样），要重启。
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+
+&tlmm {
+	thp_slave_spi_default: thp-slave-spi-default-state {
+		miso-pins {
+			pins = "gpio87";
+			function = "qup20";
+			drive-strength = <2>;
+			bias-pull-down;
+		};
+
+		mosi-pins {
+			pins = "gpio88";
+			function = "qup20";
+			drive-strength = <2>;
+			bias-pull-down;
+			output-high;
+		};
+
+		clk-pins {
+			pins = "gpio89";
+			function = "qup20";
+			drive-strength = <2>;
+			bias-pull-down;
+			output-high;
+		};
+
+		cs-pins {
+			pins = "gpio90";
+			function = "qup20";
+			drive-strength = <2>;
+			bias-pull-down;
+			output-high;
+		};
+	};
+
+	thp_slave_int_default: thp-slave-int-default-state {
+		pins = "gpio39";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+};
+
+&spi20 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	pinctrl-0 = <&thp_slave_spi_default>;
+	pinctrl-names = "default";
+	status = "okay";
+
+	thp_slave: touchscreen@0 {
+		compatible = "himax,hx83121a-ts";
+		reg = <0>;
+		spi-max-frequency = <12000000>;
+		interrupts-extended = <&tlmm 39 IRQ_TYPE_EDGE_FALLING>;
+		pinctrl-0 = <&thp_slave_int_default>;
+		pinctrl-names = "default";
+	};
+};
+
+&{/soc@0/geniqup@9c0000/spi@998000/touchscreen@0} {
+	interrupts-extended = <&tlmm 175 IRQ_TYPE_EDGE_FALLING>;
+	mode-gpios = <&tlmm 174 GPIO_ACTIVE_HIGH>;
+	himax,cascade = <&thp_slave>;
+};

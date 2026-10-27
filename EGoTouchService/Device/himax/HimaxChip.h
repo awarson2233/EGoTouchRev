@@ -2,10 +2,12 @@
 #include "common/DeviceError.h"
 #include "HimaxRegisters.h"
 #include "himax/HimaxAfe.h"
+#include "himax/HimaxProtocol.h"
 
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -13,9 +15,6 @@
 #include <thread>
 
 namespace Himax {
-
-    enum class DeviceType;
-    class HalDevice;
 
     enum class ConnectionState {
         Unconnected = 0,    // 未连接/句柄未打开
@@ -45,12 +44,13 @@ namespace Himax {
             std::unique_ptr<HalDevice> m_master;
             std::unique_ptr<HalDevice> m_slave;
             // 设备路径留着，句柄失效后可以重开
-            std::wstring m_masterPath;
-            std::wstring m_slavePath;
+            std::filesystem::path m_masterPath;
+            std::filesystem::path m_slavePath;
             // 保护两个设备指针本身：worker 重开句柄时，别的线程可能正在发取消请求
             mutable std::mutex m_devMu;
             const char* m_lastInitFailStep = "";
             bool m_autoIdle = true;                     // 连续无输入帧后由 Chip 自己进 IDLE
+            bool m_slaveEnabled = true;                 // false：只用 master，见 SetSlaveEnabled
 
             // ── 读帧状态（对应 thp_afe_get_frame 的几个全局量）──────────────
             bool m_idleRetry = false;                   // g_FrameRetryEnableFlag：IC 在 IDLE，读不到帧先原地重读
@@ -147,7 +147,7 @@ namespace Himax {
             bool GetLastMasterWasRead() const { return m_lastMasterWasRead; }
             uint16_t GetLastFrameTimestamp() const;
 
-            Chip(const std::wstring& master_path, const std::wstring& slave_path);
+            Chip(const std::filesystem::path& master_path, const std::filesystem::path& slave_path);
             ~Chip(); // Add destructor for explicit cleanup
             
             bool IsReady(DeviceType type) const;
@@ -160,11 +160,15 @@ namespace Himax {
             /// 关闭并重新打开两个设备句柄（对应原厂的整只守护重启）。必须先 Quiesce。
             /// 只能在 worker 线程调用。
             bool ReopenDevices();
-            /// 面板电源真值：SPB 驱动的 ACPI 读取，bit0 = 屏幕已上电。读取失败返回空。
+            /// 面板电源真值：总线的面板状态字（Windows 上是 SPB 驱动的 ACPI 读取），bit0 = 屏幕已上电。读取失败返回空。
             std::optional<bool> ReadPanelPower();
             /// true：连续无输入帧够多时 Chip 自己进 IDLE（parser-only 模式不解算时用）。TSACore 解算时关掉，
             /// 改由 TSACore 的 IDLE 请求下发 EnterIdle。
             void SetAutoIdleEnabled(bool enabled) noexcept { m_autoIdle = enabled; }
+            /// false：只用 master（手指）。slave（笔）不配置、不开中断、不读帧，帧里的笔数据按「无笔」处理，
+            /// 总线探测也不再要求 slave 应答。只在 Init 之前改。
+            void SetSlaveEnabled(bool enabled) noexcept { m_slaveEnabled = enabled; }
+            bool IsSlaveEnabled() const noexcept { return m_slaveEnabled; }
             /// IC 在最近一帧的帧尾里自报的模式（word0 == 1 即 IDLE）。宿主不维护自己的 IDLE 状态。
             THP_AFE_MODE GetAfeMode() const noexcept { return afe_mode.load(); }
             /// 总线就绪探测（对应 himax_thp_drv!checkBusReady）：两路都读寄存器 0x13，
@@ -173,8 +177,9 @@ namespace Himax {
                 bool ioOk = false;
                 uint8_t master = 0;
                 uint8_t slave = 0;
-                uint32_t win32Error = 0;
-                bool Ready() const noexcept { return ioOk && master != 0 && slave != 0; }
+                uint32_t nativeError = 0;   // 平台错误码（Win32 错误码 / errno）
+                bool slaveRequired = true;  // 只用 master 时为 false，slave 不参与判定
+                bool Ready() const noexcept { return ioOk && master != 0 && (!slaveRequired || slave != 0); }
             };
             BusProbe ProbeBus();
             ChipResult<> check_bus(void);

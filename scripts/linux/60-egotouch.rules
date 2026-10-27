@@ -1,0 +1,2 @@
+# himax-thp 的字符设备出现时拉起 egotouchd
+SUBSYSTEM=="misc", KERNEL=="himax_thp", TAG+="systemd", ENV{SYSTEMD_WANTS}+="egotouchd.service"

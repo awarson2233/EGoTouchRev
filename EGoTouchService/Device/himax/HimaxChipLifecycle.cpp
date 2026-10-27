@@ -3,13 +3,13 @@
 #include "himax/HimaxByteUtils.h"
 #include "Logger.h"
 #include "FrameLayout.h"
+#include "Port/Time.h"
 
 #include <algorithm>
 #include <array>
 #include <cstring>
 #include <initializer_list>
 #include <vector>
-#include <windows.h>
 
 namespace Himax {
 
@@ -44,13 +44,9 @@ ChipResult<> Chip::hx_hw_reset_ahb_intf(DeviceType type) {
 
     // 物理复位操作：经测试，Slave 句柄 (WinError 1168) 不支持复位控制，
     // 物理复位引脚仅绑定在 Master 句柄上，故统一由 m_master 执行。
-    if (auto res = m_master->SetReset(0); !res) {
-        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "Physical SetReset(0) via Master failed, WinError: {}", static_cast<int>(m_master->GetError()));
-        return res;
-    }
-
-    if (auto res = m_master->SetReset(1); !res) {
-        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "Physical SetReset(1) via Master failed, WinError: {}", static_cast<int>(m_master->GetError()));
+    // 复位要保持一段时间（himax-spi 的 himax_pin_reset 拉低 5 ms），脉冲太短 IC 没有真正复位，后面的 FW reload 等不到
+    if (auto res = m_master->ResetPulse(5); !res) {
+        LOG_ERROR("HimaxChip", __func__, GetStateStr(), "Physical reset via Master failed, err: {}", static_cast<int>(m_master->GetError()));
         return res;
     }
 
@@ -76,20 +72,20 @@ ChipResult<> Chip::hx_sw_reset_ahb_intf(DeviceType type) {
             safe_mode_ok = true;
             break;
         }
-        Sleep(10);
+        Port::SleepMs(10);
     }
 
     if (!safe_mode_ok) {
         LOG_WARN("HimaxChip", __func__, GetStateStr(), "Failed to enter Safe Mode before reset, proceeding anyway...");
     }
 
-    Sleep(10);
+    Port::SleepMs(10);
     detail::ParseAddressLittleEndian(pdriver_op.data_fw_define_flash_reload_en, tmp_data, 4);
     if (auto res = HimaxProtocol::register_write(dev, pdriver_op.addr_fw_define_2nd_flash_reload, tmp_data, 4); !res) {
         LOG_ERROR("HimaxChip", __func__, GetStateStr(), "clean reload done failed!");
         return res;
     }
-    Sleep(10);
+    Port::SleepMs(10);
 
     detail::ParseAddressLittleEndian(pfw_op.data_system_reset, tmp_data, 4);
     if (auto res = HimaxProtocol::register_write(dev, pfw_op.addr_system_reset, tmp_data, 4); !res) {
@@ -97,7 +93,7 @@ ChipResult<> Chip::hx_sw_reset_ahb_intf(DeviceType type) {
         return res;
     }
 
-    Sleep(100);
+    Port::SleepMs(100);
     if (auto res = HimaxProtocol::burst_enable(dev, 1); !res) return res;
 
     return {};
@@ -179,7 +175,7 @@ ChipResult<> Chip::himax_mcu_interface_on(void) {
             break;
         }
 
-        Sleep(1);
+        Port::SleepMs(1);
     } while (++cnt < 10);
 
     if (cnt > 0) {
@@ -196,11 +192,11 @@ ChipResult<> Chip::hx_sense_on(bool FlashMode) {
     detail::ParseAddressLittleEndian(pfw_op.data_clear, tmp_data.data(), 4);
     if (auto res = HimaxProtocol::register_write(m_master.get(), pfw_op.addr_ctrl_fw_isr, tmp_data.data(), 4); !res) return res;
 
-    Sleep(11);
+    Port::SleepMs(11);
 
     if (!FlashMode) {
-        if (auto res = m_master->SetReset(false); !res) return res;
-        if (auto res = m_master->SetReset(true); !res) return res;
+        // 原厂这里两次 SET_RESET 之间不等；Linux 驱动按最短脉宽补足
+        if (auto res = m_master->ResetPulse(0); !res) return res;
     } else {
         tmp_data.fill(0);
         if (auto res = m_master->WriteBus(pic_op.adr_i2c_psw_lb, nullptr, tmp_data.data(), 2); !res) return res;
@@ -220,7 +216,7 @@ ChipResult<> Chip::hx_sense_off(bool check_en) {
             step_ok = HimaxProtocol::register_write(m_master.get(), pfw_op.addr_ctrl_fw_isr, send_data.data(), 4);
             if (!step_ok) return step_ok;
         }
-        Sleep(20);
+        Port::SleepMs(20);
 
         step_ok = HimaxProtocol::register_read(m_master.get(), pfw_op.addr_chk_fw_status, back_data.data(), 4);
         if (!step_ok) return step_ok;
@@ -253,10 +249,8 @@ ChipResult<> Chip::hx_sense_off(bool check_en) {
             return {};
         }
 
-        if (auto res = m_master->SetReset(0); !res) return res;
-        Sleep(20);
-        if (auto res = m_master->SetReset(1); !res) return res;
-        Sleep(50);
+        if (auto res = m_master->ResetPulse(20); !res) return res;
+        Port::SleepMs(50);
     } while (cnt++ < 15);
 
     LOG_INFO("HimaxChip", __func__, GetStateStr(), "Out!");
@@ -283,7 +277,7 @@ ChipResult<> Chip::himax_mcu_power_on_init(void) {
             return {};
         }
         (void)himax_mcu_read_FW_status();
-        Sleep(11);
+        Port::SleepMs(11);
     }
 
     LOG_ERROR("HimaxChip", __func__, GetStateStr(), "FW reload timeout!");
@@ -337,15 +331,15 @@ bool DdRegReadByte(HalDevice* dev, uint8_t reg, uint8_t bank, uint8_t offset, ui
 bool DdRegAccess(HalDevice* dev, bool enable) {
     if (enable) {
         (void)WriteVerify(dev, 0x9000009C, 0xDD, 0xFF);
-        Sleep(10);
+        Port::SleepMs(10);
         const bool ok = WriteVerify(dev, 0x90000280, 0xA5, 0xFF);
-        Sleep(10);
+        Port::SleepMs(10);
         return ok;
     }
     (void)WriteVerify(dev, 0x90000280, 0x00, 0xFF);
-    Sleep(10);
+    Port::SleepMs(10);
     const bool ok = WriteVerify(dev, 0x9000009C, 0x00, 0xFF);
-    Sleep(10);
+    Port::SleepMs(10);
     return ok;
 }
 
@@ -354,7 +348,7 @@ bool RetryEvery10ms(int extraTries, F&& step) {
     for (int i = 0;; ++i) {
         if (step()) return true;
         if (i >= extraTries) return false;
-        Sleep(10);
+        Port::SleepMs(10);
     }
 }
 
@@ -393,27 +387,27 @@ bool Chip::ReadOtpProjectSlot(uint16_t slot, std::string& id, PanelIdentity& ext
 
     // EB / B9 两道口令，BB 选 OTP 地址后触发读出，等 50 ms 再从 B1 bank 3 取 10 个字符
     bool ok = DdRegWrite(dev, {0xEB, 0x55, 0x66, 0xCC});
-    Sleep(10);
+    Port::SleepMs(10);
     ok &= DdRegWrite(dev, {0xB9, 0x83, 0x12, 0x1A});
-    Sleep(10);
+    Port::SleepMs(10);
     ok &= DdRegWrite(dev, {0xBB, 0x02, static_cast<uint8_t>(slot >> 8), static_cast<uint8_t>(slot)});
-    Sleep(10);
+    Port::SleepMs(10);
     ok &= DdRegWrite(dev, {0xBB, 0x0A});
-    Sleep(50);
+    Port::SleepMs(50);
 
     char chars[10]{};
     for (uint8_t i = 0; i < 10; ++i) {
         uint8_t c = 0;
         ok &= DdRegReadByte(dev, 0xB1, 3, static_cast<uint8_t>(1 + i), c);
         chars[i] = static_cast<char>(c);
-        Sleep(1);
+        Port::SleepMs(1);
     }
     id.assign(chars, strnlen(chars, sizeof(chars)));
 
     // BB 写回原值
     static constexpr std::array<uint8_t, 12> kBbRestore = {0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x70, 0x00, 0x0B};
     ok &= static_cast<bool>(HimaxProtocol::register_write(dev, 0x300BB000, kBbRestore.data(), static_cast<uint32_t>(kBbRestore.size())));
-    Sleep(10);
+    Port::SleepMs(10);
     (void)DdRegReadByte(dev, 0xB4, 0, 8, extra.revisionCode);
     (void)DdRegReadByte(dev, 0xE2, 0, 1, extra.e2);
 
@@ -425,7 +419,7 @@ bool Chip::ReadOtpProjectSlot(uint16_t slot, std::string& id, PanelIdentity& ext
         LOG_WARN("HimaxChip", __func__, GetStateStr(), "safeModeSetRaw false failed");
         return false;
     }
-    Sleep(10);
+    Port::SleepMs(10);
     return ok;
 }
 
@@ -456,7 +450,7 @@ std::optional<PanelIdentity> Chip::GetPanelIdentity() const {
 
 ChipResult<> Chip::InitFailed(const char* step, const ChipResult<>& res) {
     m_lastInitFailStep = step;
-    LOG_WARN("HimaxChip", "Init", GetStateStr(), "Init failed at step '{}': {} (master win32={}, slave win32={}).",
+    LOG_WARN("HimaxChip", "Init", GetStateStr(), "Init failed at step '{}': {} (master err={}, slave err={}).",
              step, ToString(res.error()), m_master ? m_master->GetError() : 0u,
              m_slave ? m_slave->GetError() : 0u);
     return res;
@@ -464,14 +458,14 @@ ChipResult<> Chip::InitFailed(const char* step, const ChipResult<>& res) {
 
 ChipResult<> Chip::Init(void) {
     if (auto res = hx_hw_reset_ahb_intf(DeviceType::Master); !res) return InitFailed("hw_reset", res);
-    Sleep(10);
+    Port::SleepMs(10);
     // 原厂每次 open_project 都先读 OTP 再复位开扫；面板不会变，这里只在第一次建链时读，读完再复位一次，
     // 留下的安全模式 / LPWU 定时器改动都随复位清掉
     if (!m_panelTried) {
         m_panelTried = true;
         ReadPanelIdentity();
         if (auto res = hx_hw_reset_ahb_intf(DeviceType::Master); !res) return InitFailed("hw_reset", res);
-        Sleep(10);
+        Port::SleepMs(10);
     }
     LOG_INFO("HimaxChip", __func__, GetStateStr(), "Starting initialization sequence...");
 
@@ -485,16 +479,20 @@ ChipResult<> Chip::Init(void) {
 
     if (auto res = himax_switch_data_type(DeviceType::Master, THP_INSPECTION_ENUM::EGO_RAWDATA); !res) return InitFailed("master_data_type", res);
     if (auto res = HimaxProtocol::register_write(m_master.get(), psram_op.addr_rawdata_addr, tmp_data.data(), 4); !res) return InitFailed("master_rawdata_addr", res);
-    if (auto res = himax_switch_data_type(DeviceType::Slave, THP_INSPECTION_ENUM::EGO_RAWDATA); !res) return InitFailed("slave_data_type", res);
-    if (auto res = HimaxProtocol::register_write(m_slave.get(), psram_op.addr_rawdata_addr, tmp_data.data(), 4); !res) return InitFailed("slave_rawdata_addr", res);
+    if (m_slaveEnabled) {
+        if (auto res = himax_switch_data_type(DeviceType::Slave, THP_INSPECTION_ENUM::EGO_RAWDATA); !res) return InitFailed("slave_data_type", res);
+        if (auto res = HimaxProtocol::register_write(m_slave.get(), psram_op.addr_rawdata_addr, tmp_data.data(), 4); !res) return InitFailed("slave_rawdata_addr", res);
+    }
 
     if (auto res = m_master->IntOpen(); !res) {
         return InitFailed("master_int_open", res);
     }
-    if (auto res = m_slave->IntOpen(); !res) {
-        (void)m_slave->IntClose();
-        (void)m_master->IntClose();
-        return InitFailed("slave_int_open", res);
+    if (m_slaveEnabled) {
+        if (auto res = m_slave->IntOpen(); !res) {
+            (void)m_slave->IntClose();
+            (void)m_master->IntClose();
+            return InitFailed("slave_int_open", res);
+        }
     }
 
     if (auto res = ApplyFrameReadPolicy(); !res) {
@@ -507,7 +505,9 @@ ChipResult<> Chip::Init(void) {
     // 读不到就重开那一路的中断通道。不清的话第一帧会是上一轮留下的（常见是一帧 IDLE 帧）。
     int staleFrames = 0;
     for (int i = 0; i < 3; ++i) {
-        if (m_slave->GetFrame(back_data.data() + Frame::kSlaveHeaderOffset, static_cast<uint32_t>(Frame::kSlaveFrameSize), nullptr)) {
+        if (!m_slaveEnabled) {
+            // 只用 master：slave 没开中断，不读
+        } else if (m_slave->GetFrame(back_data.data() + Frame::kSlaveHeaderOffset, static_cast<uint32_t>(Frame::kSlaveFrameSize), nullptr)) {
             ++staleFrames;
         } else {
             (void)m_slave->IntOpen();

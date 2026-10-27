@@ -227,7 +227,8 @@ bool Before(uint8_t dim1, uint8_t dim2, uint8_t refDim1, uint8_t refDim2) {
 }
 
 // TSA_CombineBlock @ 0x6baa0de5
-// mask 里的区块组合成一组 DifPrpt；其后的 4 字节一并清零（原样写 32 字节）。
+// mask 里的区块组合成一组 DifPrpt。原代码一次写 32 字节，把 DifPrpt 之后的 4 字节一并清零；
+// 那 4 字节由 GetDifPrpt 按各自的字段清零。
 void Combine(DifPrpt& out, const Blocks& blocks, uint32_t mask) {
     DifPrpt p{};
     p.maxSig = INT16_MIN;
@@ -262,7 +263,6 @@ void Combine(DifPrpt& out, const Blocks& blocks, uint32_t mask) {
     p.sum = p.negSum + p.posSum;
     p.count = static_cast<int16_t>(p.posCount + p.negCount);
     out = p;
-    std::memset(reinterpret_cast<uint8_t*>(&out) + sizeof(DifPrpt), 0, 4);
 }
 
 // TSA_GetRawPrpt @ 0x6baa0839
@@ -330,10 +330,15 @@ void GetDifPrpt() {
     const TsaStatic& s = Static();
     const bool wide = (s.featureFlags & kFeatSideTouch) != 0;
     Combine(p.difCore, blocks, Mask({kInner, kSecondCols}));
+    std::memset(p.reserved0DC, 0, sizeof(p.reserved0DC));
     uint32_t all = 0x7f;
     if (wide) all = (s.afeStatus & kAfeRawUnstable) != 0 ? Mask({kInner, kSecondCols, kBottomCorners, kBottomRow}) : 0x7f & ~Mask({kOuterCols});
     Combine(p.dif, blocks, all);
+    // 紧跟 dif 的是水下格数：每帧在这里归零，异常检测模块之后再填
+    p.underWaterCells = 0;
+    p.underWaterNegCells = 0;
     Combine(p.difInner, blocks, Mask({kInner}));
+    std::memset(p.reserved0FC, 0, 4);
 }
 
 }  // namespace

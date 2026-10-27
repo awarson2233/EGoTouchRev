@@ -1,0 +1,16 @@
+# egotouchd：himax-thp 取帧 → TSACore 解算 → uhid 触摸屏。
+# 由 60-egotouch.rules 在 /dev/himax_thp 出现时拉起，设备消失时随之停止（BindsTo），不需要 enable。
+[Unit]
+Description=EGoTouch touchscreen daemon
+BindsTo=dev-himax_thp.device
+After=dev-himax_thp.device
+
+[Service]
+ExecStart=/usr/local/bin/egotouchd --log-dir /var/log/egotouchd
+Restart=on-failure
+RestartSec=2
+LogsDirectory=egotouchd
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes

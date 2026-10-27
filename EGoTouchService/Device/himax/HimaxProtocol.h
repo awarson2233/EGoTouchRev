@@ -9,55 +9,14 @@
 // HimaxHal.h
 #pragma once
 #include "common/DeviceError.h"
+#include "Port/TouchBus.h"
 
 #include <vector>
-#include <windows.h>
 
 namespace Himax {
-    enum class DeviceType { Master, Slave };
-    
-    class HalDevice {
-    public:
-        HalDevice(const wchar_t* path, DeviceType type);
-        ~HalDevice();
-
-        bool IsValid() const;
-        ChipResult<> Ioctl(DWORD code, const void* in, uint32_t inLen, void* out,
-                   uint32_t outLen, uint32_t* retLen);
-        ChipResult<> Read(void* buffer, uint32_t len);
-        ChipResult<> ReadBus(uint8_t cmd, uint8_t* data, uint32_t len);
-        ChipResult<> WriteBus(const uint8_t cmd, const uint8_t* addr, const uint8_t* data, uint32_t len);
-        ChipResult<> ReadAcpi(uint8_t* data, uint32_t len);
-        ChipResult<> GetFrame(void* buffer, uint32_t outLen, uint32_t* retLen);
-        ChipResult<> SetTimeOut(uint32_t millisecond);
-        ChipResult<> SetBlock(bool status);
-        ChipResult<> SetReset(bool state);
-        ChipResult<> IntOpen(void);
-        ChipResult<> IntClose(void);
-        DWORD GetError(void);
-        bool IsTimeoutError() const;
-        /// 最近一次失败是不是被 RequestCancel 取消的
-        bool IsCancelledError() const;
-        /// 只发取消请求，不碰任何成员状态；可以从任意线程调用，用来把阻塞在读帧里的 worker 唤醒。
-        void RequestCancel() noexcept;
-
-    private:
-        ChipResult<> IoctlOnce(DWORD code, const void* in, uint32_t inLen, void* out,
-                               uint32_t outLen, uint32_t* retLen);
-
-        HANDLE m_handle;
-        HANDLE m_syncEvent = nullptr;
-        DWORD m_lastError;
-        DeviceType m_type;
-        
-        uint8_t m_readOp;
-        uint8_t m_writeOp;
-        const size_t dummy_size = 1;
-        const size_t header_size = 2;
-        const size_t data_offset = header_size + dummy_size;
-        
-        std::vector<uint8_t> m_xfer_buffer;
-    };
+    // 协议层沿用的名字：芯片的总线通道就是 port 层的 ITouchBus，各平台的实现在 Port/<平台>/ 下
+    using DeviceType = Port::TouchChannel;
+    using HalDevice = Port::ITouchBus;
 
     namespace HimaxProtocol {
 

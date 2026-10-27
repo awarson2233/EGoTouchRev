@@ -6,10 +6,12 @@
 #include <mutex>
 #include <string>
 #include <deque>
+#if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#endif
 
 namespace Common {
 
@@ -28,11 +30,13 @@ public:
         return inst;
     }
 
+#if defined(_WIN32)
     // Optional event to signal when new log lines arrive (Service-side)
     void SetNotifyEvent(HANDLE h) {
         std::lock_guard<std::mutex> lk(mutex_);
         m_notifyEvent = h;
     }
+#endif
 
     // Read all buffered lines (thread-safe copy)
     std::deque<std::string> GetLines() const {
@@ -57,7 +61,9 @@ public:
             lines_.pop_front();
         while (static_cast<int>(pendingLines_.size()) > kMaxLines)
             pendingLines_.pop_front();
+#if defined(_WIN32)
         if (m_notifyEvent) SetEvent(m_notifyEvent);
+#endif
     }
 
     void Clear() {
@@ -70,7 +76,9 @@ private:
     mutable std::mutex mutex_;
     std::deque<std::string> lines_;
     std::deque<std::string> pendingLines_;  // for DrainNewLines
+#if defined(_WIN32)
     HANDLE m_notifyEvent = nullptr;
+#endif
 };
 
 } // namespace Common

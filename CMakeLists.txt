@@ -179,29 +179,37 @@ target_precompile_headers(Common PRIVATE
     <memory>
     <unordered_map>
     <algorithm>
-    <Windows.h>
 )
+if (WIN32)
+    target_precompile_headers(Common PRIVATE <Windows.h>)
+endif()
 
 if (WIN32)
     target_link_libraries(Common PUBLIC advapi32)
 endif()
 
 # IPCCore library: IPC protocol ABI, named pipe transport, and shared-memory transport
-add_library(IPCCore STATIC
-    ${IPC_SOURCES}
-    ${IPC_HEADERS}
-)
-
-target_include_directories(IPCCore PUBLIC
-    "${IPC_ROOT}/include"
-)
-target_link_libraries(IPCCore PUBLIC Common)
+# 管道与共享内存的实现目前只有 Windows 版；其他平台只导出协议头文件（DVRCore 用到其中的类型）
 if (WIN32)
+    add_library(IPCCore STATIC
+        ${IPC_SOURCES}
+        ${IPC_HEADERS}
+    )
+    target_include_directories(IPCCore PUBLIC
+        "${IPC_ROOT}/include"
+    )
+    target_link_libraries(IPCCore PUBLIC Common)
     target_link_libraries(IPCCore PRIVATE advapi32)
+else()
+    add_library(IPCCore INTERFACE)
+    target_include_directories(IPCCore INTERFACE
+        "${IPC_ROOT}/include"
+    )
+    target_link_libraries(IPCCore INTERFACE Common)
 endif()
 
 # ImGuiCommon library: UI framework (only for diagnostic tools)
-if (EGO_BUILD_TOOLS)
+if (EGO_BUILD_TOOLS AND WIN32)
     add_library(ImGuiCommon STATIC
         ${IMGUI_SOURCES}
     )
@@ -211,12 +219,46 @@ if (EGO_BUILD_TOOLS)
     )
 endif()
 
-# --- Device Module (Hardware Abstraction) ---
 set(DEVICE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/EGoTouchService/Device")
+
+# --- Port Module (Platform Ports) ---
+# 平台相关的部分抽成接口（EGoTouchService/Port/*.h），每个平台在 Port/<平台>/ 下给出实现，这里按平台挑一份
+set(PORT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/EGoTouchService/Port")
+if (WIN32)
+    set(PORT_PLATFORM_DIR "${PORT_ROOT}/win32")
+else()
+    set(PORT_PLATFORM_DIR "${PORT_ROOT}/linux")
+endif()
+file(GLOB PORT_SOURCES "${PORT_PLATFORM_DIR}/*.cpp")
+file(GLOB PORT_HEADERS "${PORT_ROOT}/*.h")
+
+add_library(Port STATIC
+    ${PORT_SOURCES}
+    ${PORT_HEADERS}
+)
+target_include_directories(Port PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/EGoTouchService"
+    "${DEVICE_ROOT}"
+)
+if (NOT WIN32)
+    # himax-thp 驱动的用户态 ABI（<linux/himax_thp.h>），内核模块与 TouchBusLinux 共用
+    target_include_directories(Port PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Kernel/himax-thp/include/uapi")
+endif()
+
+# --- HimaxCore：芯片协议与生命周期（himax/Himax*.cpp），只经 Port 访问总线，各平台共用 ---
+file(GLOB HIMAX_CORE_SOURCES "${DEVICE_ROOT}/himax/Himax*.cpp")
+add_library(HimaxCore STATIC ${HIMAX_CORE_SOURCES})
+target_include_directories(HimaxCore PUBLIC "${DEVICE_ROOT}")
+target_link_libraries(HimaxCore PUBLIC Port Common)
+
+# --- Device Module (Hardware Abstraction) ---
+# Device / Host / 服务外壳与依赖它们的工具目前只有 Windows 实现；其他平台只构建算法层与 TsaRawReplay
+if (WIN32)
 file(GLOB_RECURSE DEVICE_SOURCES "${DEVICE_ROOT}/*.cpp")
 file(GLOB_RECURSE DEVICE_HEADERS "${DEVICE_ROOT}/*.h")
 list(FILTER DEVICE_SOURCES EXCLUDE REGEX "[/\\\\]tests[/\\\\]")
 list(FILTER DEVICE_HEADERS EXCLUDE REGEX "[/\\\\]tests[/\\\\]")
+list(FILTER DEVICE_SOURCES EXCLUDE REGEX "[/\\\\]himax[/\\\\]Himax[^/\\\\]*\\.cpp$")
 
 add_library(Device STATIC
     ${DEVICE_SOURCES}
@@ -233,7 +275,8 @@ target_compile_definitions(Device PUBLIC
 target_include_directories(Device PUBLIC
     "${DEVICE_ROOT}"
 )
-target_link_libraries(Device PUBLIC Common Host Solvers setupapi hid)
+target_link_libraries(Device PUBLIC HimaxCore Common Host Solvers setupapi hid)
+endif()
 
 # --- Solvers Module (Touch Algorithm) ---
 set(SOLVERS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/EGoTouchService/Solvers")
@@ -300,19 +343,17 @@ target_link_libraries(Solvers PUBLIC TsaCore)
 target_include_directories(Common PUBLIC "${SOLVERS_ROOT}")
 
 # --- Host Module (System Integration) ---
-set(HOST_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/EGoTouchService/Host")
-file(GLOB HOST_SOURCES "${HOST_ROOT}/*.cpp")
-file(GLOB HOST_HEADERS "${HOST_ROOT}/*.h")
-
-add_library(Host STATIC
-    ${HOST_SOURCES}
-    ${HOST_HEADERS}
-)
-target_include_directories(Host PUBLIC "${HOST_ROOT}")
-target_link_libraries(Host PUBLIC Common)
-
 if (WIN32)
-    target_link_libraries(Host PUBLIC advapi32)
+    set(HOST_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/EGoTouchService/Host")
+    file(GLOB HOST_SOURCES "${HOST_ROOT}/*.cpp")
+    file(GLOB HOST_HEADERS "${HOST_ROOT}/*.h")
+
+    add_library(Host STATIC
+        ${HOST_SOURCES}
+        ${HOST_HEADERS}
+    )
+    target_include_directories(Host PUBLIC "${HOST_ROOT}")
+    target_link_libraries(Host PUBLIC Common advapi32)
 endif()
 
 # --- DVR Module ---
@@ -349,6 +390,7 @@ function(ego_copy_config_to_output target)
 endfunction()
 
 # --- EGoTouchService (Production Service Shell) ---
+if (WIN32)
 set(SERVICE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/EGoTouchService")
 
 add_library(EGoTouchServiceCore STATIC
@@ -397,9 +439,10 @@ if(MSVC)
 elseif(WIN32)
     target_link_options(EGoTouchService PRIVATE -municode)
 endif()
+endif()
 
 # --- BtMcuTestTool (ImGui BT Protocol Validator) ---
-if (EGO_BUILD_TOOLS)
+if (EGO_BUILD_TOOLS AND WIN32)
     set(IMGUI_BACKEND_SOURCES
         "${IMGUI_ROOT}/backends/imgui_impl_win32.cpp"
         "${IMGUI_ROOT}/backends/imgui_impl_dx11.cpp"
@@ -429,7 +472,7 @@ endif()
 
 # --- EGoTouchRecorder：给测试者的只读录制工具（触摸帧 + BT MCU → .dvrbin）。只在 Debug 下构建，
 # DeviceRuntime 的逐帧回调只在 Debug 里编入 ---
-if (EGO_BUILD_TOOLS AND CMAKE_BUILD_TYPE STREQUAL "Debug")
+if (EGO_BUILD_TOOLS AND WIN32 AND CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_executable(EGoTouchRecorder Tools/EGoTouchRecorder/main.cpp)
     target_link_libraries(EGoTouchRecorder PRIVATE Device DVRCore Solvers Host Common shell32 ole32 advapi32)
     if (WIN32)
@@ -438,7 +481,7 @@ if (EGO_BUILD_TOOLS AND CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 # --- ChipHidProbe：运行时把 master 接口模式字改成 1，读片上 HID 报告（实验用）---
-if (EGO_BUILD_TOOLS)
+if (EGO_BUILD_TOOLS AND WIN32)
     add_executable(ChipHidProbe Tools/ChipHidProbe/main.cpp)
     target_link_libraries(ChipHidProbe PRIVATE Device Common advapi32 winmm)
     if (WIN32)
@@ -448,7 +491,28 @@ endif()
 
 # --- ChipHidProbeB：方案 B 验证，if_mode 保持 0，运行时热补丁 P1–P5，解析帧尾 HID 报告 ---
 # 不要求管理员（asInvoker）：服务由外部先停好，SPB 设备直接开，便于非提权连跑。
-if (EGO_BUILD_TOOLS)
+if (EGO_BUILD_TOOLS AND WIN32)
     add_executable(ChipHidProbeB Tools/ChipHidProbeB/main.cpp)
     target_link_libraries(ChipHidProbeB PRIVATE Device Common advapi32 winmm)
+endif()
+
+# --- HimaxThpProbe：验证两个平台的总线端口（Chip::Init、取帧、按 Chip 的规则校验两路帧）---
+if (EGO_BUILD_TOOLS)
+    add_executable(HimaxThpProbe Tools/HimaxThpProbe/main.cpp)
+    target_link_libraries(HimaxThpProbe PRIVATE HimaxCore Common)
+endif()
+
+# --- egotouchd：Linux 触摸守护进程（himax-thp 取帧 → TSACore → uhid 触摸屏）---
+if (NOT WIN32)
+    add_executable(egotouchd EGoTouchService/linux/egotouchd.cpp)
+    target_include_directories(egotouchd PRIVATE "${DEVICE_ROOT}")
+    target_link_libraries(egotouchd PRIVATE HimaxCore Solvers Port Common)
+    install(TARGETS egotouchd RUNTIME DESTINATION bin COMPONENT Runtime)
+
+    # himax-thp 内核模块：转给 Kernel/himax-thp/Makefile，产物在 build/kernel/<内核版本>/。不在 ALL 里，
+    # 没装内核头文件时不影响用户态构建
+    set(EGO_KDIR "/lib/modules/${CMAKE_HOST_SYSTEM_VERSION}/build" CACHE PATH "Kernel build tree for himax-thp")
+    add_custom_target(kmod
+        COMMAND make -C "${CMAKE_CURRENT_SOURCE_DIR}/Kernel/himax-thp" "KDIR=${EGO_KDIR}"
+        USES_TERMINAL VERBATIM)
 endif()

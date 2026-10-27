@@ -9,9 +9,14 @@
 #include <map>
 #include <sstream>
 
+#if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#else
+#include <link.h>
+#include <pthread.h>
+#endif
 
 namespace TsaReplay {
 
@@ -42,6 +47,7 @@ struct AddressRange {
     bool Contains(uint64_t v) const { return v >= lo && v < hi; }
 };
 
+#if defined(_WIN32)
 AddressRange CurrentStack() {
     ULONG_PTR lo = 0, hi = 0;
     GetCurrentThreadStackLimits(&lo, &hi);
@@ -54,6 +60,36 @@ AddressRange HostModule() {
     const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
     return {reinterpret_cast<uintptr_t>(base), reinterpret_cast<uintptr_t>(base) + nt->OptionalHeader.SizeOfImage};
 }
+#else
+AddressRange CurrentStack() {
+    pthread_attr_t attr;
+    void* addr = nullptr;
+    size_t size = 0;
+    if (pthread_getattr_np(pthread_self(), &attr) == 0) {
+        pthread_attr_getstack(&attr, &addr, &size);
+        pthread_attr_destroy(&attr);
+    }
+    return {reinterpret_cast<uintptr_t>(addr), reinterpret_cast<uintptr_t>(addr) + size};
+}
+
+// 主程序映像：dl_iterate_phdr 第一项就是可执行文件本身，取它全部 PT_LOAD 段的包络
+AddressRange HostModule() {
+    AddressRange range{};
+    dl_iterate_phdr([](dl_phdr_info* info, size_t, void* out) -> int {
+        auto* r = static_cast<AddressRange*>(out);
+        r->lo = UINTPTR_MAX;
+        for (int i = 0; i < info->dlpi_phnum; ++i) {
+            const ElfW(Phdr)& ph = info->dlpi_phdr[i];
+            if (ph.p_type != PT_LOAD) continue;
+            const uintptr_t start = info->dlpi_addr + ph.p_vaddr;
+            r->lo = std::min<uintptr_t>(r->lo, start);
+            r->hi = std::max<uintptr_t>(r->hi, start + ph.p_memsz);
+        }
+        return 1;
+    }, &range);
+    return range;
+}
+#endif
 
 struct HeapBlock {
     const uint8_t* data = nullptr;

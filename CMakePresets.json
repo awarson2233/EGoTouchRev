@@ -1,25 +1,38 @@
 {
-  "version": 2,
+  "version": 3,
   "cmakeMinimumRequired": {
     "major": 3,
-    "minor": 20,
+    "minor": 21,
     "patch": 0
   },
   "configurePresets": [
     {
-      "name": "arm64-base",
+      "name": "base",
       "hidden": true,
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/${presetName}",
+      "installDir": "${sourceDir}/out/install/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": {
+          "type": "BOOL",
+          "value": "ON"
+        }
+      }
+    },
+    {
+      "name": "arm64-base",
+      "hidden": true,
+      "inherits": "base",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
       "architecture": {
         "value": "arm64",
         "strategy": "external"
       },
       "cacheVariables": {
-        "CMAKE_EXPORT_COMPILE_COMMANDS": {
-          "type": "BOOL",
-          "value": "ON"
-        },
         "CMAKE_C_COMPILER": {
           "type": "FILEPATH",
           "value": "C:/Program Files/LLVM/bin/clang.exe"
@@ -29,8 +42,7 @@
           "value": "C:/Program Files/LLVM/bin/clang++.exe"
         },
         "CMAKE_C_COMPILER_TARGET": "arm64-pc-windows-msvc",
-        "CMAKE_CXX_COMPILER_TARGET": "arm64-windows-msvc",
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}"
+        "CMAKE_CXX_COMPILER_TARGET": "arm64-windows-msvc"
       },
       "vendor": {
         "microsoft.com/VisualStudioSettings/CMake/1.0": {
@@ -44,11 +56,7 @@
       "displayName": "arm64 Debug",
       "inherits": "arm64-base",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "EGO_BUILD_TOOLS": {
-          "type": "BOOL",
-          "value": "ON"
-        }
+        "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
@@ -58,18 +66,89 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
+    },
+    {
+      "name": "linux-base",
+      "hidden": true,
+      "inherits": "base",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
+      "name": "linux-Debug",
+      "displayName": "Linux Debug",
+      "inherits": "linux-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "linux-Release",
+      "displayName": "Linux Release",
+      "inherits": "linux-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
     }
   ],
   "buildPresets": [
     {
       "name": "arm64-Debug",
       "displayName": "arm64 Debug Build",
-      "configurePreset": "arm64-Debug"
+      "configurePreset": "arm64-Debug",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
     },
     {
       "name": "arm64-Release",
       "displayName": "arm64 Release Build",
-      "configurePreset": "arm64-Release"
+      "configurePreset": "arm64-Release",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "linux-Debug",
+      "displayName": "Linux Debug Build",
+      "configurePreset": "linux-Debug",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "linux-Release",
+      "displayName": "Linux Release Build",
+      "configurePreset": "linux-Release",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "linux-kmod",
+      "displayName": "Linux kernel modules (himax-thp)",
+      "configurePreset": "linux-Release",
+      "targets": [ "kmod" ],
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
     }
   ]
 }
