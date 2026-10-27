@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.5.0](https://github.com/awarson2233/EGoTouchRev/compare/v1.4.0...v1.5.0) (2026-10-27)
+
+
+### ✨ 新功能
+
+* **linux:** himax-thp 加 DT binding，Slave 经 himax,cascade 配对 ([d7e6c77](https://github.com/awarson2233/EGoTouchRev/commit/d7e6c77ea4dd36097410d08de8d438ec4e796986))
+* **linux:** himax-thp 只暴露总线原语，帧走带帧头的队列 ([d2c5490](https://github.com/awarson2233/EGoTouchRev/commit/d2c549099078a2faa964b7f6f424af3fe83fbaf2))
+* **linux:** himax-thp 对齐 gaokun3/linux 树内版本，install.sh 改为切换 touch-spi dtb ([b62f44b](https://github.com/awarson2233/EGoTouchRev/commit/b62f44b829ba78bb78a3398b7b22978597ce73d9))
+* **linux:** 开机自启——himax-thp 自动加载接管触摸，udev 拉起 egotouchd 服务 ([036d8f5](https://github.com/awarson2233/EGoTouchRev/commit/036d8f518b71e2bb22a1e464472a20e302a149a2))
+* **linux:** 新增 Port 总线层与 himax-thp 内核模块，HimaxCore 可在 Linux 上编译取帧 ([b0af4ae](https://github.com/awarson2233/EGoTouchRev/commit/b0af4aee4c497ef9ec592fa2812f68a40b384954))
+* **linux:** 新增 uhid 触摸输出与 egotouchd 守护进程，TSACore 解算接到系统触摸 ([1f2659a](https://github.com/awarson2233/EGoTouchRev/commit/1f2659aef5853983a611126b2eee234f5bc960e1))
+* **tools:** HimaxThpProbe 支持 Windows，新增 --late-arm 对照 Init 期间不读帧的时序 ([33c076a](https://github.com/awarson2233/EGoTouchRev/commit/33c076a67301d4c6ee683f0713f4b324512278d7))
+
+
+### 🐛 修复
+
+* **himax:** 复位拉低保持 5 ms，Linux 上重新 Init 不再 FW reload 超时 ([309d4e4](https://github.com/awarson2233/EGoTouchRev/commit/309d4e46837862a6754023f55c3d7d2a78f0a87c))
+* **linux:** 拉低 gpio174 让触摸芯片进 SPI 模式，INT 按帧来，取帧改回中断 ([d69d5b7](https://github.com/awarson2233/EGoTouchRev/commit/d69d5b7d0d5fc10b19281e533efbb86f0f6a48e3))
+* **stylus:** TX1 笔坐标的 dim1 走线间距表按面板机型取 ([8279f3f](https://github.com/awarson2233/EGoTouchRev/commit/8279f3f6b8556bbc6ee2f6f1753f50e1a1286d64))
+
+
+### ♻️ 重构
+
+* **linux:** 删掉 himax-thp 的实验代码，中断与 SPI 设置全按 DT ([399c163](https://github.com/awarson2233/EGoTouchRev/commit/399c163f515616effc76d7b4df9190f2a31fd21e))
+
+
+### 📝 文档
+
+* **linux:** 7.2.12 上重装后开机自启与实机触摸验证通过 ([68d46c8](https://github.com/awarson2233/EGoTouchRev/commit/68d46c838a506b515e30565c566aecb92d2ab7e7))
+* **linux:** 开机自启已重启验证；记下 Init 后偶发的取帧停顿 ([2803f77](https://github.com/awarson2233/EGoTouchRev/commit/2803f77f3b39099b76c13a99b196f6a8c26fea27))
+* **linux:** 记录笔的蓝牙 MCU 在 Linux 上的接口与实测 ([0386300](https://github.com/awarson2233/EGoTouchRev/commit/038630016f885f1be3b0cbd5ebded6ad579d7080))
+* 用 TSACore 算法架构文档替换旧的分章算法文档 ([abfb359](https://github.com/awarson2233/EGoTouchRev/commit/abfb3593095708422f6b225ec07013c1c9b8ec71))
+
 ## [1.4.0](https://github.com/awarson2233/EGoTouchRev/compare/v1.3.0...v1.4.0) (2026-10-16)
 
 
