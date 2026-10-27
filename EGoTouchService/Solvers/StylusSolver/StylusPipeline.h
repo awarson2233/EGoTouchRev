@@ -12,6 +12,7 @@
 #include <array>
 #include <cstdint>
 #include <mutex>
+#include <string_view>
 
 namespace Config {
 class ConfigBinder;
@@ -39,9 +40,14 @@ struct StylusPenSession {
 
 class StylusPipeline {
 public:
-    StylusPipeline() = default;
+    StylusPipeline();
 
     bool Process(HeatmapFrame& frame);
+
+    /// 面板机型（显示驱动 OTP 的 project id）：选 TX1 坐标的 dim1 走线间距表，与原厂一样取该机型
+    /// 参数表的 FlashPrmt + 0xA0。CSOT 与 BOE 的表补偿方向相反，选错时笔迹在长轴上以屏幕中心为原点
+    /// 两侧对称外偏，最大约 0.47 格（≈ 20 px）。构造时按缺省机型。
+    void SetPanelProjectId(std::string_view projectId);
 
     void registerBindings(Config::ConfigBinder& binder);
     void applyConfig(const Config::ConfigStore& store);

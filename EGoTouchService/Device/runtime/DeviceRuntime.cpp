@@ -1282,6 +1282,7 @@ void DeviceRuntime::EnterStreaming(const PowerInputs &in) {
                  projectId, m_tsaCoreSolver.PanelProjectId());
       }
     }
+    m_stylusPipeline.SetPanelProjectId(projectId);
     m_tsaCoreSolver.OnAfeStarted();
   }
   m_link.provenEpoch = in.downEpoch;

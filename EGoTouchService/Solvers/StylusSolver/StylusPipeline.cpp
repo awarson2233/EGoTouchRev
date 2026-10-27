@@ -1,7 +1,10 @@
 #include "StylusPipeline.h"
 #include "config/ConfigBinder.h"
 #include "config/ConfigStore.h"
+#include "TsaCore/PanelProfile.h"
+#include "TsaCore/TsaCore.h"
 
+#include <string>
 #include <string_view>
 
 namespace Solvers {
@@ -257,6 +260,17 @@ void StylusPipeline::ApplyPenSession(const StylusPenSession& session) {
         }
     }
     m_lastFrameWasTerminal = true;
+}
+
+StylusPipeline::StylusPipeline() {
+    SetPanelProjectId(Tsa::kDefaultPanelProjectId);
+}
+
+void StylusPipeline::SetPanelProjectId(std::string_view projectId) {
+    static_assert(Tsa::Core::kPitchMapSize == Asa::kMaxSensorDim + 1);
+    const Asa::PitchMap map = Tsa::Core::Dim1PitchMap(std::string(projectId).c_str());
+    m_hpp2.SetPitchMapDim1(map);
+    m_hpp3.m_coordinateSolver.SetPitchMapDim1(map);
 }
 
 void StylusPipeline::ResetStatefulStages() {

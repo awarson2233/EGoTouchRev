@@ -323,6 +323,7 @@ int main(int argc, char** argv) {
     auto stylus = std::make_unique<Solvers::StylusPipeline>();
     uint32_t btSeqSeen = 0;
     tsa->SetPanelProjectId(panel);
+    stylus->SetPanelProjectId(panel);
     tsa->SetChargerPlugged(charger);
     if (pen || stylusSolver) {
         tsa->SetStylusConnected(true);

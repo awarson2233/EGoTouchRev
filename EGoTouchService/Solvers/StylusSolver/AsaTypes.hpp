@@ -25,6 +25,10 @@ enum class FrameClass : uint8_t {
 static constexpr int kCoorUnit = 0x400;
 static constexpr int kMaxSensorDim = 80;
 
+/// 走线间距表（SensorPitchSizeMap 的 pitchTable）：首项为 100 表示不重映射。
+using PitchMap = std::array<double, kMaxSensorDim + 1>;
+inline constexpr PitchMap kIdentityPitchMap{{100.0}};
+
 struct CoorResult {
     int32_t dim1 = 0;
     int32_t dim2 = 0;

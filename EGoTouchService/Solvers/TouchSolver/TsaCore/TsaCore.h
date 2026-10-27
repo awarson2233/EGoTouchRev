@@ -7,6 +7,7 @@
 // 所有调用都必须在同一个线程上。
 // ══════════════════════════════════════════════════════════════════════
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 
@@ -89,6 +90,12 @@ void SetResolution(uint16_t xRes, uint16_t yRes, uint16_t resScale);
 [[nodiscard]] const int16_t* DiffGrid();
 /// 实际装入的机型参数表名（没有专表的机型落到 "DFLT000000"）。
 [[nodiscard]] const char* PrmtName();
+
+/// ASA 走线间距表的项数（kMaxSensorDim + 1）。
+inline constexpr size_t kPitchMapSize = 81;
+/// 机型参数表里 TX1 笔坐标的 dim1 走线间距表（FlashPrmt + 0xA0）。CSOT 与 BOE 的补偿方向相反，
+/// DFLT000000 是不重映射的哨兵表（首项 100）。只按机型名查内嵌的表、不碰 TSACore 的状态，任意线程可调。
+[[nodiscard]] std::array<double, kPitchMapSize> Dim1PitchMap(const char* projectName);
 
 // ── 笔会话 ──────────────────────────────────────────────────────────
 /// 本帧的笔报告，在 ProcessFrame 之前送入。

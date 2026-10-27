@@ -122,6 +122,10 @@ public:
         m_state.ResetOnTerminal();
     }
 
+    void SetPitchMapDim1(const Asa::PitchMap& map) noexcept {
+        m_coordinateSolver.SetPitchMapDim1(map);
+    }
+
 private:
     State m_state;
 

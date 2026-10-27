@@ -120,6 +120,7 @@ private:
             LOG_WARN("egotouchd", __func__, "panel", "Panel changed to {} after TSACore loaded {}; keeping it.",
                      projectId, m_tsa.PanelProjectId());
         }
+        m_stylus.SetPanelProjectId(projectId);
         m_tsa.OnAfeStarted();
         LOG_NOTICE("egotouchd", __func__, "streaming", "Chip initialized, streaming (panel {}).", m_tsa.PanelProjectId());
         return true;
