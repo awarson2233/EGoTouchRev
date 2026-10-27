@@ -6,6 +6,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      linux_packages_tag:
+        description: 给已发布的版本补传 Linux 安装包（例如 v1.5.0），用所选分支当前的代码构建
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -82,18 +87,20 @@ jobs:
   # Linux 安装包：只给自带 himax-thp 的 gaokun3 内核，见 scripts/linux/package/
   build-linux-packages:
     needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
+    if: needs.release-please.outputs.release_created == 'true' || inputs.linux_packages_tag != ''
     runs-on: ubuntu-24.04-arm
     container: ubuntu:26.04
+    env:
+      RELEASE_TAG: ${{ needs.release-please.outputs.tag_name || inputs.linux_packages_tag }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.release-please.outputs.tag_name }}
+          ref: ${{ needs.release-please.outputs.release_created == 'true' && needs.release-please.outputs.tag_name || github.sha }}
 
       - name: Build egotouchd and packages
         shell: bash
         run: |
-          scripts/linux/package/ci-build.sh "${{ needs.release-please.outputs.version }}"
+          scripts/linux/package/ci-build.sh "${RELEASE_TAG#v}"
           cd build/linux-packages && sha256sum *.deb *.rpm > SHA256SUMS-linux.txt
 
       - uses: actions/upload-artifact@v7
@@ -115,4 +122,4 @@ jobs:
       - name: Upload to the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ needs.release-please.outputs.tag_name }}" linux-packages/* --clobber --repo "$GITHUB_REPOSITORY"
+        run: gh release upload "${{ needs.release-please.outputs.tag_name || inputs.linux_packages_tag }}" linux-packages/* --clobber --repo "$GITHUB_REPOSITORY"
