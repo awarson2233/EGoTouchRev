@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.6.0](https://github.com/awarson2233/EGoTouchRev/compare/v1.5.0...v1.6.0) (2026-10-27)
+
+
+### ✨ 新功能
+
+* **linux:** 发版附带 arm64 deb / rpm 安装包，装上重启即切到 SPI 触摸 ([185c1d6](https://github.com/awarson2233/EGoTouchRev/commit/185c1d68ee9d331db64c9e020eeb8edcfd77b84f))
+
+
+### 🐛 修复
+
+* **linux:** apt remove 后重装 egotouch 包不再停在 i2c-hid ([6365e32](https://github.com/awarson2233/EGoTouchRev/commit/6365e327f2aea50024e8ba96d5cb810ca39e21ad))
+
 ## [1.5.0](https://github.com/awarson2233/EGoTouchRev/compare/v1.4.0...v1.5.0) (2026-10-27)
 
 
