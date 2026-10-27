@@ -29,14 +29,17 @@ stage_root() {
     printf 'uhid\n' > "$r/usr/lib/modules-load.d/egotouch.conf"
 }
 
-# 首次安装才切 dtb：升级不动用户手动 disable 过的状态。切不了（内核不对、EL2 dtb）只提示，包照样装上
+# 安装、重装、升级都调 enable --package：已经是 touch-spi 时什么都不做，用户手动 disable 过（有标记）时不开。
+# 不能按「是不是首次安装」判断：apt remove 之后包留在 rc 状态，再装时 dpkg 传进旧版本号，看起来像升级。
+# 切不了（内核不对、EL2 dtb）只提示，包照样装上
 POST_INSTALL='systemctl daemon-reload || true
 udevadm control --reload || true
-egotouch-dtb enable || echo "egotouch: touch stays on i2c-hid, see the message above; egotouch-dtb status shows the state"'
+egotouch-dtb enable --package || echo "egotouch: touch stays on i2c-hid, see the message above; egotouch-dtb status shows the state"'
 PRE_REMOVE='systemctl stop egotouchd.service || true
-egotouch-dtb disable || true'
+egotouch-dtb disable --package || true'
 POST_REMOVE='systemctl daemon-reload || true
 udevadm control --reload || true'
+PURGE='rm -f /etc/kernel/devicetree.egotouch-off'
 
 # ---- deb ----
 DEB="$WORK/deb"
@@ -60,7 +63,7 @@ EOF
 cat > "$DEB/DEBIAN/postinst" <<EOF
 #!/bin/sh
 set -e
-if [ "\$1" = configure ] && [ -z "\$2" ]; then
+if [ "\$1" = configure ]; then
 $POST_INSTALL
 fi
 EOF
@@ -76,6 +79,9 @@ cat > "$DEB/DEBIAN/postrm" <<EOF
 set -e
 if [ "\$1" = remove ] || [ "\$1" = purge ]; then
 $POST_REMOVE
+fi
+if [ "\$1" = purge ]; then
+$PURGE
 fi
 EOF
 chmod 755 "$DEB/DEBIAN/postinst" "$DEB/DEBIAN/prerm" "$DEB/DEBIAN/postrm"
@@ -116,18 +122,18 @@ cp -a $RPM/root/. %{buildroot}/
 /usr/lib/modules-load.d/egotouch.conf
 
 %post
-if [ \$1 -eq 1 ]; then
 $POST_INSTALL
-fi
 
 %preun
 if [ \$1 -eq 0 ]; then
 $PRE_REMOVE
 fi
 
+# rpm 卸载即彻底删除（没有 deb 的 rc 状态），手动 disable 的标记一起清掉
 %postun
 if [ \$1 -eq 0 ]; then
 $POST_REMOVE
+$PURGE
 fi
 EOF
 rpmbuild -bb --target aarch64 --define "_topdir $RPM/top" --define "_build_id_links none" "$RPM/$NAME.spec"

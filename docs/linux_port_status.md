@@ -45,10 +45,12 @@
   `egotouch-<版本>-1.aarch64.rpm`，`sudo apt install ./egotouch_*.deb` / `sudo dnf install ./egotouch-*.rpm` 后重启即可，卸载再重启回到 i2c-hid。
   包由 [build-packages.sh](/scripts/linux/package/build-packages.sh) 打，CI 在 ubuntu:26.04 的 arm64 容器里编（[ci-build.sh](/scripts/linux/package/ci-build.sh)），
   egotouchd 全静态链接，deb 与 rpm 用同一个可执行文件。装的东西：`/usr/bin/egotouchd`、`/usr/bin/egotouch-dtb`、udev 规则、
-  `egotouchd.service`、modules-load 的 uhid。首次安装时调 [egotouch-dtb](/scripts/linux/egotouch-dtb) `enable`：内核带 himax-thp 和 touch-spi dtb、
+  `egotouchd.service`、modules-load 的 uhid。安装、重装、升级时调 [egotouch-dtb](/scripts/linux/egotouch-dtb) `enable --package`：内核带 himax-thp 和 touch-spi dtb、
   `/etc/kernel/devicetree` 没设或是默认 dtb 时，备份原值（`devicetree.egotouch-orig`）、换成 touch-spi dtb、重新生成当前内核的启动项；
-  否则只提示、不切（例如原来指向 EL2 的 dtb，上游 EL2 暂停，touch-spi 没有 EL2 版本）。升级不再切，卸载时 `disable` 换回原值。
-  `egotouch-dtb status` 看当前状态。**两种包还没在实机上装过**。
+  否则只提示、不切（例如原来指向 EL2 的 dtb，上游 EL2 暂停，touch-spi 没有 EL2 版本）。手动 `egotouch-dtb disable` 会留下标记（`devicetree.egotouch-off`），之后升级不再打开；卸载时 `disable --package` 换回原值、不留标记，
+  所以 `apt remove` 后再装会重新打开（deb 卸载后处于 rc 状态，重装时 dpkg 传旧版本号，不能按「首次安装」判断，实机踩过）；purge 清掉标记。
+  `egotouch-dtb status` 看当前状态。deb 已在实机（Ubuntu 26.04、PR 内核 7.2.12）装过：安装后重启走 SPI、卸载后重启回 i2c-hid、
+  内核包重装后启动项保住 touch-spi dtb（见 [gaokun3-boot-unify.md](/docs/artifacts/gaokun3-boot-unify.md)）；rpm 没有 Fedora 实机。
 - **开机自启** `scripts/linux/`（从源码装）：`install.sh [--now]` / `uninstall.sh`。新内核下与安装包装的是同一套（egotouchd 在 /usr/local/bin），
   切 dtb 同样经 egotouch-dtb。下面是旧内核（没有树内 himax-thp）的装法：
   `/usr/local/bin/egotouchd`；当前内核的 `updates/egotouch/{himax-thp,thp-slave-dt}.ko`（depmod 后 udev 按 compatible 自动加载

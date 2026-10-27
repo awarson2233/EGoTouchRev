@@ -2,8 +2,9 @@
 # 在默认 dtb（i2c-hid，芯片自己解算）与 touch-spi dtb（himax-thp + egotouchd）之间切换启动用的 dtb（需要 root）。
 #   egotouch-dtb status    当前状态
 #   egotouch-dtb enable    /etc/kernel/devicetree 换成 touch-spi dtb，重新生成当前内核的启动项；重启生效
-#   egotouch-dtb disable   换回 enable 之前的值
-# 安装包的安装 / 卸载脚本调它；从源码装时 install.sh / uninstall.sh 也调它。
+#   egotouch-dtb disable   换回 enable 之前的值，并记下「用户关掉了」，之后升级安装包不再自动打开
+# 安装包的安装 / 卸载脚本调它（--package：安装时用户关过就不开，卸载时不记标记，重装会再打开）；
+# 从源码装时 install.sh / uninstall.sh 也调它。
 #
 # 只支持自带 himax-thp 与 sc8280xp-huawei-gaokun3-touch-spi.dtb 的 gaokun3 内核。/etc/kernel/devicetree 是全局的，
 # 之后装的内核也会去找 touch-spi dtb；原来指向别的 dtb（例如 EL2 的 sc8280xp-huawei-gaokun3-el2.dtb）时不切，
@@ -15,6 +16,9 @@ DEFAULT_DTB="qcom/sc8280xp-huawei-gaokun3.dtb"
 SPI_DTB="qcom/sc8280xp-huawei-gaokun3-touch-spi.dtb"
 DT_CONF=/etc/kernel/devicetree
 DT_ORIG=/etc/kernel/devicetree.egotouch-orig
+DT_OFF=/etc/kernel/devicetree.egotouch-off    # 用户手动 disable 过
+PACKAGE=0
+[ "${2:-}" = --package ] && PACKAGE=1
 
 current_dtb() { [ -f "$DT_CONF" ] && tr -d '[:space:]' < "$DT_CONF" || true; }
 
@@ -34,10 +38,13 @@ kernel_has_himax_thp() {
 
 # 用当前的 /etc/kernel/devicetree 重新生成这个内核的启动项
 regen_boot_entry() {
+    local image="/boot/vmlinuz-$KREL"
+    [ -e "$image" ] || image="/usr/lib/modules/$KREL/vmlinuz"
     if command -v update-initramfs >/dev/null; then
         update-initramfs -u -k "$KREL"          # Ubuntu：钩子里调 kernel-install
     else
-        kernel-install add "$KREL" "/usr/lib/modules/$KREL/vmlinuz"
+        # 与 gaokun3/build 的 rpm 一致：entry token 用发行版名（见其 docs/boot-layout.md）
+        kernel-install --make-entry-directory=yes --entry-token=os-id add "$KREL" "$image"
     fi
 }
 
@@ -67,6 +74,11 @@ cmd_status() {
 
 cmd_enable() {
     local cur reason
+    if [ $PACKAGE = 1 ] && [ -e "$DT_OFF" ]; then
+        echo "egotouch-dtb disable was run before; touch stays on i2c-hid until egotouch-dtb enable"
+        return 0
+    fi
+    rm -f "$DT_OFF"
     cur="$(current_dtb)"
     [ "$cur" = "$SPI_DTB" ] && { echo "already on $SPI_DTB"; return 0; }
     reason="$(why_not)"
@@ -81,10 +93,12 @@ cmd_enable() {
 }
 
 cmd_disable() {
+    # 手动关掉的记下来，升级安装包时不再打开；卸载时不记，重装会再打开
+    [ $PACKAGE = 1 ] || { mkdir -p /etc/kernel; : > "$DT_OFF"; }
     [ -e "$DT_ORIG" ] || { echo "nothing to restore ($DT_ORIG missing)"; return 0; }
     if [ -s "$DT_ORIG" ]; then mv "$DT_ORIG" "$DT_CONF"; else rm -f "$DT_CONF" "$DT_ORIG"; fi
     # 内核已经卸掉时启动项也不在了，没什么可重新生成
-    [ -d "/usr/lib/modules/$KREL" ] && regen_boot_entry
+    if [ -d "/usr/lib/modules/$KREL" ]; then regen_boot_entry; fi
     echo "$DT_CONF restored; reboot to get touch back on i2c-hid"
 }
 
@@ -92,5 +106,5 @@ case "${1:-status}" in
     status) cmd_status ;;
     enable) cmd_enable ;;
     disable) cmd_disable ;;
-    *) echo "usage: $0 [status|enable|disable]" >&2; exit 2 ;;
+    *) echo "usage: $0 [status|enable|disable] [--package]" >&2; exit 2 ;;
 esac

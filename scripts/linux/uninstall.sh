@@ -15,7 +15,7 @@ systemctl daemon-reload
 udevadm control --reload
 
 if [ -e "$DT_ORIG" ]; then
-    "$ROOT/scripts/linux/egotouch-dtb" disable
+    "$ROOT/scripts/linux/egotouch-dtb" disable --package
     rm -f /usr/local/bin/egotouchd /usr/local/bin/egotouch-dtb
     echo "uninstalled"
     exit 0
