@@ -6,8 +6,9 @@
 #
 # 按当前内核分两种：
 #   新内核：自带 himax-thp（CONFIG_HIMAX_THP）和 sc8280xp-huawei-gaokun3-touch-spi.dtb。默认 dtb 下触摸走
-#           i2c-hid（芯片自己解算）；这里把 /etc/kernel/devicetree 换成 touch-spi dtb、重新生成启动项，
-#           重启后两路 SPI 打开、himax-thp 绑定、egotouchd 由 udev 拉起。之后装的内核沿用这个 dtb。
+#           i2c-hid（芯片自己解算）；这里由 egotouch-dtb enable 把 /etc/kernel/devicetree 换成 touch-spi dtb、
+#           重新生成启动项，重启后两路 SPI 打开、himax-thp 绑定、egotouchd 由 udev 拉起。与安装包
+#           （scripts/linux/package/）装的是同一套，只是 egotouchd 放在 /usr/local/bin。
 #   旧内核：没有树内 himax-thp。装本仓库编的 himax-thp.ko 与运行时 overlay（thp-slave-dt.ko），
 #           modprobe.d 挡住 himax-spi。模块装在当前内核的 updates/egotouch/ 下，换内核要重编重装。
 #
@@ -21,17 +22,6 @@ HERE="$ROOT/scripts/linux"
 KREL="$(uname -r)"
 BIN="$ROOT/build/linux-Release/egotouchd"
 SPI_DTB="qcom/sc8280xp-huawei-gaokun3-touch-spi.dtb"
-DT_CONF=/etc/kernel/devicetree
-DT_ORIG=/etc/kernel/devicetree.egotouch-orig
-
-# kernel-install（90-loaderentry）找 devicetree 的位置
-kernel_has_spi_dtb() {
-    local d
-    for d in "/usr/lib/modules/$KREL/dtb" "/usr/lib/linux-image-$KREL" "/usr/lib/firmware/$KREL/device-tree"; do
-        [ -f "$d/$SPI_DTB" ] && return 0
-    done
-    return 1
-}
 
 # 树内的 himax-thp 在 kernel/ 下；本仓库装的在 updates/egotouch/ 下，不算
 kernel_has_himax_thp() {
@@ -40,13 +30,13 @@ kernel_has_himax_thp() {
     [[ "$m" == "/lib/modules/$KREL/kernel/"* || "$m" == "/usr/lib/modules/$KREL/kernel/"* ]]
 }
 
-# 用当前的 /etc/kernel/devicetree 重新生成这个内核的启动项
-regen_boot_entry() {
-    if command -v update-initramfs >/dev/null; then
-        update-initramfs -u -k "$KREL"          # Ubuntu：钩子里调 kernel-install
-    else
-        kernel-install add "$KREL" "/lib/modules/$KREL/vmlinuz"
-    fi
+# kernel-install（90-loaderentry）找 devicetree 的位置
+kernel_has_spi_dtb() {
+    local d
+    for d in "/usr/lib/modules/$KREL/dtb" "/usr/lib/linux-image-$KREL" "/usr/lib/firmware/$KREL/device-tree"; do
+        [ -f "$d/$SPI_DTB" ] && return 0
+    done
+    return 1
 }
 
 install_daemon() {
@@ -64,17 +54,11 @@ if kernel_has_himax_thp && kernel_has_spi_dtb; then
     rm -f /etc/modprobe.d/egotouch.conf
     rm -rf "/lib/modules/$KREL/updates/egotouch"
     depmod -a "$KREL"
-
-    if [ "$(cat "$DT_CONF" 2>/dev/null)" != "$SPI_DTB" ]; then
-        [ -e "$DT_ORIG" ] || { [ -f "$DT_CONF" ] && cp "$DT_CONF" "$DT_ORIG" || : > "$DT_ORIG"; }
-        mkdir -p /etc/kernel
-        printf '%s\n' "$SPI_DTB" > "$DT_CONF"
-    fi
-    regen_boot_entry
+    install -D -m 755 "$HERE/egotouch-dtb" /usr/local/bin/egotouch-dtb
     systemctl daemon-reload
     udevadm control --reload
-    echo "installed: /usr/local/bin/egotouchd, udev rule, egotouchd.service; $DT_CONF -> $SPI_DTB"
-    echo "reboot to switch touch from i2c-hid to SPI + egotouchd"
+    echo "installed: /usr/local/bin/{egotouchd,egotouch-dtb}, udev rule, egotouchd.service"
+    /usr/local/bin/egotouch-dtb enable
     exit 0
 fi
 

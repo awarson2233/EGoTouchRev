@@ -45,3 +45,24 @@ jobs:
           path: build/*.exe
           if-no-files-found: error
           retention-days: 14
+
+  linux-packages:
+    name: Linux packages (arm64 deb / rpm)
+    runs-on: ubuntu-24.04-arm
+    container: ubuntu:26.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build egotouchd and packages
+        shell: bash
+        run: |
+          base="$(sed -n 's/^project(EGoTouchRev VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)"
+          scripts/linux/package/ci-build.sh "${base}~git${GITHUB_SHA::7}"
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: egotouch-linux-arm64-${{ github.sha }}
+          path: build/linux-packages/*
+          if-no-files-found: error
+          retention-days: 14

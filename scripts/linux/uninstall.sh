@@ -6,7 +6,6 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 KREL="$(uname -r)"
-DT_CONF=/etc/kernel/devicetree
 DT_ORIG=/etc/kernel/devicetree.egotouch-orig
 
 systemctl stop egotouchd 2>/dev/null || true
@@ -16,14 +15,9 @@ systemctl daemon-reload
 udevadm control --reload
 
 if [ -e "$DT_ORIG" ]; then
-    if [ -s "$DT_ORIG" ]; then mv "$DT_ORIG" "$DT_CONF"; else rm -f "$DT_CONF" "$DT_ORIG"; fi
-    if command -v update-initramfs >/dev/null; then
-        update-initramfs -u -k "$KREL"
-    else
-        kernel-install add "$KREL" "/lib/modules/$KREL/vmlinuz"
-    fi
-    rm -f /usr/local/bin/egotouchd
-    echo "uninstalled; $DT_CONF restored, reboot to get touch back on i2c-hid"
+    "$ROOT/scripts/linux/egotouch-dtb" disable
+    rm -f /usr/local/bin/egotouchd /usr/local/bin/egotouch-dtb
+    echo "uninstalled"
     exit 0
 fi
 

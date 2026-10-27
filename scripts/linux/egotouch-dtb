@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# 在默认 dtb（i2c-hid，芯片自己解算）与 touch-spi dtb（himax-thp + egotouchd）之间切换启动用的 dtb（需要 root）。
+#   egotouch-dtb status    当前状态
+#   egotouch-dtb enable    /etc/kernel/devicetree 换成 touch-spi dtb，重新生成当前内核的启动项；重启生效
+#   egotouch-dtb disable   换回 enable 之前的值
+# 安装包的安装 / 卸载脚本调它；从源码装时 install.sh / uninstall.sh 也调它。
+#
+# 只支持自带 himax-thp 与 sc8280xp-huawei-gaokun3-touch-spi.dtb 的 gaokun3 内核。/etc/kernel/devicetree 是全局的，
+# 之后装的内核也会去找 touch-spi dtb；原来指向别的 dtb（例如 EL2 的 sc8280xp-huawei-gaokun3-el2.dtb）时不切，
+# 免得悄悄丢掉那份 dtb 的功能。
+set -euo pipefail
+
+KREL="${KREL:-$(uname -r)}"
+DEFAULT_DTB="qcom/sc8280xp-huawei-gaokun3.dtb"
+SPI_DTB="qcom/sc8280xp-huawei-gaokun3-touch-spi.dtb"
+DT_CONF=/etc/kernel/devicetree
+DT_ORIG=/etc/kernel/devicetree.egotouch-orig
+
+current_dtb() { [ -f "$DT_CONF" ] && tr -d '[:space:]' < "$DT_CONF" || true; }
+
+# kernel-install（90-loaderentry）找 devicetree 的位置：deb 放 /usr/lib/linux-image-<krel>，rpm 放模块目录下的 dtb/
+kernel_has_spi_dtb() {
+    local d
+    for d in "/usr/lib/modules/$KREL/dtb" "/usr/lib/linux-image-$KREL" "/usr/lib/firmware/$KREL/device-tree"; do
+        [ -f "$d/$SPI_DTB" ] && return 0
+    done
+    return 1
+}
+
+kernel_has_himax_thp() {
+    modinfo -k "$KREL" -n himax_thp >/dev/null 2>&1 ||
+        grep -qs '/himax-thp\.ko' "/usr/lib/modules/$KREL/modules.builtin"
+}
+
+# 用当前的 /etc/kernel/devicetree 重新生成这个内核的启动项
+regen_boot_entry() {
+    if command -v update-initramfs >/dev/null; then
+        update-initramfs -u -k "$KREL"          # Ubuntu：钩子里调 kernel-install
+    else
+        kernel-install add "$KREL" "/usr/lib/modules/$KREL/vmlinuz"
+    fi
+}
+
+# 不能切时返回原因，能切时返回空
+why_not() {
+    local cur
+    cur="$(current_dtb)"
+    if ! kernel_has_himax_thp || ! kernel_has_spi_dtb; then
+        echo "kernel $KREL has no himax-thp or $SPI_DTB; install a gaokun3 kernel with the touch series"
+    elif [ -n "$cur" ] && [ "$cur" != "$DEFAULT_DTB" ] && [ "$cur" != "$SPI_DTB" ]; then
+        echo "$DT_CONF selects $cur; SPI touch only has a variant of $DEFAULT_DTB"
+    fi
+}
+
+cmd_status() {
+    local cur reason
+    cur="$(current_dtb)"
+    echo "devicetree: ${cur:-<unset, firmware default>}"
+    if [ "$cur" = "$SPI_DTB" ]; then
+        echo "touch: SPI + egotouchd"
+    else
+        echo "touch: i2c-hid"
+        reason="$(why_not)"
+        [ -z "$reason" ] && echo "egotouch-dtb enable can switch it" || echo "cannot switch: $reason"
+    fi
+}
+
+cmd_enable() {
+    local cur reason
+    cur="$(current_dtb)"
+    [ "$cur" = "$SPI_DTB" ] && { echo "already on $SPI_DTB"; return 0; }
+    reason="$(why_not)"
+    [ -z "$reason" ] || { echo "not switching: $reason" >&2; return 1; }
+
+    # 原来没有这个文件时记一个空文件，disable 时据此删掉
+    [ -e "$DT_ORIG" ] || { [ -f "$DT_CONF" ] && cp "$DT_CONF" "$DT_ORIG" || : > "$DT_ORIG"; }
+    mkdir -p /etc/kernel
+    printf '%s\n' "$SPI_DTB" > "$DT_CONF"
+    regen_boot_entry
+    echo "$DT_CONF -> $SPI_DTB; reboot to switch touch to SPI + egotouchd"
+}
+
+cmd_disable() {
+    [ -e "$DT_ORIG" ] || { echo "nothing to restore ($DT_ORIG missing)"; return 0; }
+    if [ -s "$DT_ORIG" ]; then mv "$DT_ORIG" "$DT_CONF"; else rm -f "$DT_CONF" "$DT_ORIG"; fi
+    # 内核已经卸掉时启动项也不在了，没什么可重新生成
+    [ -d "/usr/lib/modules/$KREL" ] && regen_boot_entry
+    echo "$DT_CONF restored; reboot to get touch back on i2c-hid"
+}
+
+case "${1:-status}" in
+    status) cmd_status ;;
+    enable) cmd_enable ;;
+    disable) cmd_disable ;;
+    *) echo "usage: $0 [status|enable|disable]" >&2; exit 2 ;;
+esac

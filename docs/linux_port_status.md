@@ -41,7 +41,16 @@
   AFE 闭环 → uhid，与 DeviceRuntime 的流式一帧相同。建链简化为：总线就绪才 Init，失败退避重试；SOS 或总线掉线时
   抬起所有触点、`OnAfeStopped`，回到等总线。选项 `--transpose`、`--master-only`。笔还没有上报。
   实测：120 fps，手指方向正确（GNOME 旋转后自动映射），按下 / 抬起成对，IC 进 IDLE 后稳定。
-- **开机自启** `scripts/linux/`：`install.sh [--now]` / `uninstall.sh`。装的东西：
+- **安装包**（自带 himax-thp 与 touch-spi dtb 的 gaokun3 内核）：每次发版 Release 里附 `egotouch_<版本>_arm64.deb` 与
+  `egotouch-<版本>-1.aarch64.rpm`，`sudo apt install ./egotouch_*.deb` / `sudo dnf install ./egotouch-*.rpm` 后重启即可，卸载再重启回到 i2c-hid。
+  包由 [build-packages.sh](/scripts/linux/package/build-packages.sh) 打，CI 在 ubuntu:26.04 的 arm64 容器里编（[ci-build.sh](/scripts/linux/package/ci-build.sh)），
+  egotouchd 全静态链接，deb 与 rpm 用同一个可执行文件。装的东西：`/usr/bin/egotouchd`、`/usr/bin/egotouch-dtb`、udev 规则、
+  `egotouchd.service`、modules-load 的 uhid。首次安装时调 [egotouch-dtb](/scripts/linux/egotouch-dtb) `enable`：内核带 himax-thp 和 touch-spi dtb、
+  `/etc/kernel/devicetree` 没设或是默认 dtb 时，备份原值（`devicetree.egotouch-orig`）、换成 touch-spi dtb、重新生成当前内核的启动项；
+  否则只提示、不切（例如原来指向 EL2 的 dtb，上游 EL2 暂停，touch-spi 没有 EL2 版本）。升级不再切，卸载时 `disable` 换回原值。
+  `egotouch-dtb status` 看当前状态。**两种包还没在实机上装过**。
+- **开机自启** `scripts/linux/`（从源码装）：`install.sh [--now]` / `uninstall.sh`。新内核下与安装包装的是同一套（egotouchd 在 /usr/local/bin），
+  切 dtb 同样经 egotouch-dtb。下面是旧内核（没有树内 himax-thp）的装法：
   `/usr/local/bin/egotouchd`；当前内核的 `updates/egotouch/{himax-thp,thp-slave-dt}.ko`（depmod 后 udev 按 compatible 自动加载
   himax-thp）；`/etc/modprobe.d/egotouch.conf`（当前内核装了 himax-thp 就不加载 himax-spi，没装照常加载，升级内核后触摸退回原驱动）；
   `/etc/modules-load.d/egotouch.conf`（thp_slave_dt、uhid）；`/etc/udev/rules.d/60-egotouch.rules` + `egotouchd.service`
