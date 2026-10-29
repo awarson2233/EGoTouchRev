@@ -114,7 +114,7 @@ jobs:
     needs: [release-please, build-linux-packages]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: linux-packages
           path: linux-packages
